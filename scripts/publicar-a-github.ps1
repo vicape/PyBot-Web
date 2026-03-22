@@ -4,6 +4,16 @@
 
 $ErrorActionPreference = "Stop"
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+# gh a veces no entra al PATH hasta reiniciar terminal — rutas tipicas:
+$ghPaths = @(
+    "${env:ProgramFiles}\GitHub CLI",
+    "${env:ProgramFiles(x86)}\GitHub CLI"
+)
+foreach ($p in $ghPaths) {
+    if (Test-Path $p) {
+        $env:Path = "$p;$env:Path"
+    }
+}
 
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -17,6 +27,11 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Write-Host "Instalando GitHub CLI (gh) con winget..."
     winget install --id GitHub.cli -e --accept-package-agreements --accept-source-agreements
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    foreach ($p in $ghPaths) {
+        if (Test-Path $p) {
+            $env:Path = "$p;$env:Path"
+        }
+    }
 }
 
 Write-Host "`n=== Login GitHub (se abre el navegador) ===`n"
