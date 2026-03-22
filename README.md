@@ -22,6 +22,18 @@ Abrí la URL que muestra Vite (Chrome).
 
 👉 **[docs/LO_MAS_FACIL.md](docs/LO_MAS_FACIL.md)** — **GitHub Desktop**: instalás, entrás con **Google** en el navegador, **Add local repository** → carpeta `PyBot-Web` → **Publish repository**. Casi sin comandos.
 
+### Desde esta PC (Git + script)
+
+Ya está hecho **commit local** en `C:\Users\Naro\PyBot-Web` (rama `main`). Para crear el repo en GitHub y subir todo **desde acá**, en **PowerShell** (o terminal de Cursor):
+
+```powershell
+cd C:\Users\Naro\PyBot-Web
+powershell -ExecutionPolicy Bypass -File .\scripts\publicar-a-github.ps1
+```
+
+Eso instala **GitHub CLI** si falta, abre el **navegador** para que entres con **Google**, crea el repo **PyBot-Web** y hace **push**.  
+(Si el nombre `PyBot-Web` ya existe en tu cuenta, creá el repo vacío en la web y usá `git remote add origin ...` + `git push -u origin main` como en [docs/AUTH_DESDE_CURSOR.md](docs/AUTH_DESDE_CURSOR.md).)
+
 Alternativa con terminal + Cursor: **[docs/AUTH_DESDE_CURSOR.md](docs/AUTH_DESDE_CURSOR.md)**.
 
 ## Deploy en Vercel (vos)
