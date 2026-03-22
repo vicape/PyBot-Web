@@ -1,6 +1,8 @@
 # PyBot-Web
 
-Web app (React + Vite) para controlar Arduino con **Firmata** vía **Web Serial** en Chrome (Chromebook / Mac).  
+Web app (React + Vite) para controlar Arduino con **Firmata** vía **Web Serial** en Chrome (Chromebook / Mac).
+
+Repo: https://github.com/vicape/PyBot-Web  
 Proyecto **aparte** del IDE **PyBot** de escritorio; no reemplaza ni borra nada de ese repo.
 
 ## Estado actual
