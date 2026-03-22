@@ -1,35 +1,77 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import "./App.css";
+import {
+  openFirmata,
+  writeServoSpeed,
+  speedToServoAngle,
+} from "./firmataWeb.js";
 
 const MOTOR_PIN = 10;
 const BUTTON_PIN = 12;
 const STEP = 50;
 
-/** Firmata + Web Serial: implementación próxima; por ahora UI y lógica de estados lista */
 export default function App() {
   const [connected, setConnected] = useState(false);
   const [speed, setSpeed] = useState(0);
   const [phase, setPhase] = useState(0);
   const [direction, setDirection] = useState(-1);
   const [log, setLog] = useState(["Listo. Conectá el Arduino y tocá el pulsador."]);
+  const [connecting, setConnecting] = useState(false);
+
+  /** @type {React.MutableRefObject<{ writer: WritableStreamDefaultWriter, close: () => Promise<void> } | null>} */
+  const connRef = useRef(null);
 
   const pushLog = useCallback((msg) => {
     setLog((prev) => [...prev.slice(-12), msg]);
   }, []);
+
+  const disconnectSerial = useCallback(async () => {
+    const c = connRef.current;
+    connRef.current = null;
+    setConnected(false);
+    if (c) {
+      try {
+        await c.close();
+      } catch {
+        /* ignore */
+      }
+      pushLog("Desconectado.");
+    }
+  }, [pushLog]);
 
   const connectSerial = useCallback(async () => {
     if (!("serial" in navigator)) {
       pushLog("Este navegador no tiene Web Serial. Usá Chrome.");
       return;
     }
-    try {
-      await navigator.serial.requestPort();
-      setConnected(true);
-      pushLog("Puerto elegido. (Firmata: abrir puerto y handshake — próximo paso)");
-    } catch (e) {
-      if (e.name !== "NotFoundError") pushLog(`Conexión: ${e.message}`);
+    if (connRef.current) {
+      await disconnectSerial();
     }
-  }, [pushLog]);
+    setConnecting(true);
+    try {
+      const port = await navigator.serial.requestPort();
+      const { writer, close, baudRate } = await openFirmata(port, MOTOR_PIN);
+      connRef.current = { writer, close };
+      setConnected(true);
+      pushLog(
+        `Firmata listo @ ${baudRate} baud — servo pin ${MOTOR_PIN}`,
+      );
+    } catch (e) {
+      pushLog(`Error: ${e.message || e}`);
+      connRef.current = null;
+      setConnected(false);
+    } finally {
+      setConnecting(false);
+    }
+  }, [pushLog, disconnectSerial]);
+
+  useEffect(() => {
+    const w = connRef.current?.writer;
+    if (!w) return;
+    writeServoSpeed(w, MOTOR_PIN, speed).catch((e) =>
+      pushLog(`Escritura servo: ${e.message}`),
+    );
+  }, [speed, connected, pushLog]);
 
   const onButtonPress = useCallback(() => {
     let nextSpeed = speed;
@@ -61,7 +103,6 @@ export default function App() {
     setSpeed(nextSpeed);
     setPhase(nextPhase);
     setDirection(nextDir);
-    // TODO: firmataServoWrite(MOTOR_PIN, angleFromSpeed(nextSpeed))
   }, [speed, phase, direction, pushLog]);
 
   useEffect(() => {
@@ -75,23 +116,47 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [onButtonPress]);
 
+  useEffect(() => {
+    return () => {
+      const c = connRef.current;
+      if (c) {
+        c.close().catch(() => {});
+        connRef.current = null;
+      }
+    };
+  }, []);
+
   return (
     <div className="app">
       <header className="header">
         <h1>PyBot Web</h1>
         <p className="subtitle">
-          Pulsador pin {BUTTON_PIN} · Motor pin {MOTOR_PIN} · Firmata
+          Pulsador pin {BUTTON_PIN} · Motor pin {MOTOR_PIN} · StandardFirmata
         </p>
       </header>
 
       <main className="main">
         <section className="card">
           <h2>Conexión</h2>
-          <button type="button" className="btn primary" onClick={connectSerial}>
-            Conectar USB (Chrome)
-          </button>
+          <div className="row">
+            <button
+              type="button"
+              className="btn primary"
+              onClick={connectSerial}
+              disabled={connecting}
+            >
+              {connecting ? "Conectando…" : "Conectar USB (Chrome)"}
+            </button>
+            {connected ? (
+              <button type="button" className="btn secondary" onClick={disconnectSerial}>
+                Desconectar
+              </button>
+            ) : null}
+          </div>
           <p className={`status ${connected ? "ok" : ""}`}>
-            {connected ? "Puerto seleccionado" : "Sin puerto"}
+            {connected
+              ? `Firmata activo — enviando servo al pin ${MOTOR_PIN}`
+              : "Sin conexión serie"}
           </p>
         </section>
 
@@ -106,10 +171,14 @@ export default function App() {
               <span className="label">Fase</span>
               <span className="value">{phase}</span>
             </div>
+            <div>
+              <span className="label">Ángulo (aprox.)</span>
+              <span className="value">{speedToServoAngle(speed)}°</span>
+            </div>
           </div>
           <p className="hint">
-            Simulá el pulsador con la barra espaciadora hasta que Firmata lea el pin
-            real.
+            Cable de señal del servo continuo en <strong>D{MOTOR_PIN}</strong>. Conectá,
+            elegí el puerto COM y usá Espacio o el botón (pulsador real: próximo paso).
           </p>
           <button type="button" className="btn secondary" onClick={onButtonPress}>
             Simular toque (o Espacio)
@@ -127,7 +196,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        PyBot-Web · React + Vercel · no modifica el proyecto PyBot de escritorio
+        PyBot-Web · React + Vercel · StandardFirmata (mismo enfoque que PyBot)
       </footer>
     </div>
   );
