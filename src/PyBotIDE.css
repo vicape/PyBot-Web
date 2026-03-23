@@ -354,6 +354,7 @@
   align-items: center;
   gap: 14px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .brand-logos {
@@ -431,6 +432,7 @@
   gap: 8px;
   justify-content: flex-end;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .tb-group {
@@ -1230,6 +1232,25 @@
 
 /* Responsive: toolbar */
 @media (max-width: 1220px) {
+  .toolbar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .toolbar-brand {
+    width: 100%;
+  }
+  .toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .tb-group {
+    flex-wrap: wrap;
+  }
+  .tb-group--muted {
+    border-left: none;
+    padding-left: 0;
+  }
   .brand-sub {
     max-width: min(240px, 24vw);
   }
@@ -1254,9 +1275,6 @@
 }
 
 @media (max-width: 720px) {
-  .toolbar {
-    flex-wrap: wrap;
-  }
   .brand-sub {
     display: none;
   }
