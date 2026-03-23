@@ -669,18 +669,16 @@
   inset: 0;
   background-image: url("/branding/pybot-logo.png");
   background-repeat: no-repeat;
-  background-position: center 42%;
-  background-size: min(30vw, 300px);
-  opacity: 0.04;
-  filter: grayscale(1) contrast(0.9) brightness(1.08);
-  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 1) 0 36%, rgba(0, 0, 0, 0) 64%);
-  -webkit-mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 1) 0 36%, rgba(0, 0, 0, 0) 64%);
+  background-position: center 45%;
+  background-size: min(34vw, 340px);
+  opacity: 0.035;
+  filter: grayscale(1) contrast(0.86) brightness(1.1);
   pointer-events: none;
   z-index: 0;
 }
 
 .ide-root[data-theme="light"] .editor-shell::before {
-  opacity: 0.05;
+  opacity: 0.045;
 }
 
 .workspace-panels {
@@ -1443,7 +1441,7 @@
     border-top: 1px solid var(--ide-border);
   }
   .editor-shell::before {
-    background-size: min(48vw, 220px);
-    opacity: 0.035;
+    background-size: min(54vw, 240px);
+    opacity: 0.03;
   }
 }
