@@ -155,6 +155,8 @@
 
 .sidebar {
   width: 248px;
+  min-width: 180px;
+  max-width: 460px;
   flex-shrink: 0;
   background: var(--ide-surface);
   border-right: 1px solid var(--ide-border);
@@ -248,6 +250,48 @@
   background: var(--ide-bg);
 }
 
+.splitter {
+  background: transparent;
+  position: relative;
+  z-index: 3;
+}
+
+.splitter::after {
+  content: "";
+  position: absolute;
+  background: var(--ide-border);
+  opacity: 0.35;
+  transition: opacity 0.12s ease;
+}
+
+.splitter:hover::after {
+  opacity: 0.95;
+}
+
+.splitter-vertical {
+  width: 6px;
+  cursor: col-resize;
+}
+
+.splitter-vertical::after {
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+}
+
+.splitter-horizontal {
+  height: 8px;
+  cursor: row-resize;
+}
+
+.splitter-horizontal::after {
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 2px;
+}
+
 /* —— Toolbar —— */
 .toolbar {
   display: flex;
@@ -271,6 +315,23 @@
   align-items: center;
   gap: 14px;
   min-width: 0;
+}
+
+.brand-logos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+}
+
+.brand-logo-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--ide-border);
+  padding: 2px;
 }
 
 .brand-mark {
@@ -393,11 +454,6 @@
   color: var(--fg-bright);
 }
 
-.tb-btn--active {
-  border-color: #24c24a;
-  box-shadow: 0 0 0 1px rgba(36, 194, 74, 0.3) inset;
-}
-
 .conn-lamp {
   width: 10px;
   height: 10px;
@@ -411,6 +467,53 @@
   box-shadow:
     0 0 10px rgba(35, 214, 79, 0.85),
     0 0 0 2px rgba(35, 214, 79, 0.18);
+}
+
+.conn-state {
+  font-size: 12px;
+  color: var(--fg-muted);
+  min-width: 62px;
+}
+
+.conn-state--on {
+  color: #34d058;
+}
+
+.mode-switch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-label {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.mode-switch {
+  display: inline-flex;
+  border: 1px solid var(--ide-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mode-btn {
+  border: none;
+  background: var(--ide-elevated);
+  color: var(--fg-muted);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mode-btn + .mode-btn {
+  border-left: 1px solid var(--ide-border);
+}
+
+.mode-btn--active {
+  background: #1f6feb;
+  color: #fff;
 }
 
 .ide-root[data-theme="light"] .tb-btn--ghost {
@@ -759,5 +862,11 @@
     border-left: none;
     padding-left: 0;
     flex-wrap: wrap;
+  }
+  .brand-logos {
+    display: none;
+  }
+  .mode-label {
+    display: none;
   }
 }

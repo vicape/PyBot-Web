@@ -47,6 +47,14 @@ export default function PyBotIDE() {
     () => localStorage.getItem("pybot_python_only") === "1",
   );
   const [, forceLang] = useState(0);
+  const [sidebarWidth, setSidebarWidth] = useState(
+    () => parseInt(localStorage.getItem("pybot_sidebar_w") || "248", 10),
+  );
+  const [consoleHeight, setConsoleHeight] = useState(
+    () => parseInt(localStorage.getItem("pybot_console_h") || "220", 10),
+  );
+  const [showPybotLogo, setShowPybotLogo] = useState(true);
+  const [showSchoolLogo, setShowSchoolLogo] = useState(true);
   const consoleEndRef = useRef(null);
 
   useEffect(() => {
@@ -61,6 +69,14 @@ export default function PyBotIDE() {
   useEffect(() => {
     localStorage.setItem("pybot_python_only", pythonOnly ? "1" : "0");
   }, [pythonOnly]);
+
+  useEffect(() => {
+    localStorage.setItem("pybot_sidebar_w", String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem("pybot_console_h", String(consoleHeight));
+  }, [consoleHeight]);
 
   useEffect(() => {
     consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -132,6 +148,44 @@ export default function PyBotIDE() {
 
   const monacoTheme = theme === "dark" ? "vs-dark" : "light";
 
+  const startSidebarResize = useCallback(
+    (event) => {
+      event.preventDefault();
+      const startX = event.clientX;
+      const startW = sidebarWidth;
+      const onMove = (ev) => {
+        const next = Math.max(180, Math.min(460, startW + (ev.clientX - startX)));
+        setSidebarWidth(next);
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [sidebarWidth],
+  );
+
+  const startConsoleResize = useCallback(
+    (event) => {
+      event.preventDefault();
+      const startY = event.clientY;
+      const startH = consoleHeight;
+      const onMove = (ev) => {
+        const next = Math.max(120, Math.min(420, startH - (ev.clientY - startY)));
+        setConsoleHeight(next);
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [consoleHeight],
+  );
+
   return (
     <div className="ide-root" data-theme={theme}>
       <div className="ide-workbench">
@@ -189,7 +243,7 @@ export default function PyBotIDE() {
 
         <div className="ide-body">
           {sidebarOpen ? (
-            <aside className="sidebar">
+            <aside className="sidebar" style={{ width: `${sidebarWidth}px` }}>
               <div className="sidebar-header">
                 <span className="sidebar-label">{t("explorer")}</span>
               </div>
@@ -216,6 +270,14 @@ export default function PyBotIDE() {
               </div>
             </aside>
           ) : null}
+          {sidebarOpen ? (
+            <div
+              className="splitter splitter-vertical"
+              role="separator"
+              aria-orientation="vertical"
+              onMouseDown={startSidebarResize}
+            />
+          ) : null}
 
           <div className="main-stack">
             <header className="toolbar">
@@ -226,6 +288,24 @@ export default function PyBotIDE() {
                 <div className="brand-copy">
                   <span className="brand-title">{t("appTitle")}</span>
                   <span className="brand-sub">{t("brandSub")}</span>
+                </div>
+                <div className="brand-logos">
+                  {showPybotLogo ? (
+                    <img
+                      src="/branding/pybot-logo.png"
+                      alt="Logo PyBot"
+                      className="brand-logo-img"
+                      onError={() => setShowPybotLogo(false)}
+                    />
+                  ) : null}
+                  {showSchoolLogo ? (
+                    <img
+                      src="/branding/colegio-escudo.png"
+                      alt="Escudo del colegio"
+                      className="brand-logo-img"
+                      onError={() => setShowSchoolLogo(false)}
+                    />
+                  ) : null}
                 </div>
               </div>
               <div className="toolbar-actions">
@@ -254,17 +334,32 @@ export default function PyBotIDE() {
                     {connected ? <IconUsb width={16} height={16} /> : <IconPlug width={16} height={16} />}
                     {connected ? t("disconnect") : t("connect")}
                   </button>
-                  <span className={`conn-lamp ${connected ? "conn-lamp--on" : ""}`} title={connected ? t("statusConn") : t("statusDisc")} />
-                  <button
-                    type="button"
-                    className={`tb-btn tb-btn--ghost ${pythonOnly ? "tb-btn--active" : ""}`}
-                    onClick={() => {
-                      setPythonOnly((v) => !v);
-                      appendConsole(`${t("pythonOnlyOn")}: ${!pythonOnly ? "ON" : "OFF"}\n`, "info");
-                    }}
-                  >
-                    {t("pythonOnly")}
-                  </button>
+                  <span
+                    className={`conn-lamp ${connected ? "conn-lamp--on" : ""}`}
+                    title={connected ? t("statusConn") : t("statusDisc")}
+                  />
+                  <span className={`conn-state ${connected ? "conn-state--on" : ""}`}>
+                    {connected ? t("statusConnectedShort") : t("statusDisconnectedShort")}
+                  </span>
+                  <div className="mode-switch-wrap">
+                    <span className="mode-label">{t("modeLabel")}</span>
+                    <div className="mode-switch">
+                      <button
+                        type="button"
+                        className={`mode-btn ${!pythonOnly ? "mode-btn--active" : ""}`}
+                        onClick={() => setPythonOnly(false)}
+                      >
+                        {t("modeHardware")}
+                      </button>
+                      <button
+                        type="button"
+                        className={`mode-btn ${pythonOnly ? "mode-btn--active" : ""}`}
+                        onClick={() => setPythonOnly(true)}
+                      >
+                        {t("modePythonOnly")}
+                      </button>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     className="tb-btn tb-btn--ghost"
@@ -313,7 +408,13 @@ export default function PyBotIDE() {
               </div>
             </div>
 
-            <div className="console-panel">
+            <div
+              className="splitter splitter-horizontal"
+              role="separator"
+              aria-orientation="horizontal"
+              onMouseDown={startConsoleResize}
+            />
+            <div className="console-panel" style={{ height: `${consoleHeight}px` }}>
               <div className="console-head">
                 <span className="console-head__title">{t("terminal")}</span>
                 <span className="console-head__hint">stdout / stderr</span>
