@@ -46,6 +46,7 @@ export default function PyBotIDE() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   const [helpModuleIdx, setHelpModuleIdx] = useState(0);
   const [helpLesson, setHelpLesson] = useState(null);
   const [pythonOnly, setPythonOnly] = useState(
@@ -72,6 +73,7 @@ export default function PyBotIDE() {
   const [currentFileName, setCurrentFileName] = useState("programa.py");
   const consoleEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const toolbarMenuRef = useRef(null);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -113,6 +115,17 @@ export default function PyBotIDE() {
   useEffect(() => {
     consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [consoleLines]);
+
+  useEffect(() => {
+    if (!toolbarMenuOpen) return;
+    const onDocMouseDown = (event) => {
+      if (!toolbarMenuRef.current?.contains(event.target)) {
+        setToolbarMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [toolbarMenuOpen]);
 
   const appendConsole = useCallback((line, kind = "out") => {
     setConsoleLines((prev) => [...prev.slice(-400), { text: line, kind }]);
@@ -272,6 +285,7 @@ export default function PyBotIDE() {
     setHelpModuleIdx(0);
     setHelpLesson(null);
     setHelpOpen(true);
+    setToolbarMenuOpen(false);
   }, []);
 
   const startSidebarResize = useCallback(
@@ -474,69 +488,84 @@ export default function PyBotIDE() {
                     <IconSquare width={16} height={16} />
                     <span className="tb-btn__label">{t("stop")}</span>
                   </button>
-                  <button type="button" className="tb-btn tb-btn--ghost" onClick={onOpenLocal}>
-                    <span className="tb-btn__label">{t("openFile")}</span>
-                  </button>
-                  <button type="button" className="tb-btn tb-btn--ghost" onClick={onSaveLocal}>
-                    <span className="tb-btn__label">{t("saveFile")}</span>
-                  </button>
                 </div>
-                <div className="tb-group tb-group--muted">
+                <div className="tb-group tb-group--muted" ref={toolbarMenuRef}>
                   <button
                     type="button"
-                    className="tb-btn tb-btn--ghost tb-btn--connect"
-                    onClick={connected ? onDisconnect : onConnect}
-                    disabled={connecting || pythonOnly}
+                    className="tb-btn tb-btn--ghost tb-btn--menu"
+                    onClick={() => setToolbarMenuOpen((v) => !v)}
+                    aria-expanded={toolbarMenuOpen}
+                    aria-haspopup="menu"
                   >
-                    {connected ? <IconUsb width={16} height={16} /> : <IconPlug width={16} height={16} />}
-                    <span className="tb-btn__label">{connected ? t("disconnect") : t("connect")}</span>
+                    <span className="tb-btn__label">{t("menu")}</span>
+                    <IconChevron width={14} height={14} />
                   </button>
-                  <span
-                    className={`conn-lamp ${connected ? "conn-lamp--on" : ""}`}
-                    title={connected ? t("statusConn") : t("statusDisc")}
-                  />
-                  <span className={`conn-state ${connected ? "conn-state--on" : ""}`}>
-                    {connected ? t("statusConnectedShort") : t("statusDisconnectedShort")}
-                  </span>
-                  <div className="mode-switch-wrap">
-                    <span className="mode-label">{t("modeLabel")}</span>
-                    <div className="mode-switch">
-                      <button
-                        type="button"
-                        className={`mode-btn ${!pythonOnly ? "mode-btn--active" : ""}`}
-                        onClick={() => setPythonOnly(false)}
-                      >
-                        {t("modeHardware")}
+                  {toolbarMenuOpen ? (
+                    <div className="toolbar-menu" role="menu" aria-label={t("menuActions")}>
+                      <button type="button" className="toolbar-menu-item" onClick={() => { onOpenLocal(); setToolbarMenuOpen(false); }}>
+                        {t("openFile")}
+                      </button>
+                      <button type="button" className="toolbar-menu-item" onClick={() => { onSaveLocal(); setToolbarMenuOpen(false); }}>
+                        {t("saveFile")}
                       </button>
                       <button
                         type="button"
-                        className={`mode-btn ${pythonOnly ? "mode-btn--active" : ""}`}
-                        onClick={() => setPythonOnly(true)}
+                        className="toolbar-menu-item"
+                        onClick={() => {
+                          if (connected) onDisconnect();
+                          else onConnect();
+                          setToolbarMenuOpen(false);
+                        }}
+                        disabled={connecting || pythonOnly}
                       >
-                        {t("modePythonOnly")}
+                        {connected ? t("disconnect") : t("connect")}
+                      </button>
+                      <div className="toolbar-menu-divider" />
+                      <div className="toolbar-menu-mode">
+                        <span className="toolbar-menu-mode__label">{t("modeLabel")}</span>
+                        <div className="mode-switch">
+                          <button
+                            type="button"
+                            className={`mode-btn ${!pythonOnly ? "mode-btn--active" : ""}`}
+                            onClick={() => setPythonOnly(false)}
+                          >
+                            {t("modeHardware")}
+                          </button>
+                          <button
+                            type="button"
+                            className={`mode-btn ${pythonOnly ? "mode-btn--active" : ""}`}
+                            onClick={() => setPythonOnly(true)}
+                          >
+                            {t("modePythonOnly")}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="toolbar-menu-divider" />
+                      <button type="button" className="toolbar-menu-item" onClick={openHelp}>
+                        {t("help")}
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        onClick={() => {
+                          setAboutOpen(true);
+                          setToolbarMenuOpen(false);
+                        }}
+                      >
+                        {t("about")}
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        onClick={() => {
+                          clearConsole();
+                          setToolbarMenuOpen(false);
+                        }}
+                      >
+                        {t("clearConsole")}
                       </button>
                     </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="tb-btn tb-btn--ghost tb-btn--secondary"
-                    onClick={openHelp}
-                  >
-                    <IconHelp width={16} height={16} />
-                    <span className="tb-btn__label">{t("help")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="tb-btn tb-btn--ghost tb-btn--secondary"
-                    onClick={() => setAboutOpen(true)}
-                  >
-                    <IconInfo width={16} height={16} />
-                    <span className="tb-btn__label">{t("about")}</span>
-                  </button>
-                  <button type="button" className="tb-btn tb-btn--ghost tb-btn--secondary" onClick={clearConsole}>
-                    <IconTrash width={16} height={16} />
-                    <span className="tb-btn__label">{t("clearConsole")}</span>
-                  </button>
+                  ) : null}
                 </div>
               </div>
             </header>
