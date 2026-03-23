@@ -115,6 +115,12 @@ export default function PyBotIDE() {
 
   const clearConsole = useCallback(() => setConsoleLines([]), []);
 
+  const codeNeedsHardware = useCallback((source) => {
+    const s = String(source ?? "");
+    // Detecta uso directo de API hardware de PyBot.
+    return /\b(pin|motor|servo|wait)\s*\(/.test(s);
+  }, []);
+
   const resetDefaults = useCallback(() => {
     setTheme("dark");
     setContrast("normal");
@@ -151,7 +157,8 @@ export default function PyBotIDE() {
 
   const onRun = useCallback(async () => {
     if (running) return;
-    if (!pythonOnly && !hardwareIsConnected()) {
+    const needsHw = codeNeedsHardware(code);
+    if (!pythonOnly && needsHw && !hardwareIsConnected()) {
       appendConsole(t("needConnect") + "\n", "err");
       return;
     }
@@ -164,7 +171,7 @@ export default function PyBotIDE() {
       await runPythonAsync(code, {
         onOut: (s) => appendConsole(s, "out"),
         onErr: (s) => appendConsole(s, "err"),
-        pythonOnly,
+        pythonOnly: pythonOnly || !needsHw,
       });
       appendConsole("\n[Fin]\n", "info");
     } catch {
@@ -172,7 +179,7 @@ export default function PyBotIDE() {
     } finally {
       setRunning(false);
     }
-  }, [running, code, appendConsole, pythonOnly]);
+  }, [running, code, appendConsole, pythonOnly, codeNeedsHardware]);
 
   const onStop = useCallback(() => {
     signalStop();

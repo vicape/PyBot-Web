@@ -12,6 +12,57 @@ export const DEFAULT_CODE = [
 
 export const EXAMPLES = [
   {
+    id: "python_hello",
+    keyEs: "Python: Hola",
+    keyEn: "Python: Hello",
+    file: "python_hello.py",
+    code: [
+      'print("Hola desde PyBot Web")',
+      "for i in range(1, 6):",
+      '    print("Contador:", i)',
+    ].join("\n"),
+  },
+  {
+    id: "python_tables",
+    keyEs: "Python: Tabla",
+    keyEn: "Python: Table",
+    file: "python_table.py",
+    code: [
+      "n = 7",
+      'print(f"Tabla del {n}")',
+      "for i in range(1, 11):",
+      '    print(f"{n} x {i} = {n*i}")',
+    ].join("\n"),
+  },
+  {
+    id: "python_functions",
+    keyEs: "Python: Funciones",
+    keyEn: "Python: Functions",
+    file: "python_functions.py",
+    code: [
+      "def saludar(nombre):",
+      '    return f"Hola, {nombre}!"',
+      "",
+      'nombres = ["Ana", "Leo", "Mia"]',
+      "for n in nombres:",
+      "    print(saludar(n))",
+    ].join("\n"),
+  },
+  {
+    id: "python_lists",
+    keyEs: "Python: Listas",
+    keyEn: "Python: Lists",
+    file: "python_lists.py",
+    code: [
+      "nums = [5, 1, 8, 3, 2]",
+      'print("Original:", nums)',
+      "nums.sort()",
+      'print("Ordenada:", nums)',
+      'print("Suma:", sum(nums))',
+      'print("Promedio:", sum(nums)/len(nums))',
+    ].join("\n"),
+  },
+  {
     id: "blink",
     keyEs: "Blink",
     keyEn: "Blink",
