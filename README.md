@@ -8,7 +8,7 @@ Proyecto **aparte** del PyBot de escritorio; no lo modifica.
 ## Python en el navegador
 
 - **Pyodide** (carga desde CDN la primera vez; puede tardar).
-- Misma API que PyBot: `pin`, `servo`, `motor`, `wait`, `print` — en la web van con **`await`** y un `asyncio.run(main())` al final (ver plantilla y ayuda F1 en la app).
+- Misma API que PyBot: `pin`, `servo`, `motor`, `wait`, `print` — en la web van con **`await`** y al final **`await main()`** (no `asyncio.run(main())`: Pyodide ya tiene un event loop activo).
 
 ## Hardware
 

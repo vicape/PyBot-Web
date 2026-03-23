@@ -30,9 +30,9 @@ const STRINGS = {
   await motor(10, 50)
   await wait(1)
 
-Siempre usá async def main(): ... y al final:
-  import asyncio
-  asyncio.run(main())
+Siempre usá async def main(): ... y al final (Pyodide ya tiene event loop activo):
+  await main()
+  (no uses asyncio.run(main()) — falla en el navegador)
 
 Chrome + cable USB + StandardFirmata en el Arduino.`,
   },
@@ -67,9 +67,9 @@ Chrome + cable USB + StandardFirmata en el Arduino.`,
   await motor(10, 50)
   await wait(1)
 
-Always use async def main(): ... and end with:
-  import asyncio
-  asyncio.run(main())
+Always use async def main(): ... and end with (Pyodide already runs an event loop):
+  await main()
+  (do not use asyncio.run(main()) — it fails in the browser)
 
 Chrome + USB + StandardFirmata on the Arduino.`,
   },

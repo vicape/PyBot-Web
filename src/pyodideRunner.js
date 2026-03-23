@@ -52,6 +52,18 @@ async def pin(mode, pin_id, value=None):
 `;
 
 /**
+ * Pyodide ejecuta el script dentro de un event loop ya activo;
+ * asyncio.run() lanza "cannot be called from a running event loop".
+ * Reemplazamos el patrón habitual por await a nivel superior.
+ */
+function patchAsyncioRunForPyodide(code) {
+  let s = code;
+  // asyncio.run(main()) → await main()
+  s = s.replace(/asyncio\.run\s*\(\s*main\s*\(\s*\)\s*\)/g, "await main()");
+  return s;
+}
+
+/**
  * @param {string} userCode
  * @param {{ onOut?: (s:string)=>void, onErr?: (s:string)=>void }} hooks
  */
@@ -76,7 +88,8 @@ export async function runPythonAsync(userCode, hooks = {}) {
 
   pyodide.registerJsModule("pybot_hw", createPyodideHwModule());
 
-  const full = `${PYTHON_PRELUDE}\n\n${userCode}\n`;
+  const userPatched = patchAsyncioRunForPyodide(userCode);
+  const full = `${PYTHON_PRELUDE}\n\n${userPatched}\n`;
   try {
     await pyodide.runPythonAsync(full);
   } catch (e) {
