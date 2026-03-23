@@ -91,20 +91,11 @@
 }
 
 .bg-watermark {
-  position: absolute;
-  inset: 0;
-  background-image: url("/branding/pybot-logo.png");
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: min(56vw, 520px);
-  opacity: 0.05;
-  filter: grayscale(1) contrast(0.95) brightness(1.07);
-  pointer-events: none;
-  z-index: 0;
+  display: none;
 }
 
 .ide-root[data-theme="light"] .bg-watermark {
-  opacity: 0.07;
+  opacity: 0;
 }
 
 /* Fila superior: actividad + cuerpo (corrige barra arriba vs izquierda) */
@@ -668,6 +659,26 @@
   min-width: 0;
   padding: 0 1px;
   background: var(--ide-bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.editor-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("/branding/pybot-logo.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: min(40vw, 420px);
+  opacity: 0.05;
+  filter: grayscale(1) contrast(0.92) brightness(1.1);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ide-root[data-theme="light"] .editor-shell::before {
+  opacity: 0.07;
 }
 
 .workspace-panels {
@@ -691,6 +702,15 @@
   min-height: 0;
   overflow: hidden;
   border-bottom: 1px solid var(--ide-border);
+  position: relative;
+  z-index: 1;
+}
+
+/* Permite que la marca de agua se vea detras del editor */
+.editor-area .monaco-editor,
+.editor-area .monaco-editor .margin,
+.editor-area .monaco-editor .monaco-editor-background {
+  background: transparent !important;
 }
 
 /* —— Consola —— */
@@ -1403,8 +1423,8 @@
     border-left: none;
     border-top: 1px solid var(--ide-border);
   }
-  .bg-watermark {
-    background-size: min(72vw, 360px);
+  .editor-shell::before {
+    background-size: min(64vw, 300px);
     opacity: 0.04;
   }
 }
