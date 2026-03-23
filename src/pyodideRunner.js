@@ -171,8 +171,20 @@ export async function runPythonAsync(userCode, hooks = {}) {
     indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/",
   });
 
-  pyodide.setStdout({ batched: (s) => out(String(s)) });
-  pyodide.setStderr({ batched: (s) => err(String(s)) });
+  // Pyodide "batched" puede entregar líneas sin salto final.
+  // Para que print() se vea como en terminal clásica, reinsertamos \n si falta.
+  pyodide.setStdout({
+    batched: (s) => {
+      const text = String(s);
+      out(text.endsWith("\n") ? text : `${text}\n`);
+    },
+  });
+  pyodide.setStderr({
+    batched: (s) => {
+      const text = String(s);
+      err(text.endsWith("\n") ? text : `${text}\n`);
+    },
+  });
 
   pyodide.registerJsModule(
     "pybot_hw",
