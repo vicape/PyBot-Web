@@ -97,14 +97,14 @@
   background-repeat: no-repeat;
   background-position: center;
   background-size: min(56vw, 520px);
-  opacity: 0.06;
-  filter: grayscale(1) contrast(1.05);
+  opacity: 0.05;
+  filter: grayscale(1) contrast(0.95) brightness(1.07);
   pointer-events: none;
   z-index: 0;
 }
 
 .ide-root[data-theme="light"] .bg-watermark {
-  opacity: 0.08;
+  opacity: 0.07;
 }
 
 /* Fila superior: actividad + cuerpo (corrige barra arriba vs izquierda) */
@@ -429,6 +429,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+  justify-content: flex-end;
 }
 
 .tb-group {
@@ -451,6 +452,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-height: 36px;
   padding: 8px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
@@ -505,6 +507,14 @@
   color: var(--fg-bright);
 }
 
+.tb-btn:focus-visible,
+.mode-btn:focus-visible,
+.act-icon:focus-visible,
+.example-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .conn-lamp {
   width: 10px;
   height: 10px;
@@ -546,13 +556,14 @@
   border: 1px solid var(--ide-border);
   border-radius: 8px;
   overflow: hidden;
+  min-height: 36px;
 }
 
 .mode-btn {
   border: none;
   background: var(--ide-elevated);
   color: var(--fg-muted);
-  padding: 7px 10px;
+  padding: 7px 12px;
   font-size: calc(13px + var(--font-delta, 0px));
   font-weight: 600;
   cursor: pointer;
@@ -636,7 +647,7 @@
 
 .console-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 8px 14px;
@@ -656,7 +667,7 @@
 .console-head__hint {
   font-size: 11px;
   color: var(--fg-muted);
-  opacity: 0.75;
+  opacity: 0.9;
   font-family: var(--font-mono);
 }
 
@@ -994,6 +1005,9 @@
     width: 100%;
     justify-content: flex-start;
   }
+  .tb-group {
+    flex-wrap: wrap;
+  }
   .tb-group--muted {
     border-left: none;
     padding-left: 0;
@@ -1045,6 +1059,7 @@
   }
   .tb-btn {
     padding: 7px 10px;
+    min-height: 34px;
   }
   .console-panel--side {
     width: 100% !important;
@@ -1054,6 +1069,6 @@
   }
   .bg-watermark {
     background-size: min(72vw, 360px);
-    opacity: 0.05;
+    opacity: 0.04;
   }
 }

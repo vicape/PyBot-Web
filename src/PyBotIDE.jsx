@@ -491,7 +491,7 @@ export default function PyBotIDE() {
                 <div className="console-panel console-panel--side" style={{ width: `${consoleWidth}px` }}>
                   <div className="console-head">
                     <span className="console-head__title">{t("terminal")}</span>
-                    <span className="console-head__hint">stdout / stderr</span>
+                    <span className="console-head__hint">{t("terminalOutput")}</span>
                   </div>
                   <pre className="console-out" role="log" aria-live="polite">
                     {consoleLines.map((line, i) => (
@@ -538,7 +538,7 @@ export default function PyBotIDE() {
                 <div className="console-panel" style={{ height: `${consoleHeight}px` }}>
                   <div className="console-head">
                     <span className="console-head__title">{t("terminal")}</span>
-                    <span className="console-head__hint">stdout / stderr</span>
+                    <span className="console-head__hint">{t("terminalOutput")}</span>
                   </div>
                   <pre className="console-out" role="log" aria-live="polite">
                     {consoleLines.map((line, i) => (
