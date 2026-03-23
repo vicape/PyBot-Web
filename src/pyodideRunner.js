@@ -49,8 +49,9 @@ async def _apin(mode, pin_id, value=None):
     if m == "in":
         return await pybot_hw.pin_read(pin_id)
     if m == "out":
+        # Compat escritorio: pin("out", pin) sin valor -> LOW por defecto
         if value is None:
-            raise ValueError("pin_args")
+            value = 0
         await pybot_hw.pin_write(pin_id, value)
         return None
     raise ValueError("pin_mode")
@@ -78,6 +79,13 @@ def pin(*args):
         if len(args) < 2:
             raise ValueError("pin_args")
         pin_id = args[1]
+        value = args[2] if len(args) >= 3 else None
+        return run_sync(_apin(mode, pin_id, value))
+
+    # pin(pin_id, "in"/"out", [value]) estilo alternativo escritorio
+    if len(args) >= 2 and isinstance(args[1], str) and args[1].lower().strip() in ("in", "out"):
+        pin_id = args[0]
+        mode = args[1]
         value = args[2] if len(args) >= 3 else None
         return run_sync(_apin(mode, pin_id, value))
 
