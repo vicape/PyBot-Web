@@ -536,6 +536,22 @@
   background: var(--ide-bg);
 }
 
+.workspace-panels {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.workspace-panels--right {
+  flex-direction: row;
+}
+
+.workspace-panels--right .editor-shell {
+  min-height: 0;
+}
+
 .editor-area {
   flex: 1;
   min-height: 0;
@@ -551,6 +567,15 @@
   flex-direction: column;
   background: #0d0d0d;
   border-top: 1px solid var(--ide-border);
+}
+
+.console-panel--side {
+  height: auto;
+  width: 360px;
+  min-width: 260px;
+  max-width: 720px;
+  border-top: none;
+  border-left: 1px solid var(--ide-border);
 }
 
 .ide-root[data-theme="light"] .console-panel {

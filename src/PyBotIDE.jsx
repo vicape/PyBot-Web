@@ -53,6 +53,12 @@ export default function PyBotIDE() {
   const [consoleHeight, setConsoleHeight] = useState(
     () => parseInt(localStorage.getItem("pybot_console_h") || "220", 10),
   );
+  const [consoleWidth, setConsoleWidth] = useState(
+    () => parseInt(localStorage.getItem("pybot_console_w") || "360", 10),
+  );
+  const [terminalPosition, setTerminalPosition] = useState(
+    () => localStorage.getItem("pybot_terminal_pos") || "bottom",
+  );
   const [showPybotLogo, setShowPybotLogo] = useState(true);
   const [showSchoolLogo, setShowSchoolLogo] = useState(true);
   const consoleEndRef = useRef(null);
@@ -77,6 +83,14 @@ export default function PyBotIDE() {
   useEffect(() => {
     localStorage.setItem("pybot_console_h", String(consoleHeight));
   }, [consoleHeight]);
+
+  useEffect(() => {
+    localStorage.setItem("pybot_console_w", String(consoleWidth));
+  }, [consoleWidth]);
+
+  useEffect(() => {
+    localStorage.setItem("pybot_terminal_pos", terminalPosition);
+  }, [terminalPosition]);
 
   useEffect(() => {
     consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -184,6 +198,25 @@ export default function PyBotIDE() {
       window.addEventListener("mouseup", onUp);
     },
     [consoleHeight],
+  );
+
+  const startConsoleWidthResize = useCallback(
+    (event) => {
+      event.preventDefault();
+      const startX = event.clientX;
+      const startW = consoleWidth;
+      const onMove = (ev) => {
+        const next = Math.max(260, Math.min(720, startW - (ev.clientX - startX)));
+        setConsoleWidth(next);
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [consoleWidth],
   );
 
   return (
@@ -384,50 +417,100 @@ export default function PyBotIDE() {
               </div>
             </header>
 
-            <div className="editor-shell">
-              <div className="editor-area">
-                <Editor
-                  height="100%"
-                  language="python"
-                  theme={monacoTheme}
-                  value={code}
-                  onChange={(v) => setCode(v ?? "")}
-                  options={{
-                    fontSize: 14,
-                    fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-                    minimap: { enabled: false },
-                    wordWrap: "on",
-                    scrollBeyondLastLine: false,
-                    tabSize: 4,
-                    padding: { top: 12, bottom: 12 },
-                    smoothScrolling: true,
-                    cursorBlinking: "smooth",
-                    renderLineHighlight: "line",
-                  }}
+            {terminalPosition === "right" ? (
+              <div className="workspace-panels workspace-panels--right">
+                <div className="editor-shell">
+                  <div className="editor-area">
+                    <Editor
+                      height="100%"
+                      language="python"
+                      theme={monacoTheme}
+                      value={code}
+                      onChange={(v) => setCode(v ?? "")}
+                      options={{
+                        fontSize: 14,
+                        fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+                        minimap: { enabled: false },
+                        wordWrap: "on",
+                        scrollBeyondLastLine: false,
+                        tabSize: 4,
+                        padding: { top: 12, bottom: 12 },
+                        smoothScrolling: true,
+                        cursorBlinking: "smooth",
+                        renderLineHighlight: "line",
+                      }}
+                    />
+                  </div>
+                </div>
+                <div
+                  className="splitter splitter-vertical"
+                  role="separator"
+                  aria-orientation="vertical"
+                  onMouseDown={startConsoleWidthResize}
                 />
+                <div className="console-panel console-panel--side" style={{ width: `${consoleWidth}px` }}>
+                  <div className="console-head">
+                    <span className="console-head__title">{t("terminal")}</span>
+                    <span className="console-head__hint">stdout / stderr</span>
+                  </div>
+                  <pre className="console-out" role="log" aria-live="polite">
+                    {consoleLines.map((line, i) => (
+                      <span key={i} className={`co-line co-${line.kind}`}>
+                        {line.text}
+                      </span>
+                    ))}
+                    <span ref={consoleEndRef} />
+                  </pre>
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="editor-shell">
+                  <div className="editor-area">
+                    <Editor
+                      height="100%"
+                      language="python"
+                      theme={monacoTheme}
+                      value={code}
+                      onChange={(v) => setCode(v ?? "")}
+                      options={{
+                        fontSize: 14,
+                        fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+                        minimap: { enabled: false },
+                        wordWrap: "on",
+                        scrollBeyondLastLine: false,
+                        tabSize: 4,
+                        padding: { top: 12, bottom: 12 },
+                        smoothScrolling: true,
+                        cursorBlinking: "smooth",
+                        renderLineHighlight: "line",
+                      }}
+                    />
+                  </div>
+                </div>
 
-            <div
-              className="splitter splitter-horizontal"
-              role="separator"
-              aria-orientation="horizontal"
-              onMouseDown={startConsoleResize}
-            />
-            <div className="console-panel" style={{ height: `${consoleHeight}px` }}>
-              <div className="console-head">
-                <span className="console-head__title">{t("terminal")}</span>
-                <span className="console-head__hint">stdout / stderr</span>
-              </div>
-              <pre className="console-out" role="log" aria-live="polite">
-                {consoleLines.map((line, i) => (
-                  <span key={i} className={`co-line co-${line.kind}`}>
-                    {line.text}
-                  </span>
-                ))}
-                <span ref={consoleEndRef} />
-              </pre>
-            </div>
+                <div
+                  className="splitter splitter-horizontal"
+                  role="separator"
+                  aria-orientation="horizontal"
+                  onMouseDown={startConsoleResize}
+                />
+                <div className="console-panel" style={{ height: `${consoleHeight}px` }}>
+                  <div className="console-head">
+                    <span className="console-head__title">{t("terminal")}</span>
+                    <span className="console-head__hint">stdout / stderr</span>
+                  </div>
+                  <pre className="console-out" role="log" aria-live="polite">
+                    {consoleLines.map((line, i) => (
+                      <span key={i} className={`co-line co-${line.kind}`}>
+                        {line.text}
+                      </span>
+                    ))}
+                    <span ref={consoleEndRef} />
+                  </pre>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -480,6 +563,17 @@ export default function PyBotIDE() {
               >
                 <option value="es">Español</option>
                 <option value="en">English</option>
+              </select>
+            </label>
+            <label className="modal-row">
+              <span className="modal-label">{t("terminalPosition")}</span>
+              <select
+                value={terminalPosition}
+                onChange={(e) => setTerminalPosition(e.target.value)}
+                className="modal-select"
+              >
+                <option value="bottom">{t("terminalBottom")}</option>
+                <option value="right">{t("terminalRight")}</option>
               </select>
             </label>
             <button type="button" className="modal-close" onClick={() => setSettingsOpen(false)}>
