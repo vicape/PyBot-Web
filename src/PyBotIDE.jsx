@@ -59,6 +59,9 @@ export default function PyBotIDE() {
   const [terminalPosition, setTerminalPosition] = useState(
     () => localStorage.getItem("pybot_terminal_pos") || "bottom",
   );
+  const [fontDelta, setFontDelta] = useState(
+    () => parseInt(localStorage.getItem("pybot_font_delta") || "0", 10),
+  );
   const [showPybotLogo, setShowPybotLogo] = useState(true);
   const [showSchoolLogo, setShowSchoolLogo] = useState(true);
   const consoleEndRef = useRef(null);
@@ -91,6 +94,10 @@ export default function PyBotIDE() {
   useEffect(() => {
     localStorage.setItem("pybot_terminal_pos", terminalPosition);
   }, [terminalPosition]);
+
+  useEffect(() => {
+    localStorage.setItem("pybot_font_delta", String(fontDelta));
+  }, [fontDelta]);
 
   useEffect(() => {
     consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -220,7 +227,11 @@ export default function PyBotIDE() {
   );
 
   return (
-    <div className="ide-root" data-theme={theme}>
+    <div
+      className="ide-root"
+      data-theme={theme}
+      style={{ "--font-delta": `${fontDelta}px` }}
+    >
       <div className="ide-workbench">
         <aside className="activity-bar" aria-label="Barra de actividad">
           <button
@@ -428,7 +439,7 @@ export default function PyBotIDE() {
                       value={code}
                       onChange={(v) => setCode(v ?? "")}
                       options={{
-                        fontSize: 15,
+                        fontSize: 15 + fontDelta,
                         fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
                         minimap: { enabled: false },
                         wordWrap: "on",
@@ -474,7 +485,7 @@ export default function PyBotIDE() {
                       value={code}
                       onChange={(v) => setCode(v ?? "")}
                       options={{
-                        fontSize: 15,
+                        fontSize: 15 + fontDelta,
                         fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
                         minimap: { enabled: false },
                         wordWrap: "on",
@@ -575,6 +586,26 @@ export default function PyBotIDE() {
                 <option value="bottom">{t("terminalBottom")}</option>
                 <option value="right">{t("terminalRight")}</option>
               </select>
+            </label>
+            <label className="modal-row">
+              <span className="modal-label">{t("fontSize")}</span>
+              <div className="font-stepper">
+                <button
+                  type="button"
+                  className="font-step-btn"
+                  onClick={() => setFontDelta((v) => Math.max(-3, v - 1))}
+                >
+                  -
+                </button>
+                <span className="font-step-value">{15 + fontDelta}px</span>
+                <button
+                  type="button"
+                  className="font-step-btn"
+                  onClick={() => setFontDelta((v) => Math.min(8, v + 1))}
+                >
+                  +
+                </button>
+              </div>
             </label>
             <button type="button" className="modal-close" onClick={() => setSettingsOpen(false)}>
               {t("close")}
