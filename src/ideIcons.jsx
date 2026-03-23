@@ -91,3 +91,25 @@ export function IconChevron(props) {
     </svg>
   );
 }
+
+export function IconInfo(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 11v6" />
+      <path d="M12 7h.01" />
+    </svg>
+  );
+}
+
+export function IconPyBot(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="5" y="7" width="14" height="11" rx="3" />
+      <path d="M12 3v4" />
+      <circle cx="9.5" cy="12" r="1" />
+      <circle cx="14.5" cy="12" r="1" />
+      <path d="M9 15h6" />
+    </svg>
+  );
+}

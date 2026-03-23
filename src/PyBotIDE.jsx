@@ -20,6 +20,8 @@ import {
   IconTrash,
   IconPlug,
   IconChevron,
+  IconInfo,
+  IconPyBot,
 } from "./ideIcons.jsx";
 
 function labelForExample(ex) {
@@ -40,6 +42,10 @@ export default function PyBotIDE() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [pythonOnly, setPythonOnly] = useState(
+    () => localStorage.getItem("pybot_python_only") === "1",
+  );
   const [, forceLang] = useState(0);
   const consoleEndRef = useRef(null);
 
@@ -51,6 +57,10 @@ export default function PyBotIDE() {
   useEffect(() => {
     localStorage.setItem("pybot_code", code);
   }, [code]);
+
+  useEffect(() => {
+    localStorage.setItem("pybot_python_only", pythonOnly ? "1" : "0");
+  }, [pythonOnly]);
 
   useEffect(() => {
     consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -84,7 +94,7 @@ export default function PyBotIDE() {
 
   const onRun = useCallback(async () => {
     if (running) return;
-    if (!hardwareIsConnected()) {
+    if (!pythonOnly && !hardwareIsConnected()) {
       appendConsole(t("needConnect") + "\n", "err");
       return;
     }
@@ -97,6 +107,7 @@ export default function PyBotIDE() {
       await runPythonAsync(code, {
         onOut: (s) => appendConsole(s, "out"),
         onErr: (s) => appendConsole(s, "err"),
+        pythonOnly,
       });
       appendConsole("\n[Fin]\n", "info");
     } catch {
@@ -104,7 +115,7 @@ export default function PyBotIDE() {
     } finally {
       setRunning(false);
     }
-  }, [running, code, appendConsole]);
+  }, [running, code, appendConsole, pythonOnly]);
 
   const onStop = useCallback(() => {
     signalStop();
@@ -209,7 +220,9 @@ export default function PyBotIDE() {
           <div className="main-stack">
             <header className="toolbar">
               <div className="toolbar-brand">
-                <div className="brand-mark" aria-hidden />
+                <div className="brand-mark" aria-hidden>
+                  <IconPyBot width={22} height={22} />
+                </div>
                 <div className="brand-copy">
                   <span className="brand-title">{t("appTitle")}</span>
                   <span className="brand-sub">{t("brandSub")}</span>
@@ -236,10 +249,21 @@ export default function PyBotIDE() {
                     type="button"
                     className="tb-btn tb-btn--ghost"
                     onClick={connected ? onDisconnect : onConnect}
-                    disabled={connecting}
+                    disabled={connecting || pythonOnly}
                   >
                     {connected ? <IconUsb width={16} height={16} /> : <IconPlug width={16} height={16} />}
                     {connected ? t("disconnect") : t("connect")}
+                  </button>
+                  <span className={`conn-lamp ${connected ? "conn-lamp--on" : ""}`} title={connected ? t("statusConn") : t("statusDisc")} />
+                  <button
+                    type="button"
+                    className={`tb-btn tb-btn--ghost ${pythonOnly ? "tb-btn--active" : ""}`}
+                    onClick={() => {
+                      setPythonOnly((v) => !v);
+                      appendConsole(`${t("pythonOnlyOn")}: ${!pythonOnly ? "ON" : "OFF"}\n`, "info");
+                    }}
+                  >
+                    {t("pythonOnly")}
                   </button>
                   <button
                     type="button"
@@ -248,6 +272,14 @@ export default function PyBotIDE() {
                   >
                     <IconHelp width={16} height={16} />
                     {t("help")}
+                  </button>
+                  <button
+                    type="button"
+                    className="tb-btn tb-btn--ghost"
+                    onClick={() => setAboutOpen(true)}
+                  >
+                    <IconInfo width={16} height={16} />
+                    {t("about")}
                   </button>
                   <button type="button" className="tb-btn tb-btn--ghost" onClick={clearConsole}>
                     <IconTrash width={16} height={16} />
@@ -307,7 +339,7 @@ export default function PyBotIDE() {
         <span className="status-main">
           {running ? t("statusRunning") : t("statusReady")}
           <span className="status-sep">·</span>
-          {connected ? t("statusConn") : t("statusDisc")}
+          {pythonOnly ? t("pythonOnlyOn") : connected ? t("statusConn") : t("statusDisc")}
           {connected && hardwareBaudRate() ? (
             <>
               <span className="status-sep">·</span>
@@ -369,6 +401,25 @@ export default function PyBotIDE() {
             </h3>
             <pre className="help-pre">{t("helpBody")}</pre>
             <button type="button" className="modal-close" onClick={() => setHelpOpen(false)}>
+              {t("close")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {aboutOpen ? (
+        <div className="modal-back" role="presentation" onClick={() => setAboutOpen(false)}>
+          <div
+            className="modal modal-wide"
+            role="dialog"
+            aria-labelledby="about-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="about-title" className="modal-title">
+              {t("about")}
+            </h3>
+            <pre className="help-pre">{t("aboutBody")}</pre>
+            <button type="button" className="modal-close" onClick={() => setAboutOpen(false)}>
               {t("close")}
             </button>
           </div>

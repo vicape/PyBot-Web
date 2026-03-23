@@ -1,5 +1,16 @@
 import { createPyodideHwModule } from "./hardwareBridge.js";
 
+function createPythonOnlyHwModule() {
+  return {
+    motor: async () => null,
+    servo_write: async () => null,
+    wait: async (seconds) =>
+      new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(seconds) * 1000))),
+    pin_read: async () => 0,
+    pin_write: async () => null,
+  };
+}
+
 /**
  * API async nativa para Pyodide (compatible universal, sin run_sync/JSPI).
  * El código estilo escritorio se transforma automáticamente antes de ejecutar.
@@ -141,11 +152,12 @@ function normalizeUserCode(code) {
 
 /**
  * @param {string} userCode
- * @param {{ onOut?: (s:string)=>void, onErr?: (s:string)=>void }} hooks
+ * @param {{ onOut?: (s:string)=>void, onErr?: (s:string)=>void, pythonOnly?: boolean }} hooks
  */
 export async function runPythonAsync(userCode, hooks = {}) {
   const out = hooks.onOut ?? (() => {});
   const err = hooks.onErr ?? (() => {});
+  const pythonOnly = Boolean(hooks.pythonOnly);
 
   if (typeof globalThis.loadPyodide !== "function") {
     throw new Error(
@@ -162,7 +174,10 @@ export async function runPythonAsync(userCode, hooks = {}) {
   pyodide.setStdout({ batched: (s) => out(String(s)) });
   pyodide.setStderr({ batched: (s) => err(String(s)) });
 
-  pyodide.registerJsModule("pybot_hw", createPyodideHwModule());
+  pyodide.registerJsModule(
+    "pybot_hw",
+    pythonOnly ? createPythonOnlyHwModule() : createPyodideHwModule(),
+  );
 
   const userMigrated = normalizeUserCode(userCode);
   const full = `${PYTHON_PRELUDE}\n\n${userMigrated}\n`;
