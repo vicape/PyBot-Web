@@ -428,7 +428,7 @@ export default function PyBotIDE() {
                       value={code}
                       onChange={(v) => setCode(v ?? "")}
                       options={{
-                        fontSize: 14,
+                        fontSize: 15,
                         fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
                         minimap: { enabled: false },
                         wordWrap: "on",
@@ -474,7 +474,7 @@ export default function PyBotIDE() {
                       value={code}
                       onChange={(v) => setCode(v ?? "")}
                       options={{
-                        fontSize: 14,
+                        fontSize: 15,
                         fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
                         minimap: { enabled: false },
                         wordWrap: "on",
