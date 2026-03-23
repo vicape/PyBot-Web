@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import Editor from "@monaco-editor/react";
 import "./PyBotIDE.css";
 import { DEFAULT_CODE, EXAMPLES } from "./examplesData.js";
-import { t, getLang, setLang } from "./i18n.js";
+import { t, getLang, setLang, formatHardwareError } from "./i18n.js";
 import {
   hardwareConnect,
   hardwareDisconnect,
@@ -70,7 +70,7 @@ export default function PyBotIDE() {
       setConnected(true);
       appendConsole(`USB OK @ ${baudRate} baud (Firmata)\n`, "info");
     } catch (e) {
-      appendConsole(`${e.message}\n`, "err");
+      appendConsole(`${formatHardwareError(e?.message)}\n`, "err");
     } finally {
       setConnecting(false);
     }

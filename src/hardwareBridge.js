@@ -16,17 +16,41 @@ export function hardwareBaudRate() {
   return _baudRate;
 }
 
+/** Códigos traducidos en i18n (formatHardwareError) */
 export async function hardwareConnect() {
   if (!("serial" in navigator)) {
-    throw new Error("Web Serial no disponible (usá Chrome).");
+    throw new Error("PYBOT_USB:MISSING_BROWSER");
   }
+  if (typeof globalThis.isSecureContext === "boolean" && !globalThis.isSecureContext) {
+    throw new Error("PYBOT_USB:HTTPS");
+  }
+
   await hardwareDisconnect();
-  const port = await navigator.serial.requestPort();
-  const { session, close, baudRate } = await connectFirmataSession(port);
-  _session = session;
-  _close = close;
-  _baudRate = baudRate;
-  return { baudRate };
+
+  let port;
+  try {
+    port = await navigator.serial.requestPort();
+  } catch (e) {
+    const name = e?.name ?? "";
+    if (name === "NotFoundError") {
+      throw new Error("PYBOT_USB:LIST_EMPTY");
+    }
+    if (name === "SecurityError") {
+      throw new Error("PYBOT_USB:PERMISSION");
+    }
+    throw e;
+  }
+
+  try {
+    const { session, close, baudRate } = await connectFirmataSession(port);
+    _session = session;
+    _close = close;
+    _baudRate = baudRate;
+    return { baudRate };
+  } catch (e) {
+    const msg = e?.message ?? String(e);
+    throw new Error(`PYBOT_FIRMATA:${msg}`);
+  }
 }
 
 export async function hardwareDisconnect() {
