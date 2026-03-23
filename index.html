@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PyBot Web — Motor + pulsador</title>
+    <title>PyBot Web by VIC — IDE Python + Arduino</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -13,6 +13,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.__PYBOT_STOP__ = false;
+    </script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

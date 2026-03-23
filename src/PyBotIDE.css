@@ -1,0 +1,337 @@
+/* Tema alineado a PyBot escritorio (theme.py) */
+.ide-root[data-theme="dark"] {
+  --bg-dark: #1e1e1e;
+  --bg-sidebar: #252526;
+  --bg-activity: #333333;
+  --bg-toolbar: #323233;
+  --bg-console: #1e1e1e;
+  --bg-input: #3c3c3c;
+  --fg: #cccccc;
+  --fg-dim: #858585;
+  --fg-bright: #ffffff;
+  --accent: #0078d4;
+  --border: #474747;
+  --run: #16825d;
+  --stop: #c72e2e;
+  --hover-act: #505050;
+  --err: #f48771;
+  --info: #3794ff;
+}
+
+.ide-root[data-theme="light"] {
+  --bg-dark: #f3f3f3;
+  --bg-sidebar: #f3f3f3;
+  --bg-activity: #d4d4d4;
+  --bg-toolbar: #e8e8e8;
+  --bg-console: #ffffff;
+  --bg-input: #e8e8e8;
+  --fg: #3b3b3b;
+  --fg-dim: #767676;
+  --fg-bright: #000000;
+  --accent: #0078d4;
+  --border: #c8c8c8;
+  --run: #16825d;
+  --stop: #c72e2e;
+  --hover-act: #c0c0c0;
+  --err: #cd3131;
+  --info: #0451a5;
+}
+
+.ide-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  font-family: "Segoe UI", "DM Sans", system-ui, sans-serif;
+  background: var(--bg-dark);
+  color: var(--fg);
+}
+
+.ide-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.activity-bar {
+  width: 48px;
+  flex-shrink: 0;
+  background: var(--bg-activity);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 4px 0;
+  border-right: 1px solid var(--border);
+}
+
+.act-btn {
+  margin: 2px 4px;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.act-btn:hover {
+  background: var(--hover-act);
+  color: var(--fg-bright);
+}
+
+.act-btn.act-active {
+  border-left: 3px solid var(--accent);
+}
+
+.act-btn.act-ok {
+  color: #4ec9b0;
+}
+
+.act-spacer {
+  flex: 1;
+  min-height: 16px;
+}
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.sidebar-head,
+.sidebar-sub {
+  padding: 10px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+}
+
+.example-list {
+  padding: 4px 0 12px;
+}
+
+.example-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.example-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ide-root[data-theme="light"] .example-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.main-stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar-title {
+  font-weight: 600;
+  color: var(--fg-bright);
+}
+
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tb-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tb-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.tb-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tb-run {
+  background: var(--run);
+  color: #fff;
+}
+
+.tb-stop {
+  background: var(--stop);
+  color: #fff;
+}
+
+.editor-area {
+  flex: 1;
+  min-height: 180px;
+  border-bottom: 1px solid var(--border);
+}
+
+.console-panel {
+  height: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-console);
+}
+
+.console-head {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+.console-out {
+  flex: 1;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  font-family: "Consolas", "Cascadia Code", monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.co-out {
+  color: var(--fg);
+}
+
+.co-err {
+  color: var(--err);
+}
+
+.co-info {
+  color: var(--info);
+}
+
+.status-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.sb-dot {
+  font-size: 10px;
+}
+
+.sb-ok {
+  color: #4ec9b0;
+}
+
+.sb-right {
+  margin-left: auto;
+  opacity: 0.9;
+}
+
+.modal-back {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modal {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  max-width: 420px;
+  width: 100%;
+  color: var(--fg);
+}
+
+.modal-wide {
+  max-width: 560px;
+}
+
+.modal h3 {
+  margin: 0 0 16px;
+  color: var(--fg-bright);
+}
+
+.modal-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+.modal-select {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--fg);
+}
+
+.modal-close {
+  margin-top: 8px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.help-pre {
+  margin: 0 0 16px;
+  padding: 12px;
+  background: var(--bg-dark);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 50vh;
+  overflow: auto;
+}

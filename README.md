@@ -1,16 +1,22 @@
-# PyBot-Web
+# PyBot-Web — IDE en el navegador
 
-Web app (React + Vite) para controlar Arduino con **Firmata** vía **Web Serial** en Chrome (Chromebook / Mac).
+IDE **tipo PyBot de escritorio**: barra de actividad, sidebar con **ejemplos**, **editor Monaco** (Python), **terminal**, **Run/Stop**, **Conectar USB** (Web Serial + **StandardFirmata**), **ajustes** (tema claro/oscuro, idioma ES/EN), **ayuda**.
 
 Repo: https://github.com/vicape/PyBot-Web  
-Proyecto **aparte** del IDE **PyBot** de escritorio; no reemplaza ni borra nada de ese repo.
+Proyecto **aparte** del PyBot de escritorio; no lo modifica.
 
-## Estado actual
+## Python en el navegador
 
-- UI, diseño y **lógica de estados** del motor / fases (igual que el ejercicio con pulsador y rebotes).
-- **Firmata por serie**: pendiente de cablear (abrir puerto, baud, sysex, servo pin 10, digital pin 12).
+- **Pyodide** (carga desde CDN la primera vez; puede tardar).
+- Misma API que PyBot: `pin`, `servo`, `motor`, `wait`, `print` — en la web van con **`await`** y un `asyncio.run(main())` al final (ver plantilla y ayuda F1 en la app).
 
-## Desarrollo local
+## Hardware
+
+- **Chrome** + **HTTPS** (Vercel) o `localhost`.
+- Arduino con **StandardFirmata** (57600 / 115200).
+- Firmata en JS: digital in/out, PWM, servo, motor, analógico A0–A5.
+
+## Desarrollo
 
 ```bash
 cd PyBot-Web
@@ -18,33 +24,12 @@ npm install
 npm run dev
 ```
 
-Abrí la URL que muestra Vite (Chrome).
+## GitHub / Vercel
 
-## Subir a GitHub (lo más fácil)
-
-👉 **[docs/LO_MAS_FACIL.md](docs/LO_MAS_FACIL.md)** — **GitHub Desktop**: instalás, entrás con **Google** en el navegador, **Add local repository** → carpeta `PyBot-Web` → **Publish repository**. Casi sin comandos.
-
-### Desde esta PC (Git + script)
-
-Ya está hecho **commit local** en `C:\Users\Naro\PyBot-Web` (rama `main`). Para crear el repo en GitHub y subir todo **desde acá**, en **PowerShell** (o terminal de Cursor):
-
-```powershell
-cd C:\Users\Naro\PyBot-Web
-powershell -ExecutionPolicy Bypass -File .\scripts\publicar-a-github.ps1
-```
-
-Eso instala **GitHub CLI** si falta, abre el **navegador** para que entres con **Google**, crea el repo **PyBot-Web** y hace **push**.  
-(Si el nombre `PyBot-Web` ya existe en tu cuenta, creá el repo vacío en la web y usá `git remote add origin ...` + `git push -u origin main` como en [docs/AUTH_DESDE_CURSOR.md](docs/AUTH_DESDE_CURSOR.md).)
-
-Alternativa con terminal + Cursor: **[docs/AUTH_DESDE_CURSOR.md](docs/AUTH_DESDE_CURSOR.md)**.
-
-## Deploy en Vercel (vos)
-
-1. [vercel.com](https://vercel.com) → **Add New Project** → importar el repo `PyBot-Web`.
-2. Framework: **Vite** (o dejar autodetect).
-3. **Deploy**. La URL `*.vercel.app` sirve por HTTPS (necesario para Web Serial en producción).
+- **[docs/LO_MAS_FACIL.md](docs/LO_MAS_FACIL.md)** — GitHub Desktop.
+- **Vercel**: importar repo, framework **Vite**, deploy.
 
 ## Notas
 
-- Web Serial solo en **HTTPS** o `localhost`.
-- Arduino con **StandardFirmata** (misma idea que PyBot escritorio).
+- `input()` de consola no está soportado como en escritorio; los ejemplos web evitan o usan bucles fijos.
+- **Detener**: Stop marca bandera; el código debe usar `await wait(...)` o await en API para poder cortar entre pasos.
