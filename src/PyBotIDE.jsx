@@ -69,7 +69,9 @@ export default function PyBotIDE() {
   );
   const [showPybotLogo, setShowPybotLogo] = useState(true);
   const [showSchoolLogo, setShowSchoolLogo] = useState(true);
+  const [currentFileName, setCurrentFileName] = useState("programa.py");
   const consoleEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -188,6 +190,67 @@ export default function PyBotIDE() {
     signalStop();
     appendConsole("\n[Stop solicitado]\n", "info");
   }, [appendConsole]);
+
+  const onOpenLocal = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const onFileSelected = useCallback(
+    async (event) => {
+      const file = event.target?.files?.[0];
+      event.target.value = "";
+      if (!file) return;
+      try {
+        const text = await file.text();
+        setCode(String(text ?? ""));
+        setCurrentFileName(file.name || "programa.py");
+        appendConsole(`${t("fileLoaded")} ${file.name || "programa.py"}\n`, "info");
+      } catch {
+        appendConsole(`${t("fileLoaded")} ERROR\n`, "err");
+      }
+    },
+    [appendConsole],
+  );
+
+  const onSaveLocal = useCallback(async () => {
+    const fallbackName =
+      currentFileName && currentFileName.toLowerCase().endsWith(".py")
+        ? currentFileName
+        : `${currentFileName || "programa"}.py`;
+    try {
+      if (typeof window.showSaveFilePicker === "function") {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: fallbackName,
+          types: [
+            {
+              description: "Python",
+              accept: { "text/x-python": [".py"], "text/plain": [".py"] },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(code);
+        await writable.close();
+        const savedName = handle.name || fallbackName;
+        setCurrentFileName(savedName);
+        appendConsole(`${t("fileSaved")} ${savedName}\n`, "info");
+        return;
+      }
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+    }
+
+    const blob = new Blob([code], { type: "text/x-python;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fallbackName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    appendConsole(`${t("fileSaved")} ${fallbackName}\n`, "info");
+  }, [code, currentFileName, appendConsole]);
 
   const loadExample = useCallback(
     (ex) => {
@@ -410,6 +473,12 @@ export default function PyBotIDE() {
                   <button type="button" className="tb-btn tb-btn--stop tb-btn--primary" onClick={onStop}>
                     <IconSquare width={16} height={16} />
                     <span className="tb-btn__label">{t("stop")}</span>
+                  </button>
+                  <button type="button" className="tb-btn tb-btn--ghost" onClick={onOpenLocal}>
+                    <span className="tb-btn__label">{t("openFile")}</span>
+                  </button>
+                  <button type="button" className="tb-btn tb-btn--ghost" onClick={onSaveLocal}>
+                    <span className="tb-btn__label">{t("saveFile")}</span>
                   </button>
                 </div>
                 <div className="tb-group tb-group--muted">
@@ -781,6 +850,13 @@ export default function PyBotIDE() {
           </div>
         </div>
       ) : null}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".py,text/x-python,text/plain"
+        style={{ display: "none" }}
+        onChange={onFileSelected}
+      />
     </div>
   );
 }
