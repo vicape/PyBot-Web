@@ -41,15 +41,15 @@ const STRINGS = {
     needConnect:
       "Conectá el USB antes de ejecutar código con pin/motor/servo, o activá Solo Python.",
     usbErr_MISSING_BROWSER:
-      "Web Serial no está disponible. Usá Google Chrome o Microsoft Edge actualizado (no Firefox ni Safari).",
+      "Este dispositivo o navegador no tiene compatibilidad USB suficiente para esta función.",
     usbErr_HTTPS:
-      "Abrí PyBot con https:// o solo en localhost — Web Serial no funciona en sitios inseguros (http en otra máquina).",
+      "La aplicación debe abrirse en un entorno seguro para habilitar la conexión USB.",
     usbErr_LIST_EMPTY:
-      "No elegiste puerto, la lista salió vacía, o cancelaste. En una PC “nueva” casi siempre falta: (1) Driver USB-serial para tu placa: CH340 o CP210x (buscá en Google “CH340 driver Windows”). (2) Cable USB que lleve datos, no solo carga. (3) Otro puerto USB del PC. (4) En Windows: Administrador de dispositivos → debería verse un “Puerto COM”. Sin COM, el navegador no puede listar el Arduino.",
+      "No se encontró ningún puerto disponible o se canceló la selección. Verificá cable de datos, drivers del sistema y que el dispositivo aparezca como puerto serie.",
     usbErr_PERMISSION:
-      "El navegador bloqueó el USB. Revisá el candado de la barra de direcciones y permití el acceso al puerto serie.",
+      "La aplicación no tiene permisos para acceder al USB. Revisá permisos del navegador y del sistema.",
     usbErr_FIRMATA:
-      "El puerto abrió pero no respondió como StandardFirmata. Subí el sketch “StandardFirmata” desde el IDE de Arduino, cerrá el Monitor Serie del IDE (solo un programa puede usar el COM) y volvé a conectar. Detalle técnico:",
+      "El dispositivo USB no respondió correctamente. Reiniciá la placa, cerrá otras apps que usen el puerto y volvé a intentar.",
     pyodideLoad: "Cargando Python (primera vez puede tardar)…",
     statusMeta: "Python · mismo estilo que escritorio",
     helpBody: `PyBot Web usa Python estilo escritorio: escribís pin/motor/servo/wait sin async/await.
@@ -64,20 +64,20 @@ const STRINGS = {
 
 No hace falta envolver en main(); podés escribir líneas directas.
 
-Por dentro Pyodide adapta el código para ejecutar hardware de forma compatible.
+El entorno adapta el código automáticamente para ejecutar de forma compatible.
 
 USB / puerto no aparece:
 • Solo Chrome o Edge (Chromium). HTTPS o localhost.
 • Driver CH340 o CP2102 según el chip de tu placa; cable de datos; otro USB.
-• En el Arduino: StandardFirmata cargado; cerrar Monitor Serie del IDE.
+• Cerrar cualquier otra app que esté usando el mismo puerto USB.
 
-Chrome + cable USB + StandardFirmata en el Arduino.`,
+Recomendado: navegador actualizado + cable USB de datos.`,
     aboutBody: `PyBot Web
 Versión web del entorno PyBot para aprender Python + robótica.
 
 Características:
 • Editor profesional con ejemplos.
-• Modo Arduino (Web Serial + Firmata).
+• Modo Python + Hardware.
 • Modo Solo Python para clases sin hardware.
 • Ayuda integrada y ejecución directa.
 
@@ -125,15 +125,15 @@ Creado por VIC.`,
     needConnect:
       "Connect USB before running code that uses pin/motor/servo, or enable Python only.",
     usbErr_MISSING_BROWSER:
-      "Web Serial is not available. Use Google Chrome or Microsoft Edge (not Firefox or Safari).",
+      "This device or browser lacks enough USB compatibility for this feature.",
     usbErr_HTTPS:
-      "Open PyBot over https:// or localhost only — Web Serial does not work on insecure http (except localhost).",
+      "The app must run in a secure context to enable USB connection.",
     usbErr_LIST_EMPTY:
-      "No port selected, the list was empty, or you cancelled. On a fresh PC you usually need: (1) USB–serial driver for your board: CH340 or CP210x (search “CH340 driver Windows”). (2) A USB cable that carries data, not charge-only. (3) Another USB port. (4) In Windows Device Manager you should see a COM port — without COM, the browser cannot list the Arduino.",
+      "No ports were found or selection was cancelled. Check data cable, system drivers, and verify the device appears as a serial port.",
     usbErr_PERMISSION:
-      "The browser blocked USB access. Check the site permissions icon and allow serial port access.",
+      "The app does not have USB access permissions. Check browser and system permissions.",
     usbErr_FIRMATA:
-      "The port opened but did not answer as StandardFirmata. Upload the “StandardFirmata” sketch from the Arduino IDE, close the IDE Serial Monitor (only one app can use the COM port), and connect again. Technical detail:",
+      "The USB device did not respond correctly. Restart the board, close other apps using the same port, and try again.",
     pyodideLoad: "Loading Python (first load may take a while)…",
     statusMeta: "Python · same style as desktop",
     helpBody: `PyBot Web keeps desktop-style Python: write pin/motor/servo/wait without async/await.
@@ -148,20 +148,20 @@ Creado por VIC.`,
 
 You don't need a main() wrapper; direct top-level lines are fine.
 
-Pyodide adapts code internally to run hardware calls safely.
+The runtime adapts code automatically for safe execution.
 
 USB / empty port list:
 • Chrome or Edge (Chromium) only. HTTPS or localhost.
 • CH340 or CP2102 driver depending on your board; data-capable cable; try another USB port.
-• On the Arduino: StandardFirmata uploaded; close the IDE Serial Monitor.
+• Close any other app using the same USB port.
 
-Chrome + USB + StandardFirmata on the Arduino.`,
+Recommended: updated browser + data-capable USB cable.`,
     aboutBody: `PyBot Web
 Web edition of PyBot to learn Python + robotics.
 
 Features:
 • Professional editor with examples.
-• Arduino mode (Web Serial + Firmata).
+• Python + Hardware mode.
 • Python-only mode for classes without hardware.
 • Built-in help and direct run flow.
 
@@ -195,8 +195,7 @@ export function formatHardwareError(message) {
     if (out !== key) return out;
   }
   if (m.startsWith("PYBOT_FIRMATA:")) {
-    const detail = m.slice("PYBOT_FIRMATA:".length);
-    return `${t("usbErr_FIRMATA")} ${detail}`;
+    return t("usbErr_FIRMATA");
   }
   return m;
 }

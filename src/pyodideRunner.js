@@ -161,7 +161,7 @@ export async function runPythonAsync(userCode, hooks = {}) {
 
   if (typeof globalThis.loadPyodide !== "function") {
     throw new Error(
-      "Pyodide no está cargado. Recargá la página (script pyodide en index.html).",
+      "El entorno de Python no está disponible. Recargá la página.",
     );
   }
 

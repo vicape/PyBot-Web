@@ -141,7 +141,7 @@ export default function PyBotIDE() {
     try {
       const { baudRate } = await hardwareConnect();
       setConnected(true);
-      appendConsole(`USB OK @ ${baudRate} baud (Firmata)\n`, "info");
+      appendConsole(`USB OK @ ${baudRate} baud\n`, "info");
     } catch (e) {
       appendConsole(`${formatHardwareError(e?.message)}\n`, "err");
     } finally {
