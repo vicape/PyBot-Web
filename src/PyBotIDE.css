@@ -715,18 +715,21 @@
 }
 
 /* Linea actual sin recuadro: solo sombreado suave */
-.editor-area .monaco-editor .current-line,
-.editor-area .monaco-editor .margin-view-overlays .current-line-margin {
+.editor-area .monaco-editor .view-overlays .current-line,
+.editor-area .monaco-editor .margin-view-overlays .current-line-margin,
+.editor-area .monaco-editor .focused .view-overlays .current-line,
+.editor-area .monaco-editor .focused .margin-view-overlays .current-line-margin {
   border: none !important;
+  outline: none !important;
   box-shadow: none !important;
 }
 
-.ide-root[data-theme="dark"] .editor-area .monaco-editor .current-line,
+.ide-root[data-theme="dark"] .editor-area .monaco-editor .view-overlays .current-line,
 .ide-root[data-theme="dark"] .editor-area .monaco-editor .margin-view-overlays .current-line-margin {
   background-color: rgba(255, 255, 255, 0.045) !important;
 }
 
-.ide-root[data-theme="light"] .editor-area .monaco-editor .current-line,
+.ide-root[data-theme="light"] .editor-area .monaco-editor .view-overlays .current-line,
 .ide-root[data-theme="light"] .editor-area .monaco-editor .margin-view-overlays .current-line-margin {
   background-color: rgba(0, 0, 0, 0.05) !important;
 }
