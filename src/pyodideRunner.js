@@ -64,8 +64,30 @@ def servo(pin, angle, angle_end=None, speed=5):
 def wait(seconds):
     return run_sync(_await_hw(seconds))
 
-def pin(mode, pin_id, value=None):
-    return run_sync(_apin(mode, pin_id, value))
+def pin(*args):
+    # Compatibilidad:
+    # - pin("in", 7)
+    # - pin("out", 2, 1)
+    # - pin(7) / pin("A0")            -> lectura
+    # - pin(2, 1)                     -> escritura digital
+    if len(args) == 0:
+        raise ValueError("pin_args")
+
+    if isinstance(args[0], str) and args[0].lower().strip() in ("in", "out"):
+        mode = args[0]
+        if len(args) < 2:
+            raise ValueError("pin_args")
+        pin_id = args[1]
+        value = args[2] if len(args) >= 3 else None
+        return run_sync(_apin(mode, pin_id, value))
+
+    pin_id = args[0]
+    if len(args) == 1:
+        return run_sync(_apin("in", pin_id, None))
+    if len(args) == 2:
+        return run_sync(_apin("out", pin_id, args[1]))
+
+    raise ValueError("pin_args")
 `;
 
 /**
