@@ -880,6 +880,11 @@
   max-width: 580px;
 }
 
+.modal-help {
+  max-width: min(980px, 92vw);
+  position: relative;
+}
+
 .modal-title {
   margin: 0 0 18px;
   font-size: 1.15rem;
@@ -971,6 +976,211 @@
   max-height: 52vh;
   overflow: auto;
   color: var(--fg);
+}
+
+.help-course-head {
+  margin: 0 0 12px;
+}
+
+.help-course-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--ide-border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.help-course-title {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--fg-bright);
+}
+
+.help-course-subtitle {
+  margin: 6px 0 0;
+  color: var(--fg-muted);
+  font-size: 0.95rem;
+}
+
+.help-course-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 14px;
+  min-height: 360px;
+  margin-bottom: 14px;
+}
+
+.help-course-menu {
+  border: 1px solid var(--ide-border);
+  border-radius: var(--radius-sm);
+  background: var(--ide-bg);
+  padding: 8px;
+  overflow: auto;
+}
+
+.help-module-btn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  padding: 10px;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.help-module-btn:hover {
+  background: var(--ide-elevated);
+  border-color: var(--ide-border);
+}
+
+.help-module-btn--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.help-module-title {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.help-module-summary {
+  display: block;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+}
+
+.help-course-content {
+  border: 1px solid var(--ide-border);
+  border-radius: var(--radius-sm);
+  background: var(--ide-bg);
+  padding: 12px;
+}
+
+.help-content-title {
+  margin: 0;
+  color: var(--fg-bright);
+  font-size: 1rem;
+}
+
+.help-content-summary {
+  margin: 6px 0 10px;
+  color: var(--fg-muted);
+}
+
+.help-lesson-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.help-lesson-card {
+  border: 1px solid var(--ide-border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--ide-surface);
+}
+
+.help-lesson-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.92rem;
+}
+
+.help-lesson-card p {
+  margin: 0 0 8px;
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+}
+
+.help-lesson-open {
+  border: 1px solid var(--ide-border);
+  background: var(--ide-elevated);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.help-lesson-open:hover {
+  border-color: var(--accent);
+}
+
+.help-lesson-popup-back {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  z-index: 2;
+}
+
+.help-lesson-popup {
+  width: min(680px, 92%);
+  max-height: 78vh;
+  overflow: auto;
+  background: var(--ide-surface);
+  border: 1px solid var(--ide-border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.help-lesson-popup__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.help-lesson-popup__head h5 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--fg-bright);
+}
+
+.help-lesson-objective {
+  margin: 8px 0 10px;
+  color: var(--fg-muted);
+}
+
+.help-lesson-steps {
+  margin: 0 0 10px 18px;
+  padding: 0;
+}
+
+.help-lesson-steps li {
+  margin-bottom: 6px;
+}
+
+.help-lesson-tip,
+.help-lesson-challenge {
+  margin: 8px 0;
+}
+
+.help-code {
+  margin: 10px 0 14px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ide-border);
+  background: #111;
+  color: #ddd;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+}
+
+.ide-root[data-theme="light"] .help-code {
+  background: #f5f7fa;
+  color: #111;
 }
 
 .help-pre::-webkit-scrollbar {
@@ -1078,6 +1288,13 @@
   .brand-main-logo {
     width: 32px;
     height: 32px;
+  }
+  .help-course-layout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .help-course-menu {
+    max-height: 180px;
   }
 }
 

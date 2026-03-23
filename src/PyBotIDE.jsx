@@ -10,6 +10,7 @@ import {
   hardwareBaudRate,
 } from "./hardwareBridge.js";
 import { runPythonAsync, signalStop } from "./pyodideRunner.js";
+import { HELP_COURSE } from "./helpCourseData.js";
 import {
   IconExplorer,
   IconPlay,
@@ -45,6 +46,8 @@ export default function PyBotIDE() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [helpModuleIdx, setHelpModuleIdx] = useState(0);
+  const [helpLesson, setHelpLesson] = useState(null);
   const [pythonOnly, setPythonOnly] = useState(
     () => localStorage.getItem("pybot_python_only") === "1",
   );
@@ -195,6 +198,18 @@ export default function PyBotIDE() {
   );
 
   const monacoTheme = theme === "dark" ? "vs-dark" : "light";
+  const lang = getLang();
+  const course =
+    HELP_COURSE[lang] && HELP_COURSE[lang].modules.length > 0
+      ? HELP_COURSE[lang]
+      : HELP_COURSE.es;
+  const selectedModule = course.modules[helpModuleIdx] ?? course.modules[0];
+
+  const openHelp = useCallback(() => {
+    setHelpModuleIdx(0);
+    setHelpLesson(null);
+    setHelpOpen(true);
+  }, []);
 
   const startSidebarResize = useCallback(
     (event) => {
@@ -436,7 +451,7 @@ export default function PyBotIDE() {
                   <button
                     type="button"
                     className="tb-btn tb-btn--ghost tb-btn--secondary"
-                    onClick={() => setHelpOpen(true)}
+                    onClick={openHelp}
                   >
                     <IconHelp width={16} height={16} />
                     <span className="tb-btn__label">{t("help")}</span>
@@ -660,7 +675,7 @@ export default function PyBotIDE() {
       {helpOpen ? (
         <div className="modal-back" role="presentation" onClick={() => setHelpOpen(false)}>
           <div
-            className="modal modal-wide"
+            className="modal modal-wide modal-help"
             role="dialog"
             aria-labelledby="help-title"
             onClick={(e) => e.stopPropagation()}
@@ -668,7 +683,79 @@ export default function PyBotIDE() {
             <h3 id="help-title" className="modal-title">
               {t("help")}
             </h3>
-            <pre className="help-pre">{t("helpBody")}</pre>
+            <div className="help-course-head">
+              <span className="help-course-badge">{course.badge}</span>
+              <h4 className="help-course-title">{course.title}</h4>
+              <p className="help-course-subtitle">{course.subtitle}</p>
+            </div>
+            <div className="help-course-layout">
+              <aside className="help-course-menu" aria-label={lang === "es" ? "Modulos" : "Modules"}>
+                {course.modules.map((mod, idx) => (
+                  <button
+                    key={mod.id}
+                    type="button"
+                    className={`help-module-btn ${idx === helpModuleIdx ? "help-module-btn--active" : ""}`}
+                    onClick={() => {
+                      setHelpModuleIdx(idx);
+                      setHelpLesson(null);
+                    }}
+                  >
+                    <span className="help-module-title">{mod.title}</span>
+                    <span className="help-module-summary">{mod.summary}</span>
+                  </button>
+                ))}
+              </aside>
+              <section className="help-course-content">
+                <h5 className="help-content-title">{selectedModule?.title}</h5>
+                <p className="help-content-summary">{selectedModule?.summary}</p>
+                <div className="help-lesson-grid">
+                  {(selectedModule?.lessons ?? []).map((lesson) => (
+                    <article key={lesson.id} className="help-lesson-card">
+                      <div className="help-lesson-card__top">
+                        <strong>{lesson.title}</strong>
+                        <span>{lesson.duration}</span>
+                      </div>
+                      <p>{lesson.objective}</p>
+                      <button
+                        type="button"
+                        className="help-lesson-open"
+                        onClick={() => setHelpLesson(lesson)}
+                      >
+                        {lang === "es" ? "Abrir leccion" : "Open lesson"}
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </div>
+            {helpLesson ? (
+              <div className="help-lesson-popup-back" onClick={() => setHelpLesson(null)} role="presentation">
+                <div className="help-lesson-popup" role="dialog" onClick={(e) => e.stopPropagation()}>
+                  <div className="help-lesson-popup__head">
+                    <h5>{helpLesson.title}</h5>
+                    <span>{helpLesson.duration}</span>
+                  </div>
+                  <p className="help-lesson-objective">{helpLesson.objective}</p>
+                  <ol className="help-lesson-steps">
+                    {helpLesson.steps.map((step, idx) => (
+                      <li key={`${helpLesson.id}-step-${idx}`}>{step}</li>
+                    ))}
+                  </ol>
+                  <p className="help-lesson-tip">
+                    <strong>{lang === "es" ? "Tip pro: " : "Pro tip: "}</strong>
+                    {helpLesson.tip}
+                  </p>
+                  <p className="help-lesson-challenge">
+                    <strong>{lang === "es" ? "Desafio: " : "Challenge: "}</strong>
+                    {helpLesson.challenge}
+                  </p>
+                  <pre className="help-code">{helpLesson.code}</pre>
+                  <button type="button" className="modal-close" onClick={() => setHelpLesson(null)}>
+                    {t("close")}
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <button type="button" className="modal-close" onClick={() => setHelpOpen(false)}>
               {t("close")}
             </button>
