@@ -1,4 +1,5 @@
 import { createPyodideHwModule } from "./hardwareBridge.js";
+import { formatPythonError } from "./i18n.js";
 
 function createPythonOnlyHwModule() {
   return {
@@ -160,9 +161,9 @@ export async function runPythonAsync(userCode, hooks = {}) {
   const pythonOnly = Boolean(hooks.pythonOnly);
 
   if (typeof globalThis.loadPyodide !== "function") {
-    throw new Error(
-      "El entorno de Python no está disponible. Recargá la página.",
-    );
+    const msg = "El entorno de Python no está disponible. Recargá la página.";
+    err(`${msg}\n`);
+    throw new Error(msg);
   }
 
   globalThis.__PYBOT_STOP__ = false;
@@ -200,7 +201,7 @@ export async function runPythonAsync(userCode, hooks = {}) {
     if (msg.includes("detenido") || msg.includes("Programa detenido")) {
       out("\n[Detenido]\n");
     } else {
-      err(msg + "\n");
+      err(`${formatPythonError(msg)}\n`);
     }
     throw e;
   }

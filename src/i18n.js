@@ -199,3 +199,103 @@ export function formatHardwareError(message) {
   }
   return m;
 }
+
+/**
+ * Convierte errores de ejecución de Python en mensajes simples y educativos.
+ * No expone trazas internas ni detalles técnicos complejos.
+ * @param {string} message
+ */
+export function formatPythonError(message) {
+  const m = String(message ?? "");
+  const isEs = getLang() === "es";
+
+  const pick = (es, en) => (isEs ? es : en);
+
+  const unknown = pick(
+    "No se pudo ejecutar el programa. Revisá la última parte de tu código y probá de nuevo.",
+    "The program could not run. Check the last part of your code and try again.",
+  );
+
+  const firstDefinedName = m.match(/name ['"]([^'"]+)['"] is not defined/i)?.[1];
+
+  if (/SyntaxError|invalid syntax/i.test(m)) {
+    return pick(
+      "Error de sintaxis: hay una línea escrita con formato inválido. Revisá paréntesis, comillas, dos puntos y comas.",
+      "Syntax error: one line has invalid format. Check parentheses, quotes, colons, and commas.",
+    );
+  }
+  if (/IndentationError|unexpected indent|unindent does not match/i.test(m)) {
+    return pick(
+      "Error de indentación: la sangría no coincide. Usá la misma cantidad de espacios en bloques como if, for y def.",
+      "Indentation error: spacing does not match. Use consistent indentation in blocks like if, for, and def.",
+    );
+  }
+  if (/NameError/i.test(m)) {
+    if (firstDefinedName) {
+      return pick(
+        `Nombre no definido: "${firstDefinedName}". Puede estar mal escrito o no fue creado antes de usarlo.`,
+        `Undefined name: "${firstDefinedName}". It may be misspelled or used before being created.`,
+      );
+    }
+    return pick(
+      "Nombre no definido: hay una variable o función que no existe todavía.",
+      "Undefined name: a variable or function does not exist yet.",
+    );
+  }
+  if (/TypeError/i.test(m)) {
+    return pick(
+      "Tipo de dato incorrecto: una operación recibió un valor de tipo no esperado. Revisá si usás texto, número o lista correctamente.",
+      "Wrong data type: an operation received an unexpected value type. Check whether you are using text, number, or list correctly.",
+    );
+  }
+  if (/ValueError|pin_args|invalid_analog|invalid_value/i.test(m)) {
+    return pick(
+      "Valor o argumentos inválidos: revisá los parámetros de la función (cantidad, orden y rango).",
+      "Invalid value or arguments: check function parameters (count, order, and range).",
+    );
+  }
+  if (/ZeroDivisionError|division by zero/i.test(m)) {
+    return pick(
+      "División por cero: no se puede dividir por 0. Cambiá ese valor antes de calcular.",
+      "Division by zero: you cannot divide by 0. Change that value before calculating.",
+    );
+  }
+  if (/IndexError|list index out of range/i.test(m)) {
+    return pick(
+      "Índice fuera de rango: intentaste acceder a una posición que no existe en la lista.",
+      "Index out of range: you tried to access a list position that does not exist.",
+    );
+  }
+  if (/KeyError/i.test(m)) {
+    return pick(
+      "Clave inexistente: esa clave no está en el diccionario.",
+      "Missing key: that key is not in the dictionary.",
+    );
+  }
+  if (/AttributeError/i.test(m)) {
+    return pick(
+      "Atributo o método no disponible: revisá el nombre y si ese objeto soporta esa operación.",
+      "Attribute or method not available: check the name and whether the object supports that operation.",
+    );
+  }
+  if (/ModuleNotFoundError|No module named/i.test(m)) {
+    return pick(
+      "Módulo no encontrado: intentaste importar algo que no está disponible en este entorno.",
+      "Module not found: you tried to import something unavailable in this environment.",
+    );
+  }
+  if (/RecursionError/i.test(m)) {
+    return pick(
+      "Recursión muy profunda: una función se está llamando demasiadas veces. Revisá la condición de corte.",
+      "Recursion too deep: a function is calling itself too many times. Check the stop condition.",
+    );
+  }
+  if (/Permission|denied|blocked|secure context/i.test(m)) {
+    return pick(
+      "Permiso o acceso bloqueado: revisá permisos y volvé a intentar.",
+      "Permission or access blocked: review permissions and try again.",
+    );
+  }
+
+  return unknown;
+}
