@@ -32,6 +32,9 @@ export default function PyBotIDE() {
   const [theme, setTheme] = useState(
     () => localStorage.getItem("pybot_theme") || "dark",
   );
+  const [contrast, setContrast] = useState(
+    () => localStorage.getItem("pybot_contrast") || "normal",
+  );
   const [code, setCode] = useState(
     () => localStorage.getItem("pybot_code") || DEFAULT_CODE,
   );
@@ -70,6 +73,10 @@ export default function PyBotIDE() {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("pybot_theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("pybot_contrast", contrast);
+  }, [contrast]);
 
   useEffect(() => {
     localStorage.setItem("pybot_code", code);
@@ -230,6 +237,7 @@ export default function PyBotIDE() {
     <div
       className="ide-root"
       data-theme={theme}
+      data-contrast={contrast}
       style={{ "--font-delta": `${fontDelta}px` }}
     >
       <div className="ide-workbench">
@@ -560,6 +568,17 @@ export default function PyBotIDE() {
               >
                 <option value="dark">{t("themeDark")}</option>
                 <option value="light">{t("themeLight")}</option>
+              </select>
+            </label>
+            <label className="modal-row">
+              <span className="modal-label">{t("contrast")}</span>
+              <select
+                value={contrast}
+                onChange={(e) => setContrast(e.target.value)}
+                className="modal-select"
+              >
+                <option value="normal">{t("contrastNormal")}</option>
+                <option value="high">{t("contrastHigh")}</option>
               </select>
             </label>
             <label className="modal-row">

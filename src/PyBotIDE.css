@@ -58,6 +58,25 @@
   --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
 }
 
+/* Modo alto contraste (aplica sobre claro y oscuro) */
+.ide-root[data-contrast="high"] {
+  --fg: #f2f5f9;
+  --fg-muted: #c0c9d3;
+  --fg-bright: #ffffff;
+  --ide-border: #7a8694;
+  --ide-border-subtle: #5e6872;
+  --accent: #49a2ff;
+}
+
+.ide-root[data-theme="light"][data-contrast="high"] {
+  --fg: #0c1116;
+  --fg-muted: #28323c;
+  --fg-bright: #000000;
+  --ide-border: #4f5963;
+  --ide-border-subtle: #7a8694;
+  --accent: #005cc5;
+}
+
 .ide-root {
   display: flex;
   flex-direction: column;
@@ -332,6 +351,11 @@
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--ide-border);
   padding: 2px;
+}
+
+.ide-root[data-contrast="high"] .brand-logo-img {
+  background: rgba(255, 255, 255, 0.22);
+  border-width: 2px;
 }
 
 .brand-mark {
@@ -623,6 +647,10 @@
   scrollbar-gutter: stable;
 }
 
+.ide-root[data-contrast="high"] .console-out {
+  color: #ffffff;
+}
+
 .ide-root[data-theme="light"] .console-out {
   color: var(--fg);
 }
@@ -665,6 +693,14 @@
 }
 .co-info {
   color: var(--info);
+}
+
+.ide-root[data-contrast="high"] .co-info {
+  color: #7cc3ff;
+}
+
+.ide-root[data-contrast="high"] .co-err {
+  color: #ff8b8b;
 }
 
 /* —— Status bar —— */

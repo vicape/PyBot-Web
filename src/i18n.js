@@ -15,6 +15,9 @@ const STRINGS = {
     theme: "Tema",
     themeDark: "Oscuro",
     themeLight: "Claro",
+    contrast: "Contraste",
+    contrastNormal: "Normal",
+    contrastHigh: "Alto",
     language: "Idioma",
     fontSize: "Tamano de fuente",
     terminalPosition: "Posicion de la terminal",
@@ -95,6 +98,9 @@ Creado por VIC.`,
     theme: "Theme",
     themeDark: "Dark",
     themeLight: "Light",
+    contrast: "Contrast",
+    contrastNormal: "Normal",
+    contrastHigh: "High",
     language: "Language",
     fontSize: "Font size",
     terminalPosition: "Terminal position",
@@ -162,7 +168,7 @@ Built by VIC.`,
 };
 
 export function getLang() {
-  return localStorage.getItem("pybot_lang") || "es";
+  return localStorage.getItem("pybot_lang") || "en";
 }
 
 export function setLang(lang) {
