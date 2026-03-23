@@ -1,14 +1,13 @@
 import { createPyodideHwModule } from "./hardwareBridge.js";
 
 /**
- * Misma API que PyBot escritorio: pin(), motor(), servo(), wait() sin await.
- * Por dentro Pyodide habla con JS (async); pyodide.ffi.run_sync une ambos mundos.
+ * API async nativa para Pyodide (compatible universal, sin run_sync/JSPI).
+ * El código estilo escritorio se transforma automáticamente antes de ejecutar.
  */
 const PYTHON_PRELUDE = `
 import asyncio
 import js
 import pybot_hw
-from pyodide.ffi import run_sync
 
 def _stopped():
     try:
@@ -56,16 +55,16 @@ async def _apin(mode, pin_id, value=None):
         return None
     raise ValueError("pin_mode")
 
-def motor(pin, speed=0):
-    return run_sync(_amotor(pin, speed))
+async def motor(pin, speed=0):
+    return await _amotor(pin, speed)
 
-def servo(pin, angle, angle_end=None, speed=5):
-    return run_sync(_aservo(pin, angle, angle_end, speed))
+async def servo(pin, angle, angle_end=None, speed=5):
+    return await _aservo(pin, angle, angle_end, speed)
 
-def wait(seconds):
-    return run_sync(_await_hw(seconds))
+async def wait(seconds):
+    return await _await_hw(seconds)
 
-def pin(*args):
+async def pin(*args):
     # Compatibilidad:
     # - pin("in", 7)
     # - pin("out", 2, 1)
@@ -80,33 +79,63 @@ def pin(*args):
             raise ValueError("pin_args")
         pin_id = args[1]
         value = args[2] if len(args) >= 3 else None
-        return run_sync(_apin(mode, pin_id, value))
+        return await _apin(mode, pin_id, value)
 
     # pin(pin_id, "in"/"out", [value]) estilo alternativo escritorio
     if len(args) >= 2 and isinstance(args[1], str) and args[1].lower().strip() in ("in", "out"):
         pin_id = args[0]
         mode = args[1]
         value = args[2] if len(args) >= 3 else None
-        return run_sync(_apin(mode, pin_id, value))
+        return await _apin(mode, pin_id, value)
 
     pin_id = args[0]
     if len(args) == 1:
-        return run_sync(_apin("in", pin_id, None))
+        return await _apin("in", pin_id, None)
     if len(args) == 2:
-        return run_sync(_apin("out", pin_id, args[1]))
+        return await _apin("out", pin_id, args[1])
 
     raise ValueError("pin_args")
 `;
 
+function addAwaitForHardwareCalls(line) {
+  const t = line.trim();
+  if (!t || t.startsWith("#")) return line;
+  if (/^\s*(def|async\s+def)\s+/.test(line)) return line;
+  if (/^\s*from\s+/.test(line) || /^\s*import\s+/.test(line)) return line;
+  if (/^\s*await\b/.test(line)) return line;
+
+  let out = line;
+  const names = ["pin", "motor", "servo", "wait"];
+  for (const n of names) {
+    const re = new RegExp(`(?<!await\\s)\\b${n}\\s*\\(`, "g");
+    out = out.replace(re, `await ${n}(`);
+  }
+  return out;
+}
+
 /**
- * Código viejo (async/await) → estilo escritorio para no romper pegados.
+ * Acepta código estilo escritorio y async viejo, y lo lleva al formato Pyodide.
  */
-function migrateLegacyAsyncCode(code) {
+function normalizeUserCode(code) {
   let s = code;
-  s = s.replace(/asyncio\.run\s*\(\s*main\s*\(\s*\)\s*\)/g, "main()");
-  s = s.replace(/\bawait\s+main\s*\(\s*\)/g, "main()");
-  s = s.replace(/\bawait\s+(pin|motor|wait|servo)\s*\(/g, "$1(");
-  s = s.replace(/\basync\s+def\s+main\s*\(/g, "def main(");
+  // Entradas comunes de versiones anteriores
+  s = s.replace(/asyncio\.run\s*\(\s*main\s*\(\s*\)\s*\)/g, "await main()");
+  s = s.replace(/\bmain\s*\(\s*\)\s*$/gm, "await main()");
+
+  const hasAsyncMain = /\basync\s+def\s+main\s*\(/.test(s);
+  const hasSyncMain = /\bdef\s+main\s*\(/.test(s);
+
+  if (hasSyncMain && !hasAsyncMain) {
+    s = s.replace(/\bdef\s+main\s*\(/, "async def main(");
+  }
+
+  s = s
+    .split("\n")
+    .map((line) => addAwaitForHardwareCalls(line))
+    .join("\n");
+
+  // Evitar dobles await por reemplazos anteriores
+  s = s.replace(/\bawait\s+await\s+/g, "await ");
   return s;
 }
 
@@ -135,7 +164,7 @@ export async function runPythonAsync(userCode, hooks = {}) {
 
   pyodide.registerJsModule("pybot_hw", createPyodideHwModule());
 
-  const userMigrated = migrateLegacyAsyncCode(userCode);
+  const userMigrated = normalizeUserCode(userCode);
   const full = `${PYTHON_PRELUDE}\n\n${userMigrated}\n`;
   try {
     await pyodide.runPythonAsync(full);
