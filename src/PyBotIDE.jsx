@@ -21,7 +21,6 @@ import {
   IconPlug,
   IconChevron,
   IconInfo,
-  IconPyBot,
 } from "./ideIcons.jsx";
 
 function labelForExample(ex) {
@@ -254,6 +253,7 @@ export default function PyBotIDE() {
       data-contrast={contrast}
       style={{ "--font-delta": `${fontDelta}px` }}
     >
+      <div className="bg-watermark" aria-hidden />
       <div className="ide-workbench">
         <aside className="activity-bar" aria-label="Barra de actividad">
           <button
@@ -349,7 +349,7 @@ export default function PyBotIDE() {
             <header className="toolbar">
               <div className="toolbar-brand">
                 <div className="brand-mark" aria-hidden>
-                  <IconPyBot width={22} height={22} />
+                  <img src="/branding/pybot-logo.png" alt="" className="brand-main-logo" />
                 </div>
                 <div className="brand-copy">
                   <span className="brand-title">{t("appTitle")}</span>
