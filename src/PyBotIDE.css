@@ -887,6 +887,25 @@
   filter: brightness(1.08);
 }
 
+.modal-reset {
+  margin-top: 2px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid var(--ide-border);
+  border-radius: var(--radius-sm);
+  background: var(--ide-elevated);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: calc(14px + var(--font-delta, 0px));
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modal-reset:hover {
+  border-color: var(--accent);
+  color: var(--fg-bright);
+}
+
 .help-pre {
   margin: 0 0 18px;
   padding: 14px 16px;

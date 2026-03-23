@@ -116,6 +116,20 @@ export default function PyBotIDE() {
 
   const clearConsole = useCallback(() => setConsoleLines([]), []);
 
+  const resetDefaults = useCallback(() => {
+    setTheme("dark");
+    setContrast("normal");
+    setLang("en");
+    forceLang((n) => n + 1);
+    setTerminalPosition("bottom");
+    setFontDelta(0);
+    setPythonOnly(false);
+    setSidebarWidth(248);
+    setConsoleHeight(220);
+    setConsoleWidth(360);
+    appendConsole("[Info] Settings reset to defaults.\n", "info");
+  }, [appendConsole]);
+
   const onConnect = useCallback(async () => {
     if (connecting) return;
     setConnecting(true);
@@ -626,6 +640,9 @@ export default function PyBotIDE() {
                 </button>
               </div>
             </label>
+            <button type="button" className="modal-reset" onClick={resetDefaults}>
+              {t("resetDefaults")}
+            </button>
             <button type="button" className="modal-close" onClick={() => setSettingsOpen(false)}>
               {t("close")}
             </button>
