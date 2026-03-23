@@ -541,6 +541,16 @@ export default function PyBotIDE() {
                         </div>
                       </div>
                       <div className="toolbar-menu-divider" />
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        onClick={() => {
+                          setSettingsOpen(true);
+                          setToolbarMenuOpen(false);
+                        }}
+                      >
+                        {t("settings")}
+                      </button>
                       <button type="button" className="toolbar-menu-item" onClick={openHelp}>
                         {t("help")}
                       </button>
