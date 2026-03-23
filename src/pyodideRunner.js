@@ -1,9 +1,14 @@
 import { createPyodideHwModule } from "./hardwareBridge.js";
 
+/**
+ * Misma API que PyBot escritorio: pin(), motor(), servo(), wait() sin await.
+ * Por dentro Pyodide habla con JS (async); pyodide.ffi.run_sync une ambos mundos.
+ */
 const PYTHON_PRELUDE = `
 import asyncio
 import js
 import pybot_hw
+from pyodide.ffi import run_sync
 
 def _stopped():
     try:
@@ -11,12 +16,12 @@ def _stopped():
     except Exception:
         return False
 
-async def motor(pin, speed=0):
+async def _amotor(pin, speed=0):
     if _stopped():
         raise RuntimeError("detenido")
     await pybot_hw.motor(int(pin), int(speed))
 
-async def servo(pin, angle, angle_end=None, speed=5):
+async def _aservo(pin, angle, angle_end=None, speed=5):
     p = int(pin)
     if angle_end is not None:
         ae = int(angle_end)
@@ -36,10 +41,10 @@ async def servo(pin, angle, angle_end=None, speed=5):
     else:
         await pybot_hw.servo_write(p, int(angle))
 
-async def wait(seconds):
+async def _await_hw(seconds):
     await pybot_hw.wait(float(seconds))
 
-async def pin(mode, pin_id, value=None):
+async def _apin(mode, pin_id, value=None):
     m = str(mode).lower().strip()
     if m == "in":
         return await pybot_hw.pin_read(pin_id)
@@ -49,17 +54,29 @@ async def pin(mode, pin_id, value=None):
         await pybot_hw.pin_write(pin_id, value)
         return None
     raise ValueError("pin_mode")
+
+def motor(pin, speed=0):
+    return run_sync(_amotor(pin, speed))
+
+def servo(pin, angle, angle_end=None, speed=5):
+    return run_sync(_aservo(pin, angle, angle_end, speed))
+
+def wait(seconds):
+    return run_sync(_await_hw(seconds))
+
+def pin(mode, pin_id, value=None):
+    return run_sync(_apin(mode, pin_id, value))
 `;
 
 /**
- * Pyodide ejecuta el script dentro de un event loop ya activo;
- * asyncio.run() lanza "cannot be called from a running event loop".
- * Reemplazamos el patrón habitual por await a nivel superior.
+ * Código viejo (async/await) → estilo escritorio para no romper pegados.
  */
-function patchAsyncioRunForPyodide(code) {
+function migrateLegacyAsyncCode(code) {
   let s = code;
-  // asyncio.run(main()) → await main()
-  s = s.replace(/asyncio\.run\s*\(\s*main\s*\(\s*\)\s*\)/g, "await main()");
+  s = s.replace(/asyncio\.run\s*\(\s*main\s*\(\s*\)\s*\)/g, "main()");
+  s = s.replace(/\bawait\s+main\s*\(\s*\)/g, "main()");
+  s = s.replace(/\bawait\s+(pin|motor|wait|servo)\s*\(/g, "$1(");
+  s = s.replace(/\basync\s+def\s+main\s*\(/g, "def main(");
   return s;
 }
 
@@ -88,8 +105,8 @@ export async function runPythonAsync(userCode, hooks = {}) {
 
   pyodide.registerJsModule("pybot_hw", createPyodideHwModule());
 
-  const userPatched = patchAsyncioRunForPyodide(userCode);
-  const full = `${PYTHON_PRELUDE}\n\n${userPatched}\n`;
+  const userMigrated = migrateLegacyAsyncCode(userCode);
+  const full = `${PYTHON_PRELUDE}\n\n${userMigrated}\n`;
   try {
     await pyodide.runPythonAsync(full);
   } catch (e) {

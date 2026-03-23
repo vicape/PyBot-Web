@@ -8,7 +8,7 @@ Proyecto **aparte** del PyBot de escritorio; no lo modifica.
 ## Python en el navegador
 
 - **Pyodide** (carga desde CDN la primera vez; puede tardar).
-- Misma API que PyBot: `pin`, `servo`, `motor`, `wait`, `print` — en la web van con **`await`** y al final **`await main()`** (no `asyncio.run(main())`: Pyodide ya tiene un event loop activo).
+- Misma API que PyBot de escritorio: `pin`, `servo`, `motor`, `wait`, `print` — **sin `async`/`await` en tu código** (`def main():` … `main()`). Pyodide usa `run_sync` por debajo para hablar con el USB.
 
 ## Hardware
 
@@ -32,4 +32,4 @@ npm run dev
 ## Notas
 
 - `input()` de consola no está soportado como en escritorio; los ejemplos web evitan o usan bucles fijos.
-- **Detener**: Stop marca bandera; el código debe usar `await wait(...)` o await en API para poder cortar entre pasos.
+- **Detener**: Stop marca bandera; el código debe usar `wait(...)` entre pasos para poder cortar.

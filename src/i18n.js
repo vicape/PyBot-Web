@@ -24,18 +24,27 @@ const STRINGS = {
     logDisconnected: "USB desconectado.",
     needConnect: "Conectá el USB antes de ejecutar código con pin/motor/servo.",
     pyodideLoad: "Cargando Python (primera vez puede tardar)…",
-    helpBody: `PyBot Web usa Python en el navegador (Pyodide) con la misma API que PyBot de escritorio, pero con async/await:
+    statusMeta: "Python · mismo estilo que escritorio",
+    helpBody: `Es el mismo Python y la misma forma de escribir que en PyBot de escritorio (sin async ni await en tu código):
 
-  await pin("out", 2, 1)
-  await pin("in", 7)
-  await pin("in", "A0")
-  await servo(10, 90)
-  await motor(10, 50)
-  await wait(1)
+  pin("out", 2, 1)
+  pin("in", 7)
+  pin("in", "A0")
+  x = pin("in", "A0")
+  servo(10, 90)
+  motor(10, 50)
+  wait(1)
 
-Siempre usá async def main(): ... y al final (Pyodide ya tiene event loop activo):
-  await main()
-  (no uses asyncio.run(main()) — falla en el navegador)
+Plantilla típica:
+
+  def main():
+      ...
+
+  main()
+
+Por dentro el navegador usa Pyodide; las llamadas al USB se resuelven con run_sync (recomendado Chrome actualizado).
+
+Si pegaste código viejo con await, al ejecutar se intenta adaptar solo.
 
 Chrome + cable USB + StandardFirmata en el Arduino.`,
   },
@@ -64,18 +73,27 @@ Chrome + cable USB + StandardFirmata en el Arduino.`,
     logDisconnected: "USB disconnected.",
     needConnect: "Connect USB before running code that uses pin/motor/servo.",
     pyodideLoad: "Loading Python (first load may take a while)…",
-    helpBody: `PyBot Web runs Python in the browser (Pyodide) with the same API as desktop PyBot, using async/await:
+    statusMeta: "Python · same style as desktop",
+    helpBody: `Same Python and the same way of writing as desktop PyBot (no async/await in your code):
 
-  await pin("out", 2, 1)
-  await pin("in", 7)
-  await pin("in", "A0")
-  await servo(10, 90)
-  await motor(10, 50)
-  await wait(1)
+  pin("out", 2, 1)
+  pin("in", 7)
+  pin("in", "A0")
+  x = pin("in", "A0")
+  servo(10, 90)
+  motor(10, 50)
+  wait(1)
 
-Always use async def main(): ... and end with (Pyodide already runs an event loop):
-  await main()
-  (do not use asyncio.run(main()) — it fails in the browser)
+Typical template:
+
+  def main():
+      ...
+
+  main()
+
+The browser runs Pyodide; USB calls use run_sync under the hood (Chrome recommended).
+
+If you paste older code with await, the runner tries to adapt it.
 
 Chrome + USB + StandardFirmata on the Arduino.`,
   },

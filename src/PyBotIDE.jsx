@@ -315,7 +315,7 @@ export default function PyBotIDE() {
             </>
           ) : null}
         </span>
-        <span className="status-meta">Pyodide · async/await</span>
+        <span className="status-meta">{t("statusMeta")}</span>
       </footer>
 
       {settingsOpen ? (
