@@ -874,17 +874,26 @@ export default function PyBotIDE() {
       {aboutOpen ? (
         <div className="modal-back" role="presentation" onClick={() => setAboutOpen(false)}>
           <div
-            className="modal modal-wide"
+            className="modal modal-about"
             role="dialog"
             aria-labelledby="about-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="about-title" className="modal-title">
-              {t("about")}
-            </h3>
-            <pre className="help-pre">{t("aboutBody")}</pre>
+            <div className="about-card">
+              <img src="/branding/pybot-logo.png" alt="PyBot logo" className="about-logo" />
+              <h3 id="about-title" className="about-title">
+                {t("aboutName")}
+              </h3>
+              <p className="about-desc">{t("aboutDesc")}</p>
+              <p className="about-meta">
+                <strong>{t("aboutAuthor")}:</strong> Victor Capeluto
+              </p>
+              <p className="about-meta">
+                <strong>{t("aboutVersion")}:</strong> 1.0
+              </p>
+            </div>
             <button type="button" className="modal-close" onClick={() => setAboutOpen(false)}>
-              {t("close")}
+              OK
             </button>
           </div>
         </div>

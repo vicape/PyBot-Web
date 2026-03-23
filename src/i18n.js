@@ -89,6 +89,10 @@ Características:
 • Ayuda integrada y ejecución directa.
 
 Creado por VIC.`,
+    aboutName: "PyBot by VIC",
+    aboutDesc: "Un IDE para programar Arduino con Python. Disenado para que chicos aprendan a programar.",
+    aboutAuthor: "Autor",
+    aboutVersion: "Version",
   },
   en: {
     appTitle: "PyBot Web",
@@ -180,6 +184,10 @@ Features:
 • Built-in help and direct run flow.
 
 Built by VIC.`,
+    aboutName: "PyBot by VIC",
+    aboutDesc: "An IDE for programming Arduino with Python. Designed for kids learning to code.",
+    aboutAuthor: "Author",
+    aboutVersion: "Version",
   },
 };
 

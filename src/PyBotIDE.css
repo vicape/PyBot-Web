@@ -982,6 +982,47 @@
   position: relative;
 }
 
+.modal-about {
+  max-width: 380px;
+  text-align: center;
+}
+
+.about-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.about-logo {
+  width: min(170px, 65vw);
+  height: auto;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.about-title {
+  margin: 6px 0 0;
+  color: var(--fg-bright);
+  font-size: 2rem;
+  line-height: 1.1;
+  font-weight: 700;
+}
+
+.about-desc {
+  margin: 0;
+  color: var(--fg);
+  font-size: 1.12rem;
+  line-height: 1.35;
+}
+
+.about-meta {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 1.05rem;
+}
+
 .modal-title {
   margin: 0 0 18px;
   font-size: 1.15rem;
