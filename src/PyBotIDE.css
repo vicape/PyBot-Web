@@ -473,6 +473,10 @@
     opacity 0.12s ease;
 }
 
+.tb-btn__label {
+  white-space: nowrap;
+}
+
 .tb-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -550,6 +554,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .mode-label {
@@ -1006,6 +1011,30 @@
 }
 
 /* Responsive: toolbar */
+@media (max-width: 1220px) {
+  .brand-sub {
+    max-width: min(240px, 24vw);
+  }
+  .tb-group--muted {
+    gap: 4px;
+  }
+  .tb-btn--secondary {
+    padding-inline: 8px;
+  }
+  .tb-btn--secondary .tb-btn__label {
+    display: none;
+  }
+}
+
+@media (max-width: 1080px) {
+  .conn-state {
+    display: none;
+  }
+  .mode-label {
+    display: none;
+  }
+}
+
 @media (max-width: 720px) {
   .toolbar {
     flex-wrap: wrap;

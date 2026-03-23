@@ -385,27 +385,27 @@ export default function PyBotIDE() {
                 <div className="tb-group">
                   <button
                     type="button"
-                    className="tb-btn tb-btn--run"
+                    className="tb-btn tb-btn--run tb-btn--primary"
                     onClick={onRun}
                     disabled={running}
                   >
                     <IconPlay width={16} height={16} />
-                    {t("run")}
+                    <span className="tb-btn__label">{t("run")}</span>
                   </button>
-                  <button type="button" className="tb-btn tb-btn--stop" onClick={onStop}>
+                  <button type="button" className="tb-btn tb-btn--stop tb-btn--primary" onClick={onStop}>
                     <IconSquare width={16} height={16} />
-                    {t("stop")}
+                    <span className="tb-btn__label">{t("stop")}</span>
                   </button>
                 </div>
                 <div className="tb-group tb-group--muted">
                   <button
                     type="button"
-                    className="tb-btn tb-btn--ghost"
+                    className="tb-btn tb-btn--ghost tb-btn--connect"
                     onClick={connected ? onDisconnect : onConnect}
                     disabled={connecting || pythonOnly}
                   >
                     {connected ? <IconUsb width={16} height={16} /> : <IconPlug width={16} height={16} />}
-                    {connected ? t("disconnect") : t("connect")}
+                    <span className="tb-btn__label">{connected ? t("disconnect") : t("connect")}</span>
                   </button>
                   <span
                     className={`conn-lamp ${connected ? "conn-lamp--on" : ""}`}
@@ -435,23 +435,23 @@ export default function PyBotIDE() {
                   </div>
                   <button
                     type="button"
-                    className="tb-btn tb-btn--ghost"
+                    className="tb-btn tb-btn--ghost tb-btn--secondary"
                     onClick={() => setHelpOpen(true)}
                   >
                     <IconHelp width={16} height={16} />
-                    {t("help")}
+                    <span className="tb-btn__label">{t("help")}</span>
                   </button>
                   <button
                     type="button"
-                    className="tb-btn tb-btn--ghost"
+                    className="tb-btn tb-btn--ghost tb-btn--secondary"
                     onClick={() => setAboutOpen(true)}
                   >
                     <IconInfo width={16} height={16} />
-                    {t("about")}
+                    <span className="tb-btn__label">{t("about")}</span>
                   </button>
-                  <button type="button" className="tb-btn tb-btn--ghost" onClick={clearConsole}>
+                  <button type="button" className="tb-btn tb-btn--ghost tb-btn--secondary" onClick={clearConsole}>
                     <IconTrash width={16} height={16} />
-                    {t("clearConsole")}
+                    <span className="tb-btn__label">{t("clearConsole")}</span>
                   </button>
                 </div>
               </div>
