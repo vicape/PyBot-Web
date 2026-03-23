@@ -673,6 +673,7 @@
   background-size: min(34vw, 340px);
   opacity: 0.035;
   filter: grayscale(1) contrast(0.86) brightness(1.1);
+  clip-path: circle(31% at 50% 45%);
   pointer-events: none;
   z-index: 0;
 }
