@@ -337,7 +337,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding: 10px 18px;
   min-height: 56px;
   background: var(--ide-toolbar);
@@ -415,27 +415,30 @@
 }
 
 .brand-sub {
-  font-size: calc(12px + var(--font-delta, 0px));
+  font-size: clamp(12px, calc(12px + var(--font-delta, 0px)), 14px);
   color: var(--fg-muted);
   font-weight: 450;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: min(420px, 50vw);
+  max-width: min(360px, 34vw);
 }
 
 .toolbar-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .tb-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .tb-group--muted {
@@ -453,12 +456,14 @@
   justify-content: center;
   gap: 8px;
   min-height: 36px;
-  padding: 8px 14px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   font-family: var(--font-ui);
-  font-size: calc(14px + var(--font-delta, 0px));
+  font-size: clamp(13px, calc(13px + var(--font-delta, 0px)), 15px);
   font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background 0.12s ease,
@@ -531,9 +536,10 @@
 }
 
 .conn-state {
-  font-size: calc(13px + var(--font-delta, 0px));
+  font-size: clamp(12px, calc(12px + var(--font-delta, 0px)), 14px);
   color: var(--fg-muted);
   min-width: 62px;
+  white-space: nowrap;
 }
 
 .conn-state--on {
@@ -547,8 +553,9 @@
 }
 
 .mode-label {
-  font-size: calc(13px + var(--font-delta, 0px));
+  font-size: clamp(12px, calc(12px + var(--font-delta, 0px)), 14px);
   color: var(--fg-muted);
+  white-space: nowrap;
 }
 
 .mode-switch {
@@ -564,8 +571,9 @@
   background: var(--ide-elevated);
   color: var(--fg-muted);
   padding: 7px 12px;
-  font-size: calc(13px + var(--font-delta, 0px));
+  font-size: clamp(12px, calc(12px + var(--font-delta, 0px)), 14px);
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -748,7 +756,7 @@
   align-items: center;
   gap: 12px;
   padding: 6px 16px;
-  font-size: calc(13px + var(--font-delta, 0px));
+  font-size: clamp(12px, calc(12px + var(--font-delta, 0px)), 14px);
   font-weight: 500;
   background: #0a0a0a;
   color: #9b9b9b;
@@ -810,9 +818,10 @@
 
 .status-meta {
   font-family: var(--font-mono);
-  font-size: calc(12px + var(--font-delta, 0px));
+  font-size: clamp(11px, calc(11px + var(--font-delta, 0px)), 13px);
   opacity: 0.85;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 /* —— Modales —— */
@@ -885,7 +894,7 @@
 .modal-label {
   font-weight: 600;
   color: var(--fg-muted);
-  font-size: calc(12px + var(--font-delta, 0px));
+  font-size: clamp(12px, calc(12px + var(--font-delta, 0px)), 14px);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -897,7 +906,7 @@
   background: var(--ide-bg);
   color: var(--fg);
   font-family: var(--font-ui);
-  font-size: calc(14px + var(--font-delta, 0px));
+  font-size: clamp(13px, calc(13px + var(--font-delta, 0px)), 16px);
   cursor: pointer;
 }
 
@@ -915,7 +924,7 @@
   background: var(--accent);
   color: #fff;
   font-family: var(--font-ui);
-  font-size: calc(14px + var(--font-delta, 0px));
+  font-size: clamp(13px, calc(13px + var(--font-delta, 0px)), 16px);
   font-weight: 600;
   cursor: pointer;
   transition: filter 0.12s ease;
@@ -934,7 +943,7 @@
   background: var(--ide-elevated);
   color: var(--fg);
   font-family: var(--font-ui);
-  font-size: calc(14px + var(--font-delta, 0px));
+  font-size: clamp(13px, calc(13px + var(--font-delta, 0px)), 16px);
   font-weight: 600;
   cursor: pointer;
 }
@@ -992,18 +1001,22 @@
 .font-step-value {
   min-width: 58px;
   text-align: center;
-  font-size: calc(14px + var(--font-delta, 0px));
+  font-size: clamp(13px, calc(13px + var(--font-delta, 0px)), 16px);
   color: var(--fg-bright);
 }
 
 /* Responsive: toolbar */
 @media (max-width: 720px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
   .brand-sub {
     display: none;
   }
   .toolbar-actions {
     width: 100%;
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
   .tb-group {
     flex-wrap: wrap;
