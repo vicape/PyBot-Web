@@ -28,10 +28,23 @@ function labelForExample(ex) {
   return getLang() === "en" ? ex.keyEn : ex.keyEs;
 }
 
+function readInitialTheme() {
+  const stored = localStorage.getItem("pybot_theme");
+  if (stored === "dark" || stored === "light") return stored;
+  if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+  return "light";
+}
+
+function readInitialPythonOnly() {
+  const v = localStorage.getItem("pybot_python_only");
+  if (v === null) return true;
+  return v === "1";
+}
+
 export default function PyBotIDE() {
-  const [theme, setTheme] = useState(
-    () => localStorage.getItem("pybot_theme") || "dark",
-  );
+  const [theme, setTheme] = useState(() => readInitialTheme());
   const [contrast, setContrast] = useState(
     () => localStorage.getItem("pybot_contrast") || "normal",
   );
@@ -49,9 +62,7 @@ export default function PyBotIDE() {
   const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   const [helpModuleIdx, setHelpModuleIdx] = useState(0);
   const [helpLesson, setHelpLesson] = useState(null);
-  const [pythonOnly, setPythonOnly] = useState(
-    () => localStorage.getItem("pybot_python_only") === "1",
-  );
+  const [pythonOnly, setPythonOnly] = useState(() => readInitialPythonOnly());
   const [, forceLang] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(
     () => parseInt(localStorage.getItem("pybot_sidebar_w") || "248", 10),
@@ -158,13 +169,15 @@ export default function PyBotIDE() {
   }, []);
 
   const resetDefaults = useCallback(() => {
-    setTheme("dark");
+    const sysDark =
+      typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    setTheme(sysDark ? "dark" : "light");
     setContrast("normal");
     setLang("en");
     forceLang((n) => n + 1);
     setTerminalPosition("bottom");
     setFontDelta(0);
-    setPythonOnly(false);
+    setPythonOnly(true);
     setSidebarWidth(248);
     setConsoleHeight(220);
     setConsoleWidth(360);
