@@ -74,6 +74,24 @@ export default function PyBotIDE() {
   const consoleEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const toolbarMenuRef = useRef(null);
+  const [isCompactMobile, setIsCompactMobile] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const apply = () => {
+      const next = mq.matches;
+      setIsCompactMobile(next);
+      if (next) {
+        setSidebarOpen(false);
+        setTerminalPosition("bottom");
+      }
+    };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -118,13 +136,13 @@ export default function PyBotIDE() {
 
   useEffect(() => {
     if (!toolbarMenuOpen) return;
-    const onDocMouseDown = (event) => {
+    const onDocPointerDown = (event) => {
       if (!toolbarMenuRef.current?.contains(event.target)) {
         setToolbarMenuOpen(false);
       }
     };
-    document.addEventListener("mousedown", onDocMouseDown);
-    return () => document.removeEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
   }, [toolbarMenuOpen]);
 
   const appendConsole = useCallback((line, kind = "out") => {
@@ -269,8 +287,9 @@ export default function PyBotIDE() {
     (ex) => {
       setCode(ex.code);
       appendConsole(`Cargado: ${ex.file}\n`, "info");
+      if (isCompactMobile) setSidebarOpen(false);
     },
-    [appendConsole],
+    [appendConsole, isCompactMobile],
   );
 
   const monacoTheme = theme === "dark" ? "vs-dark" : "light";
@@ -407,6 +426,14 @@ export default function PyBotIDE() {
         </aside>
 
         <div className="ide-body">
+          {sidebarOpen && isCompactMobile ? (
+            <button
+              type="button"
+              className="sidebar-backdrop"
+              aria-label={t("close")}
+              onClick={() => setSidebarOpen(false)}
+            />
+          ) : null}
           {sidebarOpen ? (
             <aside className="sidebar" style={{ width: `${sidebarWidth}px` }}>
               <div className="sidebar-header">

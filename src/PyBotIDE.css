@@ -81,13 +81,19 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
   overflow: hidden;
   font-family: var(--font-ui);
   background: var(--ide-bg);
   color: var(--fg);
   -webkit-font-smoothing: antialiased;
   position: relative;
+  /* Evita desplazamiento horizontal por 100vw + barra de scroll */
+  box-sizing: border-box;
 }
 
 .bg-watermark {
@@ -1457,36 +1463,198 @@
   }
 }
 
-@media (max-width: 560px) {
-  .ide-body {
+/* —— Móvil: barra superior, explorador en overlay, terminal apilada —— */
+@media (max-width: 640px) {
+  .ide-workbench {
     flex-direction: column;
+    min-height: 0;
   }
-  .sidebar {
-    width: 100% !important;
-    max-width: none;
+
+  .activity-bar {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: max(6px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px))
+      8px max(10px, env(safe-area-inset-left, 0px));
     border-right: none;
-    border-bottom: 1px solid var(--ide-border);
-    min-height: 120px;
+    border-bottom: 1px solid var(--ide-border-subtle);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    flex-shrink: 0;
+    z-index: 50;
+    min-height: 48px;
   }
-  .splitter-vertical {
+
+  .act-spacer {
     display: none;
   }
-  .toolbar {
-    padding: 8px 10px;
-    gap: 10px;
+
+  .act-icon--active {
+    box-shadow: inset 0 -3px 0 0 var(--accent);
+    border-radius: var(--radius-sm);
+    margin-right: 0;
+    width: 44px;
   }
-  .tb-btn {
-    padding: 7px 10px;
-    min-height: 34px;
+
+  .ide-body {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    position: relative;
   }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: rgba(0, 0, 0, 0.48);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .ide-body > .sidebar {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 52px);
+    left: 0;
+    bottom: env(safe-area-inset-bottom, 0px);
+    width: min(300px, 88vw) !important;
+    min-width: 0 !important;
+    max-width: none;
+    min-height: 0 !important;
+    z-index: 45;
+    border-right: 1px solid var(--ide-border);
+    border-bottom: none;
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.35);
+  }
+
+  .ide-body > .splitter-vertical {
+    display: none;
+  }
+
+  .workspace-panels--right {
+    flex-direction: column !important;
+  }
+
+  .workspace-panels--right > .splitter-vertical {
+    display: none;
+  }
+
+  .workspace-panels {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .workspace-panels .editor-shell {
+    flex: 1 1 auto;
+    min-height: 140px;
+  }
+
   .console-panel--side {
     width: 100% !important;
-    min-width: 0;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: min(38dvh, 280px) !important;
+    min-height: 120px;
+    flex-shrink: 0;
     border-left: none;
     border-top: 1px solid var(--ide-border);
   }
+
+  .console-panel:not(.console-panel--side) {
+    min-height: 100px;
+    max-height: min(42dvh, 320px);
+  }
+
+  .toolbar {
+    padding: 8px max(10px, env(safe-area-inset-left, 0px)) 8px
+      max(10px, env(safe-area-inset-right, 0px));
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .toolbar-menu {
+    position: fixed;
+    left: max(8px, env(safe-area-inset-left, 0px));
+    right: max(8px, env(safe-area-inset-right, 0px));
+    top: auto;
+    bottom: max(10px, env(safe-area-inset-bottom, 0px));
+    width: auto;
+    max-height: min(72dvh, 520px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    z-index: 80;
+    box-shadow: var(--shadow-md);
+  }
+
+  .tb-btn {
+    padding: 10px 12px;
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .tb-btn--menu {
+    min-width: 96px;
+  }
+
+  .modal-back {
+    align-items: flex-end;
+    justify-content: center;
+    padding: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px))
+      max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .modal,
+  .modal-wide,
+  .modal-help,
+  .modal-about {
+    max-height: min(88dvh, 720px);
+    overflow-y: auto;
+    width: 100%;
+    border-radius: 12px 12px 0 0;
+    margin-bottom: 0;
+  }
+
+  .modal-help {
+    max-width: none;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .status-bar {
+    padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  .brand-title {
+    font-size: 1rem;
+  }
+
   .editor-shell::before {
-    background-size: min(54vw, 240px);
+    background-size: min(70vw, 220px);
     opacity: 0.03;
+  }
+
+  .example-item {
+    min-height: 44px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .splitter-horizontal {
+    display: none;
   }
 }
