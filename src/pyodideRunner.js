@@ -115,6 +115,14 @@ async def pin(*args):
 async def input(prompt=""):
     result = await js.__pybot_request_input__(str(prompt))
     return str(result) if result is not None else ""
+
+async def sleep(seconds):
+    return await _await_hw(seconds)
+
+import time
+def _safe_sleep(secs):
+    raise RuntimeError("time_sleep_blocked")
+time.sleep = _safe_sleep
 `;
 
 function isInsideStringOrComment(src, pos) {
@@ -138,7 +146,7 @@ function addAwaitForHardwareCalls(line) {
   if (/^\s*await\b/.test(line)) return line;
 
   let out = line;
-  const names = ["pin", "motor", "servo", "wait", "input"];
+  const names = ["pin", "motor", "servo", "wait", "input", "sleep"];
   for (const n of names) {
     const re = new RegExp(`(?<!await\\s)\\b${n}\\s*\\(`, "g");
     out = out.replace(re, (match, offset) => {

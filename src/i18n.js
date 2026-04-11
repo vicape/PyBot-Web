@@ -312,6 +312,18 @@ export function formatPythonError(message) {
       "Recursion too deep: a function is calling itself too many times. Check the stop condition.",
     );
   }
+  if (/time_sleep_blocked/i.test(m)) {
+    return pick(
+      "Para hacer pausas, usá la función wait() en lugar de time.sleep() en esta versión.",
+      "To pause the program, use wait() instead of time.sleep() in this version.",
+    );
+  }
+  if (/SystemExit|exit\(/i.test(m)) {
+    return pick(
+      "Programa terminado por exit() o quit().",
+      "Program terminated by exit() or quit().",
+    );
+  }
   if (/PermissionError|Permission.*denied|access.*blocked|secure context/i.test(m)) {
     return pick(
       "Permiso o acceso bloqueado: revisá permisos y volvé a intentar.",
