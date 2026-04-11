@@ -111,6 +111,10 @@ async def pin(*args):
         return await _apin("out", pin_id, args[1])
 
     raise ValueError("pin_args")
+
+async def input(prompt=""):
+    result = await js.__pybot_request_input__(str(prompt))
+    return str(result) if result is not None else ""
 `;
 
 function isInsideStringOrComment(src, pos) {
@@ -134,7 +138,7 @@ function addAwaitForHardwareCalls(line) {
   if (/^\s*await\b/.test(line)) return line;
 
   let out = line;
-  const names = ["pin", "motor", "servo", "wait"];
+  const names = ["pin", "motor", "servo", "wait", "input"];
   for (const n of names) {
     const re = new RegExp(`(?<!await\\s)\\b${n}\\s*\\(`, "g");
     out = out.replace(re, (match, offset) => {
@@ -211,12 +215,9 @@ export async function runPythonAsync(userCode, hooks = {}) {
 
   // Pyodide "batched" puede entregar líneas sin salto final.
   // Para que print() se vea como en terminal clásica, reinsertamos \n si falta.
-  let lastStdoutChunk = "";
-
   pyodide.setStdout({
     batched: (s) => {
       const text = String(s);
-      lastStdoutChunk = text.replace(/\n$/, "");
       out(text.endsWith("\n") ? text : `${text}\n`);
     },
   });
@@ -227,15 +228,11 @@ export async function runPythonAsync(userCode, hooks = {}) {
     },
   });
 
-  pyodide.setStdin({
-    stdin: () => {
-      const promptText = lastStdoutChunk || "input:";
-      lastStdoutChunk = "";
-      const answer = globalThis.prompt?.(promptText) ?? "";
-      out(`${answer}\n`);
-      return answer;
-    },
-  });
+  const onInput = hooks.onInput;
+  globalThis.__pybot_request_input__ = (promptText) => {
+    if (onInput) return onInput(promptText);
+    return Promise.resolve(globalThis.prompt?.(promptText) ?? "");
+  };
 
   pyodide.registerJsModule(
     "pybot_hw",

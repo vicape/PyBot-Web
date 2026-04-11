@@ -85,6 +85,10 @@ export default function PyBotIDE() {
   const consoleEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const toolbarMenuRef = useRef(null);
+  const inputResolveRef = useRef(null);
+  const inputFieldRef = useRef(null);
+  const [waitingInput, setWaitingInput] = useState(false);
+  const [inputPrompt, setInputPrompt] = useState("");
   const [isCompactMobile, setIsCompactMobile] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches,
   );
@@ -146,6 +150,10 @@ export default function PyBotIDE() {
   }, [consoleLines]);
 
   useEffect(() => {
+    if (waitingInput) inputFieldRef.current?.focus();
+  }, [waitingInput]);
+
+  useEffect(() => {
     if (!toolbarMenuOpen) return;
     const onDocPointerDown = (event) => {
       if (!toolbarMenuRef.current?.contains(event.target)) {
@@ -161,6 +169,27 @@ export default function PyBotIDE() {
   }, []);
 
   const clearConsole = useCallback(() => setConsoleLines([]), []);
+
+  const onInput = useCallback((promptText) => {
+    return new Promise((resolve) => {
+      inputResolveRef.current = resolve;
+      setInputPrompt(promptText);
+      setWaitingInput(true);
+    });
+  }, []);
+
+  const onInputSubmit = useCallback(
+    (value) => {
+      appendConsole(`${inputPrompt}${value}\n`, "out");
+      setWaitingInput(false);
+      setInputPrompt("");
+      if (inputResolveRef.current) {
+        inputResolveRef.current(value);
+        inputResolveRef.current = null;
+      }
+    },
+    [inputPrompt, appendConsole],
+  );
 
   const codeNeedsHardware = useCallback((source) => {
     const s = String(source ?? "");
@@ -220,6 +249,7 @@ export default function PyBotIDE() {
       await runPythonAsync(code, {
         onOut: (s) => appendConsole(s, "out"),
         onErr: (s) => appendConsole(s, "err"),
+        onInput,
         pythonOnly: pythonOnly || !needsHw,
       });
       appendConsole("\n[Fin]\n", "info");
@@ -227,11 +257,20 @@ export default function PyBotIDE() {
       /* logged */
     } finally {
       setRunning(false);
+      setWaitingInput(false);
+      setInputPrompt("");
+      inputResolveRef.current = null;
     }
-  }, [running, code, appendConsole, pythonOnly, codeNeedsHardware]);
+  }, [running, code, appendConsole, pythonOnly, codeNeedsHardware, onInput]);
 
   const onStop = useCallback(() => {
     signalStop();
+    if (inputResolveRef.current) {
+      inputResolveRef.current("");
+      inputResolveRef.current = null;
+      setWaitingInput(false);
+      setInputPrompt("");
+    }
     appendConsole("\n[Stop solicitado]\n", "info");
   }, [appendConsole]);
 
@@ -664,6 +703,23 @@ export default function PyBotIDE() {
                     ))}
                     <span ref={consoleEndRef} />
                   </pre>
+                  {waitingInput ? (
+                    <div className="console-input-row">
+                      <span className="console-input-prompt">{inputPrompt}</span>
+                      <input
+                        ref={inputFieldRef}
+                        className="console-input-field"
+                        type="text"
+                        autoComplete="off"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            onInputSubmit(e.target.value);
+                            e.target.value = "";
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : (
@@ -711,6 +767,23 @@ export default function PyBotIDE() {
                     ))}
                     <span ref={consoleEndRef} />
                   </pre>
+                  {waitingInput ? (
+                    <div className="console-input-row">
+                      <span className="console-input-prompt">{inputPrompt}</span>
+                      <input
+                        ref={inputFieldRef}
+                        className="console-input-field"
+                        type="text"
+                        autoComplete="off"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            onInputSubmit(e.target.value);
+                            e.target.value = "";
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               </>
             )}
