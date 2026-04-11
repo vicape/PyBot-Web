@@ -60,10 +60,14 @@ async def _apin(mode, pin_id, value=None):
     if m == "in":
         return await pybot_hw.pin_read(pin_id)
     if m == "out":
-        # Compat escritorio: pin("out", pin) sin valor -> LOW por defecto
         if value is None:
             value = 0
         await pybot_hw.pin_write(pin_id, value)
+        return None
+    if m == "pwm":
+        if value is None:
+            value = 0
+        await pybot_hw.pin_write(pin_id, int(value))
         return None
     raise ValueError("pin_mode")
 
@@ -85,7 +89,7 @@ async def pin(*args):
     if len(args) == 0:
         raise ValueError("pin_args")
 
-    if isinstance(args[0], str) and args[0].lower().strip() in ("in", "out"):
+    if isinstance(args[0], str) and args[0].lower().strip() in ("in", "out", "pwm"):
         mode = args[0]
         if len(args) < 2:
             raise ValueError("pin_args")
@@ -94,7 +98,7 @@ async def pin(*args):
         return await _apin(mode, pin_id, value)
 
     # pin(pin_id, "in"/"out", [value]) estilo alternativo escritorio
-    if len(args) >= 2 and isinstance(args[1], str) and args[1].lower().strip() in ("in", "out"):
+    if len(args) >= 2 and isinstance(args[1], str) and args[1].lower().strip() in ("in", "out", "pwm"):
         pin_id = args[0]
         mode = args[1]
         value = args[2] if len(args) >= 3 else None
@@ -109,6 +113,19 @@ async def pin(*args):
     raise ValueError("pin_args")
 `;
 
+function isInsideStringOrComment(src, pos) {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < pos; i++) {
+    const ch = src[i];
+    if (ch === "\\" && (inSingle || inDouble)) { i++; continue; }
+    if (ch === "#" && !inSingle && !inDouble) return true;
+    if (ch === "'" && !inDouble) inSingle = !inSingle;
+    if (ch === '"' && !inSingle) inDouble = !inDouble;
+  }
+  return inSingle || inDouble;
+}
+
 function addAwaitForHardwareCalls(line) {
   const t = line.trim();
   if (!t || t.startsWith("#")) return line;
@@ -120,7 +137,10 @@ function addAwaitForHardwareCalls(line) {
   const names = ["pin", "motor", "servo", "wait"];
   for (const n of names) {
     const re = new RegExp(`(?<!await\\s)\\b${n}\\s*\\(`, "g");
-    out = out.replace(re, `await ${n}(`);
+    out = out.replace(re, (match, offset) => {
+      if (isInsideStringOrComment(out, offset)) return match;
+      return `await ${n}(`;
+    });
   }
   return out;
 }
@@ -128,11 +148,29 @@ function addAwaitForHardwareCalls(line) {
 /**
  * Acepta código estilo escritorio y async viejo, y lo lleva al formato Pyodide.
  */
+function safeLineReplace(line, pattern, replacement) {
+  return line.replace(pattern, (match, ...rest) => {
+    const offset = rest[rest.length - 2];
+    if (isInsideStringOrComment(line, offset)) return match;
+    return typeof replacement === "function" ? replacement(match) : replacement;
+  });
+}
+
 function normalizeUserCode(code) {
   let s = code;
-  // Entradas comunes de versiones anteriores
-  s = s.replace(/asyncio\.run\s*\(\s*main\s*\(\s*\)\s*\)/g, "await main()");
-  s = s.replace(/\bmain\s*\(\s*\)\s*$/gm, "await main()");
+
+  s = s
+    .split("\n")
+    .map((line) => {
+      let l = safeLineReplace(
+        line,
+        /asyncio\.run\s*\(\s*main\s*\(\s*\)\s*\)/g,
+        "await main()",
+      );
+      l = safeLineReplace(l, /\bmain\s*\(\s*\)\s*$/g, "await main()");
+      return l;
+    })
+    .join("\n");
 
   const hasAsyncMain = /\basync\s+def\s+main\s*\(/.test(s);
   const hasSyncMain = /\bdef\s+main\s*\(/.test(s);
@@ -146,7 +184,6 @@ function normalizeUserCode(code) {
     .map((line) => addAwaitForHardwareCalls(line))
     .join("\n");
 
-  // Evitar dobles await por reemplazos anteriores
   s = s.replace(/\bawait\s+await\s+/g, "await ");
   return s;
 }

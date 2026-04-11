@@ -312,7 +312,7 @@ export function formatPythonError(message) {
       "Recursion too deep: a function is calling itself too many times. Check the stop condition.",
     );
   }
-  if (/Permission|denied|blocked|secure context/i.test(m)) {
+  if (/PermissionError|Permission.*denied|access.*blocked|secure context/i.test(m)) {
     return pick(
       "Permiso o acceso bloqueado: revisá permisos y volvé a intentar.",
       "Permission or access blocked: review permissions and try again.",

@@ -80,7 +80,9 @@ export async function hwServoWrite(pin, angle) {
 }
 
 export async function hwWait(seconds) {
-  const end = Date.now() + seconds * 1000;
+  const ms = Number(seconds) * 1000;
+  if (!Number.isFinite(ms) || ms < 0) return;
+  const end = Date.now() + ms;
   while (Date.now() < end) {
     if (globalThis.__PYBOT_STOP__) {
       throw new Error("Programa detenido.");
@@ -109,9 +111,18 @@ export async function hwPinRead(pinId) {
 
 export async function hwPinWrite(pinId, value) {
   const s = needSession();
-  const n = parseInt(String(pinId), 10);
+  const sid = typeof pinId === "string" ? pinId : String(pinId ?? "");
+  let n;
+  if (sid.toUpperCase().startsWith("A")) {
+    const ch = parseInt(sid.slice(1), 10);
+    if (Number.isNaN(ch) || ch < 0 || ch > 5) throw new Error("invalid_analog");
+    n = 14 + ch;
+  } else {
+    n = parseInt(sid, 10);
+  }
+  if (Number.isNaN(n)) throw new Error("invalid_value");
   const v = parseInt(String(value), 10);
-  if (v < 0 || v > 255) throw new Error("invalid_value");
+  if (Number.isNaN(v) || v < 0 || v > 255) throw new Error("invalid_value");
   if (v > 1) {
     await s.setPinMode(n, MODE_PWM);
     await s.pwmWrite(n, v);
