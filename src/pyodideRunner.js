@@ -211,9 +211,12 @@ export async function runPythonAsync(userCode, hooks = {}) {
 
   // Pyodide "batched" puede entregar líneas sin salto final.
   // Para que print() se vea como en terminal clásica, reinsertamos \n si falta.
+  let lastStdoutChunk = "";
+
   pyodide.setStdout({
     batched: (s) => {
       const text = String(s);
+      lastStdoutChunk = text.replace(/\n$/, "");
       out(text.endsWith("\n") ? text : `${text}\n`);
     },
   });
@@ -221,6 +224,16 @@ export async function runPythonAsync(userCode, hooks = {}) {
     batched: (s) => {
       const text = String(s);
       err(text.endsWith("\n") ? text : `${text}\n`);
+    },
+  });
+
+  pyodide.setStdin({
+    stdin: () => {
+      const promptText = lastStdoutChunk || "input:";
+      lastStdoutChunk = "";
+      const answer = globalThis.prompt?.(promptText) ?? "";
+      out(`${answer}\n`);
+      return answer;
     },
   });
 
