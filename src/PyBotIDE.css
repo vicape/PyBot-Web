@@ -1659,6 +1659,28 @@
   }
 }
 
+.canvas-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px;
+  background: #111;
+  border-bottom: 1px solid var(--ide-border);
+  flex-shrink: 0;
+}
+
+.ide-root[data-theme="light"] .canvas-wrap {
+  background: #e8e8e8;
+}
+
+.pybot-canvas {
+  display: block;
+  border-radius: 4px;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
 .console-input-row {
   display: flex;
   align-items: center;

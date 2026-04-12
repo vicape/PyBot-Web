@@ -1,5 +1,6 @@
 import { createPyodideHwModule } from "./hardwareBridge.js";
 import { formatPythonError } from "./i18n.js";
+import { createCanvasModule, setCanvasHooks, resetCanvas } from "./pybot_canvas.js";
 
 function createPythonOnlyHwModule() {
   return {
@@ -123,6 +124,32 @@ import time
 def _safe_sleep(secs):
     raise RuntimeError("time_sleep_blocked")
 time.sleep = _safe_sleep
+
+import pybot_gfx as _gfx
+
+async def pantalla(ancho=400, alto=300):
+    await _gfx.pantalla(int(ancho), int(alto))
+
+async def fondo(color="negro"):
+    await _gfx.fondo(str(color))
+
+async def dibujar_rect(x, y, ancho, alto, color="blanco"):
+    await _gfx.dibujar_rect(int(x), int(y), int(ancho), int(alto), str(color))
+
+async def dibujar_circulo(x, y, radio, color="blanco"):
+    await _gfx.dibujar_circulo(int(x), int(y), int(radio), str(color))
+
+async def dibujar_linea(x1, y1, x2, y2, color="blanco", grosor=2):
+    await _gfx.dibujar_linea(int(x1), int(y1), int(x2), int(y2), str(color), int(grosor))
+
+async def texto(x, y, msg, color="blanco", size=18):
+    await _gfx.texto(int(x), int(y), str(msg), str(color), int(size))
+
+async def actualizar():
+    await _gfx.actualizar()
+
+async def limpiar():
+    await _gfx.limpiar()
 `;
 
 function isInsideStringOrComment(src, pos) {
@@ -146,7 +173,11 @@ function addAwaitForHardwareCalls(line) {
   if (/^\s*await\b/.test(line)) return line;
 
   let out = line;
-  const names = ["pin", "motor", "servo", "wait", "input", "sleep"];
+  const names = [
+    "pin", "motor", "servo", "wait", "input", "sleep",
+    "pantalla", "fondo", "dibujar_rect", "dibujar_circulo",
+    "dibujar_linea", "texto", "actualizar", "limpiar",
+  ];
 
   for (const n of names) {
     const re = new RegExp(`(?<!await\\s)(?<!\\.)\\b${n}\\s*\\(`, "g");
@@ -275,6 +306,10 @@ export async function runPythonAsync(userCode, hooks = {}) {
     "pybot_hw",
     pythonOnly ? createPythonOnlyHwModule() : createPyodideHwModule(),
   );
+
+  if (hooks.onCanvas) setCanvasHooks(hooks.onCanvas);
+  resetCanvas();
+  pyodide.registerJsModule("pybot_gfx", createCanvasModule());
 
   const userMigrated = normalizeUserCode(userCode);
   const full = `${PYTHON_PRELUDE}\n\n${userMigrated}\n`;

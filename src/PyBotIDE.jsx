@@ -89,6 +89,8 @@ export default function PyBotIDE() {
   const inputFieldRef = useRef(null);
   const [waitingInput, setWaitingInput] = useState(false);
   const [inputPrompt, setInputPrompt] = useState("");
+  const canvasRef = useRef(null);
+  const [canvasSize, setCanvasSize] = useState(null);
   const [isCompactMobile, setIsCompactMobile] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches,
   );
@@ -170,6 +172,12 @@ export default function PyBotIDE() {
 
   const clearConsole = useCallback(() => setConsoleLines([]), []);
 
+  const onCanvas = useCallback(async (w, h) => {
+    setCanvasSize({ w, h });
+    await new Promise((r) => requestAnimationFrame(r));
+    return canvasRef.current;
+  }, []);
+
   const onInput = useCallback((promptText) => {
     return new Promise((resolve) => {
       inputResolveRef.current = resolve;
@@ -250,6 +258,7 @@ export default function PyBotIDE() {
         onOut: (s) => appendConsole(s, "out"),
         onErr: (s) => appendConsole(s, "err"),
         onInput,
+        onCanvas,
         pythonOnly: pythonOnly || !needsHw,
       });
       appendConsole("\n[Fin]\n", "info");
@@ -261,7 +270,7 @@ export default function PyBotIDE() {
       setInputPrompt("");
       inputResolveRef.current = null;
     }
-  }, [running, code, appendConsole, pythonOnly, codeNeedsHardware, onInput]);
+  }, [running, code, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas]);
 
   const onStop = useCallback(() => {
     signalStop();
@@ -691,6 +700,16 @@ export default function PyBotIDE() {
                   onMouseDown={startConsoleWidthResize}
                 />
                 <div className="console-panel console-panel--side" style={{ width: `${consoleWidth}px` }}>
+                  {canvasSize ? (
+                    <div className="canvas-wrap">
+                      <canvas
+                        ref={canvasRef}
+                        width={canvasSize.w}
+                        height={canvasSize.h}
+                        className="pybot-canvas"
+                      />
+                    </div>
+                  ) : null}
                   <div className="console-head">
                     <span className="console-head__title">{t("terminal")}</span>
                     <span className="console-head__hint">{t("terminalOutput")}</span>
@@ -754,7 +773,17 @@ export default function PyBotIDE() {
                   aria-orientation="horizontal"
                   onMouseDown={startConsoleResize}
                 />
-                <div className="console-panel" style={{ height: `${consoleHeight}px` }}>
+                <div className="console-panel" style={{ height: canvasSize ? "auto" : `${consoleHeight}px` }}>
+                  {canvasSize ? (
+                    <div className="canvas-wrap">
+                      <canvas
+                        ref={canvasRef}
+                        width={canvasSize.w}
+                        height={canvasSize.h}
+                        className="pybot-canvas"
+                      />
+                    </div>
+                  ) : null}
                   <div className="console-head">
                     <span className="console-head__title">{t("terminal")}</span>
                     <span className="console-head__hint">{t("terminalOutput")}</span>
