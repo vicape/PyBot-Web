@@ -1667,6 +1667,38 @@
   background: #111;
   border-bottom: 1px solid var(--ide-border);
   flex-shrink: 0;
+  position: relative;
+}
+
+.canvas-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ccc;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.canvas-close:hover {
+  background: rgba(255, 60, 60, 0.7);
+  color: #fff;
+}
+.ide-root[data-theme="light"] .canvas-close {
+  background: rgba(0, 0, 0, 0.1);
+  color: #555;
+}
+.ide-root[data-theme="light"] .canvas-close:hover {
+  background: rgba(220, 50, 50, 0.7);
+  color: #fff;
 }
 
 .ide-root[data-theme="light"] .canvas-wrap {

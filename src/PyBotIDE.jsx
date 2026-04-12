@@ -706,6 +706,7 @@ export default function PyBotIDE() {
                 <div className="console-panel console-panel--side" style={{ width: `${consoleWidth}px` }}>
                   {canvasSize ? (
                     <div className="canvas-wrap">
+                      <button type="button" className="canvas-close" onClick={() => setCanvasSize(null)} title="Cerrar canvas">&times;</button>
                       <canvas
                         ref={canvasRef}
                         width={canvasSize.w}
@@ -780,6 +781,7 @@ export default function PyBotIDE() {
                 <div className="console-panel" style={{ height: canvasSize ? "auto" : `${consoleHeight}px` }}>
                   {canvasSize ? (
                     <div className="canvas-wrap">
+                      <button type="button" className="canvas-close" onClick={() => setCanvasSize(null)} title="Cerrar canvas">&times;</button>
                       <canvas
                         ref={canvasRef}
                         width={canvasSize.w}
