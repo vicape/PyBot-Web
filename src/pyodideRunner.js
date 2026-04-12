@@ -127,32 +127,43 @@ time.sleep = _safe_sleep
 
 import pybot_gfx as _gfx
 
-async def pantalla(ancho=400, alto=300):
-    await _gfx.pantalla(int(ancho), int(alto))
+async def screen(w=400, h=300):
+    await _gfx.screen(int(w), int(h))
 
-async def fondo(color="negro"):
-    await _gfx.fondo(str(color))
+async def fill(color="black"):
+    await _gfx.fill(str(color))
 
-async def dibujar_rect(x, y, ancho, alto, color="blanco"):
-    await _gfx.dibujar_rect(int(x), int(y), int(ancho), int(alto), str(color))
+async def draw_rect(x, y, w, h, color="white"):
+    await _gfx.draw_rect(int(x), int(y), int(w), int(h), str(color))
 
-async def dibujar_circulo(x, y, radio, color="blanco"):
-    await _gfx.dibujar_circulo(int(x), int(y), int(radio), str(color))
+async def draw_circle(x, y, radius, color="white"):
+    await _gfx.draw_circle(int(x), int(y), int(radius), str(color))
 
-async def dibujar_linea(x1, y1, x2, y2, color="blanco", grosor=2):
-    await _gfx.dibujar_linea(int(x1), int(y1), int(x2), int(y2), str(color), int(grosor))
+async def draw_line(x1, y1, x2, y2, color="white", width=2):
+    await _gfx.draw_line(int(x1), int(y1), int(x2), int(y2), str(color), int(width))
 
-async def texto(x, y, msg, color="blanco", size=18):
-    await _gfx.texto(int(x), int(y), str(msg), str(color), int(size))
+async def draw_text(x, y, msg, color="white", size=18):
+    await _gfx.draw_text(int(x), int(y), str(msg), str(color), int(size))
 
-async def actualizar():
-    await _gfx.actualizar()
+async def flip():
+    await _gfx.flip()
 
-async def limpiar():
-    await _gfx.limpiar()
+async def clear():
+    await _gfx.clear()
 
-async def tecla(nombre):
-    return bool(await _gfx.tecla(str(nombre)))
+async def key_pressed(name):
+    return bool(await _gfx.key_pressed(str(name)))
+
+# Aliases español (backward compat)
+pantalla = screen
+fondo = fill
+dibujar_rect = draw_rect
+dibujar_circulo = draw_circle
+dibujar_linea = draw_line
+texto = draw_text
+actualizar = flip
+limpiar = clear
+tecla = key_pressed
 `;
 
 function isInsideStringOrComment(src, pos) {
@@ -178,6 +189,8 @@ function addAwaitForHardwareCalls(line) {
   let out = line;
   const names = [
     "pin", "motor", "servo", "wait", "input", "sleep",
+    "screen", "fill", "draw_rect", "draw_circle",
+    "draw_line", "draw_text", "flip", "clear", "key_pressed",
     "pantalla", "fondo", "dibujar_rect", "dibujar_circulo",
     "dibujar_linea", "texto", "actualizar", "limpiar", "tecla",
   ];

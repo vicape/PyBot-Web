@@ -1,7 +1,7 @@
 /**
- * pybot_canvas — módulo gráfico ligero para PyBot Web.
- * Usa doble buffer para evitar parpadeo: se dibuja en un canvas oculto
- * y actualizar() copia el frame completo al canvas visible.
+ * pybot_canvas — lightweight graphics module for PyBot Web.
+ * API names follow Pygame conventions (English).
+ * Uses double buffering to prevent flicker.
  */
 
 const COLORES = {
@@ -50,7 +50,7 @@ function ensureCanvas() {
 
 export function createCanvasModule() {
   return {
-    pantalla: async (w, h) => {
+    screen: async (w, h) => {
       const width = Math.max(100, Math.min(800, Number(w) || 400));
       const height = Math.max(75, Math.min(600, Number(h) || 300));
       if (_onShow) {
@@ -73,37 +73,37 @@ export function createCanvasModule() {
       document.addEventListener("keyup", _onKeyUp);
     },
 
-    fondo: async (color) => {
+    fill: async (color) => {
       const ctx = ensureCanvas();
       ctx.fillStyle = resolveColor(color);
       ctx.fillRect(0, 0, _buffer.width, _buffer.height);
     },
 
-    dibujar_rect: async (x, y, w, h, color) => {
+    draw_rect: async (x, y, w, h, color) => {
       const ctx = ensureCanvas();
       ctx.fillStyle = resolveColor(color);
       ctx.fillRect(Number(x), Number(y), Number(w), Number(h));
     },
 
-    dibujar_circulo: async (x, y, radio, color) => {
+    draw_circle: async (x, y, radius, color) => {
       const ctx = ensureCanvas();
       ctx.fillStyle = resolveColor(color);
       ctx.beginPath();
-      ctx.arc(Number(x), Number(y), Math.abs(Number(radio)), 0, Math.PI * 2);
+      ctx.arc(Number(x), Number(y), Math.abs(Number(radius)), 0, Math.PI * 2);
       ctx.fill();
     },
 
-    dibujar_linea: async (x1, y1, x2, y2, color, grosor) => {
+    draw_line: async (x1, y1, x2, y2, color, width) => {
       const ctx = ensureCanvas();
       ctx.strokeStyle = resolveColor(color);
-      ctx.lineWidth = Number(grosor) || 2;
+      ctx.lineWidth = Number(width) || 2;
       ctx.beginPath();
       ctx.moveTo(Number(x1), Number(y1));
       ctx.lineTo(Number(x2), Number(y2));
       ctx.stroke();
     },
 
-    texto: async (x, y, msg, color, size) => {
+    draw_text: async (x, y, msg, color, size) => {
       const ctx = ensureCanvas();
       const px = Number(size) || 18;
       ctx.fillStyle = resolveColor(color);
@@ -112,19 +112,19 @@ export function createCanvasModule() {
       ctx.fillText(String(msg), Number(x), Number(y));
     },
 
-    actualizar: async () => {
+    flip: async () => {
       if (_visibleCtx && _buffer) {
         _visibleCtx.drawImage(_buffer, 0, 0);
       }
       await new Promise((r) => requestAnimationFrame(r));
     },
 
-    limpiar: async () => {
+    clear: async () => {
       const ctx = ensureCanvas();
       ctx.clearRect(0, 0, _buffer.width, _buffer.height);
     },
 
-    tecla: async (nombre) => {
+    key_pressed: async (name) => {
       const KEY_MAP = {
         arriba: "ArrowUp", up: "ArrowUp",
         abajo: "ArrowDown", down: "ArrowDown",
@@ -134,12 +134,12 @@ export function createCanvasModule() {
         enter: "Enter", escape: "Escape", esc: "Escape",
         w: "w", a: "a", s: "s", d: "d",
       };
-      const k = String(nombre ?? "").toLowerCase().trim();
+      const k = String(name ?? "").toLowerCase().trim();
       return _keys.has(KEY_MAP[k] ?? k);
     },
 
-    ancho: () => _buffer?.width ?? 0,
-    alto: () => _buffer?.height ?? 0,
+    width: () => _buffer?.width ?? 0,
+    height: () => _buffer?.height ?? 0,
   };
 }
 
