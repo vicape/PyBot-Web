@@ -1,6 +1,7 @@
 /**
  * pybot_canvas — módulo gráfico ligero para PyBot Web.
- * Expone funciones que Python llama vía Pyodide para dibujar en un <canvas>.
+ * Usa doble buffer para evitar parpadeo: se dibuja en un canvas oculto
+ * y actualizar() copia el frame completo al canvas visible.
  */
 
 const COLORES = {
@@ -24,6 +25,8 @@ function resolveColor(c) {
 }
 
 let _canvas = null;
+let _visibleCtx = null;
+let _buffer = null;
 let _ctx = null;
 let _onShow = null;
 
@@ -32,7 +35,7 @@ export function setCanvasHooks(onShow) {
 }
 
 function ensureCanvas() {
-  if (!_canvas) throw new Error("canvas_not_ready");
+  if (!_ctx) throw new Error("canvas_not_ready");
   return _ctx;
 }
 
@@ -45,20 +48,24 @@ export function createCanvasModule() {
         const el = await _onShow(width, height);
         if (el) {
           _canvas = el;
-          _ctx = el.getContext("2d");
+          _visibleCtx = el.getContext("2d");
         }
       }
       if (!_canvas) throw new Error("canvas_not_ready");
       _canvas.width = width;
       _canvas.height = height;
+      _buffer = new OffscreenCanvas(width, height);
+      _ctx = _buffer.getContext("2d");
       _ctx.fillStyle = "#000";
       _ctx.fillRect(0, 0, width, height);
+      _visibleCtx.fillStyle = "#000";
+      _visibleCtx.fillRect(0, 0, width, height);
     },
 
     fondo: async (color) => {
       const ctx = ensureCanvas();
       ctx.fillStyle = resolveColor(color);
-      ctx.fillRect(0, 0, _canvas.width, _canvas.height);
+      ctx.fillRect(0, 0, _buffer.width, _buffer.height);
     },
 
     dibujar_rect: async (x, y, w, h, color) => {
@@ -95,20 +102,25 @@ export function createCanvasModule() {
     },
 
     actualizar: async () => {
+      if (_visibleCtx && _buffer) {
+        _visibleCtx.drawImage(_buffer, 0, 0);
+      }
       await new Promise((r) => requestAnimationFrame(r));
     },
 
     limpiar: async () => {
       const ctx = ensureCanvas();
-      ctx.clearRect(0, 0, _canvas.width, _canvas.height);
+      ctx.clearRect(0, 0, _buffer.width, _buffer.height);
     },
 
-    ancho: () => _canvas?.width ?? 0,
-    alto: () => _canvas?.height ?? 0,
+    ancho: () => _buffer?.width ?? 0,
+    alto: () => _buffer?.height ?? 0,
   };
 }
 
 export function resetCanvas() {
   _canvas = null;
+  _visibleCtx = null;
+  _buffer = null;
   _ctx = null;
 }
