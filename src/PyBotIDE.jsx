@@ -778,7 +778,7 @@ export default function PyBotIDE() {
                   aria-orientation="horizontal"
                   onMouseDown={startConsoleResize}
                 />
-                <div className="console-panel" style={{ height: canvasSize ? "auto" : `${consoleHeight}px` }}>
+                <div className="console-panel" style={{ height: `${consoleHeight}px` }}>
                   {canvasSize ? (
                     <div className="canvas-wrap">
                       <button type="button" className="canvas-close" onClick={() => setCanvasSize(null)} title="Cerrar canvas">&times;</button>
