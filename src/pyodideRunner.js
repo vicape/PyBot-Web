@@ -147,13 +147,42 @@ function addAwaitForHardwareCalls(line) {
 
   let out = line;
   const names = ["pin", "motor", "servo", "wait", "input", "sleep"];
+
   for (const n of names) {
-    const re = new RegExp(`(?<!await\\s)\\b${n}\\s*\\(`, "g");
-    out = out.replace(re, (match, offset) => {
-      if (isInsideStringOrComment(out, offset)) return match;
-      return `await ${n}(`;
-    });
+    const re = new RegExp(`(?<!await\\s)(?<!\\.)\\b${n}\\s*\\(`, "g");
+    const hits = [];
+    let m;
+    while ((m = re.exec(out)) !== null) {
+      if (!isInsideStringOrComment(out, m.index)) {
+        hits.push({ index: m.index, len: m[0].length });
+      }
+    }
+    for (let k = hits.length - 1; k >= 0; k--) {
+      const { index: nameStart, len: matchLen } = hits[k];
+      const parenPos = nameStart + matchLen - 1;
+      let depth = 1;
+      let j = parenPos + 1;
+      let inStr = null;
+      while (j < out.length && depth > 0) {
+        const ch = out[j];
+        if (inStr) {
+          if (ch === "\\") { j += 2; continue; }
+          if (ch === inStr) inStr = null;
+          j++;
+          continue;
+        }
+        if (ch === '"' || ch === "'") { inStr = ch; j++; continue; }
+        if (ch === "#") break;
+        if (ch === "(") depth++;
+        else if (ch === ")") depth--;
+        j++;
+      }
+      if (depth !== 0) continue;
+      const fullCall = out.slice(nameStart, j);
+      out = out.slice(0, nameStart) + `(await ${fullCall})` + out.slice(j);
+    }
   }
+
   return out;
 }
 
