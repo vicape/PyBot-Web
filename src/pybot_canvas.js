@@ -29,6 +29,15 @@ let _visibleCtx = null;
 let _buffer = null;
 let _ctx = null;
 let _onShow = null;
+const _keys = new Set();
+
+function _onKeyDown(e) {
+  _keys.add(e.key);
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
+    e.preventDefault();
+  }
+}
+function _onKeyUp(e) { _keys.delete(e.key); }
 
 export function setCanvasHooks(onShow) {
   _onShow = onShow;
@@ -60,6 +69,8 @@ export function createCanvasModule() {
       _ctx.fillRect(0, 0, width, height);
       _visibleCtx.fillStyle = "#000";
       _visibleCtx.fillRect(0, 0, width, height);
+      document.addEventListener("keydown", _onKeyDown);
+      document.addEventListener("keyup", _onKeyUp);
     },
 
     fondo: async (color) => {
@@ -113,12 +124,29 @@ export function createCanvasModule() {
       ctx.clearRect(0, 0, _buffer.width, _buffer.height);
     },
 
+    tecla: (nombre) => {
+      const KEY_MAP = {
+        arriba: "ArrowUp", up: "ArrowUp",
+        abajo: "ArrowDown", down: "ArrowDown",
+        izquierda: "ArrowLeft", left: "ArrowLeft",
+        derecha: "ArrowRight", right: "ArrowRight",
+        espacio: " ", space: " ",
+        enter: "Enter", escape: "Escape", esc: "Escape",
+        w: "w", a: "a", s: "s", d: "d",
+      };
+      const k = String(nombre ?? "").toLowerCase().trim();
+      return _keys.has(KEY_MAP[k] ?? k);
+    },
+
     ancho: () => _buffer?.width ?? 0,
     alto: () => _buffer?.height ?? 0,
   };
 }
 
 export function resetCanvas() {
+  document.removeEventListener("keydown", _onKeyDown);
+  document.removeEventListener("keyup", _onKeyUp);
+  _keys.clear();
   _canvas = null;
   _visibleCtx = null;
   _buffer = null;

@@ -150,6 +150,9 @@ async def actualizar():
 
 async def limpiar():
     await _gfx.limpiar()
+
+def tecla(nombre):
+    return bool(_gfx.tecla(str(nombre)))
 `;
 
 function isInsideStringOrComment(src, pos) {
