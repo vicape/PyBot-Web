@@ -174,7 +174,10 @@ export default function PyBotIDE() {
 
   const onCanvas = useCallback(async (w, h) => {
     setCanvasSize({ w, h });
-    await new Promise((r) => requestAnimationFrame(r));
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 30));
+      if (canvasRef.current) return canvasRef.current;
+    }
     return canvasRef.current;
   }, []);
 
@@ -249,6 +252,7 @@ export default function PyBotIDE() {
       return;
     }
     setRunning(true);
+    setCanvasSize(null);
     signalStop();
     await new Promise((r) => setTimeout(r, 50));
     globalThis.__PYBOT_STOP__ = false;

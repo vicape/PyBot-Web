@@ -240,6 +240,13 @@ export function formatPythonError(message) {
 
   const firstDefinedName = m.match(/name ['"]([^'"]+)['"] is not defined/i)?.[1];
 
+  if (/canvas_not_ready/i.test(m)) {
+    return pick(
+      "El canvas no está listo. Asegurate de llamar pantalla(ancho, alto) antes de dibujar.",
+      "Canvas is not ready. Make sure to call pantalla(width, height) before drawing.",
+    );
+  }
+
   if (/SyntaxError|invalid syntax/i.test(m)) {
     return pick(
       "Error de sintaxis: hay una línea escrita con formato inválido. Revisá paréntesis, comillas, dos puntos y comas.",
