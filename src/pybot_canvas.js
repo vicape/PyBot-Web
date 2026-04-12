@@ -124,7 +124,7 @@ export function createCanvasModule() {
       ctx.clearRect(0, 0, _buffer.width, _buffer.height);
     },
 
-    tecla: (nombre) => {
+    tecla: async (nombre) => {
       const KEY_MAP = {
         arriba: "ArrowUp", up: "ArrowUp",
         abajo: "ArrowDown", down: "ArrowDown",
