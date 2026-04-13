@@ -1752,9 +1752,15 @@
   font-size: calc(13.5px + var(--font-delta, 0px));
   line-height: 1.55;
   outline: none;
-  caret-color: var(--accent, #007acc);
+  caret-color: transparent;
   padding: 0 4px;
-  caret-color: var(--accent, #007acc);
+  border-right: 3px solid var(--accent, #007acc);
+  animation: blink-caret 1s step-end infinite;
+}
+
+@keyframes blink-caret {
+  0%, 100% { border-right-color: var(--accent, #007acc); }
+  50% { border-right-color: transparent; }
 }
 
 .console-input-field::placeholder {
