@@ -1724,13 +1724,10 @@
   image-rendering: pixelated;
 }
 
-.console-input-row {
-  display: flex;
-  align-items: center;
-  padding: 4px 14px 6px;
-  gap: 0;
-  background: inherit;
-  flex-shrink: 0;
+.console-input-inline {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
 }
 
 .console-input-prompt {
@@ -1739,7 +1736,6 @@
   font-size: calc(13.5px + var(--font-delta, 0px));
   line-height: 1.55;
   white-space: pre;
-  flex-shrink: 0;
 }
 
 .ide-root[data-theme="light"] .console-input-prompt {
@@ -1747,8 +1743,8 @@
 }
 
 .console-input-field {
-  flex: 1;
-  min-width: 0;
+  width: 200px;
+  max-width: 50vw;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--accent, #007acc);

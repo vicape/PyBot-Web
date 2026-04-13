@@ -725,25 +725,25 @@ export default function PyBotIDE() {
                         {line.text}
                       </span>
                     ))}
+                    {waitingInput ? (
+                      <span className="console-input-inline">
+                        <span className="console-input-prompt">{inputPrompt}</span>
+                        <input
+                          ref={inputFieldRef}
+                          className="console-input-field"
+                          type="text"
+                          autoComplete="off"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              onInputSubmit(e.target.value);
+                              e.target.value = "";
+                            }
+                          }}
+                        />
+                      </span>
+                    ) : null}
                     <span ref={consoleEndRef} />
                   </pre>
-                  {waitingInput ? (
-                    <div className="console-input-row">
-                      <span className="console-input-prompt">{inputPrompt}</span>
-                      <input
-                        ref={inputFieldRef}
-                        className="console-input-field"
-                        type="text"
-                        autoComplete="off"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            onInputSubmit(e.target.value);
-                            e.target.value = "";
-                          }
-                        }}
-                      />
-                    </div>
-                  ) : null}
                 </div>
               </div>
             ) : (
@@ -800,25 +800,25 @@ export default function PyBotIDE() {
                         {line.text}
                       </span>
                     ))}
+                    {waitingInput ? (
+                      <span className="console-input-inline">
+                        <span className="console-input-prompt">{inputPrompt}</span>
+                        <input
+                          ref={inputFieldRef}
+                          className="console-input-field"
+                          type="text"
+                          autoComplete="off"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              onInputSubmit(e.target.value);
+                              e.target.value = "";
+                            }
+                          }}
+                        />
+                      </span>
+                    ) : null}
                     <span ref={consoleEndRef} />
                   </pre>
-                  {waitingInput ? (
-                    <div className="console-input-row">
-                      <span className="console-input-prompt">{inputPrompt}</span>
-                      <input
-                        ref={inputFieldRef}
-                        className="console-input-field"
-                        type="text"
-                        autoComplete="off"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            onInputSubmit(e.target.value);
-                            e.target.value = "";
-                          }
-                        }}
-                      />
-                    </div>
-                  ) : null}
                 </div>
               </>
             )}
