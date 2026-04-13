@@ -1725,9 +1725,7 @@
 }
 
 .console-input-inline {
-  display: inline-flex;
-  align-items: baseline;
-  max-width: 100%;
+  display: inline;
 }
 
 .console-input-prompt {
@@ -1743,18 +1741,21 @@
 }
 
 .console-input-field {
-  width: 1ch;
-  min-width: 1ch;
+  display: inline;
+  width: 0;
+  min-width: 0;
   max-width: 60vw;
   background: transparent;
   border: none;
   color: #e6edf3;
-  font-family: var(--font-mono);
-  font-size: calc(13.5px + var(--font-delta, 0px));
-  line-height: 1.55;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
   outline: none;
   caret-color: transparent;
   padding: 0;
+  margin: 0;
+  box-sizing: content-box;
   border-right: 3px solid var(--accent, #007acc);
   animation: blink-caret 1s step-end infinite;
 }
