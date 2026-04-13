@@ -1743,8 +1743,9 @@
 }
 
 .console-input-field {
-  width: 200px;
-  max-width: 50vw;
+  width: 1ch;
+  min-width: 1ch;
+  max-width: 60vw;
   background: transparent;
   border: none;
   color: #e6edf3;
@@ -1753,7 +1754,7 @@
   line-height: 1.55;
   outline: none;
   caret-color: transparent;
-  padding: 0 4px;
+  padding: 0;
   border-right: 3px solid var(--accent, #007acc);
   animation: blink-caret 1s step-end infinite;
 }

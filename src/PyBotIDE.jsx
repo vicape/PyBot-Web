@@ -733,10 +733,13 @@ export default function PyBotIDE() {
                           className="console-input-field"
                           type="text"
                           autoComplete="off"
+                          size="1"
+                          onInput={(e) => { e.target.style.width = Math.max(1, e.target.value.length) + "ch"; }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               onInputSubmit(e.target.value);
                               e.target.value = "";
+                              e.target.style.width = "1ch";
                             }
                           }}
                         />
@@ -808,10 +811,13 @@ export default function PyBotIDE() {
                           className="console-input-field"
                           type="text"
                           autoComplete="off"
+                          size="1"
+                          onInput={(e) => { e.target.style.width = Math.max(1, e.target.value.length) + "ch"; }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               onInputSubmit(e.target.value);
                               e.target.value = "";
+                              e.target.style.width = "1ch";
                             }
                           }}
                         />
