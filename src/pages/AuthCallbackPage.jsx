@@ -3,17 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { getSupabase } from "../supabaseClient.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
 import { updatePreferredRole } from "../platform/profileApi.js";
-import { consumeSignupRole, SIGNUP_ROLES } from "../platform/signupRole.js";
+import { consumeSignupRole } from "../platform/signupRole.js";
 
 function safeInternalNext(raw) {
   if (typeof raw !== "string") return null;
   const t = raw.trim();
   return t.startsWith("/") && !t.startsWith("//") ? t : null;
-}
-
-function defaultPathForRole(role) {
-  if (role === SIGNUP_ROLES.student) return "/join";
-  return "/dashboard";
 }
 
 /** Supabase OAuth redirige acá; detectSessionInUrl + PKCE completan la sesión. */
@@ -49,7 +44,7 @@ export default function AuthCallbackPage() {
       }
 
       const explicit = safeInternalNext(storedNext);
-      navigate(explicit ?? defaultPathForRole(signupRole), { replace: true });
+      navigate(explicit ?? "/dashboard", { replace: true });
     };
 
     const fail = () => {
