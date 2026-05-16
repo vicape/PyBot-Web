@@ -191,8 +191,18 @@ export default function OrgCoursesPage() {
           <p className="auth-card__muted">Solo docentes y gestión pueden crear cursos.</p>
         )}
 
+        {staff ? (
+          <p className="auth-card__muted auth-card__muted--tight">
+            <Link to="/dashboard?tab=classroom">Conectar Google Classroom</Link> desde el panel para importar
+            cursos.
+          </p>
+        ) : null}
+        <Link to="/dashboard" className="auth-link">
+          Volver al panel
+        </Link>
+        {" · "}
         <Link to="/" className="auth-link">
-          Ir al IDE (anónimo)
+          IDE anónimo
         </Link>
       </div>
     </main>

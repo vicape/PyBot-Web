@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import AccountSettings from "../components/dashboard/AccountSettings.jsx";
+import ClassroomPanel from "../components/dashboard/ClassroomPanel.jsx";
+import DashboardShell from "../components/dashboard/DashboardShell.jsx";
 import { getGoogleProfile } from "../authSession.js";
 import { signOutGoogleClient } from "../authGoogle.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
-import { roleLabelEs } from "../orgRole.js";
+import { isTeacherInAnyOrg, roleLabelEs } from "../orgRole.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
+import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 import { slugifyOrganizationName } from "../slugify.js";
 
 function LegacyDashboard({ profile, onSignOut }) {
@@ -12,7 +16,7 @@ function LegacyDashboard({ profile, onSignOut }) {
     <main className="auth-root">
       <div className="auth-card auth-card--wide">
         <h1 className="auth-card__title">Panel</h1>
-        <p className="auth-card__lead">Sesión iniciada (solo en este navegador).</p>
+        <p className="auth-card__lead">SesiÃ³n iniciada (solo en este navegador).</p>
         <div className="auth-profile">
           {profile.picture ? (
             <img src={profile.picture} alt="" className="auth-profile__avatar" width={56} height={56} />
@@ -22,15 +26,12 @@ function LegacyDashboard({ profile, onSignOut }) {
             {profile.email ? <span className="auth-profile__email">{profile.email}</span> : null}
           </div>
         </div>
-        <p className="auth-card__muted">
-          Para colegios y datos en la nube, configurá Supabase (ver <code>.env.example</code>).
-        </p>
         <div className="auth-card__actions auth-card__actions--row">
           <Link to="/" className="auth-btn auth-btn--ghost">
             Abrir IDE
           </Link>
           <button type="button" className="auth-btn auth-btn--primary" onClick={onSignOut}>
-            Cerrar sesión
+            Cerrar sesiÃ³n
           </button>
         </div>
       </div>
@@ -38,8 +39,11 @@ function LegacyDashboard({ profile, onSignOut }) {
   );
 }
 
+const VALID_TABS = new Set(["home", "schools", "account", "classroom"]);
+
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const supabase = useMemo(() => getSupabase(), []);
   const useCloud = isSupabaseConfigured();
 
@@ -50,23 +54,35 @@ export default function DashboardPage() {
   const [newOrgName, setNewOrgName] = useState("");
   const [savingOrg, setSavingOrg] = useState(false);
   const [profileWarn, setProfileWarn] = useState("");
+  const [displayName, setDisplayName] = useState("");
 
   const legacyProfile = getGoogleProfile();
+
+  const rawTab = searchParams.get("tab") || "home";
+  const activeTab = VALID_TABS.has(rawTab) ? rawTab : "home";
+  const isTeacher = isTeacherInAnyOrg(orgs);
+  const staffOrgId = useMemo(() => {
+    const staff = orgs.find((o) => {
+      const r = o.organization_members?.[0]?.role;
+      return r === "owner" || r === "teacher";
+    });
+    return staff?.id ?? orgs[0]?.id ?? null;
+  }, [orgs]);
+
+  const setTab = (tabId) => {
+    setSearchParams(tabId === "home" ? {} : { tab: tabId }, { replace: true });
+  };
 
   const loadOrganizations = useCallback(async () => {
     if (!supabase || !sessionUser) return;
     setOrgError("");
-    const uid = sessionUser.id;
     const { data, error } = await supabase
       .from("organizations")
       .select("id,name,slug,created_at, organization_members!inner(role)")
-      .eq("organization_members.user_id", uid);
+      .eq("organization_members.user_id", sessionUser.id);
 
-    if (error) {
-      setOrgError(error.message);
-      return;
-    }
-    setOrgs(data ?? []);
+    if (error) setOrgError(error.message);
+    else setOrgs(data ?? []);
   }, [supabase, sessionUser]);
 
   useEffect(() => {
@@ -85,8 +101,15 @@ export default function DashboardPage() {
         if (!prof.ok && !cancelled) {
           setProfileWarn(prof.error || "No se pudo sincronizar tu perfil.");
         }
+        const meta = u.user_metadata || {};
+        setDisplayName(
+          meta.full_name || meta.name || (u.email ? u.email.split("@")[0] : "Usuario"),
+        );
       }
       setLoading(false);
+      if (wasClassroomOAuthIntent() && !cancelled) {
+        setSearchParams({ tab: "classroom" }, { replace: true });
+      }
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, sess) => {
@@ -104,12 +127,18 @@ export default function DashboardPage() {
       cancelled = true;
       sub.subscription.unsubscribe();
     };
-  }, [useCloud, supabase]);
+  }, [useCloud, supabase, setSearchParams]);
 
   useEffect(() => {
     if (!useCloud || !sessionUser) return;
     loadOrganizations();
   }, [useCloud, sessionUser, loadOrganizations]);
+
+  useEffect(() => {
+    if (activeTab === "classroom" && !isTeacher && orgs.length > 0) {
+      setTab("home");
+    }
+  }, [activeTab, isTeacher, orgs.length]);
 
   const signOutLegacy = () => {
     signOutGoogleClient();
@@ -163,9 +192,10 @@ export default function DashboardPage() {
 
         setNewOrgName("");
         await loadOrganizations();
+        setTab("schools");
         return;
       }
-      setOrgError("No hay slug disponible, probá otro nombre.");
+      setOrgError("No hay slug disponible, probÃ¡ otro nombre.");
     } finally {
       setSavingOrg(false);
     }
@@ -173,8 +203,8 @@ export default function DashboardPage() {
 
   if (useCloud && loading) {
     return (
-      <main className="auth-root">
-        <p className="auth-card__muted">Cargando sesión…</p>
+      <main className="dash-root dash-root--center">
+        <p className="auth-card__muted">Cargando panelâ€¦</p>
       </main>
     );
   }
@@ -184,7 +214,7 @@ export default function DashboardPage() {
       <main className="auth-root">
         <div className="auth-card">
           <h1 className="auth-card__title">Panel</h1>
-          <p className="auth-card__lead">Iniciá sesión para ver tus colegios.</p>
+          <p className="auth-card__lead">IniciÃ¡ sesiÃ³n para ver tus colegios.</p>
           <div className="auth-card__actions">
             <Link to="/login" className="auth-btn auth-btn--ghost">
               Ir a login
@@ -201,40 +231,61 @@ export default function DashboardPage() {
   if (useCloud && sessionUser) {
     const meta = sessionUser.user_metadata || {};
     const email = sessionUser.email;
-    const name =
-      meta.full_name ||
-      meta.name ||
-      meta.display_name ||
-      (email ? email.split("@")[0] : "Usuario");
     const picture = meta.avatar_url || meta.picture || null;
+    const name = displayName || email?.split("@")[0] || "Usuario";
 
     return (
-      <main className="auth-root">
-        <div className="auth-card auth-card--wide">
-          <h1 className="auth-card__title">Panel PyBot</h1>
-          <p className="auth-card__lead">Sesión en la plataforma (Supabase).</p>
-          <div className="auth-profile">
-            {picture ? (
-              <img src={picture} alt="" className="auth-profile__avatar" width={56} height={56} />
-            ) : (
-              <div className="auth-profile__avatar auth-profile__avatar--letter" aria-hidden>
-                {(name || "?").slice(0, 1).toUpperCase()}
+      <DashboardShell
+        activeTab={activeTab}
+        onTabChange={setTab}
+        showClassroomTab={isTeacher}
+        userName={name}
+        userEmail={email}
+        userPicture={picture}
+        onSignOut={() => void signOutSupabase()}
+      >
+        {activeTab === "home" ? (
+          <div className="dash-grid">
+            <section className="dash-panel dash-panel--highlight">
+              <h2 className="dash-panel__title">Bienvenido, {name}</h2>
+              <p className="auth-card__muted auth-card__muted--tight">
+                GestionÃ¡ colegios, cursos y actividades PyBot. El IDE en{" "}
+                <Link to="/">la pÃ¡gina principal</Link> sigue libre y sin cuenta.
+              </p>
+              {profileWarn ? <p className="auth-card__notice">{profileWarn}</p> : null}
+              <div className="dash-stat-row">
+                <div className="dash-stat">
+                  <span className="dash-stat__value">{orgs.length}</span>
+                  <span className="dash-stat__label">Colegios</span>
+                </div>
+                <div className="dash-stat">
+                  <span className="dash-stat__value">{isTeacher ? "Docente" : "Alumno"}</span>
+                  <span className="dash-stat__label">Perfil principal</span>
+                </div>
               </div>
-            )}
-            <div className="auth-profile__text">
-              <strong>{name}</strong>
-              {email ? <span className="auth-profile__email">{email}</span> : null}
-            </div>
+              <div className="auth-org-row__actions">
+                <button type="button" className="auth-btn auth-btn--primary" onClick={() => setTab("schools")}>
+                  Ver colegios
+                </button>
+                <button type="button" className="auth-btn auth-btn--ghost" onClick={() => setTab("account")}>
+                  Configurar cuenta
+                </button>
+                {isTeacher ? (
+                  <button type="button" className="auth-btn auth-btn--ghost" onClick={() => setTab("classroom")}>
+                    Google Classroom
+                  </button>
+                ) : null}
+              </div>
+            </section>
           </div>
+        ) : null}
 
-          <section className="auth-section">
-            <h2 className="auth-section__title">Tus colegios</h2>
-            {profileWarn ? (
-              <p className="auth-card__notice">{profileWarn} (podés seguir usando el panel)</p>
-            ) : null}
+        {activeTab === "schools" ? (
+          <section className="dash-panel">
+            <h2 className="dash-panel__title">Tus colegios</h2>
             {orgError ? <p className="auth-card__notice auth-card__notice--err">{orgError}</p> : null}
             {orgs.length === 0 ? (
-              <p className="auth-card__muted">Todavía no registraste ningún colegio.</p>
+              <p className="auth-card__muted">TodavÃ­a no registraste ningÃºn colegio.</p>
             ) : (
               <ul className="auth-org-list">
                 {orgs.map((o) => (
@@ -242,7 +293,7 @@ export default function DashboardPage() {
                     <Link className="auth-org-row__link" to={`/dashboard/org/${o.id}`}>
                       <span className="auth-org-row__name">{o.name}</span>
                       <span className="auth-org-row__meta">
-                        @{o.slug} · {roleLabelEs(o.organization_members?.[0]?.role)}
+                        @{o.slug} Â· {roleLabelEs(o.organization_members?.[0]?.role)}
                       </span>
                     </Link>
                   </li>
@@ -251,14 +302,14 @@ export default function DashboardPage() {
             )}
             <form className="auth-org-form" onSubmit={createOrganization}>
               <label className="auth-org-label" htmlFor="new-org-name">
-                Registrar colegio
+                Crear colegio
               </label>
               <div className="auth-org-form__row">
                 <input
                   id="new-org-name"
                   className="auth-org-input"
                   type="text"
-                  placeholder='Ej. Escuela San Martín'
+                  placeholder="Ej. Escuela San MartÃ­n"
                   value={newOrgName}
                   onChange={(e) => setNewOrgName(e.target.value)}
                   maxLength={120}
@@ -269,21 +320,17 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
-            <p className="auth-card__muted">
-              El IDE en <Link to="/">/</Link> sigue disponible sin cuenta.
-            </p>
           </section>
+        ) : null}
 
-          <div className="auth-card__actions auth-card__actions--row">
-            <Link to="/" className="auth-btn auth-btn--ghost">
-              Abrir IDE
-            </Link>
-            <button type="button" className="auth-btn auth-btn--primary" onClick={signOutSupabase}>
-              Cerrar sesión
-            </button>
-          </div>
-        </div>
-      </main>
+        {activeTab === "account" ? (
+          <AccountSettings user={sessionUser} onProfileUpdated={setDisplayName} />
+        ) : null}
+
+        {activeTab === "classroom" && isTeacher ? (
+          <ClassroomPanel user={sessionUser} staffOrgId={staffOrgId} />
+        ) : null}
+      </DashboardShell>
     );
   }
 
@@ -292,7 +339,7 @@ export default function DashboardPage() {
       <main className="auth-root">
         <div className="auth-card">
           <h1 className="auth-card__title">Panel</h1>
-          <p className="auth-card__lead">No hay sesión iniciada en este navegador.</p>
+          <p className="auth-card__lead">No hay sesiÃ³n iniciada en este navegador.</p>
           <div className="auth-card__actions">
             <Link to="/login" className="auth-btn auth-btn--ghost">
               Ir a login
@@ -308,3 +355,5 @@ export default function DashboardPage() {
 
   return <LegacyDashboard profile={legacyProfile} onSignOut={signOutLegacy} />;
 }
+
+

@@ -17,6 +17,15 @@ export function roleLabelEs(role) {
   }
 }
 
+/** True si el usuario es owner o teacher en al menos un colegio. */
+export function isTeacherInAnyOrg(orgs) {
+  if (!Array.isArray(orgs)) return false;
+  return orgs.some((o) => {
+    const role = o.organization_members?.[0]?.role;
+    return role === "owner" || role === "teacher";
+  });
+}
+
 export async function fetchMyOrgRole(supabase, orgId, userId) {
   if (!supabase || !orgId || !userId) return null;
   const { data, error } = await supabase
