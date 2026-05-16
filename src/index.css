@@ -7,14 +7,29 @@ body,
 #root {
   margin: 0;
   padding: 0;
-  min-height: 100%;
-  min-height: 100dvh;
   height: 100%;
   width: 100%;
   max-width: 100%;
+  /* El IDE en / necesita overflow:hidden; las rutas de auth/dashboard
+     manejan su propio scroll con .auth-root y .dash-root */
   overflow: hidden;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Rutas fuera del IDE: permiten scroll vertical */
+body:has(.auth-root),
+body:has(.dash-root) {
+  overflow: auto;
+  height: auto;
+  min-height: 100%;
+}
+
+#root:has(.auth-root),
+#root:has(.dash-root) {
+  overflow: visible;
+  height: auto;
+  min-height: 100%;
 }
 
 body {
@@ -456,7 +471,8 @@ body {
 .dash-root {
   min-height: 100dvh;
   width: 100%;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   background: linear-gradient(165deg, #0b0f14 0%, #141c28 40%, #0f1419 100%);
   color: #e8ecf1;
