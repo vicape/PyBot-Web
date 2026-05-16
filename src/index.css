@@ -39,9 +39,10 @@ body {
 
 /* Rutas /login y /dashboard: scroll propio sin tocar el layout del IDE en / */
 .auth-root {
-  height: 100%;
-  min-height: 100dvh;
-  overflow: auto;
+  height: 100dvh;
+  height: 100vh; /* fallback */
+  overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   display: flex;
   align-items: flex-start;
@@ -469,7 +470,8 @@ body {
 /* —— Panel profesional (/dashboard) —— */
 
 .dash-root {
-  min-height: 100dvh;
+  height: 100dvh;
+  height: 100vh; /* fallback */
   width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
