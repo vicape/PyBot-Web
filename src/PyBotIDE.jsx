@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import "./PyBotIDE.css";
 import { DEFAULT_CODE, EXAMPLES } from "./examplesData.js";
@@ -12,7 +12,6 @@ import {
 } from "./hardwareBridge.js";
 import { runPythonAsync, signalStop } from "./pyodideRunner.js";
 import { HELP_COURSE } from "./helpCourseData.js";
-import { getSupabase, isSupabaseConfigured } from "./supabaseClient.js";
 import {
   IconExplorer,
   IconPlay,
@@ -45,33 +44,14 @@ function readInitialPythonOnly() {
   return v === "1";
 }
 
-function readInitialCode() {
-  if (typeof window === "undefined") return DEFAULT_CODE;
-  if (new URLSearchParams(window.location.search).get("activity")) return DEFAULT_CODE;
-  return localStorage.getItem("pybot_code") || DEFAULT_CODE;
-}
-
 export default function PyBotIDE() {
-  const [searchParams] = useSearchParams();
-  const activityParam = searchParams.get("activity");
-
   const [theme, setTheme] = useState(() => readInitialTheme());
   const [contrast, setContrast] = useState(
     () => localStorage.getItem("pybot_contrast") || "normal",
   );
-  const [code, setCode] = useState(() => readInitialCode());
-  const [activityCloud, setActivityCloud] = useState(() => {
-    const hasActivityParam =
-      typeof window !== "undefined" &&
-      Boolean(new URLSearchParams(window.location.search).get("activity"));
-    return {
-      id: null,
-      title: null,
-      ready: false,
-      needsLogin: false,
-      skipLocalStorage: hasActivityParam,
-    };
-  });
+  const [code, setCode] = useState(
+    () => localStorage.getItem("pybot_code") || DEFAULT_CODE,
+  );
   const [consoleLines, setConsoleLines] = useState([]);
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState(false);
@@ -141,22 +121,8 @@ export default function PyBotIDE() {
   }, [contrast]);
 
   useEffect(() => {
-    if (activityCloud.skipLocalStorage) return;
     localStorage.setItem("pybot_code", code);
-  }, [code, activityCloud.skipLocalStorage]);
-
-  useEffect(() => {
-    if (activityParam) return;
-    setActivityCloud({
-      id: null,
-      title: null,
-      ready: false,
-      needsLogin: false,
-      skipLocalStorage: false,
-    });
-    setCode(localStorage.getItem("pybot_code") || DEFAULT_CODE);
-    setCurrentFileName("programa.py");
-  }, [activityParam]);
+  }, [code]);
 
   useEffect(() => {
     localStorage.setItem("pybot_python_only", pythonOnly ? "1" : "0");
@@ -204,122 +170,6 @@ export default function PyBotIDE() {
   const appendConsole = useCallback((line, kind = "out") => {
     setConsoleLines((prev) => [...prev.slice(-400), { text: line, kind }]);
   }, []);
-
-  useEffect(() => {
-    if (!activityParam) return;
-
-    let cancelled = false;
-
-    (async () => {
-      if (!isSupabaseConfigured()) {
-        if (!cancelled) {
-          setActivityCloud({
-            id: null,
-            title: null,
-            ready: true,
-            needsLogin: false,
-            skipLocalStorage: true,
-          });
-        }
-        return;
-      }
-
-      const sb = getSupabase();
-      if (!sb) return;
-
-      const {
-        data: { session },
-      } = await sb.auth.getSession();
-
-      if (!session) {
-        if (!cancelled) {
-          setActivityCloud({
-            id: null,
-            title: null,
-            ready: true,
-            needsLogin: true,
-            skipLocalStorage: false,
-          });
-        }
-        return;
-      }
-
-      const { data: act, error } = await sb
-        .from("activities")
-        .select("id,title,starter_code")
-        .eq("id", activityParam)
-        .maybeSingle();
-
-      if (error || !act) {
-        if (!cancelled) {
-          setActivityCloud({
-            id: null,
-            title: "Actividad no encontrada",
-            ready: true,
-            needsLogin: false,
-            skipLocalStorage: false,
-          });
-          appendConsole("[Actividad] No se encontró la tarea o no tenés acceso.\n", "err");
-        }
-        return;
-      }
-
-      const { data: prog } = await sb
-        .from("activity_progress")
-        .select("code")
-        .eq("activity_id", activityParam)
-        .eq("user_id", session.user.id)
-        .maybeSingle();
-
-      const saved = prog?.code;
-      const initial = saved != null && saved.length > 0 ? saved : act.starter_code || DEFAULT_CODE;
-
-      if (!cancelled) {
-        setCode(initial);
-        setActivityCloud({
-          id: activityParam,
-          title: act.title,
-          ready: true,
-          needsLogin: false,
-          skipLocalStorage: true,
-        });
-        setCurrentFileName("actividad.py");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activityParam, appendConsole]);
-
-  useEffect(() => {
-    if (!activityCloud.id || !activityCloud.ready || activityCloud.needsLogin) return;
-
-    const aid = activityCloud.id;
-    const handle = window.setTimeout(() => {
-      (async () => {
-        if (!isSupabaseConfigured()) return;
-        const sb = getSupabase();
-        if (!sb) return;
-        const {
-          data: { session },
-        } = await sb.auth.getSession();
-        if (!session) return;
-        const { error } = await sb.from("activity_progress").upsert(
-          {
-            activity_id: aid,
-            user_id: session.user.id,
-            code,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "activity_id,user_id" },
-        );
-        if (error) appendConsole(`[Actividad] No se guardó: ${error.message}\n`, "err");
-      })();
-    }, 1400);
-
-    return () => window.clearTimeout(handle);
-  }, [code, activityCloud.id, activityCloud.ready, activityCloud.needsLogin, appendConsole]);
 
   const clearConsole = useCallback(() => setConsoleLines([]), []);
 
@@ -696,18 +546,6 @@ export default function PyBotIDE() {
                 <div className="brand-copy">
                   <span className="brand-title">{t("appTitle")}</span>
                   <span className="brand-sub">{t("brandSub")}</span>
-                  {activityParam && activityCloud.title ? (
-                    <span className="brand-activity" role="status">
-                      Actividad: {activityCloud.title}
-                      {" · "}
-                      <Link to="/dashboard">Panel</Link>
-                    </span>
-                  ) : null}
-                  {activityParam && activityCloud.needsLogin ? (
-                    <span className="brand-activity brand-activity--warn" role="status">
-                      <Link to="/login">Iniciá sesión</Link> para guardar en la nube
-                    </span>
-                  ) : null}
                 </div>
                 <div className="brand-logos">
                   {showPybotLogo ? (

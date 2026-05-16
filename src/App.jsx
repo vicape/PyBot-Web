@@ -7,6 +7,7 @@ import AuthCallbackPage from "./pages/AuthCallbackPage.jsx";
 import OrgCoursesPage from "./pages/OrgCoursesPage.jsx";
 import CourseActivitiesPage from "./pages/CourseActivitiesPage.jsx";
 import JoinOrgPage from "./pages/JoinOrgPage.jsx";
+import ActivityPage from "./pages/ActivityPage.jsx";
 import { isSupabaseConfigured } from "./supabaseClient.js";
 
 function AppRoutes() {
@@ -17,6 +18,7 @@ function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/join" element={<JoinOrgPage />} />
+        <Route path="/actividad/:activityId" element={<ActivityPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/dashboard/org/:orgId" element={<OrgCoursesPage />} />
         <Route path="/dashboard/org/:orgId/course/:courseId" element={<CourseActivitiesPage />} />

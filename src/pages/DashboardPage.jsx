@@ -4,6 +4,7 @@ import { getGoogleProfile } from "../authSession.js";
 import { signOutGoogleClient } from "../authGoogle.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 import { roleLabelEs } from "../orgRole.js";
+import { ensureProfileForUser } from "../platform/ensureProfile.js";
 import { slugifyOrganizationName } from "../slugify.js";
 
 function LegacyDashboard({ profile, onSignOut }) {
@@ -48,6 +49,7 @@ export default function DashboardPage() {
   const [orgError, setOrgError] = useState("");
   const [newOrgName, setNewOrgName] = useState("");
   const [savingOrg, setSavingOrg] = useState(false);
+  const [profileWarn, setProfileWarn] = useState("");
 
   const legacyProfile = getGoogleProfile();
 
@@ -74,14 +76,29 @@ export default function DashboardPage() {
     }
 
     let cancelled = false;
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (cancelled) return;
-      setSessionUser(data.session?.user ?? null);
+      const u = data.session?.user ?? null;
+      setSessionUser(u);
+      if (u) {
+        const prof = await ensureProfileForUser(u);
+        if (!prof.ok && !cancelled) {
+          setProfileWarn(prof.error || "No se pudo sincronizar tu perfil.");
+        }
+      }
       setLoading(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
-      setSessionUser(sess?.user ?? null);
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, sess) => {
+      const u = sess?.user ?? null;
+      setSessionUser(u);
+      if (u) {
+        const prof = await ensureProfileForUser(u);
+        if (!prof.ok) setProfileWarn(prof.error || "No se pudo sincronizar tu perfil.");
+        else setProfileWarn("");
+      } else {
+        setProfileWarn("");
+      }
     });
     return () => {
       cancelled = true;
@@ -212,6 +229,9 @@ export default function DashboardPage() {
 
           <section className="auth-section">
             <h2 className="auth-section__title">Tus colegios</h2>
+            {profileWarn ? (
+              <p className="auth-card__notice">{profileWarn} (podés seguir usando el panel)</p>
+            ) : null}
             {orgError ? <p className="auth-card__notice auth-card__notice--err">{orgError}</p> : null}
             {orgs.length === 0 ? (
               <p className="auth-card__muted">Todavía no registraste ningún colegio.</p>
@@ -250,10 +270,7 @@ export default function DashboardPage() {
               </div>
             </form>
             <p className="auth-card__muted">
-              <Link className="auth-link" style={{ fontSize: "inherit" }} to="/join">
-                Unite a otro colegio con código de invitación
-              </Link>
-              . Migraciones: <code>supabase/migrations/</code> (incluye invitaciones y Classroom).
+              El IDE en <Link to="/">/</Link> sigue disponible sin cuenta.
             </p>
           </section>
 

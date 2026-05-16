@@ -7,15 +7,6 @@ const hasClientId =
   typeof import.meta.env.VITE_GOOGLE_CLIENT_ID === "string" &&
   import.meta.env.VITE_GOOGLE_CLIENT_ID.trim().length > 0;
 
-/** Scopes Classroom (solo efectivos si Google Cloud tiene Classroom API activa y están en consent screen). */
-const SUPABASE_GOOGLE_SCOPES = [
-  "openid",
-  "email",
-  "profile",
-  "https://www.googleapis.com/auth/classroom.courses.readonly",
-  "https://www.googleapis.com/auth/classroom.rosters.readonly",
-].join(" ");
-
 export default function LoginPage() {
   const navigate = useNavigate();
   const existing = getGoogleProfile();
@@ -39,8 +30,7 @@ export default function LoginPage() {
       provider: "google",
       options: {
         redirectTo,
-        scopes: SUPABASE_GOOGLE_SCOPES,
-        queryParams: { prompt: "select_account", access_type: "offline" },
+        queryParams: { prompt: "select_account" },
       },
     });
   };
