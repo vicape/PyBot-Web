@@ -217,11 +217,13 @@ export default function DashboardPage() {
             ) : (
               <ul className="auth-org-list">
                 {orgs.map((o) => (
-                  <li key={o.id} className="auth-org-row">
-                    <span className="auth-org-row__name">{o.name}</span>
-                    <span className="auth-org-row__meta">
-                      @{o.slug} · {(o.organization_members?.[0]?.role) || "—"}
-                    </span>
+                  <li key={o.id} className="auth-org-row auth-org-row--link">
+                    <Link className="auth-org-row__link" to={`/dashboard/org/${o.id}`}>
+                      <span className="auth-org-row__name">{o.name}</span>
+                      <span className="auth-org-row__meta">
+                        @{o.slug} · {(o.organization_members?.[0]?.role) || "—"}
+                      </span>
+                    </Link>
                   </li>
                 ))}
               </ul>

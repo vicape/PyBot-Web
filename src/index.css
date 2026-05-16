@@ -128,6 +128,86 @@ body {
   max-width: 480px;
 }
 
+.auth-card--max {
+  max-width: 680px;
+}
+
+.auth-breadcrumb {
+  margin: 0 0 0.85rem;
+  font-size: 0.8125rem;
+  opacity: 0.82;
+}
+
+.auth-org-row--link {
+  padding: 0;
+  overflow: hidden;
+}
+
+.auth-org-row__link {
+  display: block;
+  padding: 0.55rem 0.65rem;
+  margin: -0.55rem -0.65rem;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.auth-org-row__link:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.auth-org-row__link:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.auth-org-row--split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.auth-org-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.auth-btn--sm {
+  padding: 0.45rem 0.65rem;
+  font-size: 0.8125rem;
+}
+
+.auth-org-input--block {
+  flex: none;
+  width: 100%;
+}
+
+.auth-code-area {
+  width: 100%;
+  min-height: 160px;
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.35);
+  color: #e8ecf1;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.auth-activity-form {
+  margin: 1.25rem 0 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .auth-card__notice {
   margin: 0 0 1rem;
   padding: 0.65rem 0.75rem;

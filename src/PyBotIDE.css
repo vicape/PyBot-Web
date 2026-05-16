@@ -422,6 +422,27 @@
   max-width: min(360px, 34vw);
 }
 
+.brand-activity {
+  font-size: clamp(11px, calc(11px + var(--font-delta, 0px)), 12px);
+  color: var(--fg-muted);
+  line-height: 1.35;
+  white-space: normal;
+  max-width: min(420px, 40vw);
+}
+
+.brand-activity a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.brand-activity a:hover {
+  text-decoration: underline;
+}
+
+.brand-activity--warn {
+  color: var(--warn);
+}
+
 .toolbar-actions {
   display: flex;
   flex-wrap: nowrap;
