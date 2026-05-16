@@ -3,6 +3,8 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import PyBotIDE from "./PyBotIDE.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
+import AuthCallbackPage from "./pages/AuthCallbackPage.jsx";
+import { isSupabaseConfigured } from "./supabaseClient.js";
 
 function AppRoutes() {
   return (
@@ -10,6 +12,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<PyBotIDE />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
       </Routes>
     </BrowserRouter>
@@ -17,14 +20,20 @@ function AppRoutes() {
 }
 
 export default function App() {
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-  const hasGoogle = typeof clientId === "string" && clientId.trim().length > 0;
-  if (hasGoogle) {
+  const supabaseReady = isSupabaseConfigured();
+  const rawClient =
+    typeof import.meta.env.VITE_GOOGLE_CLIENT_ID === "string"
+      ? import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()
+      : "";
+  const googleClientReady = rawClient.length > 0;
+
+  if (!supabaseReady && googleClientReady) {
     return (
-      <GoogleOAuthProvider clientId={clientId.trim()}>
+      <GoogleOAuthProvider clientId={rawClient}>
         <AppRoutes />
       </GoogleOAuthProvider>
     );
   }
+
   return <AppRoutes />;
 }

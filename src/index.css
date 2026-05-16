@@ -193,3 +193,86 @@ body {
   opacity: 0.8;
   word-break: break-all;
 }
+
+.auth-profile__avatar--letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #2563eb, #1e40af);
+  font-weight: 700;
+  font-size: 1.35rem;
+  color: #fff;
+}
+
+.auth-card__notice--err {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.auth-section {
+  margin: 0 0 1.25rem;
+}
+
+.auth-section__title {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.auth-org-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.auth-org-row {
+  padding: 0.55rem 0.65rem;
+  margin-bottom: 0.45rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.auth-org-row__name {
+  display: block;
+  font-weight: 600;
+}
+
+.auth-org-row__meta {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.auth-org-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  opacity: 0.85;
+}
+
+.auth-org-form__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.auth-org-input {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.25);
+  color: #e8ecf1;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.auth-org-input::placeholder {
+  color: rgba(232, 236, 241, 0.45);
+}
