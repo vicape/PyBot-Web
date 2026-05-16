@@ -6,8 +6,10 @@ import DashboardShell from "../components/dashboard/DashboardShell.jsx";
 import { getGoogleProfile } from "../authSession.js";
 import { signOutGoogleClient } from "../authGoogle.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
-import { isTeacherInAnyOrg, roleLabelEs } from "../orgRole.js";
+import { isTeacherInAnyOrg, isTeacherProfile, roleLabelEs } from "../orgRole.js";
+import { fetchProfile } from "../platform/profileApi.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
+import { signupRoleLabelEs } from "../platform/signupRole.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 import { slugifyOrganizationName } from "../slugify.js";
 
@@ -16,7 +18,7 @@ function LegacyDashboard({ profile, onSignOut }) {
     <main className="auth-root">
       <div className="auth-card auth-card--wide">
         <h1 className="auth-card__title">Panel</h1>
-        <p className="auth-card__lead">SesiÃ³n iniciada (solo en este navegador).</p>
+        <p className="auth-card__lead">Sesión iniciada (solo en este navegador).</p>
         <div className="auth-profile">
           {profile.picture ? (
             <img src={profile.picture} alt="" className="auth-profile__avatar" width={56} height={56} />
@@ -31,7 +33,7 @@ function LegacyDashboard({ profile, onSignOut }) {
             Abrir IDE
           </Link>
           <button type="button" className="auth-btn auth-btn--primary" onClick={onSignOut}>
-            Cerrar sesiÃ³n
+            Cerrar sesión
           </button>
         </div>
       </div>
@@ -55,12 +57,13 @@ export default function DashboardPage() {
   const [savingOrg, setSavingOrg] = useState(false);
   const [profileWarn, setProfileWarn] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [preferredRole, setPreferredRole] = useState(null);
 
   const legacyProfile = getGoogleProfile();
 
   const rawTab = searchParams.get("tab") || "home";
   const activeTab = VALID_TABS.has(rawTab) ? rawTab : "home";
-  const isTeacher = isTeacherInAnyOrg(orgs);
+  const isTeacher = isTeacherProfile(orgs, preferredRole);
   const staffOrgId = useMemo(() => {
     const staff = orgs.find((o) => {
       const r = o.organization_members?.[0]?.role;
@@ -101,9 +104,16 @@ export default function DashboardPage() {
         if (!prof.ok && !cancelled) {
           setProfileWarn(prof.error || "No se pudo sincronizar tu perfil.");
         }
+        const { profile } = await fetchProfile(u.id);
+        if (!cancelled && profile?.preferred_role) {
+          setPreferredRole(profile.preferred_role);
+        }
         const meta = u.user_metadata || {};
         setDisplayName(
-          meta.full_name || meta.name || (u.email ? u.email.split("@")[0] : "Usuario"),
+          profile?.display_name ||
+            meta.full_name ||
+            meta.name ||
+            (u.email ? u.email.split("@")[0] : "Usuario"),
         );
       }
       setLoading(false);
@@ -119,8 +129,11 @@ export default function DashboardPage() {
         const prof = await ensureProfileForUser(u);
         if (!prof.ok) setProfileWarn(prof.error || "No se pudo sincronizar tu perfil.");
         else setProfileWarn("");
+        const { profile } = await fetchProfile(u.id);
+        setPreferredRole(profile?.preferred_role ?? null);
       } else {
         setProfileWarn("");
+        setPreferredRole(null);
       }
     });
     return () => {
@@ -195,7 +208,7 @@ export default function DashboardPage() {
         setTab("schools");
         return;
       }
-      setOrgError("No hay slug disponible, probÃ¡ otro nombre.");
+      setOrgError("No hay slug disponible, probá otro nombre.");
     } finally {
       setSavingOrg(false);
     }
@@ -204,7 +217,7 @@ export default function DashboardPage() {
   if (useCloud && loading) {
     return (
       <main className="dash-root dash-root--center">
-        <p className="auth-card__muted">Cargando panelâ€¦</p>
+        <p className="auth-card__muted">Cargando panel…</p>
       </main>
     );
   }
@@ -214,7 +227,7 @@ export default function DashboardPage() {
       <main className="auth-root">
         <div className="auth-card">
           <h1 className="auth-card__title">Panel</h1>
-          <p className="auth-card__lead">IniciÃ¡ sesiÃ³n para ver tus colegios.</p>
+          <p className="auth-card__lead">Iniciá sesión para ver tus colegios.</p>
           <div className="auth-card__actions">
             <Link to="/login" className="auth-btn auth-btn--ghost">
               Ir a login
@@ -249,17 +262,27 @@ export default function DashboardPage() {
             <section className="dash-panel dash-panel--highlight">
               <h2 className="dash-panel__title">Bienvenido, {name}</h2>
               <p className="auth-card__muted auth-card__muted--tight">
-                GestionÃ¡ colegios, cursos y actividades PyBot. El IDE en{" "}
-                <Link to="/">la pÃ¡gina principal</Link> sigue libre y sin cuenta.
+                Gestioná colegios, cursos y actividades PyBot. El IDE en{" "}
+                <Link to="/">la página principal</Link> sigue libre y sin cuenta.
               </p>
               {profileWarn ? <p className="auth-card__notice">{profileWarn}</p> : null}
+              {preferredRole === "student" && orgs.length === 0 ? (
+                <p className="auth-card__notice">
+                  ¿Tenés código de invitación de tu colegio?{" "}
+                  <Link to="/join">Unite acá</Link>.
+                </p>
+              ) : null}
               <div className="dash-stat-row">
                 <div className="dash-stat">
                   <span className="dash-stat__value">{orgs.length}</span>
                   <span className="dash-stat__label">Colegios</span>
                 </div>
                 <div className="dash-stat">
-                  <span className="dash-stat__value">{isTeacher ? "Docente" : "Alumno"}</span>
+                  <span className="dash-stat__value">
+                    {isTeacherInAnyOrg(orgs)
+                      ? "Docente (colegio)"
+                      : signupRoleLabelEs(preferredRole) || (isTeacher ? "Docente" : "Alumno")}
+                  </span>
                   <span className="dash-stat__label">Perfil principal</span>
                 </div>
               </div>
@@ -285,7 +308,7 @@ export default function DashboardPage() {
             <h2 className="dash-panel__title">Tus colegios</h2>
             {orgError ? <p className="auth-card__notice auth-card__notice--err">{orgError}</p> : null}
             {orgs.length === 0 ? (
-              <p className="auth-card__muted">TodavÃ­a no registraste ningÃºn colegio.</p>
+              <p className="auth-card__muted">Todavía no registraste ningún colegio.</p>
             ) : (
               <ul className="auth-org-list">
                 {orgs.map((o) => (
@@ -293,7 +316,7 @@ export default function DashboardPage() {
                     <Link className="auth-org-row__link" to={`/dashboard/org/${o.id}`}>
                       <span className="auth-org-row__name">{o.name}</span>
                       <span className="auth-org-row__meta">
-                        @{o.slug} Â· {roleLabelEs(o.organization_members?.[0]?.role)}
+                        @{o.slug} · {roleLabelEs(o.organization_members?.[0]?.role)}
                       </span>
                     </Link>
                   </li>
@@ -309,7 +332,7 @@ export default function DashboardPage() {
                   id="new-org-name"
                   className="auth-org-input"
                   type="text"
-                  placeholder="Ej. Escuela San MartÃ­n"
+                  placeholder="Ej. Escuela San Martín"
                   value={newOrgName}
                   onChange={(e) => setNewOrgName(e.target.value)}
                   maxLength={120}
@@ -339,7 +362,7 @@ export default function DashboardPage() {
       <main className="auth-root">
         <div className="auth-card">
           <h1 className="auth-card__title">Panel</h1>
-          <p className="auth-card__lead">No hay sesiÃ³n iniciada en este navegador.</p>
+          <p className="auth-card__lead">No hay sesión iniciada en este navegador.</p>
           <div className="auth-card__actions">
             <Link to="/login" className="auth-btn auth-btn--ghost">
               Ir a login

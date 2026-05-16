@@ -26,6 +26,12 @@ export function isTeacherInAnyOrg(orgs) {
   });
 }
 
+/** Docente por membresía en colegio o por preferred_role antes de unirse. */
+export function isTeacherProfile(orgs, preferredRole) {
+  if (isTeacherInAnyOrg(orgs)) return true;
+  return preferredRole === "teacher";
+}
+
 export async function fetchMyOrgRole(supabase, orgId, userId) {
   if (!supabase || !orgId || !userId) return null;
   const { data, error } = await supabase

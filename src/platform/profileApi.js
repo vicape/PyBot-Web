@@ -21,6 +21,20 @@ export async function updateProfileDisplayName(userId, displayName) {
   return { ok: true, error: null };
 }
 
+export async function updatePreferredRole(userId, role) {
+  const sb = getSupabase();
+  if (!sb || !userId) return { ok: false, error: "no_client" };
+  if (role !== "teacher" && role !== "student") return { ok: false, error: "invalid_role" };
+
+  const { error } = await sb.from("profiles").update({ preferred_role: role }).eq("id", userId);
+
+  if (error?.message?.includes("preferred_role")) {
+    return { ok: true, error: null, skipped: true };
+  }
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, error: null, skipped: false };
+}
+
 export async function markClassroomLinked(userId) {
   const sb = getSupabase();
   if (!sb || !userId) return { ok: false, error: "no_client" };
