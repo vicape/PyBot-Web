@@ -25,6 +25,19 @@ SETUP Supabase para PyBot Web (plataforma / colegios)
    VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
    Redeploy después de agregar variables.
 
-6) Si configurás Supabase, el login en /login usa OAuth de Supabase (Google) y el panel
+6) Migraciones siguientes en orden (solo si usás la plataforma Supabase):
+
+   supabase/migrations/20260217000002_courses_activities.sql
+
+   supabase/migrations/20260315000003_invites_and_member_rls.sql
+   → invitaciones con código (/join), roles alumno/docente/gestión y políticas de membresía.
+
+7) Google Classroom (docentes):
+   - En Google Cloud del mismo proyecto OAuth: habilitá "Google Classroom API".
+   - En pantalla de consentimiento OAuth agregá los scopes de Classroom (readonly y rosters)
+     que pide la app al iniciar sesión.
+   - El navegador usa el token de acceso temporal de Google (provider_token en la sesión Supabase).
+
+8) Si configurás Supabase, el login en /login usa OAuth de Supabase (Google) y el panel
    puede crear colegios en la base.
    Si solo tenés VITE_GOOGLE_CLIENT_ID, sigue el modo anterior (perfil en el navegador).

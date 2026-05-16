@@ -7,6 +7,15 @@ const hasClientId =
   typeof import.meta.env.VITE_GOOGLE_CLIENT_ID === "string" &&
   import.meta.env.VITE_GOOGLE_CLIENT_ID.trim().length > 0;
 
+/** Scopes Classroom (solo efectivos si Google Cloud tiene Classroom API activa y están en consent screen). */
+const SUPABASE_GOOGLE_SCOPES = [
+  "openid",
+  "email",
+  "profile",
+  "https://www.googleapis.com/auth/classroom.courses.readonly",
+  "https://www.googleapis.com/auth/classroom.rosters.readonly",
+].join(" ");
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const existing = getGoogleProfile();
@@ -15,12 +24,23 @@ export default function LoginPage() {
   const oauthSupabaseGoogle = async () => {
     const sb = getSupabase();
     if (!sb) return;
+    try {
+      const next = new URLSearchParams(window.location.search).get("next");
+      if (typeof next === "string" && next.startsWith("/") && !next.startsWith("//")) {
+        sessionStorage.setItem("pybot_oauth_next", next);
+      } else {
+        sessionStorage.removeItem("pybot_oauth_next");
+      }
+    } catch {
+      //
+    }
     const redirectTo = `${window.location.origin}/auth/callback`;
     await sb.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo,
-        queryParams: { prompt: "select_account" },
+        scopes: SUPABASE_GOOGLE_SCOPES,
+        queryParams: { prompt: "select_account", access_type: "offline" },
       },
     });
   };

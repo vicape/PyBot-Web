@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { DEFAULT_CODE } from "../examplesData.js";
+import { fetchMyOrgRole, isStaffRole, roleLabelEs } from "../orgRole.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 
 export default function CourseActivitiesPage() {
@@ -15,6 +16,7 @@ export default function CourseActivitiesPage() {
   const [actTitle, setActTitle] = useState("");
   const [starterCode, setStarterCode] = useState(DEFAULT_CODE);
   const [saving, setSaving] = useState(false);
+  const [myRole, setMyRole] = useState(null);
 
   const load = useCallback(async () => {
     if (!supabase || !courseId) return;
@@ -30,6 +32,21 @@ export default function CourseActivitiesPage() {
       return;
     }
     setCourseTitle(course.title ?? "");
+
+    const {
+      data: { user: uLoad },
+    } = await supabase.auth.getUser();
+    if (uLoad?.id && course.org_id) {
+      try {
+        const r = await fetchMyOrgRole(supabase, course.org_id, uLoad.id);
+        setMyRole(r);
+      } catch {
+        setMyRole(null);
+      }
+    } else {
+      setMyRole(null);
+    }
+
     if (course.org_id) {
       const { data: org } = await supabase.from("organizations").select("name").eq("id", course.org_id).maybeSingle();
       setOrgName(org?.name ?? "");
@@ -58,7 +75,7 @@ export default function CourseActivitiesPage() {
   const createActivity = async (e) => {
     e.preventDefault();
     const t = actTitle.trim();
-    if (!t || saving || !supabase) return;
+    if (!t || saving || !supabase || !staff) return;
     setSaving(true);
     setErr("");
     const { data: { user } } = await supabase.auth.getUser();
@@ -82,6 +99,7 @@ export default function CourseActivitiesPage() {
     load();
   };
 
+  const staff = isStaffRole(myRole);
   const ideUrl = (activityId) => `/?activity=${encodeURIComponent(activityId)}`;
 
   if (loading) {
@@ -106,7 +124,20 @@ export default function CourseActivitiesPage() {
           <span aria-hidden> / </span>
           <span>{courseTitle || "Curso"}</span>
         </p>
-        <h1 className="auth-card__title">Actividades PyBot</h1>
+        <h1 className="auth-card__title">
+          Actividades PyBot
+          <span
+            style={{
+              display: "block",
+              fontSize: "0.75rem",
+              fontWeight: 500,
+              opacity: 0.75,
+              marginTop: "0.25rem",
+            }}
+          >
+            Tu rol: {roleLabelEs(myRole)}
+          </span>
+        </h1>
         <p className="auth-card__muted">
           Cada actividad abre el IDE con código de inicio; el alumno guarda su versión en la nube
           (con sesión Google / Supabase).
@@ -120,7 +151,7 @@ export default function CourseActivitiesPage() {
               <li key={a.id} className="auth-org-row auth-org-row--split">
                 <div>
                   <span className="auth-org-row__name">{a.title}</span>
-                  <span className="auth-org-row__meta">ID: {a.id}</span>
+                  <span className="auth-org-row__meta">{staff ? `ID: ${a.id}` : "Abrí y guardá desde el IDE"}</span>
                 </div>
                 <div className="auth-org-row__actions">
                   <a className="auth-btn auth-btn--ghost auth-btn--sm" href={ideUrl(a.id)}>
@@ -140,36 +171,40 @@ export default function CourseActivitiesPage() {
             ))}
           </ul>
         )}
-        <form className="auth-activity-form" onSubmit={createActivity}>
-          <h2 className="auth-section__title">Nueva actividad</h2>
-          <label className="auth-org-label" htmlFor="act-title">
-            Título
-          </label>
-          <input
-            id="act-title"
-            className="auth-org-input auth-org-input--block"
-            value={actTitle}
-            onChange={(e) => setActTitle(e.target.value)}
-            placeholder="Ej. Semáforo con wait"
-            maxLength={160}
-            disabled={saving}
-          />
-          <label className="auth-org-label" htmlFor="act-code">
-            Código inicial (Python)
-          </label>
-          <textarea
-            id="act-code"
-            className="auth-code-area"
-            value={starterCode}
-            onChange={(e) => setStarterCode(e.target.value)}
-            rows={10}
-            spellCheck={false}
-            disabled={saving}
-          />
-          <button type="submit" className="auth-btn auth-btn--primary" disabled={saving}>
-            Crear actividad
-          </button>
-        </form>
+        {staff ? (
+          <form className="auth-activity-form" onSubmit={createActivity}>
+            <h2 className="auth-section__title">Nueva actividad (docentes/gestión)</h2>
+            <label className="auth-org-label" htmlFor="act-title">
+              Título
+            </label>
+            <input
+              id="act-title"
+              className="auth-org-input auth-org-input--block"
+              value={actTitle}
+              onChange={(e) => setActTitle(e.target.value)}
+              placeholder="Ej. Semáforo con wait"
+              maxLength={160}
+              disabled={saving}
+            />
+            <label className="auth-org-label" htmlFor="act-code">
+              Código inicial (Python)
+            </label>
+            <textarea
+              id="act-code"
+              className="auth-code-area"
+              value={starterCode}
+              onChange={(e) => setStarterCode(e.target.value)}
+              rows={10}
+              spellCheck={false}
+              disabled={saving}
+            />
+            <button type="submit" className="auth-btn auth-btn--primary" disabled={saving}>
+              Crear actividad
+            </button>
+          </form>
+        ) : (
+          <p className="auth-card__muted">Tu docente o gestión publica las nuevas actividades.</p>
+        )}
         <p className="auth-card__muted">
           Los alumnos deben iniciar sesión en <Link to="/login">/login</Link> con la misma cuenta
           que en la plataforma para que el guardado automático funcione.

@@ -208,6 +208,31 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.auth-invites-block,
+.auth-classroom-block {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.auth-card__muted--tight {
+  margin-bottom: 0.5rem;
+}
+
+.auth-classroom-fields {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.auth-classroom-link-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
 .auth-card__notice {
   margin: 0 0 1rem;
   padding: 0.65rem 0.75rem;

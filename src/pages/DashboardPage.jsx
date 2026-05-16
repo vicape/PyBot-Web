@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { getGoogleProfile } from "../authSession.js";
 import { signOutGoogleClient } from "../authGoogle.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
+import { roleLabelEs } from "../orgRole.js";
 import { slugifyOrganizationName } from "../slugify.js";
 
 function LegacyDashboard({ profile, onSignOut }) {
@@ -221,7 +222,7 @@ export default function DashboardPage() {
                     <Link className="auth-org-row__link" to={`/dashboard/org/${o.id}`}>
                       <span className="auth-org-row__name">{o.name}</span>
                       <span className="auth-org-row__meta">
-                        @{o.slug} · {(o.organization_members?.[0]?.role) || "—"}
+                        @{o.slug} · {roleLabelEs(o.organization_members?.[0]?.role)}
                       </span>
                     </Link>
                   </li>
@@ -249,8 +250,10 @@ export default function DashboardPage() {
               </div>
             </form>
             <p className="auth-card__muted">
-              Próximo: invitar docentes/alumnos y enlazar Classroom. Migración SQL:{" "}
-              <code>supabase/migrations/</code>.
+              <Link className="auth-link" style={{ fontSize: "inherit" }} to="/join">
+                Unite a otro colegio con código de invitación
+              </Link>
+              . Migraciones: <code>supabase/migrations/</code> (incluye invitaciones y Classroom).
             </p>
           </section>
 
