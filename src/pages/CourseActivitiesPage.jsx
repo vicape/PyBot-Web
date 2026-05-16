@@ -4,6 +4,7 @@ import { fetchMyOrgRole, isStaffRole, roleLabelEs } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 import { listCourseStudents } from "../classroom/classroomApi.js";
+import { getValidClassroomToken } from "../platform/classroomToken.js";
 
 // ─── Pestaña Actividades ─────────────────────────────────────────────────────
 
@@ -147,10 +148,7 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
     setImportResults([]);
 
     try {
-      const {
-        data: { session },
-      } = await sb.auth.getSession();
-      const tok = session?.provider_token;
+      const tok = await getValidClassroomToken(user?.id);
       if (!tok) {
         setImportErr(
           "No hay token de Classroom. Andá al panel → Classroom y hacé clic en «Conectar Google Classroom».",

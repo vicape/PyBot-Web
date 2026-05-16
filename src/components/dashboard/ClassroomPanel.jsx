@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { listTeacherClassroomCourses } from "../../classroom/classroomApi.js";
 import { connectGoogleClassroom } from "../../platform/googleOAuth.js";
 import { fetchProfile, markClassroomLinked } from "../../platform/profileApi.js";
+import { getValidClassroomToken } from "../../platform/classroomToken.js";
 import { getSupabase } from "../../supabaseClient.js";
 import { slugifyOrganizationName } from "../../slugify.js";
 
@@ -36,10 +37,7 @@ export default function ClassroomPanel({ user, staffOrgId }) {
     setErr("");
     setOkMsg("");
     try {
-      const {
-        data: { session },
-      } = await sb.auth.getSession();
-      const tok = session?.provider_token;
+      const tok = await getValidClassroomToken(user?.id);
       const list = await listTeacherClassroomCourses(tok);
       setCourses(list);
       if (user?.id) {

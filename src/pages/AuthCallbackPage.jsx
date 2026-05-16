@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSupabase } from "../supabaseClient.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
-import { updatePreferredRole } from "../platform/profileApi.js";
+import { updatePreferredRole, saveGoogleTokens } from "../platform/profileApi.js";
 import { consumeSignupRole } from "../platform/signupRole.js";
+import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 
 function safeInternalNext(raw) {
   if (typeof raw !== "string") return null;
@@ -60,9 +61,18 @@ export default function AuthCallbackPage() {
       finished.current = true;
 
       const signupRole = consumeSignupRole();
+      const isClassroomIntent = wasClassroomOAuthIntent();
       try {
         await ensureProfileForUser(session.user, signupRole);
         if (signupRole) await updatePreferredRole(session.user.id, signupRole);
+        // Guardar refresh_token de Google para renovar el token de Classroom automáticamente
+        if (isClassroomIntent && session.provider_refresh_token) {
+          await saveGoogleTokens(session.user.id, {
+            accessToken: session.provider_token,
+            refreshToken: session.provider_refresh_token,
+            expiresIn: 3600,
+          });
+        }
       } catch {
         // No bloquear la navegación si falla la sincronización del perfil
       }

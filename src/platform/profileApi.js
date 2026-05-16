@@ -35,6 +35,36 @@ export async function updatePreferredRole(userId, role) {
   return { ok: true, error: null, skipped: false };
 }
 
+export async function saveGoogleTokens(userId, { accessToken, refreshToken, expiresIn }) {
+  const sb = getSupabase();
+  if (!sb || !userId) return { ok: false, error: "no_client" };
+
+  const patch = {};
+  if (refreshToken) patch.google_refresh_token = refreshToken;
+  if (accessToken && expiresIn) {
+    patch.google_token_expires_at = new Date(Date.now() + expiresIn * 1000).toISOString();
+  }
+  if (Object.keys(patch).length === 0) return { ok: true };
+
+  const { error } = await sb.from("profiles").update(patch).eq("id", userId);
+  if (error?.message?.includes("google_refresh_token") || error?.message?.includes("google_token_expires")) {
+    return { ok: true, skipped: true };
+  }
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function getStoredGoogleRefreshToken(userId) {
+  const sb = getSupabase();
+  if (!sb || !userId) return null;
+  const { data } = await sb
+    .from("profiles")
+    .select("google_refresh_token, google_token_expires_at")
+    .eq("id", userId)
+    .maybeSingle();
+  return data ?? null;
+}
+
 export async function markClassroomLinked(userId) {
   const sb = getSupabase();
   if (!sb || !userId) return { ok: false, error: "no_client" };
