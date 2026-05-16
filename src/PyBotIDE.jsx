@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import "./PyBotIDE.css";
 import { DEFAULT_CODE, EXAMPLES } from "./examplesData.js";
@@ -643,6 +644,14 @@ export default function PyBotIDE() {
                       >
                         {t("settings")}
                       </button>
+                      <Link
+                        to="/login"
+                        className="toolbar-menu-item"
+                        role="menuitem"
+                        onClick={() => setToolbarMenuOpen(false)}
+                      >
+                        {t("accountMenu")}
+                      </Link>
                       <button type="button" className="toolbar-menu-item" onClick={openHelp}>
                         {t("help")}
                       </button>
