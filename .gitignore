@@ -8,3 +8,4 @@ dist
 
 # Workspace multi-root del IDE en branding (local; no forma parte del sitio estático)
 public/branding/*.code-workspace
+.vercel
