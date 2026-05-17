@@ -61,11 +61,24 @@ export async function saveGoogleTokens(userId, { accessToken, refreshToken, expi
 export async function getStoredGoogleRefreshToken(userId) {
   const sb = getSupabase();
   if (!sb || !userId) return null;
-  const { data } = await sb
+
+  // Intentar con columnas nuevas + classroom_linked_at
+  const { data, error } = await sb
     .from("profiles")
-    .select("google_refresh_token, google_token_expires_at")
+    .select("google_refresh_token, google_token_expires_at, classroom_linked_at")
     .eq("id", userId)
     .maybeSingle();
+
+  if (error) {
+    // Si las columnas nuevas no existen todavía, intentar solo con classroom_linked_at
+    const fallback = await sb
+      .from("profiles")
+      .select("classroom_linked_at")
+      .eq("id", userId)
+      .maybeSingle();
+    return fallback.data ?? null;
+  }
+
   return data ?? null;
 }
 

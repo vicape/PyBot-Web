@@ -13,8 +13,12 @@ export async function getValidClassroomToken(userId) {
   // Leer estado de Classroom desde DB
   const stored = await getStoredGoogleRefreshToken(userId);
 
-  // Si no hay refresh_token NI expires_at → usuario nunca conectó Classroom
-  const hasConnected = !!(stored?.google_refresh_token || stored?.google_token_expires_at);
+  // Si no hay refresh_token NI expires_at NI classroom_linked_at → usuario nunca conectó Classroom
+  const hasConnected = !!(
+    stored?.google_refresh_token ||
+    stored?.google_token_expires_at ||
+    stored?.classroom_linked_at
+  );
   if (!hasConnected) {
     throw Object.assign(
       new Error("No hay token de Classroom. Hacé clic en «Conectar Google Classroom»."),
@@ -30,8 +34,8 @@ export async function getValidClassroomToken(userId) {
   const expiresAt = stored?.google_token_expires_at
     ? new Date(stored.google_token_expires_at)
     : null;
-  // Consideramos expirado si faltan menos de 2 minutos
-  const isExpired = expiresAt ? expiresAt <= new Date(Date.now() + 120_000) : true;
+  // Si no tenemos expires_at (migración no corrida), usar session.provider_token directamente
+  const isExpired = expiresAt ? expiresAt <= new Date(Date.now() + 120_000) : false;
 
   if (!isExpired && session?.provider_token) {
     return session.provider_token;
