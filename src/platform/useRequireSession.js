@@ -23,18 +23,32 @@ export function useRequireSession(loginNextPath) {
 
     let cancelled = false;
 
+    const timer = setTimeout(() => {
+      if (!cancelled) {
+        setLoading(false);
+        setProfileError("La sesión tardó demasiado. Recargá la página.");
+      }
+    }, 8000);
+
     (async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getSession();
       if (cancelled) return;
-      const u = data.session?.user ?? null;
+      if (error) {
+        console.error("useRequireSession.getSession:", error);
+      }
+      const u = data?.session?.user ?? null;
       if (!u) {
+        clearTimeout(timer);
         const next = loginNextPath ? `?next=${encodeURIComponent(loginNextPath)}` : "";
         navigate(`/login${next}`, { replace: true });
         return;
       }
       setUser(u);
       const prof = await ensureProfileForUser(u);
-      if (!prof.ok && !cancelled) {
+      if (cancelled) return;
+      clearTimeout(timer);
+      if (!prof.ok) {
+        console.error("useRequireSession.ensureProfile:", prof.error);
         setProfileError(prof.error || "No se pudo sincronizar el perfil.");
       }
       setLoading(false);
@@ -42,6 +56,7 @@ export function useRequireSession(loginNextPath) {
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [supabase, navigate, loginNextPath]);
 

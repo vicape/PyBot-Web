@@ -54,13 +54,18 @@ export default function OrgCoursesPage() {
       .order("created_at", { ascending: false });
 
     if (e1) {
+      console.error("loadCourses (with slug):", e1);
       const fallback = await supabase
         .from("courses")
         .select("id,title,created_at")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
-      if (fallback.error) setErr(fallback.error.message);
-      else setCourses(fallback.data ?? []);
+      if (fallback.error) {
+        console.error("loadCourses fallback:", fallback.error);
+        setErr(fallback.error.message);
+      } else {
+        setCourses(fallback.data ?? []);
+      }
     } else {
       setCourses(rows ?? []);
     }
@@ -104,6 +109,7 @@ export default function OrgCoursesPage() {
 
     setSaving(false);
     if (error) {
+      console.error("createCourse:", error);
       setErr(error.message);
       return;
     }

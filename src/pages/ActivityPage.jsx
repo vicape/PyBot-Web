@@ -28,6 +28,7 @@ export default function ActivityPage() {
       .maybeSingle();
 
     if (eAct) {
+      console.error("ActivityPage.load (full):", eAct);
       const fb = await supabase
         .from("activities")
         .select("id, title, course_id, created_at")
@@ -38,6 +39,7 @@ export default function ActivityPage() {
     }
 
     if (eAct) {
+      console.error("ActivityPage.load (fallback):", eAct);
       setLoadErr(eAct.message);
       setLoading(false);
       return;

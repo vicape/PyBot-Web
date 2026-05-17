@@ -126,14 +126,47 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
   const [removingId, setRemovingId] = useState(null);
 
   const loadMembers = useCallback(async () => {
-    if (!sb || !orgId) return;
+    if (!sb || !orgId) {
+      setLoadingMembers(false);
+      return;
+    }
     setLoadingMembers(true);
-    const { data } = await sb
+
+    // 1) Traer membresías (estudiantes)
+    const { data: rows, error: e1 } = await sb
       .from("organization_members")
-      .select("user_id, role, profiles(display_name, avatar_url, email)")
+      .select("user_id, role")
       .eq("org_id", orgId)
       .eq("role", "student");
-    setMembers(data ?? []);
+
+    if (e1) {
+      console.error("loadMembers:", e1);
+      setMembers([]);
+      setLoadingMembers(false);
+      return;
+    }
+
+    const userIds = (rows ?? []).map((r) => r.user_id);
+    if (userIds.length === 0) {
+      setMembers([]);
+      setLoadingMembers(false);
+      return;
+    }
+
+    // 2) Traer perfiles (puede fallar parcialmente por RLS; lo manejamos)
+    const { data: profs } = await sb
+      .from("profiles")
+      .select("id, display_name, avatar_url, email")
+      .in("id", userIds);
+
+    const profMap = new Map((profs ?? []).map((p) => [p.id, p]));
+    const merged = (rows ?? []).map((r) => ({
+      user_id: r.user_id,
+      role: r.role,
+      profiles: profMap.get(r.user_id) ?? null,
+    }));
+
+    setMembers(merged);
     setLoadingMembers(false);
   }, [sb, orgId]);
 

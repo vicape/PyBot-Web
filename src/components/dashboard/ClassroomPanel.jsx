@@ -47,16 +47,19 @@ export default function ClassroomPanel({ user, staffOrgId }) {
 
       // Cargar qué cursos ya fueron importados en el colegio
       if (sb && staffOrgId) {
-        const { data: existing } = await sb
+        const { data: existing, error: eEx } = await sb
           .from("courses")
           .select("classroom_course_id")
           .eq("org_id", staffOrgId)
           .not("classroom_course_id", "is", null);
-        if (existing) {
+        if (eEx) {
+          console.error("ClassroomPanel.loadImported:", eEx);
+        } else if (existing) {
           setImportedIds(new Set(existing.map((r) => r.classroom_course_id)));
         }
       }
     } catch (ex) {
+      console.error("ClassroomPanel.refreshCourses:", ex);
       setCourses([]);
       const msg = classroomErrorEs(ex);
       if (msg) setErr(msg);
@@ -90,6 +93,21 @@ export default function ClassroomPanel({ user, staffOrgId }) {
     const title = classroomCourse.name || classroomCourse.section || `Curso ${classroomCourse.id}`;
     const slug = slugifyOrganizationName(title);
 
+    // 1) Chequear si ya existe un curso con este classroom_course_id en este colegio
+    const { data: existing } = await sb
+      .from("courses")
+      .select("id")
+      .eq("org_id", staffOrgId)
+      .eq("classroom_course_id", classroomCourse.id)
+      .maybeSingle();
+
+    if (existing?.id) {
+      setImporting(null);
+      setImportedIds((prev) => new Set([...prev, classroomCourse.id]));
+      navigate(`/dashboard/org/${staffOrgId}/course/${existing.id}`);
+      return;
+    }
+
     const payload = {
       org_id: staffOrgId,
       title,
@@ -104,11 +122,20 @@ export default function ClassroomPanel({ user, staffOrgId }) {
       .select("id")
       .maybeSingle();
 
-    // Si falla por slug duplicado, intentar sin slug
-    if (error?.message?.includes("slug") || error?.code === "23505") {
+    // Si falla por slug/columna, reintento progresivos
+    if (error?.message?.includes("slug")) {
+      const { slug: _omitSlug, ...withoutSlug } = payload;
       ({ data: row, error } = await sb
         .from("courses")
-        .insert({ ...payload, slug: undefined })
+        .insert(withoutSlug)
+        .select("id")
+        .maybeSingle());
+    }
+    if (error?.message?.includes("classroom_course_id")) {
+      const { classroom_course_id: _omitCl, ...withoutCl } = payload;
+      ({ data: row, error } = await sb
+        .from("courses")
+        .insert(withoutCl)
         .select("id")
         .maybeSingle());
     }
@@ -116,6 +143,7 @@ export default function ClassroomPanel({ user, staffOrgId }) {
     setImporting(null);
 
     if (error) {
+      console.error("importCourse:", error);
       setImportErr(`No se pudo importar "${title}": ${error.message}`);
       return;
     }
