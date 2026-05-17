@@ -9,9 +9,8 @@ import { slugifyOrganizationName } from "../../slugify.js";
 
 function classroomErrorEs(err) {
   const code = err?.code;
-  if (code === "missing_access_token") {
-    return "No hay token de Google Classroom. Usá «Conectar Classroom» y aceptá los permisos.";
-  }
+  // missing_access_token se muestra como UI vacía (no error), no como mensaje de error
+  if (code === "missing_access_token") return null;
   if (err?.status === 403) {
     return "El token de Classroom expiró o no tiene permisos. Hacé clic en «Conectar Google Classroom» para renovarlo.";
   }
@@ -59,7 +58,9 @@ export default function ClassroomPanel({ user, staffOrgId }) {
       }
     } catch (ex) {
       setCourses([]);
-      setErr(classroomErrorEs(ex));
+      const msg = classroomErrorEs(ex);
+      if (msg) setErr(msg);
+      // si msg es null (missing_access_token) no mostramos error, solo el botón conectar
     } finally {
       setTesting(false);
     }
@@ -72,9 +73,8 @@ export default function ClassroomPanel({ user, staffOrgId }) {
       const { profile } = await fetchProfile(user.id);
       setLinkedAt(profile?.classroom_linked_at ?? null);
       setLoading(false);
-      if (profile?.classroom_linked_at) {
-        await refreshCourses();
-      }
+      // Intentar cargar cursos siempre — si no hay token, refreshCourses lo maneja silenciosamente
+      await refreshCourses();
     })();
   }, [user?.id, refreshCourses]);
 
