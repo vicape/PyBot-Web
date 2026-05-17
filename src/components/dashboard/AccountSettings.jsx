@@ -9,14 +9,27 @@ export default function AccountSettings({ user, onProfileUpdated }) {
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
+
+    const timer = setTimeout(() => {
+      if (!cancelled) {
+        setLoading(false);
+        setErr("No se pudo cargar el perfil. Revisá tu conexión.");
+      }
+    }, 6000);
+
     (async () => {
       setLoading(true);
       const { profile, error } = await fetchProfile(user.id);
       if (cancelled) return;
-      if (error) setErr(error);
-      else {
+      clearTimeout(timer);
+      if (error) {
+        setErr(typeof error === "string" ? error : "Error al cargar el perfil.");
+      } else {
         const meta = user.user_metadata || {};
         setDisplayName(
           profile?.display_name ||
@@ -27,8 +40,10 @@ export default function AccountSettings({ user, onProfileUpdated }) {
       }
       setLoading(false);
     })();
+
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [user]);
 

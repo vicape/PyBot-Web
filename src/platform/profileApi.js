@@ -4,7 +4,11 @@ export async function fetchProfile(userId) {
   const sb = getSupabase();
   if (!sb || !userId) return { profile: null, error: "no_client" };
 
-  const { data, error } = await sb.from("profiles").select("*").eq("id", userId).maybeSingle();
+  const { data, error } = await sb
+    .from("profiles")
+    .select("id, email, display_name, avatar_url, preferred_role, classroom_linked_at, google_token_expires_at")
+    .eq("id", userId)
+    .maybeSingle();
   if (error) return { profile: null, error: error.message };
   return { profile: data, error: null };
 }
