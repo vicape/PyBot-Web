@@ -79,17 +79,47 @@ export default function DashboardPage() {
   const loadOrganizations = useCallback(async () => {
     if (!supabase || !sessionUser) return;
     setOrgError("");
-    const { data, error } = await supabase
-      .from("organizations")
-      .select("id,name,slug,created_at, organization_members!inner(role)")
-      .eq("organization_members.user_id", sessionUser.id);
 
-    if (error) {
-      console.error("loadOrganizations:", error);
-      setOrgError(error.message);
-    } else {
-      setOrgs(data ?? []);
+    // 1) Mis membresías
+    const { data: memberships, error: eMem } = await supabase
+      .from("organization_members")
+      .select("org_id, role")
+      .eq("user_id", sessionUser.id);
+
+    if (eMem) {
+      console.error("loadOrganizations.memberships:", eMem);
+      setOrgError(eMem.message);
+      setOrgs([]);
+      return;
     }
+
+    const orgIds = (memberships ?? []).map((m) => m.org_id);
+    if (orgIds.length === 0) {
+      setOrgs([]);
+      return;
+    }
+
+    // 2) Datos de organizaciones
+    const { data: orgRows, error: eOrg } = await supabase
+      .from("organizations")
+      .select("id, name, slug, created_at")
+      .in("id", orgIds);
+
+    if (eOrg) {
+      console.error("loadOrganizations.orgs:", eOrg);
+      setOrgError(eOrg.message);
+      setOrgs([]);
+      return;
+    }
+
+    // 3) Merge — formato compatible con el resto del UI (organization_members[0].role)
+    const roleByOrg = new Map((memberships ?? []).map((m) => [m.org_id, m.role]));
+    const merged = (orgRows ?? []).map((o) => ({
+      ...o,
+      organization_members: [{ role: roleByOrg.get(o.id) }],
+    }));
+
+    setOrgs(merged);
   }, [supabase, sessionUser]);
 
   useEffect(() => {

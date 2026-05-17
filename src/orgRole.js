@@ -34,12 +34,21 @@ export function isTeacherProfile(orgs, preferredRole) {
 
 export async function fetchMyOrgRole(supabase, orgId, userId) {
   if (!supabase || !orgId || !userId) return null;
+
+  // Preferir RPC security definer (evita problemas de RLS)
+  const rpc = await supabase.rpc("my_role_in_org", { p_org_id: orgId });
+  if (!rpc.error) return rpc.data ?? null;
+
+  // Fallback: query directo (filtrando por user_id propio para evitar recursión)
   const { data, error } = await supabase
     .from("organization_members")
     .select("role")
     .eq("org_id", orgId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    console.error("fetchMyOrgRole:", error);
+    return null;
+  }
   return data?.role ?? null;
 }

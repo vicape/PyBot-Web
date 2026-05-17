@@ -132,35 +132,49 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
     }
     setLoadingMembers(true);
 
-    // 1) Traer membresías (estudiantes)
-    const { data: rows, error: e1 } = await sb
-      .from("organization_members")
-      .select("user_id, role")
-      .eq("org_id", orgId)
-      .eq("role", "student");
-
-    if (e1) {
-      console.error("loadMembers:", e1);
-      setMembers([]);
-      setLoadingMembers(false);
-      return;
+    // 1) Traer membresías vía RPC security definer (evita recursión RLS)
+    let rows = null;
+    let rpcError = null;
+    const rpc = await sb.rpc("list_org_members", { p_org_id: orgId });
+    if (rpc.error) {
+      rpcError = rpc.error;
+      // Fallback: query directo (puede fallar por RLS recursivo si DB sin migración 012)
+      const direct = await sb
+        .from("organization_members")
+        .select("user_id, role")
+        .eq("org_id", orgId);
+      if (direct.error) {
+        console.error("loadMembers (direct fallback):", direct.error);
+        setMembers([]);
+        setLoadingMembers(false);
+        return;
+      }
+      rows = direct.data ?? [];
+    } else {
+      rows = rpc.data ?? [];
     }
 
-    const userIds = (rows ?? []).map((r) => r.user_id);
+    if (rpcError) console.warn("loadMembers RPC missing/failing:", rpcError);
+
+    const students = rows.filter((r) => r.role === "student");
+    const userIds = students.map((r) => r.user_id);
+
     if (userIds.length === 0) {
       setMembers([]);
       setLoadingMembers(false);
       return;
     }
 
-    // 2) Traer perfiles (puede fallar parcialmente por RLS; lo manejamos)
-    const { data: profs } = await sb
+    // 2) Traer perfiles
+    const { data: profs, error: eProfs } = await sb
       .from("profiles")
       .select("id, display_name, avatar_url, email")
       .in("id", userIds);
 
+    if (eProfs) console.error("loadMembers.profiles:", eProfs);
+
     const profMap = new Map((profs ?? []).map((p) => [p.id, p]));
-    const merged = (rows ?? []).map((r) => ({
+    const merged = students.map((r) => ({
       user_id: r.user_id,
       role: r.role,
       profiles: profMap.get(r.user_id) ?? null,
