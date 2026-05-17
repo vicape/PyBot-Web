@@ -10,16 +10,32 @@ export async function ensureProfileForUser(user, preferredRole = null) {
 
   const role = isValidSignupRole(preferredRole) ? preferredRole : null;
 
-  const { data: existing, error: selErr } = await sb
+  let { data: existing, error: selErr } = await sb
     .from("profiles")
     .select("id, preferred_role")
     .eq("id", user.id)
     .maybeSingle();
 
+  // Si preferred_role no existe, intentar solo con id
+  if (selErr?.message?.includes("does not exist")) {
+    ({ data: existing, error: selErr } = await sb
+      .from("profiles")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle());
+  }
+
   if (selErr) return { ok: false, error: selErr.message };
   if (existing?.id) {
     if (role && !existing.preferred_role) {
-      await sb.from("profiles").update({ preferred_role: role }).eq("id", user.id);
+      const { error: updErr } = await sb
+        .from("profiles")
+        .update({ preferred_role: role })
+        .eq("id", user.id);
+      // Si la columna no existe, ignorar silenciosamente
+      if (updErr && !updErr.message?.includes("does not exist")) {
+        // Otros errores: no bloquear el flujo
+      }
     }
     return { ok: true, created: false };
   }
@@ -36,7 +52,13 @@ export async function ensureProfileForUser(user, preferredRole = null) {
   };
   if (role) row.preferred_role = role;
 
-  const { error: insErr } = await sb.from("profiles").insert(row);
+  let { error: insErr } = await sb.from("profiles").insert(row);
+
+  // Si la columna preferred_role no existe, reintentar sin ella
+  if (insErr?.message?.includes("does not exist") && row.preferred_role) {
+    const { preferred_role: _omit, ...rowWithoutRole } = row;
+    ({ error: insErr } = await sb.from("profiles").insert(rowWithoutRole));
+  }
 
   if (insErr) {
     if (insErr.code === "23505") return { ok: true, created: false };

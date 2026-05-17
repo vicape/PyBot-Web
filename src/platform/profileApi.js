@@ -1,14 +1,33 @@
 import { getSupabase } from "../supabaseClient.js";
 
+/**
+ * Lista de columnas opcionales. Si alguna no existe en tu DB (porque no corriste la migración),
+ * el código sigue funcionando con las que sí existen.
+ */
+const PROFILE_COLUMNS_FULL =
+  "id, email, display_name, avatar_url, preferred_role, classroom_linked_at, google_refresh_token, google_token_expires_at";
+const PROFILE_COLUMNS_FALLBACK = "id, email, display_name, avatar_url";
+
 export async function fetchProfile(userId) {
   const sb = getSupabase();
   if (!sb || !userId) return { profile: null, error: "no_client" };
 
-  const { data, error } = await sb
+  // Intentar con todas las columnas
+  let { data, error } = await sb
     .from("profiles")
-    .select("id, email, display_name, avatar_url, preferred_role, classroom_linked_at, google_token_expires_at")
+    .select(PROFILE_COLUMNS_FULL)
     .eq("id", userId)
     .maybeSingle();
+
+  // Si alguna columna nueva no existe, degradar al select mínimo
+  if (error && error.message && error.message.includes("does not exist")) {
+    ({ data, error } = await sb
+      .from("profiles")
+      .select(PROFILE_COLUMNS_FALLBACK)
+      .eq("id", userId)
+      .maybeSingle());
+  }
+
   if (error) return { profile: null, error: error.message };
   return { profile: data, error: null };
 }
@@ -32,7 +51,7 @@ export async function updatePreferredRole(userId, role) {
 
   const { error } = await sb.from("profiles").update({ preferred_role: role }).eq("id", userId);
 
-  if (error?.message?.includes("preferred_role")) {
+  if (error?.message?.includes("preferred_role") || error?.message?.includes("does not exist")) {
     return { ok: true, error: null, skipped: true };
   }
   if (error) return { ok: false, error: error.message };
@@ -51,7 +70,11 @@ export async function saveGoogleTokens(userId, { accessToken, refreshToken, expi
   if (Object.keys(patch).length === 0) return { ok: true };
 
   const { error } = await sb.from("profiles").update(patch).eq("id", userId);
-  if (error?.message?.includes("google_refresh_token") || error?.message?.includes("google_token_expires")) {
+
+  // Las columnas nuevas no existen aún → no romper el flujo
+  if (error?.message?.includes("does not exist") ||
+      error?.message?.includes("google_refresh_token") ||
+      error?.message?.includes("google_token_expires")) {
     return { ok: true, skipped: true };
   }
   if (error) return { ok: false, error: error.message };
@@ -63,20 +86,20 @@ export async function getStoredGoogleRefreshToken(userId) {
   if (!sb || !userId) return null;
 
   // Intentar con columnas nuevas + classroom_linked_at
-  const { data, error } = await sb
+  let { data, error } = await sb
     .from("profiles")
     .select("google_refresh_token, google_token_expires_at, classroom_linked_at")
     .eq("id", userId)
     .maybeSingle();
 
-  if (error) {
-    // Si las columnas nuevas no existen todavía, intentar solo con classroom_linked_at
-    const fallback = await sb
+  if (error && error.message && error.message.includes("does not exist")) {
+    // Las columnas nuevas no existen → usar solo classroom_linked_at
+    const fb = await sb
       .from("profiles")
       .select("classroom_linked_at")
       .eq("id", userId)
       .maybeSingle();
-    return fallback.data ?? null;
+    return fb.data ?? null;
   }
 
   return data ?? null;
@@ -91,7 +114,7 @@ export async function markClassroomLinked(userId) {
     .update({ classroom_linked_at: new Date().toISOString() })
     .eq("id", userId);
 
-  if (error?.message?.includes("classroom_linked_at")) {
+  if (error?.message?.includes("classroom_linked_at") || error?.message?.includes("does not exist")) {
     return { ok: true, error: null, skipped: true };
   }
   if (error) return { ok: false, error: error.message };
