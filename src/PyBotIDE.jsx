@@ -64,6 +64,9 @@ export default function PyBotIDE() {
   const [helpModuleIdx, setHelpModuleIdx] = useState(0);
   const [helpLesson, setHelpLesson] = useState(null);
   const [pythonOnly, setPythonOnly] = useState(() => readInitialPythonOnly());
+  const [boardType, setBoardType] = useState(
+    () => localStorage.getItem("pybot_board_type") || "arduino-firmata",
+  );
   const [, forceLang] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(
     () => parseInt(localStorage.getItem("pybot_sidebar_w") || "248", 10),
@@ -127,6 +130,10 @@ export default function PyBotIDE() {
   useEffect(() => {
     localStorage.setItem("pybot_python_only", pythonOnly ? "1" : "0");
   }, [pythonOnly]);
+
+  useEffect(() => {
+    localStorage.setItem("pybot_board_type", boardType);
+  }, [boardType]);
 
   useEffect(() => {
     localStorage.setItem("pybot_sidebar_w", String(sidebarWidth));
@@ -632,6 +639,20 @@ export default function PyBotIDE() {
                             {t("modePythonOnly")}
                           </button>
                         </div>
+                      </div>
+                      <div className="toolbar-menu-mode">
+                        <span className="toolbar-menu-mode__label">{t("boardLabel")}</span>
+                        <select
+                          className="toolbar-menu-board"
+                          value={boardType}
+                          onChange={(e) => setBoardType(e.target.value)}
+                          disabled={connected || connecting}
+                          title={connected ? t("disconnect") : t("boardHint")}
+                          aria-label={t("boardLabel")}
+                        >
+                          <option value="arduino-firmata">{t("boardArduino")}</option>
+                          <option value="esp32-serial">{t("boardEsp32")}</option>
+                        </select>
                       </div>
                       <div className="toolbar-menu-divider" />
                       <button

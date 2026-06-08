@@ -16,6 +16,24 @@ Proyecto **aparte** del PyBot de escritorio; no lo modifica.
 - Arduino con **StandardFirmata** (57600 / 115200).
 - Firmata en JS: digital in/out, PWM, servo, motor, analógico A0–A5.
 
+### Selección de placa
+
+En el menú de la barra hay un selector **Placa** (cerca del modo Hardware/Solo Python):
+
+- **Arduino Uno/Nano compatible** (por defecto) → usa **StandardFirmata**, igual que siempre. No cambia nada del flujo anterior.
+- **ESP32 DevKit** → usa el **firmware PyBot ESP32** (`firmware/pybot-esp32/pybot-esp32.ino`).
+
+Elegí la placa **antes** de conectar el USB. Para cambiarla, desconectá primero. La opción queda guardada en `localStorage` (`pybot_board_type`).
+
+### ESP32
+
+- **El código del alumno es el mismo**: `pin`, `servo`, `motor`, `wait`.
+- Requiere cargar una sola vez el firmware **PyBot ESP32** (carpeta `firmware/pybot-esp32`) desde el IDE de Arduino con la placa ESP32 seleccionada.
+- **Pines por número de GPIO directo** (no se usa A0–A5): `pin("out", 2, 1)`, `pin("in", 4)`, `pin("pwm", 18, 128)`.
+- **Lectura analógica** con prefijo `A` + el GPIO: `pin("in", "A34")`. El valor llega **escalado a 0–1023** para que el cálculo sea idéntico al de Arduino.
+- **El ESP32 trabaja a 3.3V**: no conectes señales de 5V a sus pines.
+- Protocolo interno: comandos JSON por línea (request/response). El firmware compila en core Arduino-ESP32 **2.x y 3.x**.
+
 ## Desarrollo
 
 ```bash

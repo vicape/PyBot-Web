@@ -35,6 +35,10 @@ const STRINGS = {
     modeLabel: "Modo",
     modeHardware: "Python + Hardware",
     modePythonOnly: "Python Solo",
+    boardLabel: "Placa",
+    boardArduino: "Arduino Uno/Nano compatible",
+    boardEsp32: "ESP32 DevKit",
+    boardHint: "Elegí la placa antes de conectar el USB.",
     statusConnectedShort: "Conectado",
     statusDisconnectedShort: "Sin USB",
     pythonOnly: "Solo Python (sin Arduino)",
@@ -58,6 +62,12 @@ const STRINGS = {
       "La aplicación no tiene permisos para acceder al USB. Revisá permisos del navegador y del sistema.",
     usbErr_FIRMATA:
       "El dispositivo USB no respondió correctamente. Reiniciá la placa, cerrá otras apps que usen el puerto y volvé a intentar.",
+    usbErr_ESP32_NO_RESPONSE:
+      "La placa ESP32 no respondió. Verificá que tenga cargado el firmware PyBot ESP32, el cable de datos y que ninguna otra app use el puerto.",
+    usbErr_ESP32_BAD_FIRMWARE:
+      "La placa respondió, pero no parece tener el firmware PyBot ESP32 correcto. Cargá firmware/pybot-esp32 y volvé a intentar.",
+    usbErr_ESP32_GENERIC:
+      "No se pudo conectar con la placa ESP32. Revisá el firmware PyBot ESP32, el cable y el puerto.",
     pyodideLoad: "Cargando Python (primera vez puede tardar)…",
     statusMeta: "Python · mismo estilo que escritorio",
     helpBody: `PyBot Web usa Python estilo escritorio: escribís pin/motor/servo/wait sin async/await.
@@ -131,6 +141,10 @@ Creado por VIC.`,
     modeLabel: "Mode",
     modeHardware: "Python + Hardware",
     modePythonOnly: "Python only",
+    boardLabel: "Board",
+    boardArduino: "Arduino Uno/Nano compatible",
+    boardEsp32: "ESP32 DevKit",
+    boardHint: "Pick the board before connecting USB.",
     statusConnectedShort: "Connected",
     statusDisconnectedShort: "No USB",
     pythonOnly: "Python only (no Arduino)",
@@ -154,6 +168,12 @@ Creado por VIC.`,
       "The app does not have USB access permissions. Check browser and system permissions.",
     usbErr_FIRMATA:
       "The USB device did not respond correctly. Restart the board, close other apps using the same port, and try again.",
+    usbErr_ESP32_NO_RESPONSE:
+      "The ESP32 board did not respond. Make sure the PyBot ESP32 firmware is flashed, the cable carries data, and no other app is using the port.",
+    usbErr_ESP32_BAD_FIRMWARE:
+      "The board responded but does not seem to have the correct PyBot ESP32 firmware. Flash firmware/pybot-esp32 and try again.",
+    usbErr_ESP32_GENERIC:
+      "Could not connect to the ESP32 board. Check the PyBot ESP32 firmware, cable, and port.",
     pyodideLoad: "Loading Python (first load may take a while)…",
     statusMeta: "Python · same style as desktop",
     helpBody: `PyBot Web keeps desktop-style Python: write pin/motor/servo/wait without async/await.
@@ -221,6 +241,13 @@ export function formatHardwareError(message) {
   if (m.startsWith("PYBOT_FIRMATA:")) {
     return t("usbErr_FIRMATA");
   }
+  if (m.startsWith("PYBOT_ESP32:")) {
+    const code = m.slice("PYBOT_ESP32:".length);
+    const key = `usbErr_ESP32_${code}`;
+    const out = t(key);
+    if (out !== key) return out;
+    return t("usbErr_ESP32_GENERIC");
+  }
   return m;
 }
 
@@ -277,6 +304,30 @@ export function formatPythonError(message) {
     return pick(
       "Tipo de dato incorrecto: una operación recibió un valor de tipo no esperado. Revisá si usás texto, número o lista correctamente.",
       "Wrong data type: an operation received an unexpected value type. Check whether you are using text, number, or list correctly.",
+    );
+  }
+  if (/\bNO_RESPONSE\b/.test(m)) {
+    return pick(
+      "La placa ESP32 no respondió a tiempo. Revisá la conexión USB y el firmware PyBot ESP32.",
+      "The ESP32 board did not respond in time. Check the USB connection and the PyBot ESP32 firmware.",
+    );
+  }
+  if (/\bBAD_FIRMWARE\b/.test(m)) {
+    return pick(
+      "El firmware de la placa ESP32 no es el esperado. Cargá firmware/pybot-esp32.",
+      "The ESP32 firmware is not the expected one. Flash firmware/pybot-esp32.",
+    );
+  }
+  if (/\bINVALID_PIN\b/.test(m)) {
+    return pick(
+      "Pin inválido para esta placa: revisá el número de GPIO que estás usando.",
+      "Invalid pin for this board: check the GPIO number you are using.",
+    );
+  }
+  if (/\bINVALID_CMD\b|\bCMD_FAILED\b/.test(m)) {
+    return pick(
+      "La placa no pudo ejecutar el comando: revisá el modo y los argumentos de pin/servo/motor.",
+      "The board could not run the command: check the mode and arguments of pin/servo/motor.",
     );
   }
   if (/ValueError|pin_args|invalid_analog|invalid_value/i.test(m)) {

@@ -554,6 +554,23 @@
   color: var(--fg-muted);
 }
 
+.toolbar-menu-board {
+  border: 1px solid var(--ide-border);
+  border-radius: 8px;
+  background: var(--ide-elevated);
+  color: var(--ide-fg, inherit);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.toolbar-menu-board:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .tb-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
