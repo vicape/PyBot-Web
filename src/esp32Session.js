@@ -1,4 +1,11 @@
 /**
+ * EXPERIMENTAL — NO es el flujo principal de ESP32.
+ *
+ * El modo principal de ESP32 es MicroPython (src/micropythonEsp32Session.js).
+ * Este driver JSON serial queda como experimento: no aparece en el selector y
+ * solo se activa con localStorage pybot_board_type = "esp32-serial". No afecta
+ * a Arduino.
+ *
  * Driver ESP32 (firmware PyBot ESP32) sobre Web Serial.
  *
  * Modelo: request/response. Se envía un comando JSON por línea y se espera
