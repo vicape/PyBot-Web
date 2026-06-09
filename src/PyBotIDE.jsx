@@ -3,12 +3,15 @@ import { Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import "./PyBotIDE.css";
 import { DEFAULT_CODE, EXAMPLES } from "./examplesData.js";
-import { t, getLang, setLang, formatHardwareError } from "./i18n.js";
+import { t, getLang, setLang, formatHardwareError, formatPythonError } from "./i18n.js";
 import {
   hardwareConnect,
   hardwareDisconnect,
   hardwareIsConnected,
   hardwareBaudRate,
+  hardwareMode,
+  runOnBoard,
+  interruptBoard,
 } from "./hardwareBridge.js";
 import { runPythonAsync, signalStop } from "./pyodideRunner.js";
 import { HELP_COURSE } from "./helpCourseData.js";
@@ -64,9 +67,10 @@ export default function PyBotIDE() {
   const [helpModuleIdx, setHelpModuleIdx] = useState(0);
   const [helpLesson, setHelpLesson] = useState(null);
   const [pythonOnly, setPythonOnly] = useState(() => readInitialPythonOnly());
-  const [boardType, setBoardType] = useState(
-    () => localStorage.getItem("pybot_board_type") || "arduino-firmata",
-  );
+  const [boardType, setBoardType] = useState(() => {
+    const v = localStorage.getItem("pybot_board_type");
+    return v === "esp32-micropython" ? "esp32-micropython" : "arduino-firmata";
+  });
   const [, forceLang] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(
     () => parseInt(localStorage.getItem("pybot_sidebar_w") || "248", 10),
@@ -236,9 +240,13 @@ export default function PyBotIDE() {
     if (connecting) return;
     setConnecting(true);
     try {
-      const { baudRate } = await hardwareConnect();
+      const { baudRate, mode } = await hardwareConnect();
       setConnected(true);
-      appendConsole(`USB OK @ ${baudRate} baud\n`, "info");
+      if (mode === "esp32-micropython") {
+        appendConsole(t("mpyConnected") + "\n", "info");
+      } else {
+        appendConsole(`USB OK @ ${baudRate} baud\n`, "info");
+      }
     } catch (e) {
       appendConsole(`${formatHardwareError(e?.message)}\n`, "err");
     } finally {
@@ -255,6 +263,38 @@ export default function PyBotIDE() {
   const onRun = useCallback(async () => {
     if (running) return;
     const needsHw = codeNeedsHardware(code);
+
+    // ESP32 MicroPython: el programa corre EN la placa (no en Pyodide).
+    if (!pythonOnly && hardwareMode() === "esp32-micropython") {
+      if (/\bpin\s*\([^)]*["'][Aa]\d/.test(code)) {
+        appendConsole(formatPythonError("ESP32_GPIO_ONLY") + "\n", "err");
+        return;
+      }
+      setRunning(true);
+      setCanvasSize(null);
+      signalStop();
+      await new Promise((r) => setTimeout(r, 20));
+      globalThis.__PYBOT_STOP__ = false;
+      appendConsole(t("mpyRunning") + "\n", "info");
+      try {
+        await runOnBoard(code, {
+          onOut: (s) => appendConsole(s, "out"),
+          onErr: (s) =>
+            appendConsole(
+              /ESP32_GPIO_ONLY/.test(s) ? formatPythonError("ESP32_GPIO_ONLY") + "\n" : s,
+              "err",
+            ),
+          shouldStop: () => globalThis.__PYBOT_STOP__ === true,
+        });
+        appendConsole("\n[Fin]\n", "info");
+      } catch (e) {
+        appendConsole(formatPythonError(e?.message) + "\n", "err");
+      } finally {
+        setRunning(false);
+      }
+      return;
+    }
+
     if (!pythonOnly && needsHw && !hardwareIsConnected()) {
       appendConsole(t("needConnect") + "\n", "err");
       return;
@@ -286,6 +326,9 @@ export default function PyBotIDE() {
 
   const onStop = useCallback(() => {
     signalStop();
+    if (hardwareMode() === "esp32-micropython") {
+      interruptBoard();
+    }
     if (inputResolveRef.current) {
       inputResolveRef.current("");
       inputResolveRef.current = null;
@@ -651,7 +694,7 @@ export default function PyBotIDE() {
                           aria-label={t("boardLabel")}
                         >
                           <option value="arduino-firmata">{t("boardArduino")}</option>
-                          <option value="esp32-serial">{t("boardEsp32")}</option>
+                          <option value="esp32-micropython">{t("boardEsp32Mp")}</option>
                         </select>
                       </div>
                       <div className="toolbar-menu-divider" />

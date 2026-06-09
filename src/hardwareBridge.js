@@ -1,32 +1,46 @@
 /**
  * Puente único Hardware ↔ Web.
  *
- * El bridge habla con un adaptador de alto nivel (interfaz común). Hoy hay dos:
- *   - ArduinoFirmataAdapter: envuelve FirmataSession (StandardFirmata, modelo
- *     streaming/cache). No modifica firmataSession.js.
- *   - Esp32SerialAdapter (src/esp32Session.js): protocolo JSON request/response.
+ * Backends según la placa (localStorage "pybot_board_type"):
+ *   - "arduino-firmata" (POR DEFECTO): FirmataSession (StandardFirmata). El
+ *     código del alumno corre en Pyodide y manda comandos por Firmata. Usa la
+ *     interfaz común de alto nivel vía ArduinoFirmataAdapter. No modifica
+ *     firmataSession.js.
+ *   - "esp32-micropython": MicroPythonSession (src/micropythonEsp32Session.js).
+ *     El programa del alumno corre NATIVAMENTE en la placa (REPL/raw REPL); no
+ *     se usa Pyodide ni la interfaz de comandos. Ver runOnBoard().
+ *   - "esp32-serial": EXPERIMENTAL (firmware JSON propio, src/esp32Session.js).
+ *     No es default ni se ofrece en el selector; solo accesible seteando
+ *     manualmente localStorage. No afecta a Arduino.
  *
- * Interfaz común que todo adaptador expone:
+ * Interfaz común de alto nivel (Arduino y JSON experimental):
  *   pinWrite(pin, value), pinRead(pin), pwmWrite(pin, value),
  *   servoWrite(pin, angle), motorWrite(pin, speed), close()
- *
- * La placa se elige con localStorage "pybot_board_type"
- * ("arduino-firmata" por defecto | "esp32-serial").
  */
 
 import { connectFirmataSession, MODE_OUTPUT, MODE_PWM } from "./firmataSession.js";
 import { connectEsp32Session } from "./esp32Session.js";
+import { connectMicroPythonEsp32Session } from "./micropythonEsp32Session.js";
 
-let _adapter = null;
+let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
+let _mpSession = null;     // ESP32 MicroPython (ejecución en placa)
+let _mode = null;          // "arduino-firmata" | "esp32-micropython" | "esp32-serial"
 let _baudRate = null;
 
 export function getBoardType() {
   try {
     const v = localStorage.getItem("pybot_board_type");
-    return v === "esp32-serial" ? "esp32-serial" : "arduino-firmata";
+    if (v === "esp32-micropython") return "esp32-micropython";
+    if (v === "esp32-serial") return "esp32-serial";
+    return "arduino-firmata";
   } catch {
     return "arduino-firmata";
   }
+}
+
+/** Modo del hardware ACTUALMENTE conectado (no del seleccionado). */
+export function hardwareMode() {
+  return _mode;
 }
 
 /**
@@ -103,7 +117,7 @@ class ArduinoFirmataAdapter {
 }
 
 export function hardwareIsConnected() {
-  return _adapter != null;
+  return _adapter != null || _mpSession != null;
 }
 
 export function hardwareBaudRate() {
@@ -137,12 +151,32 @@ export async function hardwareConnect() {
 
   const boardType = getBoardType();
 
+  if (boardType === "esp32-micropython") {
+    try {
+      const { session, baudRate } = await connectMicroPythonEsp32Session(port);
+      _mpSession = session;
+      _mode = "esp32-micropython";
+      _baudRate = baudRate;
+      return { baudRate, mode: _mode };
+    } catch (e) {
+      try {
+        await port.close();
+      } catch {
+        /* ignore */
+      }
+      const msg = e?.message ?? String(e);
+      throw new Error(`PYBOT_MPY:${msg}`);
+    }
+  }
+
   if (boardType === "esp32-serial") {
+    // EXPERIMENTAL: firmware JSON propio. No es flujo principal.
     try {
       const { adapter, baudRate } = await connectEsp32Session(port);
       _adapter = adapter;
+      _mode = "esp32-serial";
       _baudRate = baudRate;
-      return { baudRate };
+      return { baudRate, mode: _mode };
     } catch (e) {
       try {
         await port.close();
@@ -157,8 +191,9 @@ export async function hardwareConnect() {
   try {
     const { session, close, baudRate } = await connectFirmataSession(port);
     _adapter = new ArduinoFirmataAdapter(session, close);
+    _mode = "arduino-firmata";
     _baudRate = baudRate;
-    return { baudRate };
+    return { baudRate, mode: _mode };
   } catch (e) {
     const msg = e?.message ?? String(e);
     throw new Error(`PYBOT_FIRMATA:${msg}`);
@@ -173,8 +208,38 @@ export async function hardwareDisconnect() {
       /* ignore */
     }
   }
+  if (_mpSession) {
+    try {
+      await _mpSession.close();
+    } catch {
+      /* ignore */
+    }
+  }
   _adapter = null;
+  _mpSession = null;
+  _mode = null;
   _baudRate = null;
+}
+
+/**
+ * Ejecuta el programa del alumno EN la placa (solo ESP32 MicroPython).
+ * @param {string} code
+ * @param {{onOut?:Function,onErr?:Function,shouldStop?:Function}} cb
+ */
+export async function runOnBoard(code, cb = {}) {
+  if (!_mpSession) throw new Error("not_connected");
+  return _mpSession.runProgram(code, cb);
+}
+
+/** Interrumpe (Ctrl-C) el programa en ejecución en la placa MicroPython. */
+export async function interruptBoard() {
+  if (_mpSession) {
+    try {
+      await _mpSession.interrupt();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function needAdapter() {

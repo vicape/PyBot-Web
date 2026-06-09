@@ -20,19 +20,23 @@ Proyecto **aparte** del PyBot de escritorio; no lo modifica.
 
 En el menú de la barra hay un selector **Placa** (cerca del modo Hardware/Solo Python):
 
-- **Arduino Uno/Nano compatible** (por defecto) → usa **StandardFirmata**, igual que siempre. No cambia nada del flujo anterior.
-- **ESP32 DevKit** → usa el **firmware PyBot ESP32** (`firmware/pybot-esp32/pybot-esp32.ino`).
+- **Arduino Uno/Nano compatible** (por defecto) → usa **StandardFirmata**, igual que siempre. El código corre en Pyodide y manda comandos por Firmata. No cambia nada del flujo anterior.
+- **ESP32 MicroPython** → el programa corre **nativamente en la placa** con MicroPython (no en Pyodide).
 
 Elegí la placa **antes** de conectar el USB. Para cambiarla, desconectá primero. La opción queda guardada en `localStorage` (`pybot_board_type`).
 
-### ESP32
+### ESP32 MicroPython (modo principal)
 
-- **El código del alumno es el mismo**: `pin`, `servo`, `motor`, `wait`.
-- Requiere cargar una sola vez el firmware **PyBot ESP32** (carpeta `firmware/pybot-esp32`) desde el IDE de Arduino con la placa ESP32 seleccionada.
-- **Pines por número de GPIO directo** (no se usa A0–A5): `pin("out", 2, 1)`, `pin("in", 4)`, `pin("pwm", 18, 128)`.
-- **Lectura analógica** con prefijo `A` + el GPIO: `pin("in", "A34")`. El valor llega **escalado a 0–1023** para que el cálculo sea idéntico al de Arduino.
+- **El código del alumno es el mismo**: `pin`, `servo`, `motor`, `wait`, `print`.
+- Al **Ejecutar**, PyBot inyecta un *prelude* MicroPython (define `pin/servo/motor/wait`), envía el programa por el **raw REPL** y lo corre **en la ESP32**. Los `print(...)` aparecen en la terminal del IDE.
+- **Pines por número de GPIO directo** (no se usa A0–A5): `pin("out", 2, 1)`, `pin("in", 4)`, `pin("pwm", 18, 128)`, `servo(18, 90)`, `motor(18, 50)`.
+- **Lectura analógica**: en pines ADC (GPIO 32–39) `pin("in", 34)` devuelve el valor **escalado a 0–1023** (compatibilidad pedagógica con Arduino). Si usás `"A0"` en ESP32, PyBot muestra un aviso para que uses el número de GPIO.
 - **El ESP32 trabaja a 3.3V**: no conectes señales de 5V a sus pines.
-- Protocolo interno: comandos JSON por línea (request/response). El firmware compila en core Arduino-ESP32 **2.x y 3.x**.
+- **Requisito**: la placa debe tener **MicroPython** instalado. Si no responde como MicroPython, PyBot avisa: *"Esta ESP32 necesita ser preparada para PyBot con MicroPython."* (Próximamente: botón **Preparar ESP32** con `esptool-js`.)
+
+### ESP32 Serial JSON (experimental, no usado)
+
+El firmware `firmware/pybot-esp32/pybot-esp32.ino` y `src/esp32Session.js` implementan un enfoque alternativo por comandos JSON serial. **No es el flujo principal**, no aparece en el selector y no afecta a Arduino. Queda como experimento (`pybot_board_type = "esp32-serial"` por edición manual).
 
 ## Desarrollo
 

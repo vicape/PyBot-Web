@@ -37,8 +37,10 @@ const STRINGS = {
     modePythonOnly: "Python Solo",
     boardLabel: "Placa",
     boardArduino: "Arduino Uno/Nano compatible",
-    boardEsp32: "ESP32 DevKit",
+    boardEsp32Mp: "ESP32 MicroPython",
     boardHint: "Elegí la placa antes de conectar el USB.",
+    mpyConnected: "ESP32 MicroPython conectada. El programa correrá en la placa.",
+    mpyRunning: "Enviando programa a la ESP32…",
     statusConnectedShort: "Conectado",
     statusDisconnectedShort: "Sin USB",
     pythonOnly: "Solo Python (sin Arduino)",
@@ -68,6 +70,14 @@ const STRINGS = {
       "La placa respondió, pero no parece tener el firmware PyBot ESP32 correcto. Cargá firmware/pybot-esp32 y volvé a intentar.",
     usbErr_ESP32_GENERIC:
       "No se pudo conectar con la placa ESP32. Revisá el firmware PyBot ESP32, el cable y el puerto.",
+    usbErr_MPY_NEEDS_PREP:
+      "Esta ESP32 necesita ser preparada para PyBot con MicroPython. (Próximamente: botón “Preparar ESP32”.)",
+    usbErr_MPY_BUSY:
+      "El puerto está ocupado por otra aplicación. Cerrá Arduino IDE, Thonny u otra app que use el puerto y reintentá.",
+    usbErr_MPY_REPL_FAIL:
+      "No se pudo entrar al REPL de MicroPython en la ESP32. Reconectá la placa y reintentá.",
+    usbErr_MPY_GENERIC:
+      "No se pudo conectar con la ESP32 en modo MicroPython. Revisá el cable, el puerto y que tenga MicroPython.",
     pyodideLoad: "Cargando Python (primera vez puede tardar)…",
     statusMeta: "Python · mismo estilo que escritorio",
     helpBody: `PyBot Web usa Python estilo escritorio: escribís pin/motor/servo/wait sin async/await.
@@ -143,8 +153,10 @@ Creado por VIC.`,
     modePythonOnly: "Python only",
     boardLabel: "Board",
     boardArduino: "Arduino Uno/Nano compatible",
-    boardEsp32: "ESP32 DevKit",
+    boardEsp32Mp: "ESP32 MicroPython",
     boardHint: "Pick the board before connecting USB.",
+    mpyConnected: "ESP32 MicroPython connected. The program will run on the board.",
+    mpyRunning: "Sending program to the ESP32…",
     statusConnectedShort: "Connected",
     statusDisconnectedShort: "No USB",
     pythonOnly: "Python only (no Arduino)",
@@ -174,6 +186,14 @@ Creado por VIC.`,
       "The board responded but does not seem to have the correct PyBot ESP32 firmware. Flash firmware/pybot-esp32 and try again.",
     usbErr_ESP32_GENERIC:
       "Could not connect to the ESP32 board. Check the PyBot ESP32 firmware, cable, and port.",
+    usbErr_MPY_NEEDS_PREP:
+      "This ESP32 needs to be prepared for PyBot with MicroPython. (Coming soon: a “Prepare ESP32” button.)",
+    usbErr_MPY_BUSY:
+      "The port is busy with another application. Close Arduino IDE, Thonny, or any app using the port and try again.",
+    usbErr_MPY_REPL_FAIL:
+      "Could not enter the MicroPython REPL on the ESP32. Reconnect the board and try again.",
+    usbErr_MPY_GENERIC:
+      "Could not connect to the ESP32 in MicroPython mode. Check the cable, port, and that MicroPython is installed.",
     pyodideLoad: "Loading Python (first load may take a while)…",
     statusMeta: "Python · same style as desktop",
     helpBody: `PyBot Web keeps desktop-style Python: write pin/motor/servo/wait without async/await.
@@ -248,6 +268,13 @@ export function formatHardwareError(message) {
     if (out !== key) return out;
     return t("usbErr_ESP32_GENERIC");
   }
+  if (m.startsWith("PYBOT_MPY:")) {
+    const code = m.slice("PYBOT_MPY:".length);
+    const key = `usbErr_MPY_${code}`;
+    const out = t(key);
+    if (out !== key) return out;
+    return t("usbErr_MPY_GENERIC");
+  }
   return m;
 }
 
@@ -304,6 +331,24 @@ export function formatPythonError(message) {
     return pick(
       "Tipo de dato incorrecto: una operación recibió un valor de tipo no esperado. Revisá si usás texto, número o lista correctamente.",
       "Wrong data type: an operation received an unexpected value type. Check whether you are using text, number, or list correctly.",
+    );
+  }
+  if (/ESP32_GPIO_ONLY/.test(m)) {
+    return pick(
+      "En ESP32 usá número de GPIO, por ejemplo 34 (no A0–A5).",
+      "On ESP32 use a GPIO number, e.g. 34 (not A0–A5).",
+    );
+  }
+  if (/\bREPL_FAIL\b/.test(m)) {
+    return pick(
+      "No se pudo entrar al REPL de la ESP32. Reconectá la placa y volvé a ejecutar.",
+      "Could not enter the ESP32 REPL. Reconnect the board and run again.",
+    );
+  }
+  if (/\bRUN_FAIL\b/.test(m)) {
+    return pick(
+      "No se pudo ejecutar el programa en la ESP32. Reconectá la placa y probá de nuevo.",
+      "Could not run the program on the ESP32. Reconnect the board and try again.",
     );
   }
   if (/\bNO_RESPONSE\b/.test(m)) {
