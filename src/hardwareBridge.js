@@ -9,6 +9,7 @@
  *   - "esp32-micropython": MicroPythonSession (src/micropythonEsp32Session.js).
  *     El programa del alumno corre NATIVAMENTE en la placa (REPL/raw REPL); no
  *     se usa Pyodide ni la interfaz de comandos. Ver runOnBoard().
+ *   - "esp32-eda6": MicroPythonSession + perfil EDA6 (src/eda6Profile.js).
  *   - "esp32-serial": EXPERIMENTAL (firmware JSON propio, src/esp32Session.js).
  *     No es default ni se ofrece en el selector; solo accesible seteando
  *     manualmente localStorage. No afecta a Arduino.
@@ -20,17 +21,29 @@
 
 import { connectFirmataSession, MODE_OUTPUT, MODE_PWM } from "./firmataSession.js";
 import { connectEsp32Session } from "./esp32Session.js";
-import { connectMicroPythonEsp32Session } from "./micropythonEsp32Session.js";
+import {
+  connectMicroPythonEsp32Session,
+  MPY_PRELUDE,
+} from "./micropythonEsp32Session.js";
+import {
+  getEda6Profile,
+  getEda6LibrarySource,
+  getEda6ExecPrelude,
+  prepareUserCodeForExec,
+  prepareMainPyForFlash,
+  detectPybotGpioUsage,
+} from "./eda6Profile.js";
 
 let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
-let _mpSession = null;     // ESP32 MicroPython (ejecución en placa)
-let _mode = null;          // "arduino-firmata" | "esp32-micropython" | "esp32-serial"
+let _mpSession = null;     // ESP32 MicroPython / EDA6 (ejecución en placa)
+let _mode = null;          // "arduino-firmata" | "esp32-micropython" | "esp32-eda6" | "esp32-serial"
 let _baudRate = null;
 
 export function getBoardType() {
   try {
     const v = localStorage.getItem("pybot_board_type");
     if (v === "esp32-micropython") return "esp32-micropython";
+    if (v === "esp32-eda6") return "esp32-eda6";
     if (v === "esp32-serial") return "esp32-serial";
     return "arduino-firmata";
   } catch {
@@ -38,9 +51,23 @@ export function getBoardType() {
   }
 }
 
+export { getEda6Profile };
+
 /** Modo del hardware ACTUALMENTE conectado (no del seleccionado). */
 export function hardwareMode() {
   return _mode;
+}
+
+export function isMicroPythonOnBoard() {
+  return _mode === "esp32-micropython" || _mode === "esp32-eda6";
+}
+
+function buildEda6RunPrelude(code, profile) {
+  let prelude = getEda6ExecPrelude(profile);
+  if (detectPybotGpioUsage(prepareUserCodeForExec(code))) {
+    prelude = prelude + "\n" + MPY_PRELUDE;
+  }
+  return prelude;
 }
 
 /**
@@ -151,6 +178,27 @@ export async function hardwareConnect() {
 
   const boardType = getBoardType();
 
+  if (boardType === "esp32-eda6") {
+    try {
+      const { session, baudRate } = await connectMicroPythonEsp32Session(port, {
+        recoverRepl: true,
+        mode: "esp32-eda6",
+      });
+      _mpSession = session;
+      _mode = "esp32-eda6";
+      _baudRate = baudRate;
+      return { baudRate, mode: _mode };
+    } catch (e) {
+      try {
+        await port.close();
+      } catch {
+        /* ignore */
+      }
+      const msg = e?.message ?? String(e);
+      throw new Error(`PYBOT_MPY:${msg}`);
+    }
+  }
+
   if (boardType === "esp32-micropython") {
     try {
       const { session, baudRate } = await connectMicroPythonEsp32Session(port);
@@ -222,12 +270,18 @@ export async function hardwareDisconnect() {
 }
 
 /**
- * Ejecuta el programa del alumno EN la placa (solo ESP32 MicroPython).
+ * Ejecuta el programa del alumno EN la placa (ESP32 MicroPython / EDA6).
  * @param {string} code
  * @param {{onOut?:Function,onErr?:Function,shouldStop?:Function}} cb
  */
 export async function runOnBoard(code, cb = {}) {
   if (!_mpSession) throw new Error("not_connected");
+  if (_mode === "esp32-eda6") {
+    const profile = getEda6Profile();
+    const userCode = prepareUserCodeForExec(code);
+    const prelude = buildEda6RunPrelude(code, profile);
+    return _mpSession.runProgram(userCode, { ...cb, prelude });
+  }
   return _mpSession.runProgram(code, cb);
 }
 
@@ -240,6 +294,32 @@ export async function interruptBoard() {
       /* ignore */
     }
   }
+}
+
+export async function checkEda6Installed() {
+  if (!_mpSession) throw new Error("not_connected");
+  return _mpSession.fileExists("EDA6.py");
+}
+
+export async function installEda6Library(profile = getEda6Profile()) {
+  if (!_mpSession) throw new Error("not_connected");
+  const source = getEda6LibrarySource(profile);
+  await _mpSession.installFile("EDA6.py", source);
+}
+
+export async function flashProgramToBoard(code, profile = getEda6Profile()) {
+  if (!_mpSession) throw new Error("not_connected");
+  const exists = await _mpSession.fileExists("EDA6.py");
+  if (!exists) {
+    await installEda6Library(profile);
+  }
+  const mainPy = prepareMainPyForFlash(code);
+  await _mpSession.installFile("main.py", mainPy);
+}
+
+export async function deleteMainPy() {
+  if (!_mpSession) throw new Error("not_connected");
+  return _mpSession.removeFile("main.py");
 }
 
 function needAdapter() {

@@ -37,7 +37,33 @@ const STRINGS = {
     modePythonOnly: "Python Solo",
     boardLabel: "Placa",
     boardArduino: "Arduino Uno/Nano compatible",
-    boardEsp32Mp: "ESP32 MicroPython",
+    boardEsp32Mp: "ESP32 MicroPython - GPIO directo",
+    boardEsp32Eda6: "ESP32 EDA6 / WEMOS",
+    eda6ProfileLabel: "Perfil EDA6",
+    eda6ProfileWemos: "WEMOS",
+    eda6ProfileEsp32: "ESP32",
+    eda6Hint: "Usá puertos 1 a 4 (no GPIO). Compatible con programas de Thonny.",
+    eda6ConnectedWemos: "Perfil EDA6/WEMOS conectado. Puertos 1–4 listos.",
+    eda6ConnectedEsp32: "Perfil EDA6/ESP32 conectado. Puertos 1–4 listos.",
+    eda6Running: "Enviando programa EDA6 a la ESP32…",
+    eda6Installing: "Instalando EDA6.py en la placa…",
+    eda6InstalledOk: "Librería EDA6 instalada correctamente en la placa.",
+    eda6InstallFail: "No se pudo instalar EDA6.py. Reconectá la placa e intentá de nuevo.",
+    eda6MissingLib:
+      "Falta EDA6.py en la placa. Usá «Instalar librería EDA6» o «Grabar en ESP32».",
+    eda6FlashedOk:
+      "Programa EDA6 grabado como main.py. Reiniciá la placa para que corra solo.",
+    eda6MainDeleted:
+      "main.py borrado. Tras reiniciar la placa, no ejecutará programa autónomo.",
+    eda6VerifyOk: "EDA6.py está instalada en la placa.",
+    eda6VerifyMissing: "EDA6.py no está en la placa. Instalala antes de grabar.",
+    eda6FlashBtn: "Grabar en ESP32",
+    eda6DeleteMainBtn: "Borrar programa de ESP32",
+    eda6InstallBtn: "Instalar librería EDA6",
+    eda6VerifyBtn: "Verificar EDA6",
+    eda6PortOutOfRange: "Puerto EDA6 fuera de rango. Usá 1, 2, 3 o 4.",
+    eda6LcdNotFound:
+      "LCD no detectado. Conectá un LCD I2C o quitá las funciones LCD del programa.",
     boardHint: "Elegí la placa antes de conectar el USB.",
     mpyConnected: "ESP32 MicroPython conectada. El programa correrá en la placa.",
     mpyRunning: "Enviando programa a la ESP32…",
@@ -153,7 +179,33 @@ Creado por VIC.`,
     modePythonOnly: "Python only",
     boardLabel: "Board",
     boardArduino: "Arduino Uno/Nano compatible",
-    boardEsp32Mp: "ESP32 MicroPython",
+    boardEsp32Mp: "ESP32 MicroPython - direct GPIO",
+    boardEsp32Eda6: "ESP32 EDA6 / WEMOS",
+    eda6ProfileLabel: "EDA6 profile",
+    eda6ProfileWemos: "WEMOS",
+    eda6ProfileEsp32: "ESP32",
+    eda6Hint: "Use ports 1 to 4 (not GPIO). Compatible with Thonny programs.",
+    eda6ConnectedWemos: "EDA6/WEMOS profile connected. Ports 1–4 ready.",
+    eda6ConnectedEsp32: "EDA6/ESP32 profile connected. Ports 1–4 ready.",
+    eda6Running: "Sending EDA6 program to the ESP32…",
+    eda6Installing: "Installing EDA6.py on the board…",
+    eda6InstalledOk: "EDA6 library installed successfully on the board.",
+    eda6InstallFail: "Could not install EDA6.py. Reconnect the board and try again.",
+    eda6MissingLib:
+      "EDA6.py is missing on the board. Use “Install EDA6 library” or “Flash to ESP32”.",
+    eda6FlashedOk:
+      "EDA6 program saved as main.py. Reset the board to run it automatically.",
+    eda6MainDeleted:
+      "main.py deleted. After reset, the board will not run an autonomous program.",
+    eda6VerifyOk: "EDA6.py is installed on the board.",
+    eda6VerifyMissing: "EDA6.py is not on the board. Install it before flashing.",
+    eda6FlashBtn: "Flash to ESP32",
+    eda6DeleteMainBtn: "Delete ESP32 program",
+    eda6InstallBtn: "Install EDA6 library",
+    eda6VerifyBtn: "Verify EDA6",
+    eda6PortOutOfRange: "EDA6 port out of range. Use 1, 2, 3, or 4.",
+    eda6LcdNotFound:
+      "LCD not detected. Connect an I2C LCD or remove LCD functions from your program.",
     boardHint: "Pick the board before connecting USB.",
     mpyConnected: "ESP32 MicroPython connected. The program will run on the board.",
     mpyRunning: "Sending program to the ESP32…",
@@ -338,6 +390,18 @@ export function formatPythonError(message) {
       "En ESP32 usá número de GPIO, por ejemplo 34 (no A0–A5).",
       "On ESP32 use a GPIO number, e.g. 34 (not A0–A5).",
     );
+  }
+  if (/EDA6_PORT_RANGE/.test(m)) {
+    return pick(t("eda6PortOutOfRange"), t("eda6PortOutOfRange"));
+  }
+  if (/EDA6_LCD_MISSING/.test(m)) {
+    return pick(t("eda6LcdNotFound"), t("eda6LcdNotFound"));
+  }
+  if (/EDA6_MISSING_LIB|No module named 'EDA6'|No module named EDA6/.test(m)) {
+    return pick(t("eda6MissingLib"), t("eda6MissingLib"));
+  }
+  if (/INSTALL_FAIL/.test(m)) {
+    return pick(t("eda6InstallFail"), t("eda6InstallFail"));
   }
   if (/\bREPL_FAIL\b/.test(m)) {
     return pick(

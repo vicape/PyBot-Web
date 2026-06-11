@@ -317,13 +317,14 @@ export class MicroPythonSession {
   /**
    * Ejecuta el código del alumno (con prelude) en la placa y transmite la salida.
    * @param {string} userCode
-   * @param {{onOut?:Function,onErr?:Function,shouldStop?:Function}} cb
+   * @param {{onOut?:Function,onErr?:Function,shouldStop?:Function,prelude?:string}} cb
    */
   async runProgram(userCode, cb = {}) {
-    const { onOut, onErr, shouldStop } = cb;
+    const { onOut, onErr, shouldStop, prelude } = cb;
     if (!this._running) throw new Error("RUN_FAIL");
 
-    const program = MPY_PRELUDE + "\n" + String(userCode ?? "") + "\n";
+    const prefix = prelude != null ? prelude : MPY_PRELUDE;
+    const program = prefix + "\n" + String(userCode ?? "") + "\n";
 
     await this._enterRawRepl();
     this._buf = "";
@@ -358,6 +359,118 @@ export class MicroPythonSession {
     } catch {
       /* ignore */
     }
+  }
+
+  /**
+   * Ejecuta código utilitario en raw REPL y devuelve stdout/stderr (programa corto).
+   * @param {string} code
+   * @param {{timeout?:number}} options
+   */
+  async execRaw(code, options = {}) {
+    const timeout = options.timeout ?? 15000;
+    if (!this._running) throw new Error("RUN_FAIL");
+
+    await this._enterRawRepl();
+    this._buf = "";
+    await this._write(String(code ?? "") + "\n");
+    await this._write(CTRL_D);
+
+    try {
+      await this._waitForContains("OK", timeout);
+    } catch {
+      throw new Error("RUN_FAIL");
+    }
+    const okIdx = this._buf.indexOf("OK");
+    this._buf = this._buf.slice(okIdx + 2);
+
+    let stdout = "";
+    let stderr = "";
+    await this._drainTo(CTRL_D, (chunk) => { stdout += chunk; }, null);
+    await this._drainTo(CTRL_D, (chunk) => { stderr += chunk; }, null);
+
+    try {
+      await this._write(CTRL_B);
+    } catch {
+      /* ignore */
+    }
+    return { stdout, stderr };
+  }
+
+  /** Recupera REPL si main.py u otro programa está corriendo. */
+  async interruptAndRecoverRepl() {
+    try {
+      await this._write("\r" + CTRL_C + CTRL_C);
+      await sleep(300);
+      this._buf = "";
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** @param {string} path */
+  async fileExists(path) {
+    const safe = String(path).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const code = [
+      "import os",
+      "try:",
+      `    os.stat('${safe}')`,
+      "    print('PYBOT_FILE_EXISTS')",
+      "except OSError:",
+      "    print('PYBOT_FILE_MISSING')",
+    ].join("\n");
+    const { stdout } = await this.execRaw(code, { timeout: 8000 });
+    return stdout.includes("PYBOT_FILE_EXISTS");
+  }
+
+  /** @param {string} path @param {string} content */
+  async installFile(path, content) {
+    const bytes = new TextEncoder().encode(String(content ?? ""));
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const b64 = btoa(binary);
+    const CHUNK = 1024;
+    const chunks = [];
+    for (let i = 0; i < b64.length; i += CHUNK) {
+      chunks.push(b64.slice(i, i + CHUNK));
+    }
+    const safePath = String(path).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+    await this.execRaw(
+      `with open('${safePath}', 'wb') as f:\n    pass\nprint('PYBOT_INSTALL_OK')`,
+      { timeout: 8000 },
+    );
+
+    for (const chunk of chunks) {
+      const safeChunk = chunk.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const code = [
+        "import ubinascii",
+        `with open('${safePath}', 'ab') as f:`,
+        `    f.write(ubinascii.a2b_base64('${safeChunk}'))`,
+        "print('PYBOT_INSTALL_OK')",
+      ].join("\n");
+      const { stdout } = await this.execRaw(code, { timeout: 15000 });
+      if (!stdout.includes("PYBOT_INSTALL_OK")) {
+        throw new Error("INSTALL_FAIL");
+      }
+    }
+  }
+
+  /** @param {string} path */
+  async removeFile(path) {
+    const safe = String(path).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const code = [
+      "import os",
+      "try:",
+      `    os.remove('${safe}')`,
+      "    print('PYBOT_REMOVE_OK')",
+      "except OSError:",
+      "    print('PYBOT_REMOVE_MISSING')",
+    ].join("\n");
+    const { stdout } = await this.execRaw(code, { timeout: 8000 });
+    if (!stdout.includes("PYBOT_REMOVE_OK") && !stdout.includes("PYBOT_REMOVE_MISSING")) {
+      throw new Error("REMOVE_FAIL");
+    }
+    return stdout.includes("PYBOT_REMOVE_OK");
   }
 
   /** Interrumpe el programa en ejecución (Ctrl-C). */
@@ -411,6 +524,8 @@ export class MicroPythonSession {
  */
 export async function connectMicroPythonEsp32Session(port, options = {}) {
   const baudRate = options.baudRate ?? DEFAULT_BAUD;
+  const recoverRepl = options.recoverRepl === true;
+  const mode = options.mode ?? "esp32-micropython";
 
   if (port.readable || port.writable) {
     try {
@@ -443,5 +558,9 @@ export async function connectMicroPythonEsp32Session(port, options = {}) {
     throw new Error("NEEDS_PREP");
   }
 
-  return { session, baudRate, mode: "esp32-micropython" };
+  if (recoverRepl) {
+    await session.interruptAndRecoverRepl();
+  }
+
+  return { session, baudRate, mode };
 }

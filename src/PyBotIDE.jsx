@@ -12,7 +12,17 @@ import {
   hardwareMode,
   runOnBoard,
   interruptBoard,
+  getBoardType,
+  getEda6Profile,
+  installEda6Library,
+  checkEda6Installed,
+  flashProgramToBoard,
+  deleteMainPy,
 } from "./hardwareBridge.js";
+import {
+  filterExamplesForBoard,
+  setEda6Profile,
+} from "./eda6Profile.js";
 import { runPythonAsync, signalStop } from "./pyodideRunner.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import {
@@ -67,10 +77,8 @@ export default function PyBotIDE() {
   const [helpModuleIdx, setHelpModuleIdx] = useState(0);
   const [helpLesson, setHelpLesson] = useState(null);
   const [pythonOnly, setPythonOnly] = useState(() => readInitialPythonOnly());
-  const [boardType, setBoardType] = useState(() => {
-    const v = localStorage.getItem("pybot_board_type");
-    return v === "esp32-micropython" ? "esp32-micropython" : "arduino-firmata";
-  });
+  const [boardType, setBoardType] = useState(() => getBoardType());
+  const [eda6Profile, setEda6ProfileState] = useState(() => getEda6Profile());
   const [, forceLang] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(
     () => parseInt(localStorage.getItem("pybot_sidebar_w") || "248", 10),
@@ -138,6 +146,10 @@ export default function PyBotIDE() {
   useEffect(() => {
     localStorage.setItem("pybot_board_type", boardType);
   }, [boardType]);
+
+  useEffect(() => {
+    setEda6Profile(eda6Profile);
+  }, [eda6Profile]);
 
   useEffect(() => {
     localStorage.setItem("pybot_sidebar_w", String(sidebarWidth));
@@ -216,9 +228,15 @@ export default function PyBotIDE() {
 
   const codeNeedsHardware = useCallback((source) => {
     const s = String(source ?? "");
-    // Detecta uso directo de API hardware de PyBot.
-    return /\b(pin|motor|servo|wait)\s*\(/.test(s);
+    return (
+      /\b(pin|motor|servo|wait)\s*\(/.test(s) ||
+      /\b(entradaDigital|entradaAnalogica|salidaDigital|motorRC|servomotor|sensorDistancia|detenerTodo|printLCD|limpiarLCD|asciiLCD|luzLCD|cursorLCD|parpadeoLCD)\s*\(/.test(
+        s,
+      )
+    );
   }, []);
+
+  const visibleExamples = filterExamplesForBoard(EXAMPLES, boardType);
 
   const resetDefaults = useCallback(() => {
     const sysDark =
@@ -242,7 +260,13 @@ export default function PyBotIDE() {
     try {
       const { baudRate, mode } = await hardwareConnect();
       setConnected(true);
-      if (mode === "esp32-micropython") {
+      if (mode === "esp32-eda6") {
+        appendConsole(
+          (eda6Profile === "ESP32" ? t("eda6ConnectedEsp32") : t("eda6ConnectedWemos")) + "\n",
+          "info",
+        );
+        appendConsole(t("eda6Hint") + "\n", "info");
+      } else if (mode === "esp32-micropython") {
         appendConsole(t("mpyConnected") + "\n", "info");
       } else {
         appendConsole(`USB OK @ ${baudRate} baud\n`, "info");
@@ -252,7 +276,31 @@ export default function PyBotIDE() {
     } finally {
       setConnecting(false);
     }
-  }, [connecting, appendConsole]);
+  }, [connecting, appendConsole, eda6Profile]);
+
+  const runBoardProgram = useCallback(
+    async (runningMsg) => {
+      setRunning(true);
+      setCanvasSize(null);
+      signalStop();
+      await new Promise((r) => setTimeout(r, 20));
+      globalThis.__PYBOT_STOP__ = false;
+      appendConsole(runningMsg + "\n", "info");
+      try {
+        await runOnBoard(code, {
+          onOut: (s) => appendConsole(s, "out"),
+          onErr: (s) => appendConsole(formatPythonError(s) + "\n", "err"),
+          shouldStop: () => globalThis.__PYBOT_STOP__ === true,
+        });
+        appendConsole("\n[Fin]\n", "info");
+      } catch (e) {
+        appendConsole(formatPythonError(e?.message) + "\n", "err");
+      } finally {
+        setRunning(false);
+      }
+    },
+    [code, appendConsole],
+  );
 
   const onDisconnect = useCallback(async () => {
     await hardwareDisconnect();
@@ -264,34 +312,18 @@ export default function PyBotIDE() {
     if (running) return;
     const needsHw = codeNeedsHardware(code);
 
-    // ESP32 MicroPython: el programa corre EN la placa (no en Pyodide).
-    if (!pythonOnly && hardwareMode() === "esp32-micropython") {
-      if (/\bpin\s*\([^)]*["'][Aa]\d/.test(code)) {
+    // ESP32 MicroPython / EDA6: el programa corre EN la placa (no en Pyodide).
+    if (!pythonOnly && (boardType === "esp32-micropython" || boardType === "esp32-eda6")) {
+      if (!hardwareIsConnected()) {
+        appendConsole(t("needConnect") + "\n", "err");
+        return;
+      }
+      if (boardType === "esp32-micropython" && /\bpin\s*\([^)]*["'][Aa]\d/.test(code)) {
         appendConsole(formatPythonError("ESP32_GPIO_ONLY") + "\n", "err");
         return;
       }
-      setRunning(true);
-      setCanvasSize(null);
-      signalStop();
-      await new Promise((r) => setTimeout(r, 20));
-      globalThis.__PYBOT_STOP__ = false;
-      appendConsole(t("mpyRunning") + "\n", "info");
-      try {
-        await runOnBoard(code, {
-          onOut: (s) => appendConsole(s, "out"),
-          onErr: (s) =>
-            appendConsole(
-              /ESP32_GPIO_ONLY/.test(s) ? formatPythonError("ESP32_GPIO_ONLY") + "\n" : s,
-              "err",
-            ),
-          shouldStop: () => globalThis.__PYBOT_STOP__ === true,
-        });
-        appendConsole("\n[Fin]\n", "info");
-      } catch (e) {
-        appendConsole(formatPythonError(e?.message) + "\n", "err");
-      } finally {
-        setRunning(false);
-      }
+      const msg = boardType === "esp32-eda6" ? t("eda6Running") : t("mpyRunning");
+      await runBoardProgram(msg);
       return;
     }
 
@@ -322,12 +354,66 @@ export default function PyBotIDE() {
       setInputPrompt("");
       inputResolveRef.current = null;
     }
-  }, [running, code, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas]);
+  }, [running, code, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType]);
+
+  const onInstallEda6 = useCallback(async () => {
+    if (!connected) {
+      appendConsole(t("needConnect") + "\n", "err");
+      return;
+    }
+    appendConsole(t("eda6Installing") + "\n", "info");
+    try {
+      await installEda6Library(eda6Profile);
+      appendConsole(t("eda6InstalledOk") + "\n", "info");
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    }
+  }, [connected, appendConsole, eda6Profile]);
+
+  const onVerifyEda6 = useCallback(async () => {
+    if (!connected) {
+      appendConsole(t("needConnect") + "\n", "err");
+      return;
+    }
+    try {
+      const ok = await checkEda6Installed();
+      appendConsole((ok ? t("eda6VerifyOk") : t("eda6VerifyMissing")) + "\n", ok ? "info" : "err");
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    }
+  }, [connected, appendConsole]);
+
+  const onFlashEda6 = useCallback(async () => {
+    if (!connected) {
+      appendConsole(t("needConnect") + "\n", "err");
+      return;
+    }
+    appendConsole(t("eda6Installing") + "\n", "info");
+    try {
+      await flashProgramToBoard(code, eda6Profile);
+      appendConsole(t("eda6FlashedOk") + "\n", "info");
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    }
+  }, [connected, code, appendConsole, eda6Profile]);
+
+  const onDeleteMainPy = useCallback(async () => {
+    if (!connected) {
+      appendConsole(t("needConnect") + "\n", "err");
+      return;
+    }
+    try {
+      await deleteMainPy();
+      appendConsole(t("eda6MainDeleted") + "\n", "info");
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    }
+  }, [connected, appendConsole]);
 
   const onStop = useCallback(() => {
     signalStop();
-    if (hardwareMode() === "esp32-micropython") {
-      interruptBoard();
+    if (boardType === "esp32-micropython" || boardType === "esp32-eda6") {
+      if (hardwareIsConnected()) interruptBoard();
     }
     if (inputResolveRef.current) {
       inputResolveRef.current("");
@@ -336,7 +422,7 @@ export default function PyBotIDE() {
       setInputPrompt("");
     }
     appendConsole("\n[Stop solicitado]\n", "info");
-  }, [appendConsole]);
+  }, [appendConsole, boardType]);
 
   const onOpenLocal = useCallback(() => {
     fileInputRef.current?.click();
@@ -558,7 +644,7 @@ export default function PyBotIDE() {
               <div className="sidebar-section">
                 <div className="sidebar-section-title">{t("examples")}</div>
                 <nav className="example-list" aria-label={t("examples")}>
-                  {EXAMPLES.map((ex) => (
+                  {visibleExamples.map((ex) => (
                     <button
                       key={ex.id}
                       type="button"
@@ -695,8 +781,69 @@ export default function PyBotIDE() {
                         >
                           <option value="arduino-firmata">{t("boardArduino")}</option>
                           <option value="esp32-micropython">{t("boardEsp32Mp")}</option>
+                          <option value="esp32-eda6">{t("boardEsp32Eda6")}</option>
                         </select>
                       </div>
+                      {boardType === "esp32-eda6" ? (
+                        <div className="toolbar-menu-mode">
+                          <span className="toolbar-menu-mode__label">{t("eda6ProfileLabel")}</span>
+                          <select
+                            className="toolbar-menu-board"
+                            value={eda6Profile}
+                            onChange={(e) => setEda6ProfileState(e.target.value)}
+                            disabled={connected || connecting}
+                            aria-label={t("eda6ProfileLabel")}
+                          >
+                            <option value="WEMOS">{t("eda6ProfileWemos")}</option>
+                            <option value="ESP32">{t("eda6ProfileEsp32")}</option>
+                          </select>
+                        </div>
+                      ) : null}
+                      {boardType === "esp32-eda6" && connected ? (
+                        <>
+                          <div className="toolbar-menu-divider" />
+                          <button
+                            type="button"
+                            className="toolbar-menu-item"
+                            onClick={() => {
+                              onFlashEda6();
+                              setToolbarMenuOpen(false);
+                            }}
+                          >
+                            {t("eda6FlashBtn")}
+                          </button>
+                          <button
+                            type="button"
+                            className="toolbar-menu-item"
+                            onClick={() => {
+                              onDeleteMainPy();
+                              setToolbarMenuOpen(false);
+                            }}
+                          >
+                            {t("eda6DeleteMainBtn")}
+                          </button>
+                          <button
+                            type="button"
+                            className="toolbar-menu-item"
+                            onClick={() => {
+                              onInstallEda6();
+                              setToolbarMenuOpen(false);
+                            }}
+                          >
+                            {t("eda6InstallBtn")}
+                          </button>
+                          <button
+                            type="button"
+                            className="toolbar-menu-item"
+                            onClick={() => {
+                              onVerifyEda6();
+                              setToolbarMenuOpen(false);
+                            }}
+                          >
+                            {t("eda6VerifyBtn")}
+                          </button>
+                        </>
+                      ) : null}
                       <div className="toolbar-menu-divider" />
                       <button
                         type="button"
