@@ -33,6 +33,13 @@ import {
   prepareMainPyForFlash,
   detectPybotGpioUsage,
 } from "./eda6Profile.js";
+import {
+  getPybotHwLibrarySource,
+  prepareMainPyForGpioFlash,
+  MAIN_PY_FILENAME,
+  EDA6_FILENAME,
+  PYBOT_HW_FILENAME,
+} from "./esp32Flash.js";
 
 let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
 let _mpSession = null;     // ESP32 MicroPython / EDA6 (ejecución en placa)
@@ -296,30 +303,76 @@ export async function interruptBoard() {
   }
 }
 
+async function clearMpSessionAfterReset() {
+  if (_mpSession) {
+    try {
+      await _mpSession.close();
+    } catch {
+      /* puerto ya cerrado por el reset */
+    }
+  }
+  _mpSession = null;
+  _mode = null;
+  _baudRate = null;
+}
+
 export async function checkEda6Installed() {
   if (!_mpSession) throw new Error("not_connected");
-  return _mpSession.fileExists("EDA6.py");
+  return _mpSession.fileExists(EDA6_FILENAME);
+}
+
+export async function checkMainPyInstalled() {
+  if (!_mpSession) throw new Error("not_connected");
+  return _mpSession.fileExists(MAIN_PY_FILENAME);
 }
 
 export async function installEda6Library(profile = getEda6Profile()) {
   if (!_mpSession) throw new Error("not_connected");
   const source = getEda6LibrarySource(profile);
-  await _mpSession.installFile("EDA6.py", source);
+  await _mpSession.installFile(EDA6_FILENAME, source);
 }
 
+/** Graba EDA6.py (si falta) + main.py y reinicia la placa para ejecución autónoma. */
 export async function flashProgramToBoard(code, profile = getEda6Profile()) {
   if (!_mpSession) throw new Error("not_connected");
-  const exists = await _mpSession.fileExists("EDA6.py");
+  const exists = await _mpSession.fileExists(EDA6_FILENAME);
   if (!exists) {
     await installEda6Library(profile);
   }
   const mainPy = prepareMainPyForFlash(code);
-  await _mpSession.installFile("main.py", mainPy);
+  await _mpSession.installFile(MAIN_PY_FILENAME, mainPy);
+  await _mpSession.softReset();
+  await clearMpSessionAfterReset();
+}
+
+/** Graba pybot_hw.py + main.py (GPIO directo) y reinicia la placa. */
+export async function flashGpioProgramToBoard(code) {
+  if (!_mpSession) throw new Error("not_connected");
+  await _mpSession.installFile(PYBOT_HW_FILENAME, getPybotHwLibrarySource());
+  await _mpSession.installFile(MAIN_PY_FILENAME, prepareMainPyForGpioFlash(code));
+  await _mpSession.softReset();
+  await clearMpSessionAfterReset();
+}
+
+/**
+ * Graba el programa en la ESP32 para que corra solo al desconectar PyBot.
+ * @returns {"eda6"|"gpio"}
+ */
+export async function flashToEsp32(code) {
+  if (_mode === "esp32-eda6") {
+    await flashProgramToBoard(code, getEda6Profile());
+    return "eda6";
+  }
+  if (_mode === "esp32-micropython") {
+    await flashGpioProgramToBoard(code);
+    return "gpio";
+  }
+  throw new Error("not_esp32");
 }
 
 export async function deleteMainPy() {
   if (!_mpSession) throw new Error("not_connected");
-  return _mpSession.removeFile("main.py");
+  return _mpSession.removeFile(MAIN_PY_FILENAME);
 }
 
 function needAdapter() {

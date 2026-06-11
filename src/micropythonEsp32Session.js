@@ -473,6 +473,23 @@ export class MicroPythonSession {
     return stdout.includes("PYBOT_REMOVE_OK");
   }
 
+  /**
+   * Reinicia la placa para que MicroPython ejecute main.py al arrancar.
+   * Tras el reset la sesión serial deja de ser usable.
+   */
+  async softReset() {
+    try {
+      await this._enterRawRepl();
+      this._buf = "";
+      await this._write("import machine\nmachine.reset()\n");
+      await this._write(CTRL_D);
+      await sleep(400);
+    } catch {
+      /* la placa ya se reinició o el puerto se cerró */
+    }
+    this._running = false;
+  }
+
   /** Interrumpe el programa en ejecución (Ctrl-C). */
   async interrupt() {
     try {

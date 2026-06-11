@@ -57,13 +57,21 @@ const STRINGS = {
     eda6MissingLib:
       "Falta EDA6.py en la placa. Usá «Instalar librería EDA6» o «Grabar en ESP32».",
     eda6FlashedOk:
-      "Programa EDA6 grabado como main.py. Reiniciá la placa para que corra solo.",
+      "Programa EDA6 grabado. La placa se reinició y ya corre sola. Podés desconectar PyBot.",
     eda6MainDeleted:
       "main.py borrado. Tras reiniciar la placa, no ejecutará programa autónomo.",
     eda6VerifyOk: "EDA6.py está instalada en la placa.",
     eda6VerifyMissing: "EDA6.py no está en la placa. Instalala antes de grabar.",
-    eda6FlashBtn: "Grabar en ESP32",
-    eda6DeleteMainBtn: "Borrar programa de ESP32",
+    eda6FlashBtn: "Dejar programa en la placa",
+    esp32FlashBtn: "Dejar programa en la placa",
+    esp32FlashOk:
+      "Programa grabado en la ESP32. La placa se reinició y ya corre sola. Podés desconectar PyBot: el programa sigue en la placa.",
+    esp32FlashHint:
+      "Grabá el programa en la ESP32 para que siga corriendo al desconectar el USB de PyBot.",
+    esp32MainPresent: "main.py está en la placa: al reiniciar corre el programa grabado.",
+    esp32MainMissing: "No hay main.py en la placa. Grabá el programa para que corra solo.",
+    esp32VerifyMainBtn: "Verificar programa en placa",
+    eda6DeleteMainBtn: "Borrar programa de la placa",
     eda6InstallBtn: "Instalar librería EDA6",
     eda6VerifyBtn: "Verificar EDA6",
     eda6PortOutOfRange: "Puerto EDA6 fuera de rango. Usá 1, 2, 3 o 4.",
@@ -204,13 +212,21 @@ Creado por VIC.`,
     eda6MissingLib:
       "EDA6.py is missing on the board. Use “Install EDA6 library” or “Flash to ESP32”.",
     eda6FlashedOk:
-      "EDA6 program saved as main.py. Reset the board to run it automatically.",
+      "EDA6 program saved. The board restarted and runs on its own. You can disconnect PyBot.",
     eda6MainDeleted:
       "main.py deleted. After reset, the board will not run an autonomous program.",
     eda6VerifyOk: "EDA6.py is installed on the board.",
     eda6VerifyMissing: "EDA6.py is not on the board. Install it before flashing.",
-    eda6FlashBtn: "Flash to ESP32",
-    eda6DeleteMainBtn: "Delete ESP32 program",
+    eda6FlashBtn: "Save program to board",
+    esp32FlashBtn: "Save program to board",
+    esp32FlashOk:
+      "Program saved on the ESP32. The board restarted and is running on its own. You can disconnect PyBot.",
+    esp32FlashHint:
+      "Save the program on the ESP32 so it keeps running when you disconnect USB from PyBot.",
+    esp32MainPresent: "main.py is on the board: it runs the saved program after reset.",
+    esp32MainMissing: "No main.py on the board. Save the program to run autonomously.",
+    esp32VerifyMainBtn: "Verify program on board",
+    eda6DeleteMainBtn: "Delete program from board",
     eda6InstallBtn: "Install EDA6 library",
     eda6VerifyBtn: "Verify EDA6",
     eda6PortOutOfRange: "EDA6 port out of range. Use 1, 2, 3, or 4.",

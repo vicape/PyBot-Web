@@ -537,6 +537,11 @@
   cursor: not-allowed;
 }
 
+.toolbar-menu-item--highlight {
+  font-weight: 600;
+  color: var(--accent, #2563eb);
+}
+
 .toolbar-menu-divider {
   height: 1px;
   background: var(--ide-border-subtle);

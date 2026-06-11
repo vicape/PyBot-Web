@@ -16,8 +16,9 @@ import {
   getEda6Profile,
   installEda6Library,
   checkEda6Installed,
-  flashProgramToBoard,
+  flashToEsp32,
   deleteMainPy,
+  checkMainPyInstalled,
 } from "./hardwareBridge.js";
 import {
   filterExamplesForBoard,
@@ -274,6 +275,7 @@ export default function PyBotIDE() {
         appendConsole(t("eda6Hint") + "\n", "info");
       } else if (mode === "esp32-micropython") {
         appendConsole(t("mpyConnected") + "\n", "info");
+        appendConsole(t("esp32FlashHint") + "\n", "info");
       } else {
         appendConsole(`USB OK @ ${baudRate} baud\n`, "info");
       }
@@ -395,19 +397,43 @@ export default function PyBotIDE() {
     }
   }, [connected, appendConsole]);
 
-  const onFlashEda6 = useCallback(async () => {
+  const onFlashToEsp32 = useCallback(async () => {
     if (!connected) {
       appendConsole(t("needConnect") + "\n", "err");
       return;
     }
-    appendConsole(t("eda6Installing") + "\n", "info");
+    if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") {
+      return;
+    }
+    appendConsole(
+      (boardType === "esp32-eda6" ? t("eda6Installing") : t("esp32FlashHint")) + "\n",
+      "info",
+    );
     try {
-      await flashProgramToBoard(code, eda6Profile);
-      appendConsole(t("eda6FlashedOk") + "\n", "info");
+      const kind = await flashToEsp32(code);
+      await hardwareDisconnect();
+      setConnected(false);
+      appendConsole(
+        (kind === "eda6" ? t("eda6FlashedOk") : t("esp32FlashOk")) + "\n",
+        "info",
+      );
     } catch (e) {
       appendConsole(formatPythonError(e?.message) + "\n", "err");
     }
-  }, [connected, code, appendConsole, eda6Profile]);
+  }, [connected, code, appendConsole, boardType]);
+
+  const onVerifyMainPy = useCallback(async () => {
+    if (!connected) {
+      appendConsole(t("needConnect") + "\n", "err");
+      return;
+    }
+    try {
+      const ok = await checkMainPyInstalled();
+      appendConsole((ok ? t("esp32MainPresent") : t("esp32MainMissing")) + "\n", ok ? "info" : "err");
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    }
+  }, [connected, appendConsole]);
 
   const onDeleteMainPy = useCallback(async () => {
     if (!connected) {
@@ -811,18 +837,19 @@ export default function PyBotIDE() {
                           </select>
                         </div>
                       ) : null}
-                      {boardType === "esp32-eda6" && connected ? (
+                      {(boardType === "esp32-eda6" || boardType === "esp32-micropython") &&
+                      connected ? (
                         <>
                           <div className="toolbar-menu-divider" />
                           <button
                             type="button"
-                            className="toolbar-menu-item"
+                            className="toolbar-menu-item toolbar-menu-item--highlight"
                             onClick={() => {
-                              onFlashEda6();
+                              onFlashToEsp32();
                               setToolbarMenuOpen(false);
                             }}
                           >
-                            {t("eda6FlashBtn")}
+                            {boardType === "esp32-eda6" ? t("eda6FlashBtn") : t("esp32FlashBtn")}
                           </button>
                           <button
                             type="button"
@@ -838,22 +865,36 @@ export default function PyBotIDE() {
                             type="button"
                             className="toolbar-menu-item"
                             onClick={() => {
-                              onInstallEda6();
+                              onVerifyMainPy();
                               setToolbarMenuOpen(false);
                             }}
                           >
-                            {t("eda6InstallBtn")}
+                            {t("esp32VerifyMainBtn")}
                           </button>
-                          <button
-                            type="button"
-                            className="toolbar-menu-item"
-                            onClick={() => {
-                              onVerifyEda6();
-                              setToolbarMenuOpen(false);
-                            }}
-                          >
-                            {t("eda6VerifyBtn")}
-                          </button>
+                          {boardType === "esp32-eda6" ? (
+                            <>
+                              <button
+                                type="button"
+                                className="toolbar-menu-item"
+                                onClick={() => {
+                                  onInstallEda6();
+                                  setToolbarMenuOpen(false);
+                                }}
+                              >
+                                {t("eda6InstallBtn")}
+                              </button>
+                              <button
+                                type="button"
+                                className="toolbar-menu-item"
+                                onClick={() => {
+                                  onVerifyEda6();
+                                  setToolbarMenuOpen(false);
+                                }}
+                              >
+                                {t("eda6VerifyBtn")}
+                              </button>
+                            </>
+                          ) : null}
                         </>
                       ) : null}
                       <div className="toolbar-menu-divider" />
