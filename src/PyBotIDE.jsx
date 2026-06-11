@@ -143,8 +143,14 @@ export default function PyBotIDE() {
     localStorage.setItem("pybot_python_only", pythonOnly ? "1" : "0");
   }, [pythonOnly]);
 
+  const prevBoardTypeRef = useRef(boardType);
+
   useEffect(() => {
     localStorage.setItem("pybot_board_type", boardType);
+    if (boardType === "esp32-eda6" && prevBoardTypeRef.current !== "esp32-eda6") {
+      setEda6ProfileState("WEMOS");
+    }
+    prevBoardTypeRef.current = boardType;
   }, [boardType]);
 
   useEffect(() => {
@@ -322,6 +328,12 @@ export default function PyBotIDE() {
         appendConsole(formatPythonError("ESP32_GPIO_ONLY") + "\n", "err");
         return;
       }
+      if (boardType === "esp32-eda6") {
+        appendConsole(
+          (eda6Profile === "ESP32" ? t("eda6ProfileWarnEsp32") : t("eda6ProfileWarnWemos")) + "\n",
+          eda6Profile === "ESP32" ? "err" : "info",
+        );
+      }
       const msg = boardType === "esp32-eda6" ? t("eda6Running") : t("mpyRunning");
       await runBoardProgram(msg);
       return;
@@ -354,7 +366,7 @@ export default function PyBotIDE() {
       setInputPrompt("");
       inputResolveRef.current = null;
     }
-  }, [running, code, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType]);
+  }, [running, code, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile]);
 
   const onInstallEda6 = useCallback(async () => {
     if (!connected) {
@@ -1060,7 +1072,13 @@ export default function PyBotIDE() {
         <span className="status-main">
           {running ? t("statusRunning") : t("statusReady")}
           <span className="status-sep">·</span>
-          {pythonOnly ? t("pythonOnlyOn") : connected ? t("statusConn") : t("statusDisc")}
+          {pythonOnly
+            ? t("pythonOnlyOn")
+            : connected
+              ? boardType === "arduino-firmata"
+                ? t("statusConn")
+                : t("statusConnEsp32")
+              : t("statusDisc")}
           {connected && hardwareBaudRate() ? (
             <>
               <span className="status-sep">·</span>

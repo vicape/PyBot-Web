@@ -74,18 +74,21 @@ def _pwm(gpio, freq=50):
     return p
 
 
-def _set_pwm_duty(gpio, duty_8bit):
-    d = int(duty_8bit)
+def _set_pwm_duty(gpio, duty_val):
+    # EDA6: duty 31-120 en escala MicroPython (0-1023), igual que Thonny.
+    d = int(duty_val)
     if d < 0:
         d = 0
-    if d > 255:
-        d = 255
+    if d > 1023:
+        d = 1023
     p = _pwm(gpio, 50)
-    duty16 = d * 65535 // 255
     try:
-        p.duty_u16(duty16)
-    except Exception:
         p.duty(d)
+    except Exception:
+        try:
+            p.duty_u16(d * 65535 // 1023)
+        except Exception:
+            p.duty_u16(d * 65535 // 255)
 
 
 def _adc_read(gpio):
