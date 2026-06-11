@@ -188,7 +188,7 @@ export async function hardwareConnect() {
   if (boardType === "esp32-eda6") {
     try {
       const { session, baudRate } = await connectMicroPythonEsp32Session(port, {
-        recoverRepl: true,
+        recoverRepl: false,
         mode: "esp32-eda6",
       });
       _mpSession = session;
@@ -332,26 +332,42 @@ export async function installEda6Library(profile = getEda6Profile()) {
   await _mpSession.installFile(EDA6_FILENAME, source);
 }
 
-/** Graba EDA6.py (si falta) + main.py y reinicia la placa para ejecución autónoma. */
-export async function flashProgramToBoard(code, profile = getEda6Profile()) {
-  if (!_mpSession) throw new Error("not_connected");
-  const exists = await _mpSession.fileExists(EDA6_FILENAME);
-  if (!exists) {
-    await installEda6Library(profile);
+async function flashAndReset(verifyEda6) {
+  const verify = await _mpSession.verifyMainPyOnBoard(verifyEda6);
+  if (!verify.ok) {
+    throw new Error(`FLASH_VERIFY_FAIL:${verify.detail || "unknown"}`);
   }
-  const mainPy = prepareMainPyForFlash(code);
-  await _mpSession.installFile(MAIN_PY_FILENAME, mainPy);
+  if (verify.mainSize < 8) {
+    throw new Error("FLASH_VERIFY_FAIL:main_too_small");
+  }
   await _mpSession.softReset();
   await clearMpSessionAfterReset();
+  return verify;
+}
+
+/** Graba EDA6.py + main.py y reinicia la placa para ejecución autónoma. */
+export async function flashProgramToBoard(code, profile = getEda6Profile()) {
+  if (!_mpSession) throw new Error("not_connected");
+  await _mpSession.interruptAndRecoverRepl();
+  await installEda6Library(profile);
+  const mainPy = prepareMainPyForFlash(code);
+  await _mpSession.installFile(MAIN_PY_FILENAME, mainPy);
+  return flashAndReset(true);
 }
 
 /** Graba pybot_hw.py + main.py (GPIO directo) y reinicia la placa. */
 export async function flashGpioProgramToBoard(code) {
   if (!_mpSession) throw new Error("not_connected");
+  await _mpSession.interruptAndRecoverRepl();
   await _mpSession.installFile(PYBOT_HW_FILENAME, getPybotHwLibrarySource());
   await _mpSession.installFile(MAIN_PY_FILENAME, prepareMainPyForGpioFlash(code));
-  await _mpSession.softReset();
-  await clearMpSessionAfterReset();
+  return flashAndReset(false);
+}
+
+/** Detiene main.py en la placa y deja el REPL listo (sin desconectar). */
+export async function recoverEsp32Repl() {
+  if (!_mpSession) throw new Error("not_connected");
+  await _mpSession.interruptAndRecoverRepl();
 }
 
 /**
@@ -360,12 +376,12 @@ export async function flashGpioProgramToBoard(code) {
  */
 export async function flashToEsp32(code) {
   if (_mode === "esp32-eda6") {
-    await flashProgramToBoard(code, getEda6Profile());
-    return "eda6";
+    const verify = await flashProgramToBoard(code, getEda6Profile());
+    return { kind: "eda6", verify };
   }
   if (_mode === "esp32-micropython") {
-    await flashGpioProgramToBoard(code);
-    return "gpio";
+    const verify = await flashGpioProgramToBoard(code);
+    return { kind: "gpio", verify };
   }
   throw new Error("not_esp32");
 }

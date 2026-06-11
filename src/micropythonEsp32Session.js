@@ -455,6 +455,97 @@ export class MicroPythonSession {
     }
   }
 
+  async syncFilesystem() {
+    const code = [
+      "try:",
+      "    import os",
+      "    os.sync()",
+      "except (AttributeError, ImportError):",
+      "    pass",
+      "print('PYBOT_SYNC_OK')",
+    ].join("\n");
+    await this.execRaw(code, { timeout: 8000 });
+  }
+
+  /** @param {string} path */
+  async getFileSize(path) {
+    const safe = String(path).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const code = [
+      "import os",
+      `print(os.stat('${safe}')[6])`,
+    ].join("\n");
+    const { stdout } = await this.execRaw(code, { timeout: 8000 });
+    const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
+    const n = parseInt(lines[lines.length - 1], 10);
+    return Number.isNaN(n) ? -1 : n;
+  }
+
+  /**
+   * Verifica main.py en la placa antes de reiniciar.
+   * @param {boolean} checkEda6
+   * @returns {Promise<{ok:boolean, mainSize:number, detail:string}>}
+   */
+  async verifyMainPyOnBoard(checkEda6 = false) {
+    const code = [
+      "import os",
+      "_ok = True",
+      "_detail = ''",
+      "try:",
+      "    _sz = os.stat('main.py')[6]",
+      "except OSError:",
+      "    _ok = False",
+      "    _detail = 'missing_main'",
+      "    _sz = -1",
+      "if _ok:",
+      "    try:",
+      "        compile(open('main.py').read(), 'main.py', 'exec')",
+      "    except Exception as e:",
+      "        _ok = False",
+      "        _detail = 'compile:' + str(e)",
+      checkEda6
+        ? [
+            "if _ok:",
+            "    try:",
+            "        import EDA6",
+            "    except Exception as e:",
+            "        _ok = False",
+            "        _detail = 'eda6:' + str(e)",
+          ].join("\n")
+        : [
+            "if _ok:",
+            "    try:",
+            "        import pybot_hw",
+            "    except Exception as e:",
+            "        _ok = False",
+            "        _detail = 'pybot_hw:' + str(e)",
+          ].join("\n"),
+      "print('PYBOT_VERIFY', _ok, _sz, _detail)",
+    ].join("\n");
+    const { stdout } = await this.execRaw(code, { timeout: 20000 });
+    const line = stdout.split(/\r?\n/).find((l) => l.includes("PYBOT_VERIFY"));
+    if (!line) return { ok: false, mainSize: -1, detail: "no_response" };
+    const parts = line.replace("PYBOT_VERIFY", "").trim().split(/\s+/);
+    const ok = parts[0] === "True";
+    const mainSize = parseInt(parts[1], 10);
+    const detail = parts.slice(2).join(" ") || "";
+    return { ok, mainSize: Number.isNaN(mainSize) ? -1 : mainSize, detail };
+  }
+
+  /** Reinicio por señal DTR/RTS (más fiable en ESP32 que machine.reset por serial). */
+  async hardwareReset() {
+    const port = this.port;
+    if (!port || typeof port.setSignals !== "function") return false;
+    try {
+      await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+      await sleep(120);
+      await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+      await sleep(1600);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** @param {string} path */
   async removeFile(path) {
     const safe = String(path).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
@@ -478,12 +569,18 @@ export class MicroPythonSession {
    * Tras el reset la sesión serial deja de ser usable.
    */
   async softReset() {
+    await this.syncFilesystem();
+    const hw = await this.hardwareReset();
+    if (hw) {
+      this._running = false;
+      return;
+    }
     try {
       await this._enterRawRepl();
       this._buf = "";
       await this._write("import machine\nmachine.reset()\n");
       await this._write(CTRL_D);
-      await sleep(400);
+      await sleep(600);
     } catch {
       /* la placa ya se reinició o el puerto se cerró */
     }

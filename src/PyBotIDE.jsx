@@ -19,6 +19,7 @@ import {
   flashToEsp32,
   deleteMainPy,
   checkMainPyInstalled,
+  recoverEsp32Repl,
 } from "./hardwareBridge.js";
 import {
   filterExamplesForBoard,
@@ -273,9 +274,11 @@ export default function PyBotIDE() {
           "info",
         );
         appendConsole(t("eda6Hint") + "\n", "info");
+        appendConsole(t("esp32ReconnectWarn") + "\n", "info");
       } else if (mode === "esp32-micropython") {
         appendConsole(t("mpyConnected") + "\n", "info");
         appendConsole(t("esp32FlashHint") + "\n", "info");
+        appendConsole(t("esp32ReconnectWarn") + "\n", "info");
       } else {
         appendConsole(`USB OK @ ${baudRate} baud\n`, "info");
       }
@@ -410,7 +413,10 @@ export default function PyBotIDE() {
       "info",
     );
     try {
-      const kind = await flashToEsp32(code);
+      const { kind, verify } = await flashToEsp32(code);
+      if (verify?.mainSize > 0) {
+        appendConsole(t("esp32FlashVerified").replace("{size}", String(verify.mainSize)) + "\n", "info");
+      }
       await hardwareDisconnect();
       setConnected(false);
       appendConsole(
@@ -421,6 +427,19 @@ export default function PyBotIDE() {
       appendConsole(formatPythonError(e?.message) + "\n", "err");
     }
   }, [connected, code, appendConsole, boardType]);
+
+  const onRecoverRepl = useCallback(async () => {
+    if (!connected) {
+      appendConsole(t("needConnect") + "\n", "err");
+      return;
+    }
+    try {
+      await recoverEsp32Repl();
+      appendConsole(t("esp32RecoverReplBtn") + " OK\n", "info");
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    }
+  }, [connected, appendConsole]);
 
   const onVerifyMainPy = useCallback(async () => {
     if (!connected) {
@@ -860,6 +879,16 @@ export default function PyBotIDE() {
                             }}
                           >
                             {t("eda6DeleteMainBtn")}
+                          </button>
+                          <button
+                            type="button"
+                            className="toolbar-menu-item"
+                            onClick={() => {
+                              onRecoverRepl();
+                              setToolbarMenuOpen(false);
+                            }}
+                          >
+                            {t("esp32RecoverReplBtn")}
                           </button>
                           <button
                             type="button"

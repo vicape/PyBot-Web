@@ -57,7 +57,7 @@ const STRINGS = {
     eda6MissingLib:
       "Falta EDA6.py en la placa. Usá «Instalar librería EDA6» o «Grabar en ESP32».",
     eda6FlashedOk:
-      "Programa EDA6 grabado. La placa se reinició y ya corre sola. Podés desconectar PyBot.",
+      "Programa EDA6 grabado. La placa se reinició. Desconectá PyBot: no reconectes si querés que el servo siga solo.",
     eda6MainDeleted:
       "main.py borrado. Tras reiniciar la placa, no ejecutará programa autónomo.",
     eda6VerifyOk: "EDA6.py está instalada en la placa.",
@@ -65,7 +65,16 @@ const STRINGS = {
     eda6FlashBtn: "Dejar programa en la placa",
     esp32FlashBtn: "Dejar programa en la placa",
     esp32FlashOk:
-      "Programa grabado en la ESP32. La placa se reinició y ya corre sola. Podés desconectar PyBot: el programa sigue en la placa.",
+      "Programa grabado en la ESP32. La placa se reinició y ya corre sola. Desconectá PyBot del USB: no vuelvas a conectar si querés que siga solo (conectar detiene el programa).",
+    esp32FlashVerified: "Verificación OK: main.py de {size} bytes en la placa.",
+    esp32FlashVerifyFail: "No se pudo verificar el programa en la placa antes de reiniciar.",
+    esp32FlashVerifyMissing: "Falta main.py en la placa después de grabar.",
+    esp32FlashVerifyCompile: "main.py tiene un error y no puede ejecutarse al arrancar.",
+    esp32FlashVerifyEda6: "No se pudo importar EDA6.py. Reinstalá la librería EDA6.",
+    esp32FlashVerifyHw: "No se pudo importar pybot_hw.py.",
+    esp32ReconnectWarn:
+      "Si la placa ya tiene un programa corriendo solo, conectar PyBot puede detenerlo. Usá «Recuperar REPL» solo para editar.",
+    esp32RecoverReplBtn: "Recuperar REPL (detiene programa en placa)",
     esp32FlashHint:
       "Grabá el programa en la ESP32 para que siga corriendo al desconectar el USB de PyBot.",
     esp32MainPresent: "main.py está en la placa: al reiniciar corre el programa grabado.",
@@ -212,7 +221,7 @@ Creado por VIC.`,
     eda6MissingLib:
       "EDA6.py is missing on the board. Use “Install EDA6 library” or “Flash to ESP32”.",
     eda6FlashedOk:
-      "EDA6 program saved. The board restarted and runs on its own. You can disconnect PyBot.",
+      "EDA6 program saved. The board restarted. Disconnect PyBot; do not reconnect if you want it to keep running alone.",
     eda6MainDeleted:
       "main.py deleted. After reset, the board will not run an autonomous program.",
     eda6VerifyOk: "EDA6.py is installed on the board.",
@@ -220,7 +229,16 @@ Creado por VIC.`,
     eda6FlashBtn: "Save program to board",
     esp32FlashBtn: "Save program to board",
     esp32FlashOk:
-      "Program saved on the ESP32. The board restarted and is running on its own. You can disconnect PyBot.",
+      "Program saved on the ESP32. The board restarted. Disconnect PyBot: do not reconnect if you want it to keep running alone.",
+    esp32FlashVerified: "Verification OK: main.py is {size} bytes on the board.",
+    esp32FlashVerifyFail: "Could not verify the program on the board before restart.",
+    esp32FlashVerifyMissing: "main.py is missing on the board after flashing.",
+    esp32FlashVerifyCompile: "main.py has an error and cannot run on boot.",
+    esp32FlashVerifyEda6: "Could not import EDA6.py. Reinstall the EDA6 library.",
+    esp32FlashVerifyHw: "Could not import pybot_hw.py.",
+    esp32ReconnectWarn:
+      "If the board is already running a program on its own, connecting PyBot may stop it. Use «Recover REPL» only to edit.",
+    esp32RecoverReplBtn: "Recover REPL (stops program on board)",
     esp32FlashHint:
       "Save the program on the ESP32 so it keeps running when you disconnect USB from PyBot.",
     esp32MainPresent: "main.py is on the board: it runs the saved program after reset.",
@@ -428,6 +446,21 @@ export function formatPythonError(message) {
   }
   if (/INSTALL_FAIL/.test(m)) {
     return pick(t("eda6InstallFail"), t("eda6InstallFail"));
+  }
+  if (/FLASH_VERIFY_FAIL:missing_main/.test(m)) {
+    return pick(t("esp32FlashVerifyMissing"), t("esp32FlashVerifyMissing"));
+  }
+  if (/FLASH_VERIFY_FAIL:compile/.test(m)) {
+    return pick(t("esp32FlashVerifyCompile"), t("esp32FlashVerifyCompile"));
+  }
+  if (/FLASH_VERIFY_FAIL:eda6/.test(m)) {
+    return pick(t("esp32FlashVerifyEda6"), t("esp32FlashVerifyEda6"));
+  }
+  if (/FLASH_VERIFY_FAIL:pybot_hw/.test(m)) {
+    return pick(t("esp32FlashVerifyHw"), t("esp32FlashVerifyHw"));
+  }
+  if (/FLASH_VERIFY_FAIL/.test(m)) {
+    return pick(t("esp32FlashVerifyFail"), t("esp32FlashVerifyFail"));
   }
   if (/\bREPL_FAIL\b/.test(m)) {
     return pick(
