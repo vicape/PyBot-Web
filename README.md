@@ -21,9 +21,17 @@ Proyecto **aparte** del PyBot de escritorio; no lo modifica.
 En el menú de la barra hay un selector **Placa** (cerca del modo Hardware/Solo Python):
 
 - **Arduino Uno/Nano compatible** (por defecto) → usa **StandardFirmata**, igual que siempre. El código corre en Pyodide y manda comandos por Firmata. No cambia nada del flujo anterior.
-- **ESP32 MicroPython** → el programa corre **nativamente en la placa** con MicroPython (no en Pyodide).
+- **ESP32 MicroPython - GPIO directo** → el programa corre **nativamente en la placa** con MicroPython (no en Pyodide). API PyBot: `pin`, `servo`, `motor`, `wait` por número de GPIO.
+- **ESP32 EDA6 / WEMOS** → compatible con programas **Thonny/EDA6** (`from EDA6 import *`, `servomotor`, `salidaDigital`, etc.). Perfil **WEMOS** por defecto (puertos 1–4). Permite grabar `EDA6.py` + `main.py` en la placa.
 
 Elegí la placa **antes** de conectar el USB. Para cambiarla, desconectá primero. La opción queda guardada en `localStorage` (`pybot_board_type`).
+
+### ESP32 EDA6 / WEMOS (v0.3)
+
+- Programas copiados desde **Thonny** con `from EDA6 import *` y `from time import sleep`.
+- Perfil de pinout: **WEMOS** (recomendado) o **ESP32** (otro pinout).
+- Menú (conectado): **Grabar en ESP32**, **Instalar librería EDA6**, **Borrar programa**, **Verificar EDA6**.
+- Ejemplos EDA6 en el explorador cuando esa placa está seleccionada.
 
 ### ESP32 MicroPython (modo principal)
 
