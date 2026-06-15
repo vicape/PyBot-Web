@@ -102,6 +102,39 @@ const STRINGS = {
     fileSaved: "Archivo guardado:",
     needConnect:
       "Conectá el USB antes de ejecutar código con pin/motor/servo, o activá Solo Python.",
+    connectModalTitle: "Conexión USB",
+    connectModalIntro:
+      "Elegí el puerto de tu placa en el diálogo del navegador. Si no aparece, revisá los puntos de abajo.",
+    connectModalChecksLabel: "Requisitos del sistema",
+    connectCheck_webSerial: "Navegador compatible (Chrome o Edge actual)",
+    connectCheck_https: "Sitio seguro (HTTPS o localhost)",
+    connectCheck_knownPorts: "Esta PC ya autorizó {n} puerto(s) USB antes",
+    connectModalConnecting: "Conectando…",
+    connectShowHelp: "¿La placa no aparece?",
+    connectHideHelp: "Ocultar ayuda",
+    connectHelpTitle: "Si Windows no reconoce la placa",
+    connectHelpStep1:
+      "Abrí Administrador de dispositivos. La placa debe estar en Puertos (COM y LPT), no en Otros dispositivos con ⚠.",
+    connectHelpStep2:
+      "Si ves «FT232R USB UART» con signo de exclamación, instalá el driver FTDI (una vez por PC).",
+    connectHelpStep3: "Usá cable USB de datos (no solo carga) y cerrá Thonny o Arduino IDE si están abiertos.",
+    connectHelpStep4: "Desconectá y volvé a conectar el USB; luego pulsá Conectar USB de nuevo.",
+    connectDriverLead: "Descargá el driver según el chip USB de tu placa o cable:",
+    connectDriverFtdiHint: "Otros dispositivos → FT232R",
+    connectDriverCh340Hint: "USB-SERIAL CH340",
+    connectDriverCp2102Hint: "Silicon Labs CP210x",
+    connectDriverDownload: "Descargar driver oficial",
+    connectHelpBrowser:
+      "Usá Chrome o Edge actualizado. Firefox y Safari no soportan conexión USB desde el navegador.",
+    connectHelpHttps:
+      "Abrí PyBot desde https://… o desde localhost. Las páginas sin HTTPS bloquean el USB.",
+    connectHelpPermission:
+      "Permití el acceso USB cuando el navegador lo pida. Si cancelaste antes, recargá la página e intentá de nuevo.",
+    connectModalFoot:
+      "Podés desactivar este asistente en Configuración → «Asistente de conexión USB» (modo anterior).",
+    connectAssistantLabel: "Asistente de conexión USB",
+    connectAssistantOn: "Activado (recomendado)",
+    connectAssistantOff: "Desactivado — conectar directo como antes",
     usbErr_MISSING_BROWSER:
       "Este dispositivo o navegador no tiene compatibilidad USB suficiente para esta función.",
     usbErr_HTTPS:
@@ -266,6 +299,39 @@ Creado por VIC.`,
     fileSaved: "File saved:",
     needConnect:
       "Connect USB before running code that uses pin/motor/servo, or enable Python only.",
+    connectModalTitle: "USB connection",
+    connectModalIntro:
+      "Pick your board's port in the browser dialog. If nothing shows up, check the items below.",
+    connectModalChecksLabel: "System requirements",
+    connectCheck_webSerial: "Compatible browser (up-to-date Chrome or Edge)",
+    connectCheck_https: "Secure site (HTTPS or localhost)",
+    connectCheck_knownPorts: "This PC previously authorized {n} USB port(s)",
+    connectModalConnecting: "Connecting…",
+    connectShowHelp: "Board not showing up?",
+    connectHideHelp: "Hide help",
+    connectHelpTitle: "If Windows does not recognize the board",
+    connectHelpStep1:
+      "Open Device Manager. The board should be under Ports (COM & LPT), not Other devices with a warning icon.",
+    connectHelpStep2:
+      "If you see «FT232R USB UART» with an exclamation mark, install the FTDI driver (once per PC).",
+    connectHelpStep3: "Use a data USB cable (not charge-only) and close Thonny or Arduino IDE if open.",
+    connectHelpStep4: "Unplug and replug USB, then click Connect USB again.",
+    connectDriverLead: "Download the driver for your board or cable USB chip:",
+    connectDriverFtdiHint: "Other devices → FT232R",
+    connectDriverCh340Hint: "USB-SERIAL CH340",
+    connectDriverCp2102Hint: "Silicon Labs CP210x",
+    connectDriverDownload: "Download official driver",
+    connectHelpBrowser:
+      "Use up-to-date Chrome or Edge. Firefox and Safari do not support USB from the browser.",
+    connectHelpHttps:
+      "Open PyBot via https://… or localhost. Non-HTTPS pages block USB access.",
+    connectHelpPermission:
+      "Allow USB access when the browser asks. If you cancelled before, reload and try again.",
+    connectModalFoot:
+      "You can turn off this assistant in Settings → «USB connection assistant» (legacy mode).",
+    connectAssistantLabel: "USB connection assistant",
+    connectAssistantOn: "On (recommended)",
+    connectAssistantOff: "Off — connect directly as before",
     usbErr_MISSING_BROWSER:
       "This device or browser lacks enough USB compatibility for this feature.",
     usbErr_HTTPS:

@@ -27,6 +27,8 @@ import {
 } from "./eda6Profile.js";
 import { runPythonAsync, signalStop } from "./pyodideRunner.js";
 import { HELP_COURSE } from "./helpCourseData.js";
+import ConnectUsbModal from "./ConnectUsbModal.jsx";
+import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
 import {
   IconExplorer,
   IconPlay,
@@ -71,6 +73,11 @@ export default function PyBotIDE() {
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [connectModalOpen, setConnectModalOpen] = useState(false);
+  const [connectModalPhase, setConnectModalPhase] = useState("ready");
+  const [connectModalError, setConnectModalError] = useState(null);
+  const [connectModalShowHelp, setConnectModalShowHelp] = useState(false);
+  const [connectAssistant, setConnectAssistant] = useState(() => isConnectAssistantEnabled());
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -262,8 +269,8 @@ export default function PyBotIDE() {
     appendConsole("[Info] Settings reset to defaults.\n", "info");
   }, [appendConsole]);
 
-  const onConnect = useCallback(async () => {
-    if (connecting) return;
+  const performHardwareConnect = useCallback(async () => {
+    if (connecting) return { ok: false, skipped: true };
     setConnecting(true);
     try {
       const { baudRate, mode } = await hardwareConnect();
@@ -282,12 +289,46 @@ export default function PyBotIDE() {
       } else {
         appendConsole(`USB OK @ ${baudRate} baud\n`, "info");
       }
+      return { ok: true };
     } catch (e) {
-      appendConsole(`${formatHardwareError(e?.message)}\n`, "err");
+      const display = formatHardwareError(e?.message);
+      appendConsole(`${display}\n`, "err");
+      return { ok: false, message: e?.message, display };
     } finally {
       setConnecting(false);
     }
   }, [connecting, appendConsole, eda6Profile]);
+
+  const openConnectFlow = useCallback(() => {
+    if (connecting || pythonOnly) return;
+    if (!isConnectAssistantEnabled()) {
+      void performHardwareConnect();
+      return;
+    }
+    setConnectModalPhase("ready");
+    setConnectModalError(null);
+    setConnectModalShowHelp(false);
+    setConnectModalOpen(true);
+  }, [connecting, pythonOnly, performHardwareConnect]);
+
+  const onConnectFromModal = useCallback(async () => {
+    setConnectModalPhase("connecting");
+    const result = await performHardwareConnect();
+    if (result.ok) {
+      setConnectModalOpen(false);
+      setConnectModalPhase("ready");
+      setConnectModalError(null);
+      setConnectModalShowHelp(false);
+    } else if (!result.skipped) {
+      setConnectModalPhase("failed");
+      setConnectModalError(result.display ?? formatHardwareError(result.message));
+      setConnectModalShowHelp(true);
+    } else {
+      setConnectModalPhase("ready");
+    }
+  }, [performHardwareConnect]);
+
+  const onConnect = openConnectFlow;
 
   const runBoardProgram = useCallback(
     async (runningMsg) => {
@@ -1159,6 +1200,20 @@ export default function PyBotIDE() {
         <span className="status-meta">{t("statusMeta")}</span>
       </footer>
 
+      <ConnectUsbModal
+        open={connectModalOpen}
+        boardType={boardType}
+        connecting={connecting}
+        phase={connectModalPhase}
+        errorMessage={connectModalError}
+        showHelp={connectModalShowHelp}
+        onClose={() => {
+          if (!connecting) setConnectModalOpen(false);
+        }}
+        onConnect={onConnectFromModal}
+        onToggleHelp={() => setConnectModalShowHelp((v) => !v)}
+      />
+
       {settingsOpen ? (
         <div className="modal-back" role="presentation" onClick={() => setSettingsOpen(false)}>
           <div className="modal" role="dialog" aria-labelledby="settings-title" onClick={(e) => e.stopPropagation()}>
@@ -1231,6 +1286,22 @@ export default function PyBotIDE() {
                   +
                 </button>
               </div>
+            </label>
+            <label className="modal-row">
+              <span className="modal-label">{t("connectAssistantLabel")}</span>
+              <select
+                value={connectAssistant ? "1" : "0"}
+                onChange={(e) => {
+                  const on = e.target.value === "1";
+                  setConnectAssistant(on);
+                  setConnectAssistantEnabled(on);
+                  if (!on) setConnectModalOpen(false);
+                }}
+                className="modal-select"
+              >
+                <option value="1">{t("connectAssistantOn")}</option>
+                <option value="0">{t("connectAssistantOff")}</option>
+              </select>
             </label>
             <button type="button" className="modal-reset" onClick={resetDefaults}>
               {t("resetDefaults")}
