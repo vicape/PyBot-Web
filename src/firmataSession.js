@@ -53,6 +53,10 @@ export class FirmataSession {
     this._parsePromise = this._parseLoop();
     /** pines en modo SERVO (para motor stop release) */
     this._servoPins = new Set();
+    /** @type {{ major: number, minor: number } | null} */
+    this._firmataVersion = null;
+    /** @type {{ resolve: (v: { major: number, minor: number }) => void } | null} */
+    this._versionPending = null;
   }
 
   async _parseLoop() {
@@ -82,6 +86,10 @@ export class FirmataSession {
         } else if (type === "an") {
           const raw = bytes[0] | (bytes[1] << 7);
           this._analog[pin] = Math.min(1023, raw & 0x3ff);
+        } else if (type === "ver") {
+          const major = bytes[0];
+          const minor = bytes[1];
+          this._onFirmataVersion(major, minor);
         }
       }
       return;
@@ -112,13 +120,56 @@ export class FirmataSession {
     if (b >= 0xe0 && b <= 0xef) {
       const pin = b & 0x0f;
       this._expect = { type: "an", pin, need: 2, bytes: [] };
+      return;
     }
+
+    if (b === REPORT_VERSION) {
+      this._expect = { type: "ver", need: 2, bytes: [] };
+    }
+  }
+
+  /**
+   * @param {number} major
+   * @param {number} minor
+   */
+  _onFirmataVersion(major, minor) {
+    const version = { major, minor };
+    this._firmataVersion = version;
+    if (this._versionPending) {
+      const pending = this._versionPending;
+      this._versionPending = null;
+      pending.resolve(version);
+    }
+  }
+
+  /**
+   * Espera respuesta Firmata REPORT_VERSION (0xF9, major, minor).
+   * @param {number} timeoutMs
+   * @returns {Promise<{ major: number, minor: number }>}
+   */
+  waitForFirmataVersion(timeoutMs = 2500) {
+    if (this._firmataVersion) {
+      return Promise.resolve(this._firmataVersion);
+    }
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this._versionPending = null;
+        reject(new Error("NO_FIRMATA"));
+      }, timeoutMs);
+      this._versionPending = {
+        resolve: (v) => {
+          clearTimeout(timer);
+          resolve(v);
+        },
+      };
+    });
   }
 
   async init() {
     await new Promise((r) => setTimeout(r, 2200));
+    const versionWait = this.waitForFirmataVersion(2500);
     await this.writer.write(new Uint8Array([REPORT_VERSION]));
-    await new Promise((r) => setTimeout(r, 400));
+    await versionWait;
     for (let p = 0; p <= 1; p++) {
       await this.writer.write(new Uint8Array([REPORT_DIGITAL | p, 1]));
     }
@@ -224,6 +275,12 @@ export async function connectFirmataSession(port, options = {}) {
   let lastErr;
 
   for (const baudRate of baudRates) {
+    /** @type {FirmataSession | null} */
+    let session = null;
+    /** @type {ReadableStreamDefaultReader | null} */
+    let reader = null;
+    /** @type {WritableStreamDefaultWriter | null} */
+    let writer = null;
     try {
       if (port.readable || port.writable) {
         try {
@@ -233,9 +290,9 @@ export async function connectFirmataSession(port, options = {}) {
         }
       }
       await port.open({ baudRate });
-      const writer = port.writable.getWriter();
-      const reader = port.readable.getReader();
-      const session = new FirmataSession(writer, reader);
+      writer = port.writable.getWriter();
+      reader = port.readable.getReader();
+      session = new FirmataSession(writer, reader);
       await session.init();
 
       const close = async () => {
@@ -260,6 +317,23 @@ export async function connectFirmataSession(port, options = {}) {
       return { session, writer, reader, port, baudRate, close };
     } catch (e) {
       lastErr = e;
+      if (session) {
+        try {
+          await session.close();
+        } catch {
+          /* ignore */
+        }
+      }
+      try {
+        if (reader) reader.releaseLock();
+      } catch {
+        /* ignore */
+      }
+      try {
+        if (writer) writer.releaseLock();
+      } catch {
+        /* ignore */
+      }
       try {
         await port.close();
       } catch {
@@ -268,5 +342,8 @@ export async function connectFirmataSession(port, options = {}) {
     }
   }
 
+  if (lastErr?.message === "NO_FIRMATA") {
+    throw new Error("NO_FIRMATA");
+  }
   throw lastErr ?? new Error("No se pudo abrir el puerto");
 }

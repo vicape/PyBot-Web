@@ -145,6 +145,8 @@ const STRINGS = {
       "La aplicación no tiene permisos para acceder al USB. Revisá permisos del navegador y del sistema.",
     usbErr_FIRMATA:
       "El dispositivo USB no respondió correctamente. Reiniciá la placa, cerrá otras apps que usen el puerto y volvé a intentar.",
+    usbErr_FIRMATA_NO_FIRMATA:
+      "El Arduino fue detectado por USB, pero no respondió como StandardFirmata. Cargá StandardFirmata desde Arduino IDE: Archivo > Ejemplos > Firmata > StandardFirmata.",
     usbErr_ESP32_NO_RESPONSE:
       "La placa ESP32 no respondió. Verificá que tenga cargado el firmware PyBot ESP32, el cable de datos y que ninguna otra app use el puerto.",
     usbErr_ESP32_BAD_FIRMWARE:
@@ -342,6 +344,8 @@ Creado por VIC.`,
       "The app does not have USB access permissions. Check browser and system permissions.",
     usbErr_FIRMATA:
       "The USB device did not respond correctly. Restart the board, close other apps using the same port, and try again.",
+    usbErr_FIRMATA_NO_FIRMATA:
+      "The Arduino was detected over USB but did not respond as StandardFirmata. Upload StandardFirmata from Arduino IDE: File > Examples > Firmata > StandardFirmata.",
     usbErr_ESP32_NO_RESPONSE:
       "The ESP32 board did not respond. Make sure the PyBot ESP32 firmware is flashed, the cable carries data, and no other app is using the port.",
     usbErr_ESP32_BAD_FIRMWARE:
@@ -421,6 +425,10 @@ export function formatHardwareError(message) {
     if (out !== key) return out;
   }
   if (m.startsWith("PYBOT_FIRMATA:")) {
+    const code = m.slice("PYBOT_FIRMATA:".length);
+    const key = `usbErr_FIRMATA_${code}`;
+    const out = t(key);
+    if (out !== key) return out;
     return t("usbErr_FIRMATA");
   }
   if (m.startsWith("PYBOT_ESP32:")) {
