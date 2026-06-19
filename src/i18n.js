@@ -147,6 +147,11 @@ const STRINGS = {
       "El dispositivo USB no respondió correctamente. Reiniciá la placa, cerrá otras apps que usen el puerto y volvé a intentar.",
     usbErr_FIRMATA_NO_FIRMATA:
       "El Arduino fue detectado por USB, pero no respondió como StandardFirmata. Cargá StandardFirmata desde Arduino IDE: Archivo > Ejemplos > Firmata > StandardFirmata.",
+    usbErr_FIRMATA_FLASH_FAIL:
+      "PyBot intentó instalar StandardFirmata automáticamente, pero no pudo. Verificá que sea Arduino Uno/Nano (ATmega328P), el cable de datos y que ninguna otra app use el puerto.",
+    arduinoFirmataFlashing:
+      "Preparando Arduino: instalando StandardFirmata automáticamente (puede tardar ~30 s)…",
+    arduinoFirmataFlashOk: "StandardFirmata instalado. Arduino listo para PyBot.",
     usbErr_ESP32_NO_RESPONSE:
       "La placa ESP32 no respondió. Verificá que tenga cargado el firmware PyBot ESP32, el cable de datos y que ninguna otra app use el puerto.",
     usbErr_ESP32_BAD_FIRMWARE:
@@ -346,6 +351,11 @@ Creado por VIC.`,
       "The USB device did not respond correctly. Restart the board, close other apps using the same port, and try again.",
     usbErr_FIRMATA_NO_FIRMATA:
       "The Arduino was detected over USB but did not respond as StandardFirmata. Upload StandardFirmata from Arduino IDE: File > Examples > Firmata > StandardFirmata.",
+    usbErr_FIRMATA_FLASH_FAIL:
+      "PyBot tried to install StandardFirmata automatically but could not. Check that the board is Arduino Uno/Nano (ATmega328P), use a data USB cable, and close other apps using the port.",
+    arduinoFirmataFlashing:
+      "Preparing Arduino: installing StandardFirmata automatically (may take ~30 s)…",
+    arduinoFirmataFlashOk: "StandardFirmata installed. Arduino ready for PyBot.",
     usbErr_ESP32_NO_RESPONSE:
       "The ESP32 board did not respond. Make sure the PyBot ESP32 firmware is flashed, the cable carries data, and no other app is using the port.",
     usbErr_ESP32_BAD_FIRMWARE:

@@ -20,6 +20,7 @@
  */
 
 import { connectFirmataSession, MODE_OUTPUT, MODE_PWM } from "./firmataSession.js";
+import { flashStandardFirmata } from "./arduinoFirmataFlash.js";
 import { connectEsp32Session } from "./esp32Session.js";
 import {
   connectMicroPythonEsp32Session,
@@ -159,7 +160,10 @@ export function hardwareBaudRate() {
 }
 
 /** Códigos traducidos en i18n (formatHardwareError) */
-export async function hardwareConnect() {
+/**
+ * @param {{ onArduinoPrepare?: (info: { phase: string, pct?: number, status?: string }) => void }} [hooks]
+ */
+export async function hardwareConnect(hooks = {}) {
   if (!("serial" in navigator)) {
     throw new Error("PYBOT_USB:MISSING_BROWSER");
   }
@@ -244,15 +248,50 @@ export async function hardwareConnect() {
   }
 
   try {
+    return await connectArduinoFirmata(port, hooks);
+  } catch (e) {
+    const msg = e?.message ?? String(e);
+    if (msg.startsWith("PYBOT_FIRMATA:")) throw e;
+    throw new Error(`PYBOT_FIRMATA:${msg}`);
+  }
+}
+
+/**
+ * @param {SerialPort} port
+ * @param {{ onArduinoPrepare?: (info: { phase: string, pct?: number, status?: string }) => void }} [hooks]
+ */
+async function connectArduinoFirmata(port, hooks = {}) {
+  try {
     const { session, close, baudRate } = await connectFirmataSession(port);
     _adapter = new ArduinoFirmataAdapter(session, close);
     _mode = "arduino-firmata";
     _baudRate = baudRate;
-    return { baudRate, mode: _mode };
+    return { baudRate, mode: _mode, firmataPrepared: false };
   } catch (e) {
     const msg = e?.message ?? String(e);
-    throw new Error(`PYBOT_FIRMATA:${msg}`);
+    if (msg !== "NO_FIRMATA") {
+      throw new Error(`PYBOT_FIRMATA:${msg}`);
+    }
   }
+
+  hooks.onArduinoPrepare?.({ phase: "start" });
+  try {
+    await flashStandardFirmata(port, {
+      onProgress: ({ pct, status }) => {
+        hooks.onArduinoPrepare?.({ phase: "progress", pct, status });
+      },
+    });
+    hooks.onArduinoPrepare?.({ phase: "done" });
+  } catch {
+    hooks.onArduinoPrepare?.({ phase: "fail" });
+    throw new Error("PYBOT_FIRMATA:FLASH_FAIL");
+  }
+
+  const { session, close, baudRate } = await connectFirmataSession(port);
+  _adapter = new ArduinoFirmataAdapter(session, close);
+  _mode = "arduino-firmata";
+  _baudRate = baudRate;
+  return { baudRate, mode: _mode, firmataPrepared: true };
 }
 
 export async function hardwareDisconnect() {

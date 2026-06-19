@@ -273,7 +273,15 @@ export default function PyBotIDE() {
     if (connecting) return { ok: false, skipped: true };
     setConnecting(true);
     try {
-      const { baudRate, mode } = await hardwareConnect();
+      const { baudRate, mode } = await hardwareConnect({
+        onArduinoPrepare: (info) => {
+          if (info.phase === "start") {
+            appendConsole(t("arduinoFirmataFlashing") + "\n", "info");
+          } else if (info.phase === "done") {
+            appendConsole(t("arduinoFirmataFlashOk") + "\n", "info");
+          }
+        },
+      });
       setConnected(true);
       if (mode === "esp32-eda6") {
         appendConsole(
