@@ -81,6 +81,8 @@ const STRINGS = {
     pyblockLoading: "Cargando PyBlock…",
     pyblockEmpty:
       "PyBlock está vacío: arrastrá bloques para armar tu programa antes de ejecutar.",
+    syntaxErrorPrefix: "Error de sintaxis:",
+    lineWord: "línea",
     esp32FlashOk:
       "Programa grabado en la ESP32. La placa se reinició y ya corre sola. Desconectá PyBot del USB: no vuelvas a conectar si querés que siga solo (conectar detiene el programa).",
     esp32FlashVerified: "Verificación OK: main.py de {size} bytes en la placa.",
@@ -302,6 +304,8 @@ Creado por VIC.`,
     pyblockLoading: "Loading PyBlock…",
     pyblockEmpty:
       "PyBlock is empty: drag some blocks to build your program before running.",
+    syntaxErrorPrefix: "Syntax error:",
+    lineWord: "line",
     esp32FlashOk:
       "Program saved on the ESP32. The board restarted. Disconnect PyBot: do not reconnect if you want it to keep running alone.",
     esp32FlashVerified: "Verification OK: main.py is {size} bytes on the board.",

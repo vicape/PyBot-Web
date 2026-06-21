@@ -31,6 +31,7 @@ import {
   setEda6Profile,
 } from "./eda6Profile.js";
 import { runPythonAsync, signalStop } from "./pyodideRunner.js";
+import { checkPythonSyntax } from "./pythonSyntaxDiagnostics.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
@@ -115,6 +116,8 @@ export default function PyBotIDE() {
   const consoleEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const toolbarMenuRef = useRef(null);
+  const editorRef = useRef(null);
+  const monacoRef = useRef(null);
   const inputResolveRef = useRef(null);
   const inputFieldRef = useRef(null);
   const [waitingInput, setWaitingInput] = useState(false);
@@ -180,6 +183,51 @@ export default function PyBotIDE() {
     setCode(generated);
     setEditorMode("python");
   }, []);
+
+  // --- Diagnóstico de sintaxis Python (Monaco markers). Aislado y aditivo. ---
+  const SYNTAX_MARKER_OWNER = "pybot-python";
+
+  const handleEditorMount = useCallback((editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+  }, []);
+
+  const applySyntaxResult = useCallback((res) => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco) return;
+    const model = editor.getModel?.();
+    if (!model) return;
+    if (!res || res.ok) {
+      monaco.editor.setModelMarkers(model, SYNTAX_MARKER_OWNER, []);
+      return;
+    }
+    monaco.editor.setModelMarkers(model, SYNTAX_MARKER_OWNER, [
+      {
+        severity: monaco.MarkerSeverity.Error,
+        message: `${t("syntaxErrorPrefix")} ${res.message} (${t("lineWord")} ${res.line})`,
+        startLineNumber: res.line,
+        startColumn: res.column,
+        endLineNumber: res.endLine,
+        endColumn: res.endColumn,
+      },
+    ]);
+  }, []);
+
+  // Valida la sintaxis al escribir (solo en modo Python), con debounce.
+  useEffect(() => {
+    if (editorMode !== "python") {
+      applySyntaxResult({ ok: true });
+      return undefined;
+    }
+    const handle = setTimeout(async () => {
+      const editorAtStart = editorRef.current;
+      const res = await checkPythonSyntax(code);
+      if (editorRef.current !== editorAtStart) return; // el editor cambió/desmontó
+      applySyntaxResult(res);
+    }, 650);
+    return () => clearTimeout(handle);
+  }, [code, editorMode, applySyntaxResult]);
 
   const prevBoardTypeRef = useRef(boardType);
 
@@ -432,6 +480,20 @@ export default function PyBotIDE() {
       appendConsole(t("needConnect") + "\n", "err");
       return;
     }
+
+    // Validación de sintaxis antes de ejecutar (no corre el programa).
+    const syntax = await checkPythonSyntax(activeCode);
+    if (!syntax.ok) {
+      applySyntaxResult(syntax);
+      appendConsole(
+        `${t("syntaxErrorPrefix")} ${syntax.message}` +
+          (syntax.line ? ` (${t("lineWord")} ${syntax.line})` : "") +
+          "\n",
+        "err",
+      );
+      return;
+    }
+
     setRunning(true);
     setCanvasSize(null);
     signalStop();
@@ -455,7 +517,7 @@ export default function PyBotIDE() {
       setInputPrompt("");
       inputResolveRef.current = null;
     }
-  }, [running, code, editorMode, pyblockCode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile]);
+  }, [running, code, editorMode, pyblockCode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, applySyntaxResult]);
 
   const onInstallEda6 = useCallback(async () => {
     if (!connected) {
@@ -1143,6 +1205,7 @@ export default function PyBotIDE() {
                         theme={monacoTheme}
                         value={code}
                         onChange={(v) => setCode(v ?? "")}
+                        onMount={handleEditorMount}
                         options={{
                           fontSize: 15 + fontDelta,
                           fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
@@ -1232,6 +1295,7 @@ export default function PyBotIDE() {
                         theme={monacoTheme}
                         value={code}
                         onChange={(v) => setCode(v ?? "")}
+                        onMount={handleEditorMount}
                         options={{
                           fontSize: 15 + fontDelta,
                           fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
