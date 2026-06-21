@@ -1,7 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import "./PyBotIDE.css";
+
+// PyBlock (editor visual por bloques) — carga diferida y aislada: solo se carga
+// cuando el usuario elige el modo PyBlock, así el modo Python no se ve afectado.
+const PyBlockEditor = lazy(() => import("./pyblock/PyBlockEditor.jsx"));
 import { DEFAULT_CODE, EXAMPLES } from "./examplesData.js";
 import { t, getLang, setLang, formatHardwareError, formatPythonError } from "./i18n.js";
 import {
@@ -115,6 +119,14 @@ export default function PyBotIDE() {
   const inputFieldRef = useRef(null);
   const [waitingInput, setWaitingInput] = useState(false);
   const [downloadingArduino, setDownloadingArduino] = useState(false);
+  const [editorMode, setEditorMode] = useState(() => {
+    try {
+      return localStorage.getItem("pybot_editor_mode") === "pyblock" ? "pyblock" : "python";
+    } catch {
+      return "python";
+    }
+  });
+  const [pyblockCode, setPyblockCode] = useState("");
   const [inputPrompt, setInputPrompt] = useState("");
   const canvasRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState(null);
@@ -153,6 +165,21 @@ export default function PyBotIDE() {
   useEffect(() => {
     localStorage.setItem("pybot_python_only", pythonOnly ? "1" : "0");
   }, [pythonOnly]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("pybot_editor_mode", editorMode);
+    } catch {
+      /* ignore */
+    }
+  }, [editorMode]);
+
+  // PyBlock: pasar el Python generado al editor de texto y volver a modo Python.
+  const onCopyToPython = useCallback((generated) => {
+    if (!generated || !generated.trim()) return;
+    setCode(generated);
+    setEditorMode("python");
+  }, []);
 
   const prevBoardTypeRef = useRef(boardType);
 
@@ -341,7 +368,7 @@ export default function PyBotIDE() {
   const onConnect = openConnectFlow;
 
   const runBoardProgram = useCallback(
-    async (runningMsg) => {
+    async (runningMsg, sourceCode) => {
       setRunning(true);
       setCanvasSize(null);
       signalStop();
@@ -349,7 +376,7 @@ export default function PyBotIDE() {
       globalThis.__PYBOT_STOP__ = false;
       appendConsole(runningMsg + "\n", "info");
       try {
-        await runOnBoard(code, {
+        await runOnBoard(sourceCode ?? code, {
           onOut: (s) => appendConsole(s, "out"),
           onErr: (s) => appendConsole(formatPythonError(s) + "\n", "err"),
           shouldStop: () => globalThis.__PYBOT_STOP__ === true,
@@ -372,7 +399,13 @@ export default function PyBotIDE() {
 
   const onRun = useCallback(async () => {
     if (running) return;
-    const needsHw = codeNeedsHardware(code);
+    // En PyBlock se ejecuta el Python generado por los bloques.
+    const activeCode = editorMode === "pyblock" ? pyblockCode : code;
+    if (editorMode === "pyblock" && !activeCode.trim()) {
+      appendConsole(t("pyblockEmpty") + "\n", "err");
+      return;
+    }
+    const needsHw = codeNeedsHardware(activeCode);
 
     // ESP32 MicroPython / EDA6: el programa corre EN la placa (no en Pyodide).
     if (!pythonOnly && (boardType === "esp32-micropython" || boardType === "esp32-eda6")) {
@@ -380,7 +413,7 @@ export default function PyBotIDE() {
         appendConsole(t("needConnect") + "\n", "err");
         return;
       }
-      if (boardType === "esp32-micropython" && /\bpin\s*\([^)]*["'][Aa]\d/.test(code)) {
+      if (boardType === "esp32-micropython" && /\bpin\s*\([^)]*["'][Aa]\d/.test(activeCode)) {
         appendConsole(formatPythonError("ESP32_GPIO_ONLY") + "\n", "err");
         return;
       }
@@ -391,7 +424,7 @@ export default function PyBotIDE() {
         );
       }
       const msg = boardType === "esp32-eda6" ? t("eda6Running") : t("mpyRunning");
-      await runBoardProgram(msg);
+      await runBoardProgram(msg, activeCode);
       return;
     }
 
@@ -406,7 +439,7 @@ export default function PyBotIDE() {
     globalThis.__PYBOT_STOP__ = false;
     appendConsole(t("pyodideLoad") + "\n", "info");
     try {
-      await runPythonAsync(code, {
+      await runPythonAsync(activeCode, {
         onOut: (s) => appendConsole(s, "out"),
         onErr: (s) => appendConsole(s, "err"),
         onInput,
@@ -422,7 +455,7 @@ export default function PyBotIDE() {
       setInputPrompt("");
       inputResolveRef.current = null;
     }
-  }, [running, code, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile]);
+  }, [running, code, editorMode, pyblockCode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile]);
 
   const onInstallEda6 = useCallback(async () => {
     if (!connected) {
@@ -482,10 +515,15 @@ export default function PyBotIDE() {
   const onDownloadToArduino = useCallback(async () => {
     if (boardType !== "arduino-firmata") return;
     if (downloadingArduino) return;
+    const activeCode = editorMode === "pyblock" ? pyblockCode : code;
+    if (editorMode === "pyblock" && !activeCode.trim()) {
+      appendConsole(t("pyblockEmpty") + "\n", "err");
+      return;
+    }
     setDownloadingArduino(true);
     appendConsole(t("arduinoDownloadStart") + "\n", "info");
     try {
-      const { bytes } = await downloadToArduino(code, {
+      const { bytes } = await downloadToArduino(activeCode, {
         onPhase: (phase) => {
           if (phase === "flashing") {
             appendConsole(t("arduinoDownloadFlashing") + "\n", "info");
@@ -507,7 +545,7 @@ export default function PyBotIDE() {
     } finally {
       setDownloadingArduino(false);
     }
-  }, [boardType, downloadingArduino, code, appendConsole]);
+  }, [boardType, downloadingArduino, code, editorMode, pyblockCode, appendConsole]);
 
   const onRecoverRepl = useCallback(async () => {
     if (!connected) {
@@ -908,6 +946,18 @@ export default function PyBotIDE() {
                         </div>
                       </div>
                       <div className="toolbar-menu-mode">
+                        <span className="toolbar-menu-mode__label">{t("editorLabel")}</span>
+                        <select
+                          className="toolbar-menu-board"
+                          value={editorMode}
+                          onChange={(e) => setEditorMode(e.target.value)}
+                          aria-label={t("editorLabel")}
+                        >
+                          <option value="python">{t("editorPython")}</option>
+                          <option value="pyblock">{t("editorPyblock")}</option>
+                        </select>
+                      </div>
+                      <div className="toolbar-menu-mode">
                         <span className="toolbar-menu-mode__label">{t("boardLabel")}</span>
                         <select
                           className="toolbar-menu-board"
@@ -1076,25 +1126,37 @@ export default function PyBotIDE() {
               <div className="workspace-panels workspace-panels--right">
                 <div className="editor-shell">
                   <div className="editor-area">
-                    <Editor
-                      height="100%"
-                      language="python"
-                      theme={monacoTheme}
-                      value={code}
-                      onChange={(v) => setCode(v ?? "")}
-                      options={{
-                        fontSize: 15 + fontDelta,
-                        fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-                        minimap: { enabled: false },
-                        wordWrap: "on",
-                        scrollBeyondLastLine: false,
-                        tabSize: 4,
-                        padding: { top: 12, bottom: 12 },
-                        smoothScrolling: true,
-                        cursorBlinking: "smooth",
-                        renderLineHighlight: "line",
-                      }}
-                    />
+                    {editorMode === "pyblock" ? (
+                      <Suspense
+                        fallback={<div className="pyblock-loading">{t("pyblockLoading")}</div>}
+                      >
+                        <PyBlockEditor
+                          theme={theme}
+                          onGenerated={setPyblockCode}
+                          onCopyToPython={onCopyToPython}
+                        />
+                      </Suspense>
+                    ) : (
+                      <Editor
+                        height="100%"
+                        language="python"
+                        theme={monacoTheme}
+                        value={code}
+                        onChange={(v) => setCode(v ?? "")}
+                        options={{
+                          fontSize: 15 + fontDelta,
+                          fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+                          minimap: { enabled: false },
+                          wordWrap: "on",
+                          scrollBeyondLastLine: false,
+                          tabSize: 4,
+                          padding: { top: 12, bottom: 12 },
+                          smoothScrolling: true,
+                          cursorBlinking: "smooth",
+                          renderLineHighlight: "line",
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
                 <div
@@ -1153,25 +1215,37 @@ export default function PyBotIDE() {
               <>
                 <div className="editor-shell">
                   <div className="editor-area">
-                    <Editor
-                      height="100%"
-                      language="python"
-                      theme={monacoTheme}
-                      value={code}
-                      onChange={(v) => setCode(v ?? "")}
-                      options={{
-                        fontSize: 15 + fontDelta,
-                        fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-                        minimap: { enabled: false },
-                        wordWrap: "on",
-                        scrollBeyondLastLine: false,
-                        tabSize: 4,
-                        padding: { top: 12, bottom: 12 },
-                        smoothScrolling: true,
-                        cursorBlinking: "smooth",
-                        renderLineHighlight: "line",
-                      }}
-                    />
+                    {editorMode === "pyblock" ? (
+                      <Suspense
+                        fallback={<div className="pyblock-loading">{t("pyblockLoading")}</div>}
+                      >
+                        <PyBlockEditor
+                          theme={theme}
+                          onGenerated={setPyblockCode}
+                          onCopyToPython={onCopyToPython}
+                        />
+                      </Suspense>
+                    ) : (
+                      <Editor
+                        height="100%"
+                        language="python"
+                        theme={monacoTheme}
+                        value={code}
+                        onChange={(v) => setCode(v ?? "")}
+                        options={{
+                          fontSize: 15 + fontDelta,
+                          fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+                          minimap: { enabled: false },
+                          wordWrap: "on",
+                          scrollBeyondLastLine: false,
+                          tabSize: 4,
+                          padding: { top: 12, bottom: 12 },
+                          smoothScrolling: true,
+                          cursorBlinking: "smooth",
+                          renderLineHighlight: "line",
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
 

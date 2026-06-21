@@ -75,6 +75,12 @@ const STRINGS = {
       "¡Listo! Tu programa quedó en el Arduino ({bytes} bytes). Ya podés desconectarlo de la PC: arranca solo al darle energía.",
     arduinoDownloadUnsupported:
       "Esto todavía no se puede bajar al Arduino (probalo en vivo):",
+    editorLabel: "Editor",
+    editorPython: "Python",
+    editorPyblock: "PyBlock",
+    pyblockLoading: "Cargando PyBlock…",
+    pyblockEmpty:
+      "PyBlock está vacío: arrastrá bloques para armar tu programa antes de ejecutar.",
     esp32FlashOk:
       "Programa grabado en la ESP32. La placa se reinició y ya corre sola. Desconectá PyBot del USB: no vuelvas a conectar si querés que siga solo (conectar detiene el programa).",
     esp32FlashVerified: "Verificación OK: main.py de {size} bytes en la placa.",
@@ -290,6 +296,12 @@ Creado por VIC.`,
       "Done! Your program is now on the Arduino ({bytes} bytes). You can unplug it from the PC: it runs on its own when powered.",
     arduinoDownloadUnsupported:
       "This can't be downloaded to the Arduino yet (try it live):",
+    editorLabel: "Editor",
+    editorPython: "Python",
+    editorPyblock: "PyBlock",
+    pyblockLoading: "Loading PyBlock…",
+    pyblockEmpty:
+      "PyBlock is empty: drag some blocks to build your program before running.",
     esp32FlashOk:
       "Program saved on the ESP32. The board restarted. Disconnect PyBot: do not reconnect if you want it to keep running alone.",
     esp32FlashVerified: "Verification OK: main.py is {size} bytes on the board.",

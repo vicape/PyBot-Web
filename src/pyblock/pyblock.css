@@ -1,0 +1,77 @@
+/* PyBlock — estilos del editor visual. Aislado; no pisa estilos existentes. */
+
+.pyblock-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  background: var(--ide-bg, #1e1e1e);
+}
+
+.pyblock-canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.pyblock-preview {
+  flex: 0 0 auto;
+  max-height: 38%;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--ide-border, #333);
+  background: var(--ide-elevated, #252526);
+}
+
+.pyblock-preview__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--fg-muted, #aaa);
+  border-bottom: 1px solid var(--ide-border-subtle, #2d2d2d);
+}
+
+.pyblock-copy {
+  border: 1px solid var(--ide-border, #444);
+  border-radius: 7px;
+  background: var(--ide-elevated, #2d2d2d);
+  color: var(--ide-fg, #ddd);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pyblock-copy:hover:not(:disabled) {
+  background: var(--ide-hover, #3a3a3a);
+}
+
+.pyblock-copy:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pyblock-code {
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre;
+  color: var(--ide-fg, #d4d4d4);
+}
+
+.pyblock-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  color: var(--fg-muted, #aaa);
+  font-size: 14px;
+}
