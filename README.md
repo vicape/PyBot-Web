@@ -42,6 +42,16 @@ Elegí la placa **antes** de conectar el USB. Para cambiarla, desconectá primer
 - **El ESP32 trabaja a 3.3V**: no conectes señales de 5V a sus pines.
 - **Requisito**: la placa debe tener **MicroPython** instalado. Si no responde como MicroPython, PyBot avisa: *"Esta ESP32 necesita ser preparada para PyBot con MicroPython."* (Próximamente: botón **Preparar ESP32** con `esptool-js`.)
 
+### Bajar a Arduino (correr sin la PC)
+
+Con la placa **Arduino Uno/Nano** seleccionada, el menú ofrece **"Bajar a Arduino (correr solo)"**: el mismo programa del alumno queda **grabado en la placa** y arranca solo al darle energía, **desconectado de la computadora** (igual idea que el modo autónomo de la ESP32, sin nube ni servidores).
+
+- **Cómo funciona**: PyBot traduce tu Python a *bytecode* (`src/arduino/pybotArduinoCompiler.js`) y lo graba en la EEPROM. Un **firmware intérprete** (`firmware/pybot-arduino-vm`, `.hex` precompilado en `public/firmware/pybot-arduino-vm.hex`) ejecuta ese bytecode al encender. El firmware se graba **una sola vez** (la primera descarga) reutilizando el flasher por USB; luego solo se sube el programa por serial.
+- **El modo en vivo no cambia**: "Probar" sigue usando StandardFirmata + Pyodide.
+- **Mismas órdenes**: `pin`, `servo`, `motor`, `wait`, `print`, con `A0–A5`. La semántica (servo 0–180, `motor` como servo de rotación, PWM 0–255) es **idéntica** a la del modo en vivo.
+- **Subset soportado**: variables enteras, `if/elif/else`, `while` (incl. `while True`), `for i in range(...)`, aritmética y comparaciones, `and/or/not`. Lo no soportado da un **aviso con número de línea** ("esto todavía no se puede bajar al Arduino, probalo en vivo").
+- Ejemplos listos en el explorador: **Arduino solo: Semáforo** y **Arduino solo: Latido (PWM)**.
+
 ### ESP32 Serial JSON (experimental, no usado)
 
 El firmware `firmware/pybot-esp32/pybot-esp32.ino` y `src/esp32Session.js` implementan un enfoque alternativo por comandos JSON serial. **No es el flujo principal**, no aparece en el selector y no afecta a Arduino. Queda como experimento (`pybot_board_type = "esp32-serial"` por edición manual).

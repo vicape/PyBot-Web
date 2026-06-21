@@ -101,7 +101,15 @@ export function prepareMainPyForFlash(code) {
 }
 
 export function filterExamplesForBoard(examples, boardType) {
-  const arduinoHw = new Set(["blink", "motor", "servo", "light_sensor", "button"]);
+  const arduinoHw = new Set([
+    "blink",
+    "motor",
+    "servo",
+    "light_sensor",
+    "button",
+    "arduino_standalone_traffic",
+    "arduino_standalone_breath",
+  ]);
   const esp32Gpio = new Set([
     "esp32_blink",
     "esp32_digital_in",
