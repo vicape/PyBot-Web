@@ -69,6 +69,69 @@ pythonGenerator.forBlock["pyblock_print"] = function (block, generator) {
   return "print(" + value + ")\n";
 };
 
+// ----- Canvas / Dibujo (usa las funciones canvas ya existentes en el runtime) -----
+pythonGenerator.forBlock["pyblock_canvas_screen"] = function (block, generator) {
+  const w = valOr(generator, block, "W", "400");
+  const h = valOr(generator, block, "H", "300");
+  return "pantalla(" + w + ", " + h + ")\n";
+};
+
+pythonGenerator.forBlock["pyblock_canvas_fill"] = function (block, generator) {
+  const color = valOr(generator, block, "COLOR", '"black"');
+  return "fondo(" + color + ")\n";
+};
+
+pythonGenerator.forBlock["pyblock_canvas_rect"] = function (block, generator) {
+  const x = valOr(generator, block, "X", "10");
+  const y = valOr(generator, block, "Y", "10");
+  const w = valOr(generator, block, "W", "80");
+  const h = valOr(generator, block, "H", "40");
+  const color = valOr(generator, block, "COLOR", '"white"');
+  return "dibujar_rect(" + x + ", " + y + ", " + w + ", " + h + ", " + color + ")\n";
+};
+
+pythonGenerator.forBlock["pyblock_canvas_circle"] = function (block, generator) {
+  const x = valOr(generator, block, "X", "100");
+  const y = valOr(generator, block, "Y", "100");
+  const r = valOr(generator, block, "R", "30");
+  const color = valOr(generator, block, "COLOR", '"red"');
+  return "dibujar_circulo(" + x + ", " + y + ", " + r + ", " + color + ")\n";
+};
+
+pythonGenerator.forBlock["pyblock_canvas_line"] = function (block, generator) {
+  const x1 = valOr(generator, block, "X1", "0");
+  const y1 = valOr(generator, block, "Y1", "0");
+  const x2 = valOr(generator, block, "X2", "100");
+  const y2 = valOr(generator, block, "Y2", "100");
+  const color = valOr(generator, block, "COLOR", '"white"');
+  const width = valOr(generator, block, "WIDTH", "2");
+  return (
+    "dibujar_linea(" + x1 + ", " + y1 + ", " + x2 + ", " + y2 + ", " + color + ", " + width + ")\n"
+  );
+};
+
+pythonGenerator.forBlock["pyblock_canvas_text"] = function (block, generator) {
+  const x = valOr(generator, block, "X", "20");
+  const y = valOr(generator, block, "Y", "30");
+  const msg = valOr(generator, block, "MSG", '"Hola"');
+  const color = valOr(generator, block, "COLOR", '"white"');
+  const size = valOr(generator, block, "SIZE", "18");
+  return "texto(" + x + ", " + y + ", " + msg + ", " + color + ", " + size + ")\n";
+};
+
+pythonGenerator.forBlock["pyblock_canvas_update"] = function () {
+  return "actualizar()\n";
+};
+
+pythonGenerator.forBlock["pyblock_canvas_clear"] = function () {
+  return "limpiar()\n";
+};
+
+pythonGenerator.forBlock["pyblock_canvas_key"] = function (block, generator) {
+  const key = valOr(generator, block, "KEY", '"ArrowRight"');
+  return ["tecla(" + key + ")", Order.FUNCTION_CALL];
+};
+
 // "cambiar variable por N" limpio: x = x + N (en vez del isinstance() de Blockly).
 pythonGenerator.forBlock["math_change"] = function (block, generator) {
   const delta = generator.valueToCode(block, "DELTA", Order.ADDITIVE) || "0";

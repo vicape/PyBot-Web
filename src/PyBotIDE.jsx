@@ -582,6 +582,15 @@ export default function PyBotIDE() {
       appendConsole(t("pyblockEmpty") + "\n", "err");
       return;
     }
+    // Canvas/dibujo solo funciona en pantalla (Pyodide), no en el Arduino VM.
+    if (
+      /\b(pantalla|fondo|dibujar_rect|dibujar_circulo|dibujar_linea|texto|actualizar|limpiar|tecla|screen|fill|draw_rect|draw_circle|draw_line|draw_text|flip|key_pressed)\s*\(/.test(
+        activeCode,
+      )
+    ) {
+      appendConsole(t("arduinoNoCanvas") + "\n", "err");
+      return;
+    }
     // El compilador Arduino VM todavía no soporta def/funciones/procedimientos.
     if (/^[ \t]*(async[ \t]+)?def[ \t]+\w+/m.test(activeCode)) {
       appendConsole(t("arduinoNoFunctions") + "\n", "err");

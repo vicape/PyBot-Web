@@ -11,6 +11,10 @@ const numberShadow = (num) => ({
   shadow: { kind: "block", type: "math_number", fields: { NUM: num } },
 });
 
+const textShadow = (txt) => ({
+  shadow: { kind: "block", type: "text", fields: { TEXT: txt } },
+});
+
 export const PYBLOCK_TOOLBOX = {
   kind: "categoryToolbox",
   contents: [
@@ -99,6 +103,74 @@ export const PYBLOCK_TOOLBOX = {
           kind: "block",
           type: "pyblock_motor",
           inputs: { PIN: numberShadow(10), SPEED: numberShadow(80) },
+        },
+      ],
+    },
+    {
+      kind: "category",
+      name: "Canvas",
+      colour: "290",
+      contents: [
+        {
+          kind: "block",
+          type: "pyblock_canvas_screen",
+          inputs: { W: numberShadow(400), H: numberShadow(300) },
+        },
+        {
+          kind: "block",
+          type: "pyblock_canvas_fill",
+          inputs: { COLOR: textShadow("black") },
+        },
+        {
+          kind: "block",
+          type: "pyblock_canvas_rect",
+          inputs: {
+            X: numberShadow(10),
+            Y: numberShadow(10),
+            W: numberShadow(80),
+            H: numberShadow(40),
+            COLOR: textShadow("white"),
+          },
+        },
+        {
+          kind: "block",
+          type: "pyblock_canvas_circle",
+          inputs: {
+            X: numberShadow(100),
+            Y: numberShadow(100),
+            R: numberShadow(30),
+            COLOR: textShadow("red"),
+          },
+        },
+        {
+          kind: "block",
+          type: "pyblock_canvas_line",
+          inputs: {
+            X1: numberShadow(0),
+            Y1: numberShadow(0),
+            X2: numberShadow(100),
+            Y2: numberShadow(100),
+            COLOR: textShadow("white"),
+            WIDTH: numberShadow(2),
+          },
+        },
+        {
+          kind: "block",
+          type: "pyblock_canvas_text",
+          inputs: {
+            X: numberShadow(20),
+            Y: numberShadow(30),
+            MSG: textShadow("Hola"),
+            COLOR: textShadow("white"),
+            SIZE: numberShadow(18),
+          },
+        },
+        { kind: "block", type: "pyblock_canvas_update" },
+        { kind: "block", type: "pyblock_canvas_clear" },
+        {
+          kind: "block",
+          type: "pyblock_canvas_key",
+          inputs: { KEY: textShadow("ArrowRight") },
         },
       ],
     },

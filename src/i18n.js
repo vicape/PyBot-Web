@@ -85,6 +85,8 @@ const STRINGS = {
     lineWord: "línea",
     arduinoNoFunctions:
       "Este programa usa procedimientos o funciones. Todavía no son compatibles con Bajar a Arduino. Ejecutalo en vivo o pasá a Python.",
+    arduinoNoCanvas:
+      "Los bloques Canvas solo funcionan en pantalla. No se pueden bajar al Arduino.",
     esp32FlashOk:
       "Programa grabado en la ESP32. La placa se reinició y ya corre sola. Desconectá PyBot del USB: no vuelvas a conectar si querés que siga solo (conectar detiene el programa).",
     esp32FlashVerified: "Verificación OK: main.py de {size} bytes en la placa.",
@@ -310,6 +312,8 @@ Creado por VIC.`,
     lineWord: "line",
     arduinoNoFunctions:
       "This program uses procedures or functions. They are not yet supported by Download to Arduino. Run it live or switch to Python.",
+    arduinoNoCanvas:
+      "Canvas blocks only work on screen. They cannot be downloaded to the Arduino.",
     esp32FlashOk:
       "Program saved on the ESP32. The board restarted. Disconnect PyBot: do not reconnect if you want it to keep running alone.",
     esp32FlashVerified: "Verification OK: main.py is {size} bytes on the board.",

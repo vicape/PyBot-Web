@@ -27,6 +27,7 @@ try {
 const HUE_CONTROL = 210;
 const HUE_HARDWARE = 25;
 const HUE_OUTPUT = 160;
+const HUE_CANVAS = 290;
 
 Blockly.defineBlocksWithJsonArray([
   // ----- Control -----
@@ -146,5 +147,119 @@ Blockly.defineBlocksWithJsonArray([
     nextStatement: null,
     colour: HUE_OUTPUT,
     tooltip: "Muestra un texto o valor en la terminal (print).",
+  },
+
+  // ----- Canvas / Dibujo -----
+  {
+    type: "pyblock_canvas_screen",
+    message0: "crear pantalla ancho %1 alto %2",
+    args0: [
+      { type: "input_value", name: "W", check: "Number" },
+      { type: "input_value", name: "H", check: "Number" },
+    ],
+    inputsInline: true,
+    previousStatement: null,
+    nextStatement: null,
+    colour: HUE_CANVAS,
+    tooltip: "Crea la pantalla de dibujo (pantalla).",
+  },
+  {
+    type: "pyblock_canvas_fill",
+    message0: "fondo color %1",
+    args0: [{ type: "input_value", name: "COLOR", check: "String" }],
+    inputsInline: true,
+    previousStatement: null,
+    nextStatement: null,
+    colour: HUE_CANVAS,
+    tooltip: "Pinta el fondo de la pantalla (fondo).",
+  },
+  {
+    type: "pyblock_canvas_rect",
+    message0: "dibujar rectángulo x %1 y %2 ancho %3 alto %4 color %5",
+    args0: [
+      { type: "input_value", name: "X", check: "Number" },
+      { type: "input_value", name: "Y", check: "Number" },
+      { type: "input_value", name: "W", check: "Number" },
+      { type: "input_value", name: "H", check: "Number" },
+      { type: "input_value", name: "COLOR", check: "String" },
+    ],
+    inputsInline: true,
+    previousStatement: null,
+    nextStatement: null,
+    colour: HUE_CANVAS,
+    tooltip: "Dibuja un rectángulo (dibujar_rect).",
+  },
+  {
+    type: "pyblock_canvas_circle",
+    message0: "dibujar círculo x %1 y %2 radio %3 color %4",
+    args0: [
+      { type: "input_value", name: "X", check: "Number" },
+      { type: "input_value", name: "Y", check: "Number" },
+      { type: "input_value", name: "R", check: "Number" },
+      { type: "input_value", name: "COLOR", check: "String" },
+    ],
+    inputsInline: true,
+    previousStatement: null,
+    nextStatement: null,
+    colour: HUE_CANVAS,
+    tooltip: "Dibuja un círculo (dibujar_circulo).",
+  },
+  {
+    type: "pyblock_canvas_line",
+    message0: "dibujar línea x1 %1 y1 %2 x2 %3 y2 %4 color %5 grosor %6",
+    args0: [
+      { type: "input_value", name: "X1", check: "Number" },
+      { type: "input_value", name: "Y1", check: "Number" },
+      { type: "input_value", name: "X2", check: "Number" },
+      { type: "input_value", name: "Y2", check: "Number" },
+      { type: "input_value", name: "COLOR", check: "String" },
+      { type: "input_value", name: "WIDTH", check: "Number" },
+    ],
+    inputsInline: true,
+    previousStatement: null,
+    nextStatement: null,
+    colour: HUE_CANVAS,
+    tooltip: "Dibuja una línea (dibujar_linea).",
+  },
+  {
+    type: "pyblock_canvas_text",
+    message0: "escribir texto x %1 y %2 mensaje %3 color %4 tamaño %5",
+    args0: [
+      { type: "input_value", name: "X", check: "Number" },
+      { type: "input_value", name: "Y", check: "Number" },
+      { type: "input_value", name: "MSG", check: "String" },
+      { type: "input_value", name: "COLOR", check: "String" },
+      { type: "input_value", name: "SIZE", check: "Number" },
+    ],
+    inputsInline: true,
+    previousStatement: null,
+    nextStatement: null,
+    colour: HUE_CANVAS,
+    tooltip: "Escribe un texto en la pantalla (texto).",
+  },
+  {
+    type: "pyblock_canvas_update",
+    message0: "actualizar pantalla",
+    previousStatement: null,
+    nextStatement: null,
+    colour: HUE_CANVAS,
+    tooltip: "Muestra lo dibujado en la pantalla (actualizar).",
+  },
+  {
+    type: "pyblock_canvas_clear",
+    message0: "limpiar pantalla",
+    previousStatement: null,
+    nextStatement: null,
+    colour: HUE_CANVAS,
+    tooltip: "Borra la pantalla (limpiar).",
+  },
+  {
+    type: "pyblock_canvas_key",
+    message0: "tecla presionada %1",
+    args0: [{ type: "input_value", name: "KEY", check: "String" }],
+    inputsInline: true,
+    output: "Boolean",
+    colour: HUE_CANVAS,
+    tooltip: "Devuelve si una tecla está presionada (tecla).",
   },
 ]);
