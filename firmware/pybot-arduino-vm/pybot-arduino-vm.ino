@@ -77,7 +77,8 @@ enum {
 #define MAX_SERVOS 4
 #define EEPROM_CAP 1024
 #define MAX_IMAGE 768
-#define BOOT_WINDOW_MS 900
+#define BOOT_WINDOW_MS 2000
+#define PROMPT_EVERY_MS 150
 
 int16_t vars[MAX_VARS];
 int16_t stk[STACK_SIZE];
@@ -315,19 +316,29 @@ bool handleUpload() {
   return true;
 }
 
-// Escucha la ventana de boot. Devuelve true si se cargó un programa nuevo.
+// Escucha la ventana de boot. Emite el prompt repetidamente para que el host
+// (que pudo abrir el puerto en cualquier momento) lo detecte sin carreras de
+// tiempo. Devuelve true si se cargó un programa nuevo.
 bool bootListen() {
   unsigned long start = millis();
+  unsigned long lastPrompt = 0;
   while (millis() - start < BOOT_WINDOW_MS) {
+    if (millis() - lastPrompt >= PROMPT_EVERY_MS) {
+      Serial.print(F("PYBOTVM\n"));
+      lastPrompt = millis();
+    }
     if (Serial.available()) {
       int b = Serial.read();
       if (b == 0x7E) {
-        int cmd = readByteTimeout(300);
+        int cmd = readByteTimeout(500);
         if (cmd == 'I') {
           Serial.print(F("PYBOTVM\n"));
           start = millis();  // reiniciar ventana
+          lastPrompt = millis();
         } else if (cmd == 'U') {
           if (handleUpload()) return true;
+          start = millis();  // dar otra oportunidad si falló
+          lastPrompt = 0;
         }
       }
     }
@@ -338,7 +349,6 @@ bool bootListen() {
 void setup() {
   Serial.begin(115200);
   delay(40);
-  Serial.print(F("PYBOTVM\n"));
   bootListen();
   runProgram();
 }

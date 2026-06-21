@@ -93,15 +93,16 @@ export async function flashVmFirmware(port, options = {}) {
   throw lastErr ?? new Error("PYBOT_VM:FLASH_FAIL");
 }
 
-/** Pulso de reset por DTR/RTS (auto-reset del Uno/Nano). */
+/**
+ * Reset por DTR (auto-reset del Uno/Nano). Replica la secuencia que usa el
+ * flasher STK500 (que ya funciona en estas placas): DTR false -> espera -> true.
+ */
 async function pulseReset(port) {
   try {
-    await port.setSignals({ dataTerminalReady: false, requestToSend: false });
-    await sleep(120);
-    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
-    await sleep(120);
-    await port.setSignals({ dataTerminalReady: false, requestToSend: false });
-    await sleep(50);
+    await port.setSignals({ dataTerminalReady: false });
+    await sleep(250);
+    await port.setSignals({ dataTerminalReady: true });
+    await sleep(250);
   } catch {
     /* algunos drivers no soportan setSignals; el open ya suele resetear */
   }
@@ -163,7 +164,22 @@ async function waitForAck(reader, timeoutMs) {
  * @param {Uint8Array} image
  * @returns {Promise<"ok"|"vm-absent"|"upload-failed">}
  */
-export async function uploadBytecode(port, image) {
+export async function uploadBytecode(port, image, options = {}) {
+  const attempts = options.attempts ?? 2;
+  let sawNoPrompt = 0;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const result = await uploadAttempt(port, image);
+    if (result === "ok") return "ok";
+    if (result === "vm-absent") sawNoPrompt++;
+    // pequeña pausa antes de reintentar
+    await sleep(300);
+  }
+  // Si en todos los intentos no apareció el prompt, asumimos que la placa no
+  // tiene el firmware VM todavía.
+  return sawNoPrompt === attempts ? "vm-absent" : "upload-failed";
+}
+
+async function uploadAttempt(port, image) {
   await ensurePortClosed(port);
   await port.open({ baudRate: VM_BAUD });
   let reader;
@@ -174,8 +190,8 @@ export async function uploadBytecode(port, image) {
     writer = port.writable.getWriter();
 
     // El bootloader (optiboot) corre ~1s tras el reset; luego arranca el VM
-    // que imprime el prompt y abre la ventana de carga.
-    const seen = await waitForPrompt(reader, 4000);
+    // que imprime el prompt repetidamente y abre la ventana de carga.
+    const seen = await waitForPrompt(reader, 6000);
     if (!seen) return "vm-absent";
 
     const len = image.length;
@@ -186,7 +202,8 @@ export async function uploadBytecode(port, image) {
     await writer.write(image);
     await writer.write(new Uint8Array([sum & 0xff]));
 
-    const ack = await waitForAck(reader, 4000);
+    // La placa graba la EEPROM (~3.3 ms/byte) antes de responder 'K'.
+    const ack = await waitForAck(reader, 5000);
     return ack === "ok" ? "ok" : "upload-failed";
   } finally {
     try {
@@ -219,15 +236,22 @@ export async function uploadBytecode(port, image) {
 export async function downloadProgramToArduino(port, image, options = {}) {
   const { onPhase } = options;
   onPhase?.("uploading");
-  let result = await uploadBytecode(port, image);
+  // Sondeo rápido: ¿la placa ya tiene el firmware VM?
+  let result = await uploadBytecode(port, image, { attempts: 1 });
   if (result === "ok") return { flashed: false };
 
-  if (result === "vm-absent") {
-    onPhase?.("flashing");
-    await flashVmFirmware(port);
-    onPhase?.("retry");
-    result = await uploadBytecode(port, image);
-    if (result === "ok") return { flashed: true };
+  if (result === "upload-failed") {
+    // El VM respondió pero la carga falló: reintentar sin reflashear.
+    result = await uploadBytecode(port, image, { attempts: 2 });
+    if (result === "ok") return { flashed: false };
   }
+
+  // No hay firmware VM (o sigue fallando) -> grabarlo y reintentar (robusto).
+  onPhase?.("flashing");
+  await flashVmFirmware(port);
+  onPhase?.("retry");
+  result = await uploadBytecode(port, image, { attempts: 3 });
+  if (result === "ok") return { flashed: true };
+
   throw new Error("PYBOT_VM:UPLOAD_FAIL");
 }
