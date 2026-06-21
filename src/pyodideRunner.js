@@ -179,7 +179,16 @@ function isInsideStringOrComment(src, pos) {
   return inSingle || inDouble;
 }
 
-function addAwaitForHardwareCalls(line) {
+// Funciones async del runtime (deben llamarse con await en Pyodide).
+const HARDWARE_NAMES = [
+  "pin", "motor", "servo", "wait", "input", "sleep",
+  "screen", "fill", "draw_rect", "draw_circle",
+  "draw_line", "draw_text", "flip", "clear", "key_pressed",
+  "pantalla", "fondo", "dibujar_rect", "dibujar_circulo",
+  "dibujar_linea", "texto", "actualizar", "limpiar", "tecla",
+];
+
+function addAwaitForHardwareCalls(line, extraNames = []) {
   const t = line.trim();
   if (!t || t.startsWith("#")) return line;
   if (/^\s*(def|async\s+def)\s+/.test(line)) return line;
@@ -187,13 +196,7 @@ function addAwaitForHardwareCalls(line) {
   if (/^\s*await\b/.test(line)) return line;
 
   let out = line;
-  const names = [
-    "pin", "motor", "servo", "wait", "input", "sleep",
-    "screen", "fill", "draw_rect", "draw_circle",
-    "draw_line", "draw_text", "flip", "clear", "key_pressed",
-    "pantalla", "fondo", "dibujar_rect", "dibujar_circulo",
-    "dibujar_linea", "texto", "actualizar", "limpiar", "tecla",
-  ];
+  const names = extraNames.length ? [...HARDWARE_NAMES, ...extraNames] : HARDWARE_NAMES;
 
   for (const n of names) {
     const re = new RegExp(`(?<!await\\s)(?<!\\.)\\b${n}\\s*\\(`, "g");
@@ -244,6 +247,87 @@ function safeLineReplace(line, pattern, replacement) {
   });
 }
 
+/**
+ * Convierte a `async def` las funciones del usuario cuyo cuerpo usa hardware
+ * (o llama a otra función async, en cascada), y devuelve esos nombres para que
+ * sus llamadas se hagan con await. Esto permite escribir procedimientos/funciones
+ * limpios en PyBlock/Python (def normal) y que igualmente corran en Pyodide,
+ * donde la API de hardware es async.
+ *
+ * Es additivo: si no hay funciones con hardware adentro, devuelve el código tal
+ * cual (el caso de `def main` lo sigue manejando normalizeUserCode aparte).
+ */
+function lineHasCall(line, name) {
+  const re = new RegExp(`(?<!\\.)\\b${name}\\s*\\(`);
+  const idx = line.search(re);
+  return idx >= 0 && !isInsideStringOrComment(line, idx);
+}
+
+function asyncifyUserFunctions(code) {
+  const lines = code.split("\n");
+  const defRe = /^(\s*)(async\s+)?def\s+([A-Za-z_]\w*)\s*\(/;
+  const defs = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(defRe);
+    if (!m) continue;
+    const indent = m[1].length;
+    let bodyEnd = lines.length;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (lines[j].trim() === "") continue;
+      const ind = lines[j].length - lines[j].trimStart().length;
+      if (ind <= indent) {
+        bodyEnd = j;
+        break;
+      }
+    }
+    defs.push({ i, indent, isAsync: !!m[2], name: m[3], bodyStart: i + 1, bodyEnd });
+  }
+  if (defs.length === 0) return { code, asyncNames: new Set() };
+
+  const asyncNames = new Set();
+  for (const d of defs) {
+    if (d.isAsync) {
+      asyncNames.add(d.name);
+      continue;
+    }
+    for (let j = d.bodyStart; j < d.bodyEnd; j++) {
+      if (HARDWARE_NAMES.some((n) => lineHasCall(lines[j], n))) {
+        asyncNames.add(d.name);
+        break;
+      }
+    }
+  }
+  // Cascada: una función que llama a otra async, también es async.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const d of defs) {
+      if (asyncNames.has(d.name)) continue;
+      for (let j = d.bodyStart; j < d.bodyEnd; j++) {
+        let hit = false;
+        for (const an of asyncNames) {
+          if (lineHasCall(lines[j], an)) {
+            hit = true;
+            break;
+          }
+        }
+        if (hit) {
+          asyncNames.add(d.name);
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+
+  for (const d of defs) {
+    if (asyncNames.has(d.name) && !d.isAsync) {
+      lines[d.i] = lines[d.i].replace(/^(\s*)def\s+/, "$1async def ");
+    }
+  }
+  return { code: lines.join("\n"), asyncNames };
+}
+
 function normalizeUserCode(code) {
   let s = code;
 
@@ -267,9 +351,19 @@ function normalizeUserCode(code) {
     s = s.replace(/\bdef\s+main\s*\(/, "async def main(");
   }
 
+  // Funciones/procedimientos del usuario con hardware adentro -> async.
+  let extraAwaitNames = [];
+  try {
+    const result = asyncifyUserFunctions(s);
+    s = result.code;
+    extraAwaitNames = [...result.asyncNames].filter((n) => n !== "main");
+  } catch {
+    extraAwaitNames = [];
+  }
+
   s = s
     .split("\n")
-    .map((line) => addAwaitForHardwareCalls(line))
+    .map((line) => addAwaitForHardwareCalls(line, extraAwaitNames))
     .join("\n");
 
   s = s.replace(/\bawait\s+await\s+/g, "await ");

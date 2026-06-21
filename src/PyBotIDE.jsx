@@ -582,6 +582,11 @@ export default function PyBotIDE() {
       appendConsole(t("pyblockEmpty") + "\n", "err");
       return;
     }
+    // El compilador Arduino VM todavía no soporta def/funciones/procedimientos.
+    if (/^[ \t]*(async[ \t]+)?def[ \t]+\w+/m.test(activeCode)) {
+      appendConsole(t("arduinoNoFunctions") + "\n", "err");
+      return;
+    }
     setDownloadingArduino(true);
     appendConsole(t("arduinoDownloadStart") + "\n", "info");
     try {
