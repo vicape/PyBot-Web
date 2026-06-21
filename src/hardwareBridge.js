@@ -41,6 +41,8 @@ import {
   EDA6_FILENAME,
   PYBOT_HW_FILENAME,
 } from "./esp32Flash.js";
+import { compileToBytecode } from "./arduino/pybotArduinoCompiler.js";
+import { downloadProgramToArduino } from "./arduinoVmSession.js";
 
 let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
 let _mpSession = null;     // ESP32 MicroPython / EDA6 (ejecución en placa)
@@ -428,6 +430,57 @@ export async function flashToEsp32(code) {
 export async function deleteMainPy() {
   if (!_mpSession) throw new Error("not_connected");
   return _mpSession.removeFile(MAIN_PY_FILENAME);
+}
+
+/**
+ * "Bajar a Arduino": compila el programa del alumno a bytecode y lo graba en la
+ * placa (firmware VM) para que corra SOLA, desconectada de la PC. No usa Firmata
+ * ni Pyodide. Desconecta cualquier sesión en vivo para liberar el puerto.
+ *
+ * @param {string} code código Python del alumno
+ * @param {{ onPhase?: (phase: "compiling"|"uploading"|"flashing"|"retry") => void }} [hooks]
+ * @returns {Promise<{ flashed: boolean, bytes: number }>}
+ */
+export async function downloadToArduino(code, hooks = {}) {
+  if (!("serial" in navigator)) {
+    throw new Error("PYBOT_USB:MISSING_BROWSER");
+  }
+  if (typeof globalThis.isSecureContext === "boolean" && !globalThis.isSecureContext) {
+    throw new Error("PYBOT_USB:HTTPS");
+  }
+
+  hooks.onPhase?.("compiling");
+  const compiled = compileToBytecode(code);
+  if (!compiled.ok) {
+    const e = new Error("PYBOT_DL:COMPILE");
+    e.compile = compiled.error; // { line, es, en }
+    throw e;
+  }
+
+  await hardwareDisconnect();
+
+  let port;
+  try {
+    port = await navigator.serial.requestPort();
+  } catch (e) {
+    const name = e?.name ?? "";
+    if (name === "NotFoundError") throw new Error("PYBOT_USB:LIST_EMPTY");
+    if (name === "SecurityError") throw new Error("PYBOT_USB:PERMISSION");
+    throw e;
+  }
+
+  try {
+    const { flashed } = await downloadProgramToArduino(port, compiled.image, {
+      onPhase: (phase) => hooks.onPhase?.(phase),
+    });
+    return { flashed, bytes: compiled.image.length };
+  } finally {
+    try {
+      await port.close();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function needAdapter() {

@@ -64,6 +64,17 @@ const STRINGS = {
     eda6VerifyMissing: "EDA6.py no está en la placa. Instalala antes de grabar.",
     eda6FlashBtn: "Dejar programa en la placa",
     esp32FlashBtn: "Dejar programa en la placa",
+    arduinoDownloadBtn: "Bajar a Arduino (correr solo)",
+    arduinoDownloadMenuHint:
+      "Graba tu programa en la placa para que funcione desconectada de la PC.",
+    arduinoDownloadStart: "Preparando tu programa para el Arduino…",
+    arduinoDownloadFlashing:
+      "Instalando el intérprete PyBot en la placa (solo la primera vez)…",
+    arduinoDownloadUploading: "Enviando el programa a la placa…",
+    arduinoDownloadOk:
+      "¡Listo! Tu programa quedó en el Arduino ({bytes} bytes). Ya podés desconectarlo de la PC: arranca solo al darle energía.",
+    arduinoDownloadUnsupported:
+      "Esto todavía no se puede bajar al Arduino (probalo en vivo):",
     esp32FlashOk:
       "Programa grabado en la ESP32. La placa se reinició y ya corre sola. Desconectá PyBot del USB: no vuelvas a conectar si querés que siga solo (conectar detiene el programa).",
     esp32FlashVerified: "Verificación OK: main.py de {size} bytes en la placa.",
@@ -268,6 +279,17 @@ Creado por VIC.`,
     eda6VerifyMissing: "EDA6.py is not on the board. Install it before flashing.",
     eda6FlashBtn: "Save program to board",
     esp32FlashBtn: "Save program to board",
+    arduinoDownloadBtn: "Download to Arduino (run standalone)",
+    arduinoDownloadMenuHint:
+      "Store your program on the board so it works disconnected from the PC.",
+    arduinoDownloadStart: "Preparing your program for the Arduino…",
+    arduinoDownloadFlashing:
+      "Installing the PyBot interpreter on the board (first time only)…",
+    arduinoDownloadUploading: "Sending the program to the board…",
+    arduinoDownloadOk:
+      "Done! Your program is now on the Arduino ({bytes} bytes). You can unplug it from the PC: it runs on its own when powered.",
+    arduinoDownloadUnsupported:
+      "This can't be downloaded to the Arduino yet (try it live):",
     esp32FlashOk:
       "Program saved on the ESP32. The board restarted. Disconnect PyBot: do not reconnect if you want it to keep running alone.",
     esp32FlashVerified: "Verification OK: main.py is {size} bytes on the board.",

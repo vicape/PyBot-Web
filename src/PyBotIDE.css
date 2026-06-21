@@ -554,6 +554,13 @@
   gap: 6px;
 }
 
+.toolbar-menu-hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--fg-muted);
+  padding: 2px 10px 6px;
+}
+
 .toolbar-menu-mode__label {
   font-size: 12px;
   color: var(--fg-muted);

@@ -20,6 +20,7 @@ import {
   deleteMainPy,
   checkMainPyInstalled,
   recoverEsp32Repl,
+  downloadToArduino,
 } from "./hardwareBridge.js";
 import {
   filterExamplesForBoard,
@@ -113,6 +114,7 @@ export default function PyBotIDE() {
   const inputResolveRef = useRef(null);
   const inputFieldRef = useRef(null);
   const [waitingInput, setWaitingInput] = useState(false);
+  const [downloadingArduino, setDownloadingArduino] = useState(false);
   const [inputPrompt, setInputPrompt] = useState("");
   const canvasRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState(null);
@@ -476,6 +478,36 @@ export default function PyBotIDE() {
       appendConsole(formatPythonError(e?.message) + "\n", "err");
     }
   }, [connected, code, appendConsole, boardType]);
+
+  const onDownloadToArduino = useCallback(async () => {
+    if (boardType !== "arduino-firmata") return;
+    if (downloadingArduino) return;
+    setDownloadingArduino(true);
+    appendConsole(t("arduinoDownloadStart") + "\n", "info");
+    try {
+      const { bytes } = await downloadToArduino(code, {
+        onPhase: (phase) => {
+          if (phase === "flashing") {
+            appendConsole(t("arduinoDownloadFlashing") + "\n", "info");
+          } else if (phase === "uploading" || phase === "retry") {
+            appendConsole(t("arduinoDownloadUploading") + "\n", "info");
+          }
+        },
+      });
+      setConnected(false);
+      appendConsole(t("arduinoDownloadOk").replace("{bytes}", String(bytes)) + "\n", "info");
+    } catch (e) {
+      if (e?.compile) {
+        const msg = getLang() === "en" ? e.compile.en : e.compile.es;
+        const where = e.compile.line ? ` [${e.compile.line}]` : "";
+        appendConsole(t("arduinoDownloadUnsupported") + " " + msg + where + "\n", "err");
+      } else {
+        appendConsole(formatHardwareError(e?.message) + "\n", "err");
+      }
+    } finally {
+      setDownloadingArduino(false);
+    }
+  }, [boardType, downloadingArduino, code, appendConsole]);
 
   const onRecoverRepl = useCallback(async () => {
     if (!connected) {
@@ -973,6 +1005,23 @@ export default function PyBotIDE() {
                               </button>
                             </>
                           ) : null}
+                        </>
+                      ) : null}
+                      {boardType === "arduino-firmata" ? (
+                        <>
+                          <div className="toolbar-menu-divider" />
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--highlight"
+                            onClick={() => {
+                              onDownloadToArduino();
+                              setToolbarMenuOpen(false);
+                            }}
+                            disabled={downloadingArduino}
+                          >
+                            {t("arduinoDownloadBtn")}
+                          </button>
+                          <div className="toolbar-menu-hint">{t("arduinoDownloadMenuHint")}</div>
                         </>
                       ) : null}
                       <div className="toolbar-menu-divider" />
