@@ -55,6 +55,18 @@ export default function PyBlockEditor({ theme, onGenerated, onCopyToPython }) {
       /* workspace inválido: empezar vacío */
     }
 
+    // Workspace vacío: insertar un bloque "Inicio" para guiar al alumno.
+    try {
+      if (workspace.getTopBlocks(false).length === 0) {
+        const start = workspace.newBlock("pyblock_start");
+        start.initSvg();
+        start.render();
+        start.moveBy(40, 40);
+      }
+    } catch {
+      /* si falla, el workspace simplemente queda vacío */
+    }
+
     const regenerate = () => {
       try {
         const code = pyblockWorkspaceToPython(workspace);

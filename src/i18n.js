@@ -83,6 +83,8 @@ const STRINGS = {
       "PyBlock está vacío: arrastrá bloques para armar tu programa antes de ejecutar.",
     syntaxErrorPrefix: "Error de sintaxis:",
     lineWord: "línea",
+    pyblockStart: "Inicio",
+    pyblockStartTooltip: "Bloque de inicio: poné acá los bloques de tu programa.",
     arduinoNoFunctions:
       "Este programa usa procedimientos o funciones. Todavía no son compatibles con Bajar a Arduino. Ejecutalo en vivo o pasá a Python.",
     arduinoNoCanvas:
@@ -310,6 +312,8 @@ Creado por VIC.`,
       "PyBlock is empty: drag some blocks to build your program before running.",
     syntaxErrorPrefix: "Syntax error:",
     lineWord: "line",
+    pyblockStart: "Start",
+    pyblockStartTooltip: "Start block: put your program blocks here.",
     arduinoNoFunctions:
       "This program uses procedures or functions. They are not yet supported by Download to Arduino. Run it live or switch to Python.",
     arduinoNoCanvas:

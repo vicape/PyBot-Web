@@ -20,6 +20,12 @@ export const PYBLOCK_TOOLBOX = {
   contents: [
     {
       kind: "category",
+      name: "Inicio",
+      colour: "120",
+      contents: [{ kind: "block", type: "pyblock_start" }],
+    },
+    {
+      kind: "category",
       name: "Control",
       colour: "210",
       contents: [

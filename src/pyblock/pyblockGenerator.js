@@ -20,6 +20,16 @@ function valOr(generator, block, name, fallback) {
   return code && code.trim() !== "" ? code : fallback;
 }
 
+// Bloque de inicio (hat): genera SOLO el contenido interno, sin indentar ni
+// envolver en una función. Equivale a poner esos bloques en el nivel principal.
+pythonGenerator.forBlock["pyblock_start"] = function (block, generator) {
+  const inner = block.getInputTargetBlock("DO");
+  if (!inner) return "";
+  let code = generator.blockToCode(inner);
+  if (Array.isArray(code)) code = code[0] || "";
+  return code;
+};
+
 pythonGenerator.forBlock["pyblock_forever"] = function (block, generator) {
   const body = generator.statementToCode(block, "DO") || generator.INDENT + "pass\n";
   return "while True:\n" + body;

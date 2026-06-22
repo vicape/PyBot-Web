@@ -16,6 +16,7 @@
 
 import * as Blockly from "blockly";
 import * as EsMsg from "blockly/msg/es";
+import { t } from "../i18n.js";
 
 // Idioma español para los bloques estándar de Blockly (si falla, queda en inglés).
 try {
@@ -24,12 +25,33 @@ try {
   /* no romper si la versión de Blockly no expone setLocale */
 }
 
+// Forma "hat"/cap para el bloque de inicio (si el renderer no lo soporta, queda
+// como bloque superior normal: no rompe nada).
+try {
+  Blockly.Extensions.register("pyblock_start_hat", function () {
+    this.hat = "cap";
+  });
+} catch {
+  /* ya estaba registrada (re-import en dev) o no disponible */
+}
+
 const HUE_CONTROL = 210;
 const HUE_HARDWARE = 25;
 const HUE_OUTPUT = 160;
 const HUE_CANVAS = 290;
+const HUE_START = 120;
 
 Blockly.defineBlocksWithJsonArray([
+  // ----- Inicio (bloque hat genérico) -----
+  {
+    type: "pyblock_start",
+    message0: t("pyblockStart") + " %1",
+    args0: [{ type: "input_statement", name: "DO" }],
+    colour: HUE_START,
+    extensions: ["pyblock_start_hat"],
+    tooltip: t("pyblockStartTooltip"),
+  },
+
   // ----- Control -----
   {
     type: "pyblock_forever",
