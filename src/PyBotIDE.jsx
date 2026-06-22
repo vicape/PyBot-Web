@@ -32,6 +32,7 @@ import {
 } from "./eda6Profile.js";
 import { runPythonAsync, signalStop } from "./pyodideRunner.js";
 import { checkPythonSyntax } from "./pythonSyntaxDiagnostics.js";
+import { hasCanvasCode } from "./canvasCodeDetect.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
@@ -385,7 +386,11 @@ export default function PyBotIDE() {
   }, [connecting, appendConsole, eda6Profile]);
 
   const openConnectFlow = useCallback(() => {
-    if (connecting || pythonOnly) return;
+    if (connecting) return;
+    if (pythonOnly) {
+      appendConsole(t("needHardwareMode") + "\n", "info");
+      setPythonOnly(false);
+    }
     if (!isConnectAssistantEnabled()) {
       void performHardwareConnect();
       return;
@@ -394,7 +399,7 @@ export default function PyBotIDE() {
     setConnectModalError(null);
     setConnectModalShowHelp(false);
     setConnectModalOpen(true);
-  }, [connecting, pythonOnly, performHardwareConnect]);
+  }, [connecting, pythonOnly, appendConsole, performHardwareConnect]);
 
   const onConnectFromModal = useCallback(async () => {
     setConnectModalPhase("connecting");
@@ -427,6 +432,7 @@ export default function PyBotIDE() {
         await runOnBoard(sourceCode ?? code, {
           onOut: (s) => appendConsole(s, "out"),
           onErr: (s) => appendConsole(formatPythonError(s) + "\n", "err"),
+          onStarted: () => appendConsole(t("boardProgramRunning") + "\n", "info"),
           shouldStop: () => globalThis.__PYBOT_STOP__ === true,
         });
         appendConsole("\n[Fin]\n", "info");
@@ -454,9 +460,15 @@ export default function PyBotIDE() {
       return;
     }
     const needsHw = codeNeedsHardware(activeCode);
+    const canvasCode = hasCanvasCode(activeCode);
 
     // ESP32 MicroPython / EDA6: el programa corre EN la placa (no en Pyodide).
-    if (!pythonOnly && (boardType === "esp32-micropython" || boardType === "esp32-eda6")) {
+    // Canvas/dibujo solo corre en pantalla (Pyodide), nunca en la placa.
+    if (
+      !pythonOnly &&
+      !canvasCode &&
+      (boardType === "esp32-micropython" || boardType === "esp32-eda6")
+    ) {
       if (!hardwareIsConnected()) {
         appendConsole(t("needConnect") + "\n", "err");
         return;
@@ -554,12 +566,21 @@ export default function PyBotIDE() {
     if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") {
       return;
     }
+    const activeCode = editorMode === "pyblock" ? pyblockCode : code;
+    if (editorMode === "pyblock" && !activeCode.trim()) {
+      appendConsole(t("pyblockEmpty") + "\n", "err");
+      return;
+    }
+    if (hasCanvasCode(activeCode)) {
+      appendConsole(t("boardNoCanvas") + "\n", "err");
+      return;
+    }
     appendConsole(
       (boardType === "esp32-eda6" ? t("eda6Installing") : t("esp32FlashHint")) + "\n",
       "info",
     );
     try {
-      const { kind, verify } = await flashToEsp32(code);
+      const { kind, verify } = await flashToEsp32(activeCode);
       if (verify?.mainSize > 0) {
         appendConsole(t("esp32FlashVerified").replace("{size}", String(verify.mainSize)) + "\n", "info");
       }
@@ -572,7 +593,7 @@ export default function PyBotIDE() {
     } catch (e) {
       appendConsole(formatPythonError(e?.message) + "\n", "err");
     }
-  }, [connected, code, appendConsole, boardType]);
+  }, [connected, code, editorMode, pyblockCode, appendConsole, boardType]);
 
   const onDownloadToArduino = useCallback(async () => {
     if (boardType !== "arduino-firmata") return;
@@ -583,11 +604,7 @@ export default function PyBotIDE() {
       return;
     }
     // Canvas/dibujo solo funciona en pantalla (Pyodide), no en el Arduino VM.
-    if (
-      /\b(pantalla|fondo|dibujar_rect|dibujar_circulo|dibujar_linea|texto|actualizar|limpiar|tecla|screen|fill|draw_rect|draw_circle|draw_line|draw_text|flip|key_pressed)\s*\(/.test(
-        activeCode,
-      )
-    ) {
+    if (hasCanvasCode(activeCode)) {
       appendConsole(t("arduinoNoCanvas") + "\n", "err");
       return;
     }
@@ -667,6 +684,7 @@ export default function PyBotIDE() {
     if (boardType === "esp32-micropython" || boardType === "esp32-eda6") {
       if (hardwareIsConnected()) interruptBoard();
     }
+    setRunning(false);
     if (inputResolveRef.current) {
       inputResolveRef.current("");
       inputResolveRef.current = null;
@@ -997,7 +1015,7 @@ export default function PyBotIDE() {
                           else onConnect();
                           setToolbarMenuOpen(false);
                         }}
-                        disabled={connecting || pythonOnly}
+                        disabled={connecting}
                       >
                         {connected ? t("disconnect") : t("connect")}
                       </button>

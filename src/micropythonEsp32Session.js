@@ -20,7 +20,7 @@
  */
 
 const DEFAULT_BAUD = 115200;
-const BOOT_DELAY_MS = 300;
+const BOOT_DELAY_MS = 1200;
 
 // Códigos de control del REPL de MicroPython.
 const CTRL_A = "\x01"; // entrar a raw REPL
@@ -193,6 +193,7 @@ export class MicroPythonSession {
     this._buf = "";
     this._waiters = new Set();
     this._running = true;
+    this._abortRun = false;
     this._readPromise = this._readLoop();
   }
 
@@ -257,6 +258,7 @@ export class MicroPythonSession {
    */
   async _drainTo(marker, onChunk, shouldStop) {
     let interrupted = false;
+    let interruptAt = 0;
     for (;;) {
       const idx = this._buf.indexOf(marker);
       if (idx >= 0) {
@@ -270,48 +272,61 @@ export class MicroPythonSession {
         this._buf = "";
         if (onChunk) onChunk(chunk);
       }
-      if (!interrupted && shouldStop && shouldStop()) {
+      const stopNow = this._abortRun || (shouldStop && shouldStop());
+      if (!interrupted && stopNow) {
         interrupted = true;
+        interruptAt = Date.now();
         try {
           await this._write(CTRL_C);
         } catch {
           /* ignore */
         }
       }
+      // Tras Detener, no esperar para siempre (p. ej. while True sin salida).
+      if (interrupted && Date.now() - interruptAt > 4000) {
+        return;
+      }
       await this._waitData(120);
       if (!this._running) return;
     }
   }
 
-  /** Detecta MicroPython entrando y saliendo de raw REPL. */
+  /** Detecta MicroPython entrando y saliendo de raw REPL (hasta 3 intentos). */
   async detect() {
-    await this._write("\r" + CTRL_C + CTRL_C);
-    await sleep(200);
-    this._buf = "";
-    try {
-      await this._write(CTRL_A);
-      await this._waitForContains("raw REPL", 1500);
-      await this._write(CTRL_B);
-      await sleep(60);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this._write("\r" + CTRL_C + CTRL_C);
+      await sleep(200);
       this._buf = "";
-      return true;
-    } catch {
-      return false;
+      try {
+        await this._write(CTRL_A);
+        await this._waitForContains("raw REPL", attempt === 0 ? 3000 : 4000);
+        await this._write(CTRL_B);
+        await sleep(60);
+        this._buf = "";
+        return true;
+      } catch {
+        if (attempt < 2) await sleep(300);
+      }
     }
+    return false;
   }
 
   async _enterRawRepl() {
-    await this._write("\r" + CTRL_C + CTRL_C);
-    await sleep(80);
-    this._buf = "";
-    await this._write(CTRL_A);
-    try {
-      await this._waitForContains("raw REPL", 2000);
-    } catch {
-      throw new Error("REPL_FAIL");
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this._write("\r" + CTRL_C + CTRL_C);
+      await sleep(attempt === 0 ? 200 : 400);
+      this._buf = "";
+      try {
+        await this._write(CTRL_A);
+        await this._waitForContains("raw REPL", attempt === 0 ? 3000 : 4000);
+        await this._waitForContains(">", 2000).catch(() => {});
+        this._buf = "";
+        return;
+      } catch {
+        if (attempt === 2) throw new Error("REPL_FAIL");
+        await sleep(300);
+      }
     }
-    await this._waitForContains(">", 1500).catch(() => {});
-    this._buf = "";
   }
 
   /**
@@ -320,11 +335,13 @@ export class MicroPythonSession {
    * @param {{onOut?:Function,onErr?:Function,shouldStop?:Function,prelude?:string}} cb
    */
   async runProgram(userCode, cb = {}) {
-    const { onOut, onErr, shouldStop, prelude } = cb;
+    const { onOut, onErr, shouldStop, prelude, onStarted } = cb;
     if (!this._running) throw new Error("RUN_FAIL");
 
+    this._abortRun = false;
     const prefix = prelude != null ? prelude : MPY_PRELUDE;
     const program = prefix + "\n" + String(userCode ?? "") + "\n";
+    const okTimeout = Math.min(45000, Math.max(10000, 8000 + Math.floor(program.length / 150)));
 
     await this._enterRawRepl();
     this._buf = "";
@@ -332,14 +349,16 @@ export class MicroPythonSession {
     await this._write(CTRL_D);
 
     try {
-      await this._waitForContains("OK", 5000);
+      await this._waitForContains("OK", okTimeout);
     } catch {
       throw new Error("RUN_FAIL");
     }
     const okIdx = this._buf.indexOf("OK");
     this._buf = this._buf.slice(okIdx + 2);
 
-    // stdout hasta el primer 0x04
+    if (onStarted) onStarted();
+
+    // stdout hasta el primer 0x04 (programas con while True pueden no terminar nunca).
     await this._drainTo(CTRL_D, (chunk) => { if (onOut && chunk) onOut(chunk); }, shouldStop);
 
     // stderr hasta el segundo 0x04
@@ -589,6 +608,7 @@ export class MicroPythonSession {
 
   /** Interrumpe el programa en ejecución (Ctrl-C). */
   async interrupt() {
+    this._abortRun = true;
     try {
       await this._write(CTRL_C);
     } catch {

@@ -20,7 +20,6 @@
  */
 
 import { connectFirmataSession, MODE_OUTPUT, MODE_PWM } from "./firmataSession.js";
-import { flashStandardFirmata } from "./arduinoFirmataFlash.js";
 import { connectEsp32Session } from "./esp32Session.js";
 import {
   connectMicroPythonEsp32Session,
@@ -72,7 +71,24 @@ export function isMicroPythonOnBoard() {
   return _mode === "esp32-micropython" || _mode === "esp32-eda6";
 }
 
-function buildEda6RunPrelude(code, profile) {
+/** Prelude corto si EDA6.py ya está en la placa (evita subir ~9 KB en cada Run). */
+const EDA6_IMPORT_PRELUDE = "from EDA6 import *\nfrom time import sleep\n";
+
+async function buildEda6RunPrelude(code, profile) {
+  if (_mpSession) {
+    try {
+      const hasEda6 = await _mpSession.fileExists(EDA6_FILENAME);
+      if (hasEda6) {
+        let prelude = EDA6_IMPORT_PRELUDE;
+        if (detectPybotGpioUsage(prepareUserCodeForExec(code))) {
+          prelude = prelude + "\n" + MPY_PRELUDE;
+        }
+        return prelude;
+      }
+    } catch {
+      /* fallback: inyectar librería completa */
+    }
+  }
   let prelude = getEda6ExecPrelude(profile);
   if (detectPybotGpioUsage(prepareUserCodeForExec(code))) {
     prelude = prelude + "\n" + MPY_PRELUDE;
@@ -262,38 +278,20 @@ export async function hardwareConnect(hooks = {}) {
  * @param {SerialPort} port
  * @param {{ onArduinoPrepare?: (info: { phase: string, pct?: number, status?: string }) => void }} [hooks]
  */
-async function connectArduinoFirmata(port, hooks = {}) {
+async function connectArduinoFirmata(_port, _hooks = {}) {
   try {
-    const { session, close, baudRate } = await connectFirmataSession(port);
+    const { session, close, baudRate } = await connectFirmataSession(_port);
     _adapter = new ArduinoFirmataAdapter(session, close);
     _mode = "arduino-firmata";
     _baudRate = baudRate;
     return { baudRate, mode: _mode, firmataPrepared: false };
   } catch (e) {
     const msg = e?.message ?? String(e);
-    if (msg !== "NO_FIRMATA") {
-      throw new Error(`PYBOT_FIRMATA:${msg}`);
+    if (msg === "NO_FIRMATA") {
+      throw new Error("PYBOT_FIRMATA:NO_FIRMATA");
     }
+    throw new Error(`PYBOT_FIRMATA:${msg}`);
   }
-
-  hooks.onArduinoPrepare?.({ phase: "start" });
-  try {
-    await flashStandardFirmata(port, {
-      onProgress: ({ pct, status }) => {
-        hooks.onArduinoPrepare?.({ phase: "progress", pct, status });
-      },
-    });
-    hooks.onArduinoPrepare?.({ phase: "done" });
-  } catch {
-    hooks.onArduinoPrepare?.({ phase: "fail" });
-    throw new Error("PYBOT_FIRMATA:FLASH_FAIL");
-  }
-
-  const { session, close, baudRate } = await connectFirmataSession(port);
-  _adapter = new ArduinoFirmataAdapter(session, close);
-  _mode = "arduino-firmata";
-  _baudRate = baudRate;
-  return { baudRate, mode: _mode, firmataPrepared: true };
 }
 
 export async function hardwareDisconnect() {
@@ -327,7 +325,7 @@ export async function runOnBoard(code, cb = {}) {
   if (_mode === "esp32-eda6") {
     const profile = getEda6Profile();
     const userCode = prepareUserCodeForExec(code);
-    const prelude = buildEda6RunPrelude(code, profile);
+    const prelude = await buildEda6RunPrelude(code, profile);
     return _mpSession.runProgram(userCode, { ...cb, prelude });
   }
   return _mpSession.runProgram(code, cb);

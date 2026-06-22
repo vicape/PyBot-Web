@@ -25,11 +25,11 @@ const REPORT_ANALOG = 0xc0;
 const REPORT_DIGITAL = 0xd0;
 
 function portForPin(pin) {
-  return pin < 8 ? 0 : 1;
+  return Math.floor(pin / 8);
 }
 
 function bitForPin(pin) {
-  return pin < 8 ? pin : pin - 8;
+  return pin % 8;
 }
 
 export class FirmataSession {
@@ -40,10 +40,10 @@ export class FirmataSession {
   constructor(writer, reader) {
     this.writer = writer;
     this.reader = reader;
-    /** @type {number[]} máscara de salida por puerto 0 y 1 */
-    this._outMask = [0, 0];
+    /** @type {number[]} máscara de salida por puerto (0, 1, 2 → hasta pin 23, incl. A0–A5) */
+    this._outMask = [0, 0, 0];
     /** @type {number[]} última lectura digital por puerto */
-    this._inMask = [0, 0];
+    this._inMask = [0, 0, 0];
     /** @type {Record<number, number>} canal analógico 0–5 → 0–1023 */
     this._analog = {};
     this._parseBuf = [];
@@ -170,7 +170,7 @@ export class FirmataSession {
     const versionWait = this.waitForFirmataVersion(2500);
     await this.writer.write(new Uint8Array([REPORT_VERSION]));
     await versionWait;
-    for (let p = 0; p <= 1; p++) {
+    for (let p = 0; p <= 2; p++) {
       await this.writer.write(new Uint8Array([REPORT_DIGITAL | p, 1]));
     }
     for (let a = 0; a < 6; a++) {

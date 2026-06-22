@@ -51,6 +51,8 @@ const STRINGS = {
     eda6ConnectedWemos: "Perfil EDA6/WEMOS conectado. Puertos 1–4 listos.",
     eda6ConnectedEsp32: "Perfil EDA6/ESP32 conectado. Puertos 1–4 listos.",
     eda6Running: "Enviando programa EDA6 a la ESP32…",
+    boardProgramRunning:
+      "Programa en ejecución en la placa. Usá Detener para parar.",
     eda6Installing: "Instalando EDA6.py en la placa…",
     eda6InstalledOk: "Librería EDA6 instalada correctamente en la placa.",
     eda6InstallFail: "No se pudo instalar EDA6.py. Reconectá la placa e intentá de nuevo.",
@@ -89,6 +91,8 @@ const STRINGS = {
       "Este programa usa procedimientos o funciones. Todavía no son compatibles con Bajar a Arduino. Ejecutalo en vivo o pasá a Python.",
     arduinoNoCanvas:
       "Los bloques Canvas solo funcionan en pantalla. No se pueden bajar al Arduino.",
+    boardNoCanvas:
+      "Los bloques Canvas solo funcionan en pantalla. No se pueden grabar en la placa.",
     esp32FlashOk:
       "Programa grabado en la ESP32. La placa se reinició y ya corre sola. Desconectá PyBot del USB: no vuelvas a conectar si querés que siga solo (conectar detiene el programa).",
     esp32FlashVerified: "Verificación OK: main.py de {size} bytes en la placa.",
@@ -126,7 +130,8 @@ const STRINGS = {
     fileLoaded: "Archivo cargado:",
     fileSaved: "Archivo guardado:",
     needConnect:
-      "Conectá el USB antes de ejecutar código con pin/motor/servo, o activá Solo Python.",
+      "Conectá el USB antes de ejecutar código de hardware, Arduino, ESP32 o EDA6 (pin, motor, servo, sensores, LCD); o activá Solo Python.",
+    needHardwareMode: "Para conectar una placa, cambiá a Python + Hardware.",
     connectModalTitle: "Conexión USB",
     connectModalIntro:
       "Elegí el puerto de tu placa en el diálogo del navegador. Si no aparece, revisá los puntos de abajo.",
@@ -171,7 +176,7 @@ const STRINGS = {
     usbErr_FIRMATA:
       "El dispositivo USB no respondió correctamente. Reiniciá la placa, cerrá otras apps que usen el puerto y volvé a intentar.",
     usbErr_FIRMATA_NO_FIRMATA:
-      "El Arduino fue detectado por USB, pero no respondió como StandardFirmata. Cargá StandardFirmata desde Arduino IDE: Archivo > Ejemplos > Firmata > StandardFirmata.",
+      "El Arduino no tiene StandardFirmata. Para usar modo en vivo hay que instalarlo; esto reemplazará el programa actual.",
     usbErr_FIRMATA_FLASH_FAIL:
       "PyBot intentó instalar StandardFirmata automáticamente, pero no pudo. Verificá que sea Arduino Uno/Nano (ATmega328P), el cable de datos y que ninguna otra app use el puerto.",
     arduinoFirmataFlashing:
@@ -280,6 +285,8 @@ Creado por VIC.`,
     eda6ConnectedWemos: "EDA6/WEMOS profile connected. Ports 1–4 ready.",
     eda6ConnectedEsp32: "EDA6/ESP32 profile connected. Ports 1–4 ready.",
     eda6Running: "Sending EDA6 program to the ESP32…",
+    boardProgramRunning:
+      "Program running on the board. Use Stop to halt.",
     eda6Installing: "Installing EDA6.py on the board…",
     eda6InstalledOk: "EDA6 library installed successfully on the board.",
     eda6InstallFail: "Could not install EDA6.py. Reconnect the board and try again.",
@@ -318,6 +325,8 @@ Creado por VIC.`,
       "This program uses procedures or functions. They are not yet supported by Download to Arduino. Run it live or switch to Python.",
     arduinoNoCanvas:
       "Canvas blocks only work on screen. They cannot be downloaded to the Arduino.",
+    boardNoCanvas:
+      "Canvas blocks only work on screen. They cannot be saved to the board.",
     esp32FlashOk:
       "Program saved on the ESP32. The board restarted. Disconnect PyBot: do not reconnect if you want it to keep running alone.",
     esp32FlashVerified: "Verification OK: main.py is {size} bytes on the board.",
@@ -355,7 +364,8 @@ Creado por VIC.`,
     fileLoaded: "File loaded:",
     fileSaved: "File saved:",
     needConnect:
-      "Connect USB before running code that uses pin/motor/servo, or enable Python only.",
+      "Connect USB before running hardware, Arduino, ESP32 or EDA6 code (pin, motor, servo, sensors, LCD); or enable Python only.",
+    needHardwareMode: "To connect a board, switch to Python + Hardware.",
     connectModalTitle: "USB connection",
     connectModalIntro:
       "Pick your board's port in the browser dialog. If nothing shows up, check the items below.",
@@ -400,7 +410,7 @@ Creado por VIC.`,
     usbErr_FIRMATA:
       "The USB device did not respond correctly. Restart the board, close other apps using the same port, and try again.",
     usbErr_FIRMATA_NO_FIRMATA:
-      "The Arduino was detected over USB but did not respond as StandardFirmata. Upload StandardFirmata from Arduino IDE: File > Examples > Firmata > StandardFirmata.",
+      "The Arduino does not have StandardFirmata. Live mode requires installing it; this will replace the current program on the board.",
     usbErr_FIRMATA_FLASH_FAIL:
       "PyBot tried to install StandardFirmata automatically but could not. Check that the board is Arduino Uno/Nano (ATmega328P), use a data USB cable, and close other apps using the port.",
     arduinoFirmataFlashing:
