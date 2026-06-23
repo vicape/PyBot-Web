@@ -431,7 +431,7 @@ export default function PyBotIDE() {
       try {
         await runOnBoard(sourceCode ?? code, {
           onOut: (s) => appendConsole(s, "out"),
-          onErr: (s) => appendConsole(formatPythonError(s) + "\n", "err"),
+          onErr: (s) => appendConsole(String(s).trim() + "\n", "err"),
           onStarted: () => appendConsole(t("boardProgramRunning") + "\n", "info"),
           shouldStop: () => globalThis.__PYBOT_STOP__ === true,
         });
@@ -482,14 +482,7 @@ export default function PyBotIDE() {
           (eda6Profile === "ESP32" ? t("eda6ProfileWarnEsp32") : t("eda6ProfileWarnWemos")) + "\n",
           eda6Profile === "ESP32" ? "err" : "info",
         );
-        try {
-          const hasEda6 = await checkEda6Installed();
-          if (!hasEda6) {
-            appendConsole(t("eda6RunSlowInject") + "\n", "info");
-          }
-        } catch {
-          /* seguir: buildEda6RunPrelude inyectará la librería completa */
-        }
+        appendConsole(t("eda6RunUploading") + "\n", "info");
       }
       const msg = boardType === "esp32-eda6" ? t("eda6Running") : t("mpyRunning");
       await runBoardProgram(msg, activeCode);

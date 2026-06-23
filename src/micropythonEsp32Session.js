@@ -236,7 +236,7 @@ export class MicroPythonSession {
     const CH = 128;
     for (let i = 0; i < bytes.length; i += CH) {
       await this.writer.write(bytes.slice(i, i + CH));
-      if (bytes.length > CH) await sleep(3);
+      if (bytes.length > CH) await sleep(5);
     }
   }
 
@@ -279,6 +279,15 @@ export class MicroPythonSession {
     let interrupted = false;
     let interruptAt = 0;
     for (;;) {
+      // Errores de runtime aparecen en el buffer antes del marcador 0x04.
+      if (onChunk && /Traceback \(most recent call last\)/.test(this._buf)) {
+        const idx = this._buf.indexOf(marker);
+        const end = idx >= 0 ? idx : this._buf.length;
+        const chunk = this._buf.slice(0, end);
+        this._buf = idx >= 0 ? this._buf.slice(idx + marker.length) : "";
+        if (chunk) onChunk(chunk);
+        if (idx >= 0) return;
+      }
       const idx = this._buf.indexOf(marker);
       if (idx >= 0) {
         const chunk = this._buf.slice(0, idx);
@@ -365,11 +374,17 @@ export class MicroPythonSession {
     await this._enterRawRepl();
     this._buf = "";
     await this._write(program);
+    await sleep(program.length > 5000 ? 200 : 80);
     await this._write(CTRL_D);
 
     try {
       await this._waitForRawReplOk(okTimeout);
     } catch {
+      // Si falló, puede haber traceback en el buffer (p. ej. SyntaxError al compilar).
+      const errPreview = this._buf.slice(-800);
+      if (/Traceback|SyntaxError|ImportError|NameError|MemoryError/i.test(errPreview) && onErr) {
+        onErr(errPreview);
+      }
       throw new Error("RUN_FAIL");
     }
     this._sliceAfterRawReplOk();
