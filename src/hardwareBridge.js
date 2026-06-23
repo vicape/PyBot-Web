@@ -71,15 +71,23 @@ export function isMicroPythonOnBoard() {
   return _mode === "esp32-micropython" || _mode === "esp32-eda6";
 }
 
-/** Prelude corto si EDA6.py ya está en la placa (evita subir ~9 KB en cada Run). */
-const EDA6_IMPORT_PRELUDE = "from EDA6 import *\nfrom time import sleep\n";
+/** Prelude corto si EDA6.py ya está en la placa; sincroniza PLACA_ACTUAL con el perfil del menú. */
+function eda6ImportPrelude(profile) {
+  const placa = profile === "ESP32" ? "ESP32" : "WEMOS";
+  return (
+    "import EDA6\n" +
+    `EDA6.PLACA_ACTUAL = "${placa}"\n` +
+    "from EDA6 import *\n" +
+    "from time import sleep\n"
+  );
+}
 
 async function buildEda6RunPrelude(code, profile) {
   if (_mpSession) {
     try {
       const hasEda6 = await _mpSession.fileExists(EDA6_FILENAME);
       if (hasEda6) {
-        let prelude = EDA6_IMPORT_PRELUDE;
+        let prelude = eda6ImportPrelude(profile);
         if (detectPybotGpioUsage(prepareUserCodeForExec(code))) {
           prelude = prelude + "\n" + MPY_PRELUDE;
         }
@@ -322,6 +330,12 @@ export async function hardwareDisconnect() {
  */
 export async function runOnBoard(code, cb = {}) {
   if (!_mpSession) throw new Error("not_connected");
+  // Detener programas previos en la placa (p. ej. main.py o while True colgado).
+  try {
+    await _mpSession.interruptAndRecoverRepl();
+  } catch {
+    /* ignore */
+  }
   if (_mode === "esp32-eda6") {
     const profile = getEda6Profile();
     const userCode = prepareUserCodeForExec(code);

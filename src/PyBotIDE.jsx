@@ -482,6 +482,14 @@ export default function PyBotIDE() {
           (eda6Profile === "ESP32" ? t("eda6ProfileWarnEsp32") : t("eda6ProfileWarnWemos")) + "\n",
           eda6Profile === "ESP32" ? "err" : "info",
         );
+        try {
+          const hasEda6 = await checkEda6Installed();
+          if (!hasEda6) {
+            appendConsole(t("eda6RunSlowInject") + "\n", "info");
+          }
+        } catch {
+          /* seguir: buildEda6RunPrelude inyectará la librería completa */
+        }
       }
       const msg = boardType === "esp32-eda6" ? t("eda6Running") : t("mpyRunning");
       await runBoardProgram(msg, activeCode);

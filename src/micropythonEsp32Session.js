@@ -252,6 +252,25 @@ export class MicroPythonSession {
     });
   }
 
+  /** Respuesta OK del raw REPL de MicroPython (evita falsos positivos con subcadenas). */
+  _waitForRawReplOk(timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const check = () => {
+        if (/(?:^|\r?\n)OK\r?(?:\n|$)/.test(this._buf)) return resolve();
+        if (Date.now() - start > timeoutMs) return reject(new Error("timeout"));
+        this._waitData(80).then(check);
+      };
+      check();
+    });
+  }
+
+  _sliceAfterRawReplOk() {
+    const m = this._buf.match(/(?:^|\r?\n)OK\r?(?:\n|$)/);
+    if (!m) return;
+    this._buf = this._buf.slice(m.index + m[0].length);
+  }
+
   /**
    * Lee y emite (onChunk) hasta encontrar el marcador. Si shouldStop() pasa a
    * true, envía Ctrl-C para interrumpir el programa en la placa.
@@ -349,17 +368,25 @@ export class MicroPythonSession {
     await this._write(CTRL_D);
 
     try {
-      await this._waitForContains("OK", okTimeout);
+      await this._waitForRawReplOk(okTimeout);
     } catch {
       throw new Error("RUN_FAIL");
     }
-    const okIdx = this._buf.indexOf("OK");
-    this._buf = this._buf.slice(okIdx + 2);
+    this._sliceAfterRawReplOk();
 
     if (onStarted) onStarted();
 
+    const emitOut = (chunk) => {
+      if (!chunk) return;
+      if (/Traceback \(most recent call last\)/.test(chunk)) {
+        if (onErr) onErr(chunk);
+        return;
+      }
+      if (onOut) onOut(chunk);
+    };
+
     // stdout hasta el primer 0x04 (programas con while True pueden no terminar nunca).
-    await this._drainTo(CTRL_D, (chunk) => { if (onOut && chunk) onOut(chunk); }, shouldStop);
+    await this._drainTo(CTRL_D, emitOut, shouldStop);
 
     // stderr hasta el segundo 0x04
     let errText = "";
@@ -395,12 +422,11 @@ export class MicroPythonSession {
     await this._write(CTRL_D);
 
     try {
-      await this._waitForContains("OK", timeout);
+      await this._waitForRawReplOk(timeout);
     } catch {
       throw new Error("RUN_FAIL");
     }
-    const okIdx = this._buf.indexOf("OK");
-    this._buf = this._buf.slice(okIdx + 2);
+    this._sliceAfterRawReplOk();
 
     let stdout = "";
     let stderr = "";

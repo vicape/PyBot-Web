@@ -53,6 +53,8 @@ const STRINGS = {
     eda6Running: "Enviando programa EDA6 a la ESP32…",
     boardProgramRunning:
       "Programa en ejecución en la placa. Usá Detener para parar.",
+    eda6RunSlowInject:
+      "EDA6.py no está en la placa: se sube la librería completa (puede tardar unos segundos). Recomendado: Menú → Instalar librería EDA6.",
     eda6Installing: "Instalando EDA6.py en la placa…",
     eda6InstalledOk: "Librería EDA6 instalada correctamente en la placa.",
     eda6InstallFail: "No se pudo instalar EDA6.py. Reconectá la placa e intentá de nuevo.",
@@ -287,6 +289,8 @@ Creado por VIC.`,
     eda6Running: "Sending EDA6 program to the ESP32…",
     boardProgramRunning:
       "Program running on the board. Use Stop to halt.",
+    eda6RunSlowInject:
+      "EDA6.py is not on the board: uploading the full library (may take a few seconds). Recommended: Menu → Install EDA6 library.",
     eda6Installing: "Installing EDA6.py on the board…",
     eda6InstalledOk: "EDA6 library installed successfully on the board.",
     eda6InstallFail: "Could not install EDA6.py. Reconnect the board and try again.",
