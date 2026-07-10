@@ -1451,129 +1451,145 @@ export default function PyBotIDE() {
 
       {settingsOpen ? (
         <div className="modal-back" role="presentation" onClick={() => setSettingsOpen(false)}>
-          <div className="modal" role="dialog" aria-labelledby="settings-title" onClick={(e) => e.stopPropagation()}>
-            <h3 id="settings-title" className="modal-title">
-              {t("settings")}
-            </h3>
-            <label className="modal-row">
-              <span className="modal-label">{t("modeLabel")}</span>
-              <div className="mode-switch">
-                <button
-                  type="button"
-                  className={`mode-btn ${!pythonOnly ? "mode-btn--active" : ""}`}
-                  onClick={() => setPythonOnly(false)}
+          <div
+            className="modal modal--settings"
+            role="dialog"
+            aria-labelledby="settings-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="settings-title" className="modal-title">
+                {t("settings")}
+              </h3>
+            </div>
+            <div className="modal-body">
+              <div className="modal-section-title">{t("settingsSectionWork")}</div>
+              <label className="modal-row">
+                <span className="modal-label">{t("modeLabel")}</span>
+                <div className="mode-switch">
+                  <button
+                    type="button"
+                    className={`mode-btn ${!pythonOnly ? "mode-btn--active" : ""}`}
+                    onClick={() => setPythonOnly(false)}
+                  >
+                    {t("modeHardware")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`mode-btn ${pythonOnly ? "mode-btn--active" : ""}`}
+                    onClick={() => setPythonOnly(true)}
+                  >
+                    {t("modePythonOnly")}
+                  </button>
+                </div>
+              </label>
+              <label className="modal-row">
+                <span className="modal-label">{t("editorLabel")}</span>
+                <select
+                  value={editorMode}
+                  onChange={(e) => setEditorMode(e.target.value)}
+                  className="modal-select"
                 >
-                  {t("modeHardware")}
-                </button>
-                <button
-                  type="button"
-                  className={`mode-btn ${pythonOnly ? "mode-btn--active" : ""}`}
-                  onClick={() => setPythonOnly(true)}
+                  <option value="python">{t("editorPython")}</option>
+                  <option value="pyblock">{t("editorPyblock")}</option>
+                </select>
+              </label>
+
+              <div className="modal-section-title">{t("settingsSectionAppearance")}</div>
+              <label className="modal-row">
+                <span className="modal-label">{t("theme")}</span>
+                <select
+                  value={theme}
+                  onChange={(e) => setTheme(e.target.value)}
+                  className="modal-select"
                 >
-                  {t("modePythonOnly")}
-                </button>
-              </div>
-            </label>
-            <label className="modal-row">
-              <span className="modal-label">{t("editorLabel")}</span>
-              <select
-                value={editorMode}
-                onChange={(e) => setEditorMode(e.target.value)}
-                className="modal-select"
-              >
-                <option value="python">{t("editorPython")}</option>
-                <option value="pyblock">{t("editorPyblock")}</option>
-              </select>
-            </label>
-            <label className="modal-row">
-              <span className="modal-label">{t("theme")}</span>
-              <select
-                value={theme}
-                onChange={(e) => setTheme(e.target.value)}
-                className="modal-select"
-              >
-                <option value="dark">{t("themeDark")}</option>
-                <option value="light">{t("themeLight")}</option>
-              </select>
-            </label>
-            <label className="modal-row">
-              <span className="modal-label">{t("contrast")}</span>
-              <select
-                value={contrast}
-                onChange={(e) => setContrast(e.target.value)}
-                className="modal-select"
-              >
-                <option value="normal">{t("contrastNormal")}</option>
-                <option value="high">{t("contrastHigh")}</option>
-              </select>
-            </label>
-            <label className="modal-row">
-              <span className="modal-label">{t("language")}</span>
-              <select
-                value={getLang()}
-                onChange={(e) => {
-                  setLang(e.target.value);
-                  forceLang((n) => n + 1);
-                }}
-                className="modal-select"
-              >
-                <option value="es">Español</option>
-                <option value="en">English</option>
-              </select>
-            </label>
-            <label className="modal-row">
-              <span className="modal-label">{t("terminalPosition")}</span>
-              <select
-                value={terminalPosition}
-                onChange={(e) => setTerminalPosition(e.target.value)}
-                className="modal-select"
-              >
-                <option value="bottom">{t("terminalBottom")}</option>
-                <option value="right">{t("terminalRight")}</option>
-              </select>
-            </label>
-            <label className="modal-row">
-              <span className="modal-label">{t("fontSize")}</span>
-              <div className="font-stepper">
-                <button
-                  type="button"
-                  className="font-step-btn"
-                  onClick={() => setFontDelta((v) => Math.max(-3, v - 1))}
+                  <option value="dark">{t("themeDark")}</option>
+                  <option value="light">{t("themeLight")}</option>
+                </select>
+              </label>
+              <label className="modal-row">
+                <span className="modal-label">{t("contrast")}</span>
+                <select
+                  value={contrast}
+                  onChange={(e) => setContrast(e.target.value)}
+                  className="modal-select"
                 >
-                  -
-                </button>
-                <span className="font-step-value">{15 + fontDelta}px</span>
-                <button
-                  type="button"
-                  className="font-step-btn"
-                  onClick={() => setFontDelta((v) => Math.min(8, v + 1))}
+                  <option value="normal">{t("contrastNormal")}</option>
+                  <option value="high">{t("contrastHigh")}</option>
+                </select>
+              </label>
+              <label className="modal-row">
+                <span className="modal-label">{t("fontSize")}</span>
+                <div className="font-stepper">
+                  <button
+                    type="button"
+                    className="font-step-btn"
+                    onClick={() => setFontDelta((v) => Math.max(-3, v - 1))}
+                  >
+                    -
+                  </button>
+                  <span className="font-step-value">{15 + fontDelta}px</span>
+                  <button
+                    type="button"
+                    className="font-step-btn"
+                    onClick={() => setFontDelta((v) => Math.min(8, v + 1))}
+                  >
+                    +
+                  </button>
+                </div>
+              </label>
+              <label className="modal-row">
+                <span className="modal-label">{t("terminalPosition")}</span>
+                <select
+                  value={terminalPosition}
+                  onChange={(e) => setTerminalPosition(e.target.value)}
+                  className="modal-select"
                 >
-                  +
-                </button>
-              </div>
-            </label>
-            <label className="modal-row">
-              <span className="modal-label">{t("connectAssistantLabel")}</span>
-              <select
-                value={connectAssistant ? "1" : "0"}
-                onChange={(e) => {
-                  const on = e.target.value === "1";
-                  setConnectAssistant(on);
-                  setConnectAssistantEnabled(on);
-                  if (!on) setConnectModalOpen(false);
-                }}
-                className="modal-select"
-              >
-                <option value="1">{t("connectAssistantOn")}</option>
-                <option value="0">{t("connectAssistantOff")}</option>
-              </select>
-            </label>
-            <button type="button" className="modal-reset" onClick={resetDefaults}>
-              {t("resetDefaults")}
-            </button>
-            <button type="button" className="modal-close" onClick={() => setSettingsOpen(false)}>
-              {t("close")}
-            </button>
+                  <option value="bottom">{t("terminalBottom")}</option>
+                  <option value="right">{t("terminalRight")}</option>
+                </select>
+              </label>
+
+              <div className="modal-section-title">{t("settingsSectionLangConn")}</div>
+              <label className="modal-row">
+                <span className="modal-label">{t("language")}</span>
+                <select
+                  value={getLang()}
+                  onChange={(e) => {
+                    setLang(e.target.value);
+                    forceLang((n) => n + 1);
+                  }}
+                  className="modal-select"
+                >
+                  <option value="es">Español</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+              <label className="modal-row">
+                <span className="modal-label">{t("connectAssistantLabel")}</span>
+                <select
+                  value={connectAssistant ? "1" : "0"}
+                  onChange={(e) => {
+                    const on = e.target.value === "1";
+                    setConnectAssistant(on);
+                    setConnectAssistantEnabled(on);
+                    if (!on) setConnectModalOpen(false);
+                  }}
+                  className="modal-select"
+                >
+                  <option value="1">{t("connectAssistantOn")}</option>
+                  <option value="0">{t("connectAssistantOff")}</option>
+                </select>
+              </label>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="modal-reset" onClick={resetDefaults}>
+                {t("resetDefaults")}
+              </button>
+              <button type="button" className="modal-close" onClick={() => setSettingsOpen(false)}>
+                {t("close")}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
