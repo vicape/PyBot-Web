@@ -84,6 +84,7 @@ export default function PyBotIDE() {
   const [connectModalPhase, setConnectModalPhase] = useState("ready");
   const [connectModalError, setConnectModalError] = useState(null);
   const [connectModalShowHelp, setConnectModalShowHelp] = useState(false);
+  const [connectModalPreparing, setConnectModalPreparing] = useState(false);
   const [connectAssistant, setConnectAssistant] = useState(() => isConnectAssistantEnabled());
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -354,9 +355,13 @@ export default function PyBotIDE() {
       const { baudRate, mode } = await hardwareConnect({
         onArduinoPrepare: (info) => {
           if (info.phase === "start") {
+            setConnectModalPreparing(true);
             appendConsole(t("arduinoFirmataFlashing") + "\n", "info");
           } else if (info.phase === "done") {
+            setConnectModalPreparing(false);
             appendConsole(t("arduinoFirmataFlashOk") + "\n", "info");
+          } else if (info.phase === "fail") {
+            setConnectModalPreparing(false);
           }
         },
       });
@@ -373,7 +378,7 @@ export default function PyBotIDE() {
         appendConsole(t("esp32FlashHint") + "\n", "info");
         appendConsole(t("esp32ReconnectWarn") + "\n", "info");
       } else {
-        appendConsole(`USB OK @ ${baudRate} baud\n`, "info");
+        appendConsole(`${t("arduinoConnected")}\n`, "info");
       }
       return { ok: true };
     } catch (e) {
@@ -382,6 +387,7 @@ export default function PyBotIDE() {
       return { ok: false, message: e?.message, display };
     } finally {
       setConnecting(false);
+      setConnectModalPreparing(false);
     }
   }, [connecting, appendConsole, eda6Profile]);
 
@@ -1432,6 +1438,7 @@ export default function PyBotIDE() {
         open={connectModalOpen}
         boardType={boardType}
         connecting={connecting}
+        preparing={connectModalPreparing}
         phase={connectModalPhase}
         errorMessage={connectModalError}
         showHelp={connectModalShowHelp}

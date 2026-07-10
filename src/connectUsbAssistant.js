@@ -5,12 +5,6 @@
 
 const STORAGE_KEY = "pybot_connect_assistant";
 
-export const USB_DRIVER_LINKS = {
-  ftdi: "https://ftdichip.com/drivers/vcp-drivers/",
-  ch340: "https://www.wch-ic.com/downloads/CH341SER_EXE.html",
-  cp2102: "https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers",
-};
-
 /** @returns {boolean} */
 export function isConnectAssistantEnabled() {
   const v = localStorage.getItem(STORAGE_KEY);

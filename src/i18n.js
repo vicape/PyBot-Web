@@ -144,20 +144,13 @@ const STRINGS = {
     connectCheck_https: "Sitio seguro (HTTPS o localhost)",
     connectCheck_knownPorts: "Esta PC ya autorizó {n} puerto(s) USB antes",
     connectModalConnecting: "Conectando…",
+    connectModalPreparing: "Preparando tu Arduino…",
     connectShowHelp: "¿La placa no aparece?",
     connectHideHelp: "Ocultar ayuda",
-    connectHelpTitle: "Si Windows no reconoce la placa",
-    connectHelpStep1:
-      "Abrí Administrador de dispositivos. La placa debe estar en Puertos (COM y LPT), no en Otros dispositivos con ⚠.",
-    connectHelpStep2:
-      "Si ves «FT232R USB UART» con signo de exclamación, instalá el driver FTDI (una vez por PC).",
-    connectHelpStep3: "Usá cable USB de datos (no solo carga) y cerrá Thonny o Arduino IDE si están abiertos.",
-    connectHelpStep4: "Desconectá y volvé a conectar el USB; luego pulsá Conectar USB de nuevo.",
-    connectDriverLead: "Descargá el driver según el chip USB de tu placa o cable:",
-    connectDriverFtdiHint: "Otros dispositivos → FT232R",
-    connectDriverCh340Hint: "USB-SERIAL CH340",
-    connectDriverCp2102Hint: "Silicon Labs CP210x",
-    connectDriverDownload: "Descargar driver oficial",
+    connectHelpTitle: "Si la placa no aparece",
+    connectHelpStep1: "Usá un cable USB de datos (no solo de carga).",
+    connectHelpStep2: "Desconectá y volvé a conectar la placa; probá otro puerto USB de la PC.",
+    connectHelpStep3: "Cerrá Arduino IDE o Thonny si están abiertos, y volvé a pulsar Conectar USB.",
     connectHelpBrowser:
       "Usá Chrome o Edge actualizado. Firefox y Safari no soportan conexión USB desde el navegador.",
     connectHelpHttps:
@@ -174,18 +167,19 @@ const STRINGS = {
     usbErr_HTTPS:
       "La aplicación debe abrirse en un entorno seguro para habilitar la conexión USB.",
     usbErr_LIST_EMPTY:
-      "No se encontró ningún puerto disponible o se canceló la selección. Verificá cable de datos, drivers del sistema y que el dispositivo aparezca como puerto serie.",
+      "No se encontró la placa o se canceló la selección. Revisá el cable USB y probá de nuevo.",
     usbErr_PERMISSION:
       "La aplicación no tiene permisos para acceder al USB. Revisá permisos del navegador y del sistema.",
     usbErr_FIRMATA:
       "El dispositivo USB no respondió correctamente. Reiniciá la placa, cerrá otras apps que usen el puerto y volvé a intentar.",
     usbErr_FIRMATA_NO_FIRMATA:
-      "El Arduino no tiene StandardFirmata. Para usar modo en vivo hay que instalarlo; esto reemplazará el programa actual.",
+      "No se pudo preparar el Arduino. Probá desconectarlo y volver a conectar.",
     usbErr_FIRMATA_FLASH_FAIL:
-      "PyBot intentó instalar StandardFirmata automáticamente, pero no pudo. Verificá que sea Arduino Uno/Nano (ATmega328P), el cable de datos y que ninguna otra app use el puerto.",
+      "No pudimos preparar el Arduino. Revisá el cable USB, que sea Arduino Uno o Nano, y cerrá Arduino IDE o Thonny si están abiertos.",
     arduinoFirmataFlashing:
-      "Preparando Arduino: instalando StandardFirmata automáticamente (puede tardar ~30 s)…",
-    arduinoFirmataFlashOk: "StandardFirmata instalado. Arduino listo para PyBot.",
+      "Preparando tu Arduino, esperá unos segundos…",
+    arduinoFirmataFlashOk: "¡Listo! Tu Arduino ya está preparado.",
+    arduinoConnected: "¡Arduino conectado!",
     usbErr_ESP32_NO_RESPONSE:
       "La placa ESP32 no respondió. Verificá que tenga cargado el firmware PyBot ESP32, el cable de datos y que ninguna otra app use el puerto.",
     usbErr_ESP32_BAD_FIRMWARE:
@@ -218,7 +212,7 @@ El entorno adapta el código automáticamente para ejecutar de forma compatible.
 
 USB / puerto no aparece:
 • Solo Chrome o Edge (Chromium). HTTPS o localhost.
-• Driver CH340 o CP2102 según el chip de tu placa; cable de datos; otro USB.
+• Cable USB de datos; probá otro puerto USB.
 • Cerrar cualquier otra app que esté usando el mismo puerto USB.
 
 Recomendado: navegador actualizado + cable USB de datos.`,
@@ -382,20 +376,13 @@ Creado por VIC.`,
     connectCheck_https: "Secure site (HTTPS or localhost)",
     connectCheck_knownPorts: "This PC previously authorized {n} USB port(s)",
     connectModalConnecting: "Connecting…",
+    connectModalPreparing: "Getting your Arduino ready…",
     connectShowHelp: "Board not showing up?",
     connectHideHelp: "Hide help",
-    connectHelpTitle: "If Windows does not recognize the board",
-    connectHelpStep1:
-      "Open Device Manager. The board should be under Ports (COM & LPT), not Other devices with a warning icon.",
-    connectHelpStep2:
-      "If you see «FT232R USB UART» with an exclamation mark, install the FTDI driver (once per PC).",
-    connectHelpStep3: "Use a data USB cable (not charge-only) and close Thonny or Arduino IDE if open.",
-    connectHelpStep4: "Unplug and replug USB, then click Connect USB again.",
-    connectDriverLead: "Download the driver for your board or cable USB chip:",
-    connectDriverFtdiHint: "Other devices → FT232R",
-    connectDriverCh340Hint: "USB-SERIAL CH340",
-    connectDriverCp2102Hint: "Silicon Labs CP210x",
-    connectDriverDownload: "Download official driver",
+    connectHelpTitle: "If the board does not show up",
+    connectHelpStep1: "Use a data USB cable (not charge-only).",
+    connectHelpStep2: "Unplug and replug the board; try another USB port on the PC.",
+    connectHelpStep3: "Close Arduino IDE or Thonny if open, then click Connect USB again.",
     connectHelpBrowser:
       "Use up-to-date Chrome or Edge. Firefox and Safari do not support USB from the browser.",
     connectHelpHttps:
@@ -412,18 +399,19 @@ Creado por VIC.`,
     usbErr_HTTPS:
       "The app must run in a secure context to enable USB connection.",
     usbErr_LIST_EMPTY:
-      "No ports were found or selection was cancelled. Check data cable, system drivers, and verify the device appears as a serial port.",
+      "Board not found or selection was cancelled. Check the USB cable and try again.",
     usbErr_PERMISSION:
       "The app does not have USB access permissions. Check browser and system permissions.",
     usbErr_FIRMATA:
       "The USB device did not respond correctly. Restart the board, close other apps using the same port, and try again.",
     usbErr_FIRMATA_NO_FIRMATA:
-      "The Arduino does not have StandardFirmata. Live mode requires installing it; this will replace the current program on the board.",
+      "Could not get the Arduino ready. Try unplugging it and connecting again.",
     usbErr_FIRMATA_FLASH_FAIL:
-      "PyBot tried to install StandardFirmata automatically but could not. Check that the board is Arduino Uno/Nano (ATmega328P), use a data USB cable, and close other apps using the port.",
+      "We could not get the Arduino ready. Check the USB cable, make sure it is an Arduino Uno or Nano, and close Arduino IDE or Thonny if they are open.",
     arduinoFirmataFlashing:
-      "Preparing Arduino: installing StandardFirmata automatically (may take ~30 s)…",
-    arduinoFirmataFlashOk: "StandardFirmata installed. Arduino ready for PyBot.",
+      "Getting your Arduino ready, please wait a few seconds…",
+    arduinoFirmataFlashOk: "All set! Your Arduino is ready.",
+    arduinoConnected: "Arduino connected!",
     usbErr_ESP32_NO_RESPONSE:
       "The ESP32 board did not respond. Make sure the PyBot ESP32 firmware is flashed, the cable carries data, and no other app is using the port.",
     usbErr_ESP32_BAD_FIRMWARE:
@@ -456,7 +444,7 @@ The runtime adapts code automatically for safe execution.
 
 USB / empty port list:
 • Chrome or Edge (Chromium) only. HTTPS or localhost.
-• CH340 or CP2102 driver depending on your board; data-capable cable; try another USB port.
+• Data-capable USB cable; try another USB port.
 • Close any other app using the same USB port.
 
 Recommended: updated browser + data-capable USB cable.`,

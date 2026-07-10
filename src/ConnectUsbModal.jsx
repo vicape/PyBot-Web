@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { t } from "./i18n.js";
 import {
-  USB_DRIVER_LINKS,
   getUsbEnvironmentChecks,
   classifyConnectError,
   boardLabelKey,
@@ -12,6 +11,7 @@ import {
  *   open: boolean;
  *   boardType: string;
  *   connecting: boolean;
+ *   preparing?: boolean;
  *   phase: "ready" | "connecting" | "failed";
  *   errorMessage: string | null;
  *   showHelp: boolean;
@@ -24,6 +24,7 @@ export default function ConnectUsbModal({
   open,
   boardType,
   connecting,
+  preparing = false,
   phase,
   errorMessage,
   showHelp,
@@ -113,49 +114,7 @@ export default function ConnectUsbModal({
               <li>{t("connectHelpStep1")}</li>
               <li>{t("connectHelpStep2")}</li>
               <li>{t("connectHelpStep3")}</li>
-              <li>{t("connectHelpStep4")}</li>
             </ol>
-
-            {(errorKind === "LIST_EMPTY" || showHelp) && (
-              <div className="connect-driver-block">
-                <p className="connect-driver-block__lead">{t("connectDriverLead")}</p>
-                <ul className="connect-driver-list">
-                  <li>
-                    <strong>FT232R / FTDI</strong> — {t("connectDriverFtdiHint")}
-                    <a
-                      href={USB_DRIVER_LINKS.ftdi}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="connect-driver-link"
-                    >
-                      {t("connectDriverDownload")}
-                    </a>
-                  </li>
-                  <li>
-                    <strong>CH340</strong> — {t("connectDriverCh340Hint")}
-                    <a
-                      href={USB_DRIVER_LINKS.ch340}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="connect-driver-link"
-                    >
-                      {t("connectDriverDownload")}
-                    </a>
-                  </li>
-                  <li>
-                    <strong>CP2102</strong> — {t("connectDriverCp2102Hint")}
-                    <a
-                      href={USB_DRIVER_LINKS.cp2102}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="connect-driver-link"
-                    >
-                      {t("connectDriverDownload")}
-                    </a>
-                  </li>
-                </ul>
-              </div>
-            )}
 
             {errorKind === "MISSING_BROWSER" ? (
               <p className="connect-help__note">{t("connectHelpBrowser")}</p>
@@ -176,7 +135,11 @@ export default function ConnectUsbModal({
             onClick={onConnect}
             disabled={!canConnect}
           >
-            {phase === "connecting" || connecting ? t("connectModalConnecting") : t("connect")}
+            {preparing
+              ? t("connectModalPreparing")
+              : phase === "connecting" || connecting
+                ? t("connectModalConnecting")
+                : t("connect")}
           </button>
           <button type="button" className="connect-btn connect-btn--ghost" onClick={onToggleHelp}>
             {showHelp ? t("connectHideHelp") : t("connectShowHelp")}
