@@ -18,9 +18,23 @@
  * que es quien de verdad las ejecuta y devuelve el resultado.
  */
 
-import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs";
-
 const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+const PYODIDE_MODULE_URL = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs";
+
+// Cargamos Pyodide con import() dinámico en tiempo de ejecución (no estático).
+// Con el import estático, el build de producción de Vite reescribía el módulo
+// del CDN a una variable que quedaba sin definir dentro del Worker
+// ("pyodide_mjs is not defined"). El /* @vite-ignore */ hace que Vite deje el
+// import tal cual para que el Worker lo baje del CDN al arrancar.
+let loadPyodideFnPromise = null;
+function getLoadPyodide() {
+  if (!loadPyodideFnPromise) {
+    loadPyodideFnPromise = import(/* @vite-ignore */ PYODIDE_MODULE_URL).then(
+      (mod) => mod.loadPyodide,
+    );
+  }
+  return loadPyodideFnPromise;
+}
 
 /**
  * API async nativa para Pyodide (compatible universal, sin run_sync/JSPI).
@@ -447,10 +461,12 @@ let pyodidePromise = null;
 
 function getPyodide() {
   if (!pyodidePromise) {
-    pyodidePromise = loadPyodide({ indexURL: PYODIDE_INDEX_URL }).catch((e) => {
-      pyodidePromise = null;
-      throw e;
-    });
+    pyodidePromise = getLoadPyodide()
+      .then((loadPyodide) => loadPyodide({ indexURL: PYODIDE_INDEX_URL }))
+      .catch((e) => {
+        pyodidePromise = null;
+        throw e;
+      });
   }
   return pyodidePromise;
 }
