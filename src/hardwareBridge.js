@@ -537,14 +537,3 @@ export async function hwPinRead(pinId) {
 export async function hwPinWrite(pinId, value) {
   await needAdapter().pinWrite(pinId, value);
 }
-
-/** Objeto registrado en Pyodide como `pybot_hw` */
-export function createPyodideHwModule() {
-  return {
-    motor: (pin, speed) => hwMotor(pin, speed),
-    servo_write: (pin, angle) => hwServoWrite(pin, angle),
-    wait: (seconds) => hwWait(seconds),
-    pin_read: (pinId) => hwPinRead(pinId),
-    pin_write: (pinId, value) => hwPinWrite(pinId, value),
-  };
-}

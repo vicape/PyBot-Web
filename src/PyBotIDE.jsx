@@ -298,7 +298,19 @@ export default function PyBotIDE() {
   }, [boardMenuOpen]);
 
   const appendConsole = useCallback((line, kind = "out") => {
-    setConsoleLines((prev) => [...prev.slice(-400), { text: line, kind }]);
+    setConsoleLines((prev) => {
+      const next = [...prev, { text: line, kind }];
+      // Acota memoria/DOM ante salida continua: como mucho 500 entradas y
+      // ~48 KB de texto total (lo que se ve más un buen scrollback).
+      let total = 0;
+      let start = next.length;
+      for (let i = next.length - 1; i >= 0; i--) {
+        total += next[i].text.length;
+        start = i;
+        if (total > 49152 || next.length - i >= 500) break;
+      }
+      return start > 0 ? next.slice(start) : next;
+    });
   }, []);
 
   const clearConsole = useCallback(() => setConsoleLines([]), []);
