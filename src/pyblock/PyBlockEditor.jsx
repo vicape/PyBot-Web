@@ -5,6 +5,8 @@
  * - Genera Python real de PyBot en cada cambio y lo informa via onGenerated.
  * - Persiste el workspace en localStorage (pybot_pyblock_workspace).
  * - Muestra el Python generado en modo solo-lectura y permite "Copiar a Python".
+ * - Sigue el idioma de la app (prop `lang`): categorías, bloques y textos del
+ *   panel se re-traducen sin perder lo que el usuario armó.
  *
  * Si algo falla, se intenta no romper: el modo Python sigue intacto porque este
  * componente solo se monta cuando el editor está en modo PyBlock.
@@ -12,26 +14,31 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as Blockly from "blockly";
-import { PYBLOCK_TOOLBOX } from "./pyblockToolbox.js";
+import { getPyblockToolbox } from "./pyblockToolbox.js";
 import { pyblockWorkspaceToPython } from "./pyblockGenerator.js";
-import "./pyblockBlocks.js";
+import { definePyblockBlocks } from "./pyblockBlocks.js";
+import { t } from "../i18n.js";
 import "./pyblock.css";
 
 const WORKSPACE_KEY = "pybot_pyblock_workspace";
 
-export default function PyBlockEditor({ theme, onGenerated, onCopyToPython }) {
+export default function PyBlockEditor({ theme, lang, onGenerated, onCopyToPython }) {
   const containerRef = useRef(null);
   const workspaceRef = useRef(null);
+  const regenerateRef = useRef(() => {});
+  const langRef = useRef(lang);
   const [python, setPython] = useState("");
 
   useEffect(() => {
     const host = containerRef.current;
     if (!host) return undefined;
 
+    definePyblockBlocks(langRef.current);
+
     let workspace;
     try {
       workspace = Blockly.inject(host, {
-        toolbox: PYBLOCK_TOOLBOX,
+        toolbox: getPyblockToolbox(),
         trashcan: true,
         scrollbars: true,
         move: { scrollbars: true, drag: true, wheel: true },
@@ -80,6 +87,7 @@ export default function PyBlockEditor({ theme, onGenerated, onCopyToPython }) {
         /* ignorar errores de generación/guardado */
       }
     };
+    regenerateRef.current = regenerate;
 
     regenerate();
     workspace.addChangeListener((event) => {
@@ -118,24 +126,56 @@ export default function PyBlockEditor({ theme, onGenerated, onCopyToPython }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Cuando cambia el idioma de la app: re-traduce categorías y bloques,
+  // conservando lo que el usuario ya armó (se recrea desde el estado guardado).
+  useEffect(() => {
+    if (langRef.current === lang) return;
+    langRef.current = lang;
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
+
+    let saved = null;
+    try {
+      saved = Blockly.serialization.workspaces.save(workspace);
+    } catch {
+      /* si no se pudo guardar, seguimos igual */
+    }
+
+    definePyblockBlocks(lang);
+
+    try {
+      workspace.updateToolbox(getPyblockToolbox());
+    } catch {
+      /* si falla, la toolbox queda en el idioma anterior */
+    }
+
+    if (saved) {
+      try {
+        workspace.clear();
+        Blockly.serialization.workspaces.load(saved, workspace);
+      } catch {
+        /* si falla la recarga, el workspace queda como estaba */
+      }
+    }
+    regenerateRef.current?.();
+  }, [lang]);
+
   return (
     <div className="pyblock-root" data-theme={theme}>
       <div ref={containerRef} className="pyblock-canvas" />
       <div className="pyblock-preview">
         <div className="pyblock-preview__head">
-          <span>Python generado</span>
+          <span>{t("pyblockGeneratedLabel")}</span>
           <button
             type="button"
             className="pyblock-copy"
             onClick={() => onCopyToPython?.(python)}
             disabled={!python.trim()}
           >
-            Copiar a Python
+            {t("pyblockCopyBtn")}
           </button>
         </div>
-        <pre className="pyblock-code">
-          {python || "# Arrastrá bloques desde la izquierda para generar Python."}
-        </pre>
+        <pre className="pyblock-code">{python || t("pyblockEmptyCode")}</pre>
       </div>
     </div>
   );

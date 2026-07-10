@@ -1233,6 +1233,7 @@ export default function PyBotIDE() {
                       >
                         <PyBlockEditor
                           theme={theme}
+                          lang={lang}
                           onGenerated={setPyblockCode}
                           onCopyToPython={onCopyToPython}
                         />
@@ -1323,6 +1324,7 @@ export default function PyBotIDE() {
                       >
                         <PyBlockEditor
                           theme={theme}
+                          lang={lang}
                           onGenerated={setPyblockCode}
                           onCopyToPython={onCopyToPython}
                         />
