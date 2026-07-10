@@ -91,6 +91,7 @@ export default function PyBotIDE() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
+  const [boardMenuOpen, setBoardMenuOpen] = useState(false);
   const [helpModuleIdx, setHelpModuleIdx] = useState(0);
   const [helpLesson, setHelpLesson] = useState(null);
   const [pythonOnly, setPythonOnly] = useState(() => readInitialPythonOnly());
@@ -118,6 +119,7 @@ export default function PyBotIDE() {
   const consoleEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const toolbarMenuRef = useRef(null);
+  const boardMenuRef = useRef(null);
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const inputResolveRef = useRef(null);
@@ -283,6 +285,17 @@ export default function PyBotIDE() {
     document.addEventListener("pointerdown", onDocPointerDown, true);
     return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
   }, [toolbarMenuOpen]);
+
+  useEffect(() => {
+    if (!boardMenuOpen) return;
+    const onDocPointerDown = (event) => {
+      if (!boardMenuRef.current?.contains(event.target)) {
+        setBoardMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
+  }, [boardMenuOpen]);
 
   const appendConsole = useCallback((line, kind = "out") => {
     setConsoleLines((prev) => [...prev.slice(-400), { text: line, kind }]);
@@ -995,39 +1008,27 @@ export default function PyBotIDE() {
                     <span className="tb-btn__label">{t("stop")}</span>
                   </button>
                 </div>
-                <div className="tb-group tb-group--muted" ref={toolbarMenuRef}>
+                <div className="tb-group tb-group--muted" ref={boardMenuRef}>
                   <button
                     type="button"
-                    className="tb-btn tb-btn--ghost tb-btn--menu"
-                    onClick={() => setToolbarMenuOpen((v) => !v)}
-                    aria-expanded={toolbarMenuOpen}
+                    className={`tb-btn tb-btn--ghost tb-btn--menu ${connected ? "tb-btn--connected" : ""}`}
+                    onClick={() => setBoardMenuOpen((v) => !v)}
+                    aria-expanded={boardMenuOpen}
                     aria-haspopup="menu"
                   >
-                    <span className="tb-btn__label">{t("menu")}</span>
+                    {connected ? <IconUsb width={15} height={15} /> : <IconPlug width={15} height={15} />}
+                    <span className="tb-btn__label">{t("boardMenuTitle")}</span>
                     <IconChevron width={14} height={14} />
                   </button>
-                  {toolbarMenuOpen ? (
-                    <div className="toolbar-menu" role="menu" aria-label={t("menuActions")}>
-                      {/* —— Grupo 1: Archivo —— */}
-                      <div className="toolbar-menu-section-title">{t("menuSectionFile")}</div>
-                      <button type="button" className="toolbar-menu-item" onClick={() => { onOpenLocal(); setToolbarMenuOpen(false); }}>
-                        {t("openFile")}
-                      </button>
-                      <button type="button" className="toolbar-menu-item" onClick={() => { onSaveLocal(); setToolbarMenuOpen(false); }}>
-                        {t("saveFile")}
-                      </button>
-
-                      <div className="toolbar-menu-divider" />
-
-                      {/* —— Grupo 2: Placa y conexión —— */}
-                      <div className="toolbar-menu-section-title">{t("menuSectionBoard")}</div>
+                  {boardMenuOpen ? (
+                    <div className="toolbar-menu" role="menu" aria-label={t("menuSectionBoard")}>
                       <button
                         type="button"
-                        className="toolbar-menu-item"
+                        className="toolbar-menu-item toolbar-menu-item--highlight"
                         onClick={() => {
                           if (connected) onDisconnect();
                           else onConnect();
-                          setToolbarMenuOpen(false);
+                          setBoardMenuOpen(false);
                         }}
                         disabled={connecting}
                       >
@@ -1072,7 +1073,7 @@ export default function PyBotIDE() {
                             className="toolbar-menu-item toolbar-menu-item--secondary"
                             onClick={() => {
                               onFlashToEsp32();
-                              setToolbarMenuOpen(false);
+                              setBoardMenuOpen(false);
                             }}
                           >
                             {boardType === "esp32-eda6" ? t("eda6FlashBtn") : t("esp32FlashBtn")}
@@ -1082,7 +1083,7 @@ export default function PyBotIDE() {
                             className="toolbar-menu-item toolbar-menu-item--secondary"
                             onClick={() => {
                               onDeleteMainPy();
-                              setToolbarMenuOpen(false);
+                              setBoardMenuOpen(false);
                             }}
                           >
                             {t("eda6DeleteMainBtn")}
@@ -1092,7 +1093,7 @@ export default function PyBotIDE() {
                             className="toolbar-menu-item toolbar-menu-item--secondary"
                             onClick={() => {
                               onRecoverRepl();
-                              setToolbarMenuOpen(false);
+                              setBoardMenuOpen(false);
                             }}
                           >
                             {t("esp32RecoverReplBtn")}
@@ -1102,7 +1103,7 @@ export default function PyBotIDE() {
                             className="toolbar-menu-item toolbar-menu-item--secondary"
                             onClick={() => {
                               onVerifyMainPy();
-                              setToolbarMenuOpen(false);
+                              setBoardMenuOpen(false);
                             }}
                           >
                             {t("esp32VerifyMainBtn")}
@@ -1114,7 +1115,7 @@ export default function PyBotIDE() {
                                 className="toolbar-menu-item toolbar-menu-item--secondary"
                                 onClick={() => {
                                   onInstallEda6();
-                                  setToolbarMenuOpen(false);
+                                  setBoardMenuOpen(false);
                                 }}
                               >
                                 {t("eda6InstallBtn")}
@@ -1124,7 +1125,7 @@ export default function PyBotIDE() {
                                 className="toolbar-menu-item toolbar-menu-item--secondary"
                                 onClick={() => {
                                   onVerifyEda6();
-                                  setToolbarMenuOpen(false);
+                                  setBoardMenuOpen(false);
                                 }}
                               >
                                 {t("eda6VerifyBtn")}
@@ -1135,12 +1136,13 @@ export default function PyBotIDE() {
                       ) : null}
                       {boardType === "arduino-firmata" ? (
                         <>
+                          <div className="toolbar-menu-divider" />
                           <button
                             type="button"
                             className="toolbar-menu-item toolbar-menu-item--highlight"
                             onClick={() => {
                               onDownloadToArduino();
-                              setToolbarMenuOpen(false);
+                              setBoardMenuOpen(false);
                             }}
                             disabled={downloadingArduino}
                           >
@@ -1149,42 +1151,31 @@ export default function PyBotIDE() {
                           <div className="toolbar-menu-hint">{t("arduinoDownloadMenuHint")}</div>
                         </>
                       ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="tb-group tb-group--muted" ref={toolbarMenuRef}>
+                  <button
+                    type="button"
+                    className="tb-btn tb-btn--ghost tb-btn--menu"
+                    onClick={() => setToolbarMenuOpen((v) => !v)}
+                    aria-expanded={toolbarMenuOpen}
+                    aria-haspopup="menu"
+                  >
+                    <span className="tb-btn__label">{t("menu")}</span>
+                    <IconChevron width={14} height={14} />
+                  </button>
+                  {toolbarMenuOpen ? (
+                    <div className="toolbar-menu" role="menu" aria-label={t("menuActions")}>
+                      <button type="button" className="toolbar-menu-item" onClick={() => { onOpenLocal(); setToolbarMenuOpen(false); }}>
+                        {t("openFile")}
+                      </button>
+                      <button type="button" className="toolbar-menu-item" onClick={() => { onSaveLocal(); setToolbarMenuOpen(false); }}>
+                        {t("saveFile")}
+                      </button>
 
                       <div className="toolbar-menu-divider" />
 
-                      {/* —— Grupo 3: Preferencias y ayuda —— */}
-                      <div className="toolbar-menu-section-title">{t("menuSectionPrefs")}</div>
-                      <div className="toolbar-menu-mode">
-                        <span className="toolbar-menu-mode__label">{t("modeLabel")}</span>
-                        <div className="mode-switch">
-                          <button
-                            type="button"
-                            className={`mode-btn ${!pythonOnly ? "mode-btn--active" : ""}`}
-                            onClick={() => setPythonOnly(false)}
-                          >
-                            {t("modeHardware")}
-                          </button>
-                          <button
-                            type="button"
-                            className={`mode-btn ${pythonOnly ? "mode-btn--active" : ""}`}
-                            onClick={() => setPythonOnly(true)}
-                          >
-                            {t("modePythonOnly")}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="toolbar-menu-mode">
-                        <span className="toolbar-menu-mode__label">{t("editorLabel")}</span>
-                        <select
-                          className="toolbar-menu-board"
-                          value={editorMode}
-                          onChange={(e) => setEditorMode(e.target.value)}
-                          aria-label={t("editorLabel")}
-                        >
-                          <option value="python">{t("editorPython")}</option>
-                          <option value="pyblock">{t("editorPyblock")}</option>
-                        </select>
-                      </div>
                       <button
                         type="button"
                         className="toolbar-menu-item"
@@ -1464,6 +1455,36 @@ export default function PyBotIDE() {
             <h3 id="settings-title" className="modal-title">
               {t("settings")}
             </h3>
+            <label className="modal-row">
+              <span className="modal-label">{t("modeLabel")}</span>
+              <div className="mode-switch">
+                <button
+                  type="button"
+                  className={`mode-btn ${!pythonOnly ? "mode-btn--active" : ""}`}
+                  onClick={() => setPythonOnly(false)}
+                >
+                  {t("modeHardware")}
+                </button>
+                <button
+                  type="button"
+                  className={`mode-btn ${pythonOnly ? "mode-btn--active" : ""}`}
+                  onClick={() => setPythonOnly(true)}
+                >
+                  {t("modePythonOnly")}
+                </button>
+              </div>
+            </label>
+            <label className="modal-row">
+              <span className="modal-label">{t("editorLabel")}</span>
+              <select
+                value={editorMode}
+                onChange={(e) => setEditorMode(e.target.value)}
+                className="modal-select"
+              >
+                <option value="python">{t("editorPython")}</option>
+                <option value="pyblock">{t("editorPyblock")}</option>
+              </select>
+            </label>
             <label className="modal-row">
               <span className="modal-label">{t("theme")}</span>
               <select

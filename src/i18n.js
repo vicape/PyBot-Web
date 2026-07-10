@@ -32,10 +32,9 @@ const STRINGS = {
     clearConsole: "Limpiar consola",
     accountMenu: "Cuenta / login",
     menuActions: "Acciones",
-    menuSectionFile: "Archivo",
     menuSectionBoard: "Placa y conexión",
-    menuSectionPrefs: "Preferencias y ayuda",
     menuBoardToolsLabel: "Herramientas de la placa",
+    boardMenuTitle: "Placa",
     modeLabel: "Modo",
     modeHardware: "Python + Hardware",
     modePythonOnly: "Python Solo",
@@ -199,7 +198,7 @@ const STRINGS = {
     usbErr_MPY_GENERIC:
       "No se pudo conectar con la ESP32 en modo MicroPython. Revisá el cable, el puerto y que tenga MicroPython.",
     pyodideLoad: "Cargando Python (primera vez puede tardar)…",
-    statusMeta: "Python · mismo estilo que escritorio",
+    statusMeta: "Python",
     helpBody: `PyBot Web usa Python estilo escritorio: escribís pin/motor/servo/wait sin async/await.
 
   pin("out", 2, 1)
@@ -268,10 +267,9 @@ Creado por VIC.`,
     clearConsole: "Clear console",
     accountMenu: "Account / login",
     menuActions: "Actions",
-    menuSectionFile: "File",
     menuSectionBoard: "Board & connection",
-    menuSectionPrefs: "Preferences & help",
     menuBoardToolsLabel: "Board tools",
+    boardMenuTitle: "Board",
     modeLabel: "Mode",
     modeHardware: "Python + Hardware",
     modePythonOnly: "Python only",
@@ -435,7 +433,7 @@ Creado por VIC.`,
     usbErr_MPY_GENERIC:
       "Could not connect to the ESP32 in MicroPython mode. Check the cable, port, and that MicroPython is installed.",
     pyodideLoad: "Loading Python (first load may take a while)…",
-    statusMeta: "Python · same style as desktop",
+    statusMeta: "Python",
     helpBody: `PyBot Web keeps desktop-style Python: write pin/motor/servo/wait without async/await.
 
   pin("out", 2, 1)

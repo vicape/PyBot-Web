@@ -502,6 +502,15 @@
   min-width: 94px;
 }
 
+.tb-btn--connected {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.tb-btn--connected:hover:not(:disabled) {
+  color: var(--ok);
+}
+
 .toolbar-menu {
   position: absolute;
   top: calc(100% + 8px);
