@@ -50,28 +50,33 @@ export function definePyblockBlocks(lang) {
   }
 
   Blockly.defineBlocksWithJsonArray([
-    // ----- Inicio (bloque hat genérico) -----
+    // ----- Inicio (bloque hat, estilo Scratch: los bloques se apilan debajo) -----
     {
       type: "pyblock_start",
-      message0: t("pyblockStart") + " %1",
-      args0: [{ type: "input_statement", name: "DO" }],
+      message0: t("pyblockStart"),
+      nextStatement: null,
       colour: HUE_START,
       extensions: ["pyblock_start_hat"],
       tooltip: t("pyblockStartTooltip"),
     },
 
     // ----- Control -----
+    // "mientras" == while de Python. Trae un "verdadero" enchufado por
+    // defecto, así que arrastrado sin tocar nada se comporta como el viejo
+    // "forever" (while True). Si se reemplaza el "verdadero" por una
+    // condición real, queda un while de Python normal.
     {
-      type: "pyblock_forever",
-      message0: t("pyblockMsgForever"),
+      type: "pyblock_while",
+      message0: t("pyblockMsgWhile"),
       args0: [
-        { type: "input_dummy" },
+        { type: "input_value", name: "COND", check: "Boolean" },
         { type: "input_statement", name: "DO" },
       ],
+      inputsInline: true,
       previousStatement: null,
       nextStatement: null,
       colour: HUE_CONTROL,
-      tooltip: t("pyblockTipForever"),
+      tooltip: t("pyblockTipWhile"),
     },
     {
       type: "pyblock_repeat",

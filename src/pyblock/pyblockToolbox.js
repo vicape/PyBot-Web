@@ -21,6 +21,10 @@ const textShadow = (txt) => ({
   shadow: { kind: "block", type: "text", fields: { TEXT: txt } },
 });
 
+const trueShadow = () => ({
+  shadow: { kind: "block", type: "logic_boolean", fields: { BOOL: "TRUE" } },
+});
+
 export function getPyblockToolbox() {
   return {
     kind: "categoryToolbox",
@@ -36,7 +40,11 @@ export function getPyblockToolbox() {
         name: t("pyblockCatControl"),
         colour: "210",
         contents: [
-          { kind: "block", type: "pyblock_forever" },
+          {
+            kind: "block",
+            type: "pyblock_while",
+            inputs: { COND: trueShadow() },
+          },
           {
             kind: "block",
             type: "pyblock_repeat",

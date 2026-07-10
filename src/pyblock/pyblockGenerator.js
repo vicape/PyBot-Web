@@ -1,18 +1,18 @@
 /**
- * PyBlock — Generador: bloques -> Python real de PyBot.
+ * PyBlock โ�� Generador: bloques -> Python real de PyBot.
  *
- * Módulo NUEVO y AISLADO. Usa el generador Python oficial de Blockly como base
- * (para indentación, variables, lógica, matemática, texto, funciones y
- * procedimientos estándar) y define la traducción de los bloques propios de
+ * Mรณdulo NUEVO y AISLADO. Usa el generador Python oficial de Blockly como base
+ * (para indentaciรณn, variables, lรณgica, matemรกtica, texto, funciones y
+ * procedimientos estรกndar) y define la traducciรณn de los bloques propios de
  * PyBot a su API (pin/servo/motor/wait/print).
  *
- * Importar este archivo registra los generadores. Exporta una función para
- * convertir un workspace en código Python.
+ * Importar este archivo registra los generadores. Exporta una funciรณn para
+ * convertir un workspace en cรณdigo Python.
  */
 
 import { pythonGenerator, Order } from "blockly/python";
 
-// PyBot usa indentación de 4 espacios.
+// PyBot usa indentaciรณn de 4 espacios.
 pythonGenerator.INDENT = "    ";
 
 function valOr(generator, block, name, fallback) {
@@ -20,19 +20,18 @@ function valOr(generator, block, name, fallback) {
   return code && code.trim() !== "" ? code : fallback;
 }
 
-// Bloque de inicio (hat): genera SOLO el contenido interno, sin indentar ni
-// envolver en una función. Equivale a poner esos bloques en el nivel principal.
-pythonGenerator.forBlock["pyblock_start"] = function (block, generator) {
-  const inner = block.getInputTargetBlock("DO");
-  if (!inner) return "";
-  let code = generator.blockToCode(inner);
-  if (Array.isArray(code)) code = code[0] || "";
-  return code;
+// Bloque de inicio (hat, estilo Scratch): no genera codigo propio. Los bloques
+// apilados debajo se encadenan solos via el next-connection estandar de
+// Blockly (Generator.scrub_), igual que si estuvieran sueltos en el nivel
+// principal.
+pythonGenerator.forBlock["pyblock_start"] = function () {
+  return "";
 };
 
-pythonGenerator.forBlock["pyblock_forever"] = function (block, generator) {
+pythonGenerator.forBlock["pyblock_while"] = function (block, generator) {
+  const cond = generator.valueToCode(block, "COND", Order.NONE) || "True";
   const body = generator.statementToCode(block, "DO") || generator.INDENT + "pass\n";
-  return "while True:\n" + body;
+  return "while " + cond + ":\n" + body;
 };
 
 pythonGenerator.forBlock["pyblock_repeat"] = function (block, generator) {
@@ -150,7 +149,7 @@ pythonGenerator.forBlock["math_change"] = function (block, generator) {
 };
 
 /**
- * Convierte un workspace de Blockly en código Python de PyBot.
+ * Convierte un workspace de Blockly en cรณdigo Python de PyBot.
  * @param {import('blockly').Workspace} workspace
  * @returns {string}
  */
