@@ -1008,12 +1008,19 @@ export default function PyBotIDE() {
                   </button>
                   {toolbarMenuOpen ? (
                     <div className="toolbar-menu" role="menu" aria-label={t("menuActions")}>
+                      {/* —— Grupo 1: Archivo —— */}
+                      <div className="toolbar-menu-section-title">{t("menuSectionFile")}</div>
                       <button type="button" className="toolbar-menu-item" onClick={() => { onOpenLocal(); setToolbarMenuOpen(false); }}>
                         {t("openFile")}
                       </button>
                       <button type="button" className="toolbar-menu-item" onClick={() => { onSaveLocal(); setToolbarMenuOpen(false); }}>
                         {t("saveFile")}
                       </button>
+
+                      <div className="toolbar-menu-divider" />
+
+                      {/* —— Grupo 2: Placa y conexión —— */}
+                      <div className="toolbar-menu-section-title">{t("menuSectionBoard")}</div>
                       <button
                         type="button"
                         className="toolbar-menu-item"
@@ -1026,38 +1033,6 @@ export default function PyBotIDE() {
                       >
                         {connected ? t("disconnect") : t("connect")}
                       </button>
-                      <div className="toolbar-menu-divider" />
-                      <div className="toolbar-menu-mode">
-                        <span className="toolbar-menu-mode__label">{t("modeLabel")}</span>
-                        <div className="mode-switch">
-                          <button
-                            type="button"
-                            className={`mode-btn ${!pythonOnly ? "mode-btn--active" : ""}`}
-                            onClick={() => setPythonOnly(false)}
-                          >
-                            {t("modeHardware")}
-                          </button>
-                          <button
-                            type="button"
-                            className={`mode-btn ${pythonOnly ? "mode-btn--active" : ""}`}
-                            onClick={() => setPythonOnly(true)}
-                          >
-                            {t("modePythonOnly")}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="toolbar-menu-mode">
-                        <span className="toolbar-menu-mode__label">{t("editorLabel")}</span>
-                        <select
-                          className="toolbar-menu-board"
-                          value={editorMode}
-                          onChange={(e) => setEditorMode(e.target.value)}
-                          aria-label={t("editorLabel")}
-                        >
-                          <option value="python">{t("editorPython")}</option>
-                          <option value="pyblock">{t("editorPyblock")}</option>
-                        </select>
-                      </div>
                       <div className="toolbar-menu-mode">
                         <span className="toolbar-menu-mode__label">{t("boardLabel")}</span>
                         <select
@@ -1090,11 +1065,11 @@ export default function PyBotIDE() {
                       ) : null}
                       {(boardType === "esp32-eda6" || boardType === "esp32-micropython") &&
                       connected ? (
-                        <>
-                          <div className="toolbar-menu-divider" />
+                        <div className="toolbar-menu-subgroup">
+                          <span className="toolbar-menu-mode__label">{t("menuBoardToolsLabel")}</span>
                           <button
                             type="button"
-                            className="toolbar-menu-item toolbar-menu-item--highlight"
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
                             onClick={() => {
                               onFlashToEsp32();
                               setToolbarMenuOpen(false);
@@ -1104,7 +1079,7 @@ export default function PyBotIDE() {
                           </button>
                           <button
                             type="button"
-                            className="toolbar-menu-item"
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
                             onClick={() => {
                               onDeleteMainPy();
                               setToolbarMenuOpen(false);
@@ -1114,7 +1089,7 @@ export default function PyBotIDE() {
                           </button>
                           <button
                             type="button"
-                            className="toolbar-menu-item"
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
                             onClick={() => {
                               onRecoverRepl();
                               setToolbarMenuOpen(false);
@@ -1124,7 +1099,7 @@ export default function PyBotIDE() {
                           </button>
                           <button
                             type="button"
-                            className="toolbar-menu-item"
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
                             onClick={() => {
                               onVerifyMainPy();
                               setToolbarMenuOpen(false);
@@ -1136,7 +1111,7 @@ export default function PyBotIDE() {
                             <>
                               <button
                                 type="button"
-                                className="toolbar-menu-item"
+                                className="toolbar-menu-item toolbar-menu-item--secondary"
                                 onClick={() => {
                                   onInstallEda6();
                                   setToolbarMenuOpen(false);
@@ -1146,7 +1121,7 @@ export default function PyBotIDE() {
                               </button>
                               <button
                                 type="button"
-                                className="toolbar-menu-item"
+                                className="toolbar-menu-item toolbar-menu-item--secondary"
                                 onClick={() => {
                                   onVerifyEda6();
                                   setToolbarMenuOpen(false);
@@ -1156,11 +1131,10 @@ export default function PyBotIDE() {
                               </button>
                             </>
                           ) : null}
-                        </>
+                        </div>
                       ) : null}
                       {boardType === "arduino-firmata" ? (
                         <>
-                          <div className="toolbar-menu-divider" />
                           <button
                             type="button"
                             className="toolbar-menu-item toolbar-menu-item--highlight"
@@ -1175,7 +1149,42 @@ export default function PyBotIDE() {
                           <div className="toolbar-menu-hint">{t("arduinoDownloadMenuHint")}</div>
                         </>
                       ) : null}
+
                       <div className="toolbar-menu-divider" />
+
+                      {/* —— Grupo 3: Preferencias y ayuda —— */}
+                      <div className="toolbar-menu-section-title">{t("menuSectionPrefs")}</div>
+                      <div className="toolbar-menu-mode">
+                        <span className="toolbar-menu-mode__label">{t("modeLabel")}</span>
+                        <div className="mode-switch">
+                          <button
+                            type="button"
+                            className={`mode-btn ${!pythonOnly ? "mode-btn--active" : ""}`}
+                            onClick={() => setPythonOnly(false)}
+                          >
+                            {t("modeHardware")}
+                          </button>
+                          <button
+                            type="button"
+                            className={`mode-btn ${pythonOnly ? "mode-btn--active" : ""}`}
+                            onClick={() => setPythonOnly(true)}
+                          >
+                            {t("modePythonOnly")}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="toolbar-menu-mode">
+                        <span className="toolbar-menu-mode__label">{t("editorLabel")}</span>
+                        <select
+                          className="toolbar-menu-board"
+                          value={editorMode}
+                          onChange={(e) => setEditorMode(e.target.value)}
+                          aria-label={t("editorLabel")}
+                        >
+                          <option value="python">{t("editorPython")}</option>
+                          <option value="pyblock">{t("editorPyblock")}</option>
+                        </select>
+                      </div>
                       <button
                         type="button"
                         className="toolbar-menu-item"
