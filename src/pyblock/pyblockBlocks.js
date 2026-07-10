@@ -49,6 +49,13 @@ export function definePyblockBlocks(lang) {
     /* no romper si la versión de Blockly no expone setLocale */
   }
 
+  // El bloque estándar "controls_for" de Blockly dice "count with ... " en
+  // inglés. Lo cambiamos a "for" para que coincida con la palabra clave real
+  // de Python (igual criterio que "while" en vez de "forever").
+  if (lang === "en") {
+    Blockly.Msg["CONTROLS_FOR_TITLE"] = "for %1 from %2 to %3 by %4";
+  }
+
   Blockly.defineBlocksWithJsonArray([
     // ----- Inicio (bloque hat, estilo Scratch: los bloques se apilan debajo) -----
     {
@@ -100,6 +107,27 @@ export function definePyblockBlocks(lang) {
       nextStatement: null,
       colour: HUE_CONTROL,
       tooltip: t("pyblockTipWait"),
+    },
+
+    // ----- Entrada de datos (equivalente a input() de Python) -----
+    {
+      type: "pyblock_input",
+      message0: t("pyblockMsgInput"),
+      args0: [
+        {
+          type: "field_dropdown",
+          name: "TYPE",
+          options: [
+            [t("pyblockInputTypeText"), "TEXT"],
+            [t("pyblockInputTypeNumber"), "NUMBER"],
+          ],
+        },
+        { type: "input_value", name: "MSG", check: "String" },
+      ],
+      inputsInline: true,
+      output: null,
+      colour: HUE_OUTPUT,
+      tooltip: t("pyblockTipInput"),
     },
 
     // ----- Hardware -----

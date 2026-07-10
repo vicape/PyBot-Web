@@ -45,6 +45,16 @@ pythonGenerator.forBlock["pyblock_wait"] = function (block, generator) {
   return "wait(" + secs + ")\n";
 };
 
+pythonGenerator.forBlock["pyblock_input"] = function (block, generator) {
+  const type = block.getFieldValue("TYPE");
+  const msg = generator.valueToCode(block, "MSG", Order.NONE) || '""';
+  const code = "input(" + msg + ")";
+  if (type === "NUMBER") {
+    return ["int(" + code + ")", Order.FUNCTION_CALL];
+  }
+  return [code, Order.FUNCTION_CALL];
+};
+
 pythonGenerator.forBlock["pyblock_pin_write"] = function (block, generator) {
   const pin = valOr(generator, block, "PIN", "13");
   const val = valOr(generator, block, "VAL", "0");

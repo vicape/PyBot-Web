@@ -52,6 +52,15 @@ export function getPyblockToolbox() {
           },
           {
             kind: "block",
+            type: "controls_for",
+            inputs: {
+              FROM: numberShadow(1),
+              TO: numberShadow(10),
+              BY: numberShadow(1),
+            },
+          },
+          {
+            kind: "block",
             type: "pyblock_wait",
             inputs: { SECS: numberShadow(0.5) },
           },
@@ -217,6 +226,11 @@ export function getPyblockToolbox() {
                 shadow: { kind: "block", type: "text", fields: { TEXT: "Hola" } },
               },
             },
+          },
+          {
+            kind: "block",
+            type: "pyblock_input",
+            inputs: { MSG: textShadow("¿Cómo te llamás?") },
           },
         ],
       },
