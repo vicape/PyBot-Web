@@ -1,0 +1,408 @@
+/* Rosetta — estilos de las vistas Pseudocodigo y Flowchart. */
+
+.rep-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border, #2a2f3a);
+  background: var(--panel, #12151c);
+  flex-wrap: wrap;
+}
+
+.rep-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted, #9aa4b2);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.rep-tab:hover {
+  background: var(--hover, #1b2029);
+  color: var(--text, #e6e9ee);
+}
+
+.rep-tab--active {
+  background: var(--accent-soft, #1e3a5f);
+  color: var(--accent, #4aa3ff);
+  border-color: var(--accent, #4aa3ff);
+}
+
+.rep-tab__dot {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* --- Pseudocodigo --- */
+.pseudo-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* --- Flowchart --- */
+.flow-view {
+  height: 100%;
+  overflow: auto;
+  background:
+    radial-gradient(circle, var(--grid-dot, #ffffff10) 1px, transparent 1px);
+  background-size: 22px 22px;
+  padding: 16px;
+  display: block;
+}
+
+.flow-view__inner {
+  min-width: min-content;
+}
+
+.fc-svg {
+  display: block;
+  color: var(--text, #e6e9ee);
+  overflow: visible;
+}
+
+.fc-rect {
+  fill: var(--fc-process, #1f6feb22);
+  stroke: var(--fc-process-stroke, #4aa3ff);
+  stroke-width: 1.6;
+}
+
+.fc-io {
+  fill: var(--fc-io, #a371f722);
+  stroke: var(--fc-io-stroke, #a371f7);
+  stroke-width: 1.6;
+}
+
+.fc-diamond {
+  fill: var(--fc-decision, #f0b72922);
+  stroke: var(--fc-decision-stroke, #f0b729);
+  stroke-width: 1.6;
+}
+
+.fc-terminal {
+  fill: var(--fc-terminal, #2ea04322);
+  stroke: var(--fc-terminal-stroke, #2ea043);
+  stroke-width: 1.8;
+}
+
+.fc-conn {
+  fill: var(--text-muted, #9aa4b2);
+  stroke: none;
+}
+
+.fc-edge {
+  fill: none;
+  stroke: var(--fc-edge, #7d8899);
+  stroke-width: 1.6;
+}
+
+.fc-arrowhead {
+  fill: var(--fc-edge, #7d8899);
+}
+
+.fc-text {
+  fill: var(--text, #e6e9ee);
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 12.5px;
+}
+
+.fc-elabel {
+  fill: var(--text-muted, #9aa4b2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* --- Editor de flowchart estructurado --- */
+.flow-editor {
+  height: 100%;
+  display: flex;
+  min-height: 0;
+}
+
+.flow-editor__build {
+  width: 46%;
+  min-width: 280px;
+  overflow: auto;
+  padding: 12px;
+  border-right: 1px solid var(--border, #2a2f3a);
+}
+
+.flow-editor__hint {
+  font-size: 12px;
+  color: var(--text-muted, #9aa4b2);
+  margin-bottom: 10px;
+}
+
+.flow-editor__preview {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(circle, var(--grid-dot, #ffffff10) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.flow-editor__scroll {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+/* Controles de zoom, fijos en la esquina (no se desplazan con el diagrama). */
+.flow-zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--panel, #12151c);
+  border: 1px solid var(--border, #2a2f3a);
+  box-shadow: 0 2px 10px #0006;
+}
+
+.flow-zoom__btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 7px;
+  background: var(--panel-2, #1a1f29);
+  color: var(--text, #e6e9ee);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flow-zoom__btn:hover {
+  background: var(--accent-soft, #1f6feb22);
+  border-color: var(--accent, #1f6feb);
+}
+
+.flow-zoom__btn--reset {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 46px;
+}
+
+.flow-zoom__sep {
+  width: 1px;
+  background: var(--border, #2a2f3a);
+  margin: 4px 2px;
+}
+
+.flow-zoom__btn--copy {
+  font-size: 17px;
+}
+
+.flow-zoom__btn--ok {
+  color: #3fb950;
+  border-color: #3fb950;
+}
+
+.flow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.flow-card {
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 8px;
+  background: var(--panel, #12151c);
+  padding: 6px 8px;
+}
+
+.flow-card--diamond {
+  border-color: var(--fc-decision-stroke, #f0b729);
+}
+.flow-card--io {
+  border-color: var(--fc-io-stroke, #a371f7);
+}
+.flow-card--terminal {
+  border-color: var(--fc-terminal-stroke, #2ea043);
+}
+.flow-card--rect {
+  border-color: var(--fc-process-stroke, #4aa3ff);
+}
+
+.flow-card__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flow-chip {
+  width: 16px;
+  height: 14px;
+  flex: 0 0 auto;
+  background: var(--fc-process, #1f6feb55);
+  border: 1.5px solid var(--fc-process-stroke, #4aa3ff);
+}
+.flow-chip--rect {
+  border-radius: 3px;
+}
+.flow-chip--diamond {
+  transform: rotate(45deg) scale(0.8);
+  background: var(--fc-decision, #f0b72955);
+  border-color: var(--fc-decision-stroke, #f0b729);
+}
+.flow-chip--io {
+  transform: skewX(-18deg);
+  background: var(--fc-io, #a371f755);
+  border-color: var(--fc-io-stroke, #a371f7);
+}
+.flow-chip--terminal {
+  border-radius: 8px;
+  background: var(--fc-terminal, #2ea04355);
+  border-color: var(--fc-terminal-stroke, #2ea043);
+}
+
+.flow-card__text {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg, #0d1017);
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 6px;
+  color: var(--text, #e6e9ee);
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 12.5px;
+  padding: 4px 8px;
+}
+.flow-card__text:focus {
+  outline: none;
+  border-color: var(--accent, #4aa3ff);
+}
+
+.flow-card__del {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted, #9aa4b2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.flow-card__del:hover {
+  background: var(--danger-soft, #5f1e1e);
+  color: #ff6b6b;
+}
+
+.flow-card__children {
+  margin: 6px 0 2px 14px;
+  padding-left: 10px;
+  border-left: 2px dashed var(--border, #2a2f3a);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flow-branch__label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #9aa4b2);
+  margin-bottom: 2px;
+}
+
+.flow-insert {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  height: 16px;
+}
+.flow-insert__btn {
+  width: 18px;
+  height: 16px;
+  border: 1px dashed var(--border, #3a4150);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted, #9aa4b2);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.12s, background 0.12s;
+}
+.flow-insert__btn:hover {
+  opacity: 1;
+  background: var(--hover, #1b2029);
+  color: var(--accent, #4aa3ff);
+}
+.flow-insert__menu {
+  position: absolute;
+  top: 18px;
+  z-index: 30;
+  background: var(--panel, #12151c);
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 12px 30px #0008;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+}
+.flow-insert__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text, #e6e9ee);
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.flow-insert__item:hover {
+  background: var(--hover, #1b2029);
+}
+
+@media (max-width: 720px) {
+  .flow-editor {
+    flex-direction: column;
+  }
+  .flow-editor__build {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border, #2a2f3a);
+    max-height: 55%;
+  }
+}
+
+/* Tema claro */
+[data-theme="light"] .flow-view {
+  --grid-dot: #00000010;
+}
+[data-theme="light"] .fc-svg {
+  color: #1b1f27;
+}
+[data-theme="light"] .fc-text {
+  fill: #1b1f27;
+}
+[data-theme="light"] .fc-edge,
+[data-theme="light"] .fc-arrowhead {
+  --fc-edge: #6b7280;
+}

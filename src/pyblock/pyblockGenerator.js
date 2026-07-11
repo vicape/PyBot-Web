@@ -83,9 +83,36 @@ pythonGenerator.forBlock["pyblock_motor"] = function (block, generator) {
   return "motor(" + pin + ", " + speed + ")\n";
 };
 
+// Junta las piezas de un bloque "crear texto con" (text_join) sin usar join().
+function textJoinItems(block, generator) {
+  const n = block.itemCount_ ?? 0;
+  const parts = [];
+  for (let i = 0; i < n; i++) {
+    const code = generator.valueToCode(block, "ADD" + i, Order.NONE);
+    parts.push(code && code.trim() !== "" ? code : '""');
+  }
+  return parts;
+}
+
 pythonGenerator.forBlock["pyblock_print"] = function (block, generator) {
+  // Si adentro hay "crear texto con", usamos la forma natural de Python:
+  // print(a, " ", b) en vez de print("".join([...])). Asi se ve igual en
+  // Python, pseudocodigo (output a, " ", b) y diagrama de flujo.
+  const valueBlock = block.getInputTargetBlock("VALUE");
+  if (valueBlock && valueBlock.type === "text_join") {
+    const parts = textJoinItems(valueBlock, generator);
+    return "print(" + (parts.length ? parts.join(", ") : '""') + ")\n";
+  }
   const value = generator.valueToCode(block, "VALUE", Order.NONE) || '""';
   return "print(" + value + ")\n";
+};
+
+// "crear texto con" fuera de un print: concatenacion legible en vez de join().
+pythonGenerator.forBlock["text_join"] = function (block, generator) {
+  const parts = textJoinItems(block, generator);
+  if (parts.length === 0) return ['""', Order.ATOMIC];
+  if (parts.length === 1) return ["str(" + parts[0] + ")", Order.FUNCTION_CALL];
+  return [parts.map((p) => "str(" + p + ")").join(" + "), Order.ADDITIVE];
 };
 
 // ----- Canvas / Dibujo (usa las funciones canvas ya existentes en el runtime) -----
@@ -157,6 +184,20 @@ pythonGenerator.forBlock["math_change"] = function (block, generator) {
   const varName = generator.getVariableName(block.getFieldValue("VAR"));
   return varName + " = " + varName + " + " + delta + "\n";
 };
+
+// Blockly declara por defecto todas las variables como "x = None" al comienzo
+// del programa. Eso ensucia el codigo, rompe la fidelidad del ida y vuelta con
+// Python/pseudo (el original no las tiene) y confunde a quien recien aprende.
+// Como los bloques asignan las variables antes de usarlas, quitamos esas
+// declaraciones automaticas.
+if (!pythonGenerator.__pybotNoAutoVars) {
+  pythonGenerator.__pybotNoAutoVars = true;
+  const origFinish = pythonGenerator.finish.bind(pythonGenerator);
+  pythonGenerator.finish = function (code) {
+    if (this.definitions_) delete this.definitions_["variables"];
+    return origFinish(code);
+  };
+}
 
 /**
  * Convierte un workspace de Blockly en cรณdigo Python de PyBot.

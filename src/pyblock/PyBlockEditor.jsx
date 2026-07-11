@@ -22,11 +22,19 @@ import "./pyblock.css";
 
 const WORKSPACE_KEY = "pybot_pyblock_workspace";
 
-export default function PyBlockEditor({ theme, lang, onGenerated, onCopyToPython }) {
+export default function PyBlockEditor({
+  theme,
+  lang,
+  incoming,
+  onGenerated,
+  onEdited,
+  onCopyToPython,
+}) {
   const containerRef = useRef(null);
   const workspaceRef = useRef(null);
   const regenerateRef = useRef(() => {});
   const langRef = useRef(lang);
+  const incomingRef = useRef(incoming);
   const [python, setPython] = useState("");
 
   useEffect(() => {
@@ -52,23 +60,39 @@ export default function PyBlockEditor({ theme, lang, onGenerated, onCopyToPython
     }
     workspaceRef.current = workspace;
 
-    // Restaurar workspace guardado.
+    // Cargar el workspace: si llega un programa convertido desde otra
+    // representacion (Python/pseudo/flowchart) lo priorizamos; si no, se
+    // restaura lo que el alumno tenia guardado. Desactivamos los eventos
+    // durante la carga para que no se dispare la generacion con bloques a
+    // medio conectar (produciria codigo intermedio con sentencias sueltas).
+    Blockly.Events.disable();
     try {
-      const saved = localStorage.getItem(WORKSPACE_KEY);
-      if (saved) {
-        Blockly.serialization.workspaces.load(JSON.parse(saved), workspace);
+      if (incomingRef.current) {
+        Blockly.serialization.workspaces.load(incomingRef.current, workspace);
+      } else {
+        const saved = localStorage.getItem(WORKSPACE_KEY);
+        if (saved) {
+          Blockly.serialization.workspaces.load(JSON.parse(saved), workspace);
+        }
       }
     } catch {
       /* workspace inválido: empezar vacío */
+    } finally {
+      Blockly.Events.enable();
     }
 
     // Workspace vacío: insertar un bloque "Inicio" para guiar al alumno.
     try {
       if (workspace.getTopBlocks(false).length === 0) {
-        const start = workspace.newBlock("pyblock_start");
-        start.initSvg();
-        start.render();
-        start.moveBy(40, 40);
+        Blockly.Events.disable();
+        try {
+          const start = workspace.newBlock("pyblock_start");
+          start.initSvg();
+          start.render();
+          start.moveBy(40, 40);
+        } finally {
+          Blockly.Events.enable();
+        }
       }
     } catch {
       /* si falla, el workspace simplemente queda vacío */
@@ -90,8 +114,11 @@ export default function PyBlockEditor({ theme, lang, onGenerated, onCopyToPython
     regenerateRef.current = regenerate;
 
     regenerate();
+    // La carga inicial se hizo con eventos desactivados, asi que cualquier
+    // evento (no-UI) que llegue aca proviene de una edicion real del usuario.
     workspace.addChangeListener((event) => {
       if (event && event.isUiEvent) return;
+      onEdited?.();
       regenerate();
     });
 

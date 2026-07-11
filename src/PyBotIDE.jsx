@@ -2,6 +2,16 @@ import { useState, useCallback, useRef, useEffect, lazy, Suspense } from "react"
 import { Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import "./PyBotIDE.css";
+import {
+  pythonToPseudocode,
+  pseudocodeToPython,
+  pythonToAst,
+  astToPython,
+  astToBlockly,
+} from "./rosetta/index.js";
+import "./rosetta/rosetta.css";
+
+const FlowchartEditor = lazy(() => import("./rosetta/FlowchartEditor.jsx"));
 
 // PyBlock (editor visual por bloques) — carga diferida y aislada: solo se carga
 // cuando el usuario elige el modo PyBlock, así el modo Python no se ve afectado.
@@ -92,6 +102,7 @@ export default function PyBotIDE() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   const [boardMenuOpen, setBoardMenuOpen] = useState(false);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [helpModuleIdx, setHelpModuleIdx] = useState(0);
   const [helpLesson, setHelpLesson] = useState(null);
   const [pythonOnly, setPythonOnly] = useState(() => readInitialPythonOnly());
@@ -120,6 +131,7 @@ export default function PyBotIDE() {
   const fileInputRef = useRef(null);
   const toolbarMenuRef = useRef(null);
   const boardMenuRef = useRef(null);
+  const viewMenuRef = useRef(null);
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const inputResolveRef = useRef(null);
@@ -128,12 +140,28 @@ export default function PyBotIDE() {
   const [downloadingArduino, setDownloadingArduino] = useState(false);
   const [editorMode, setEditorMode] = useState(() => {
     try {
-      return localStorage.getItem("pybot_editor_mode") === "pyblock" ? "pyblock" : "python";
+      const saved = localStorage.getItem("pybot_editor_mode");
+      return ["python", "pyblock", "pseudo", "flow"].includes(saved) ? saved : "python";
     } catch {
       return "python";
     }
   });
   const [pyblockCode, setPyblockCode] = useState("");
+  const [pseudoCode, setPseudoCode] = useState(() => {
+    try {
+      return localStorage.getItem("pybot_pseudo") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [flowAst, setFlowAst] = useState(null);
+  // Programa (JSON de Blockly) a cargar en el editor de bloques cuando se llega
+  // a "Bloques" desde otra representacion. null = usar el workspace guardado.
+  const [pyblockIncoming, setPyblockIncoming] = useState(null);
+  // Marca si el usuario EDITO realmente cada vista. Al cambiar de pestaña solo
+  // reescribimos el Python canonico si la vista de origen fue editada; asi, solo
+  // navegar entre pestañas nunca modifica el codigo.
+  const viewEditedRef = useRef({ pseudo: false, flow: false, pyblock: false });
   const [inputPrompt, setInputPrompt] = useState("");
   const canvasRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState(null);
@@ -187,6 +215,82 @@ export default function PyBotIDE() {
     setCode(generated);
     setEditorMode("python");
   }, []);
+
+  const lang = getLang();
+
+  // --- Rosetta: conversion entre representaciones (Python es el canonico) ---
+  // Devuelve el Python "real" de lo que el alumno tiene armado en el modo actual.
+  const currentPythonCode = useCallback(() => {
+    if (editorMode === "pyblock") return pyblockCode;
+    if (editorMode === "pseudo") return pseudocodeToPython(pseudoCode);
+    if (editorMode === "flow") return flowAst ? astToPython(flowAst) : code;
+    return code; // python
+  }, [editorMode, code, pyblockCode, pseudoCode, flowAst]);
+
+  // Cambia de representacion. Regla clave para evitar que "solo navegar" altere
+  // el codigo: al SALIR de una vista, unicamente bajamos esa vista a Python si
+  // el usuario la EDITO. Si no la toco, conservamos el Python canonico tal cual.
+  // Luego derivamos la vista destino desde ese Python y la marcamos sin editar.
+  const switchRepresentation = useCallback(
+    (next) => {
+      if (next === editorMode) return;
+      const from = editorMode;
+      let baseCode = code;
+      if (from === "pseudo" && viewEditedRef.current.pseudo) {
+        baseCode = pseudocodeToPython(pseudoCode);
+      } else if (from === "flow" && viewEditedRef.current.flow && flowAst) {
+        baseCode = astToPython(flowAst);
+      } else if (from === "pyblock" && viewEditedRef.current.pyblock) {
+        baseCode = pyblockCode;
+      }
+      if (baseCode !== code) setCode(baseCode);
+
+      if (next === "pseudo") {
+        setPseudoCode(pythonToPseudocode(baseCode));
+        viewEditedRef.current.pseudo = false;
+      } else if (next === "flow") {
+        setFlowAst(pythonToAst(baseCode));
+        viewEditedRef.current.flow = false;
+      } else if (next === "pyblock") {
+        try {
+          setPyblockIncoming(astToBlockly(pythonToAst(baseCode)));
+        } catch {
+          setPyblockIncoming(null);
+        }
+        viewEditedRef.current.pyblock = false;
+      }
+      setEditorMode(next);
+    },
+    [editorMode, code, pseudoCode, flowAst, pyblockCode],
+  );
+
+  // Persistir el pseudocodigo para que sobreviva a recargas.
+  useEffect(() => {
+    try {
+      localStorage.setItem("pybot_pseudo", pseudoCode);
+    } catch {
+      /* ignore */
+    }
+  }, [pseudoCode]);
+
+  // Al montar: si arrancamos en una vista no-Python (por recarga), alineamos el
+  // Python canonico con lo que muestra esa vista una sola vez, para que no se
+  // pierda al primer cambio de pestaña.
+  useEffect(() => {
+    if (editorMode === "pseudo" && pseudoCode.trim()) {
+      setCode(pseudocodeToPython(pseudoCode));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // En modo flowchart: si no hay AST cargado (por ej. tras recargar la pagina),
+  // lo generamos desde el Python canonico.
+  useEffect(() => {
+    if (editorMode === "flow" && !flowAst) {
+      setFlowAst(pythonToAst(code));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorMode]);
 
   // --- Diagnóstico de sintaxis Python (Monaco markers). Aislado y aditivo. ---
   const SYNTAX_MARKER_OWNER = "pybot-python";
@@ -296,6 +400,17 @@ export default function PyBotIDE() {
     document.addEventListener("pointerdown", onDocPointerDown, true);
     return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
   }, [boardMenuOpen]);
+
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    const onDocPointerDown = (event) => {
+      if (!viewMenuRef.current?.contains(event.target)) {
+        setViewMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
+  }, [viewMenuOpen]);
 
   const appendConsole = useCallback((line, kind = "out") => {
     setConsoleLines((prev) => {
@@ -485,8 +600,8 @@ export default function PyBotIDE() {
   const onRun = useCallback(async () => {
     if (running) return;
     // En PyBlock se ejecuta el Python generado por los bloques.
-    const activeCode = editorMode === "pyblock" ? pyblockCode : code;
-    if (editorMode === "pyblock" && !activeCode.trim()) {
+    const activeCode = currentPythonCode();
+    if (!activeCode.trim()) {
       appendConsole(t("pyblockEmpty") + "\n", "err");
       return;
     }
@@ -561,7 +676,7 @@ export default function PyBotIDE() {
       setInputPrompt("");
       inputResolveRef.current = null;
     }
-  }, [running, code, editorMode, pyblockCode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, applySyntaxResult]);
+  }, [running, code, editorMode, pyblockCode, currentPythonCode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, applySyntaxResult]);
 
   const onInstallEda6 = useCallback(async () => {
     if (!connected) {
@@ -598,8 +713,8 @@ export default function PyBotIDE() {
     if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") {
       return;
     }
-    const activeCode = editorMode === "pyblock" ? pyblockCode : code;
-    if (editorMode === "pyblock" && !activeCode.trim()) {
+    const activeCode = currentPythonCode();
+    if (!activeCode.trim()) {
       appendConsole(t("pyblockEmpty") + "\n", "err");
       return;
     }
@@ -625,13 +740,13 @@ export default function PyBotIDE() {
     } catch (e) {
       appendConsole(formatPythonError(e?.message) + "\n", "err");
     }
-  }, [connected, code, editorMode, pyblockCode, appendConsole, boardType]);
+  }, [connected, code, editorMode, pyblockCode, currentPythonCode, appendConsole, boardType]);
 
   const onDownloadToArduino = useCallback(async () => {
     if (boardType !== "arduino-firmata") return;
     if (downloadingArduino) return;
-    const activeCode = editorMode === "pyblock" ? pyblockCode : code;
-    if (editorMode === "pyblock" && !activeCode.trim()) {
+    const activeCode = currentPythonCode();
+    if (!activeCode.trim()) {
       appendConsole(t("pyblockEmpty") + "\n", "err");
       return;
     }
@@ -670,7 +785,7 @@ export default function PyBotIDE() {
     } finally {
       setDownloadingArduino(false);
     }
-  }, [boardType, downloadingArduino, code, editorMode, pyblockCode, appendConsole]);
+  }, [boardType, downloadingArduino, code, editorMode, pyblockCode, currentPythonCode, appendConsole]);
 
   const onRecoverRepl = useCallback(async () => {
     if (!connected) {
@@ -797,7 +912,6 @@ export default function PyBotIDE() {
   );
 
   const monacoTheme = theme === "dark" ? "vs-dark" : "light";
-  const lang = getLang();
   const course =
     HELP_COURSE[lang] && HELP_COURSE[lang].modules.length > 0
       ? HELP_COURSE[lang]
@@ -866,6 +980,132 @@ export default function PyBotIDE() {
       window.addEventListener("mouseup", onUp);
     },
     [consoleWidth],
+  );
+
+  const monacoOptions = {
+    fontSize: 15 + fontDelta,
+    fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+    minimap: { enabled: false },
+    wordWrap: "on",
+    scrollBeyondLastLine: false,
+    tabSize: 4,
+    padding: { top: 12, bottom: 12 },
+    smoothScrolling: true,
+    cursorBlinking: "smooth",
+    renderLineHighlight: "line",
+  };
+
+  // Opciones de representacion (flowchart/pseudo/python/bloques).
+  const REP_TABS = [
+    ["flow", t("repFlow")],
+    ["pseudo", t("repPseudo")],
+    ["python", t("repPython")],
+    ["pyblock", t("repBlocks")],
+  ];
+  const currentRepLabel = (REP_TABS.find(([id]) => id === editorMode) || REP_TABS[2])[1];
+
+  // Desplegable "Ver como" en la barra superior (reemplaza la fila de pestañas
+  // para no ocupar espacio; misma logica switchRepresentation).
+  const viewMenu = (
+    <div className="tb-group tb-group--muted" ref={viewMenuRef}>
+      <button
+        type="button"
+        className="tb-btn tb-btn--ghost tb-btn--menu"
+        onClick={() => setViewMenuOpen((v) => !v)}
+        aria-expanded={viewMenuOpen}
+        aria-haspopup="menu"
+        title={t("repTabsLabel")}
+      >
+        <span className="tb-btn__label">
+          {t("viewAsLabel")}: {currentRepLabel}
+        </span>
+        <IconChevron width={14} height={14} />
+      </button>
+      {viewMenuOpen ? (
+        <div className="toolbar-menu" role="menu" aria-label={t("repTabsLabel")}>
+          {REP_TABS.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={editorMode === id}
+              className={`toolbar-menu-item ${editorMode === id ? "toolbar-menu-item--highlight" : ""}`}
+              onClick={() => {
+                switchRepresentation(id);
+                setViewMenuOpen(false);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  let editorSurface;
+  if (editorMode === "pyblock") {
+    editorSurface = (
+      <Suspense fallback={<div className="pyblock-loading">{t("pyblockLoading")}</div>}>
+        <PyBlockEditor
+          theme={theme}
+          lang={lang}
+          incoming={pyblockIncoming}
+          onGenerated={setPyblockCode}
+          onEdited={() => {
+            viewEditedRef.current.pyblock = true;
+          }}
+          onCopyToPython={onCopyToPython}
+        />
+      </Suspense>
+    );
+  } else if (editorMode === "pseudo") {
+    editorSurface = (
+      <div className="pseudo-view">
+        <Editor
+          height="100%"
+          language="plaintext"
+          theme={monacoTheme}
+          value={pseudoCode}
+          onChange={(v) => {
+            viewEditedRef.current.pseudo = true;
+            setPseudoCode(v ?? "");
+          }}
+          options={monacoOptions}
+        />
+      </div>
+    );
+  } else if (editorMode === "flow") {
+    editorSurface = (
+      <Suspense fallback={<div className="pyblock-loading">{t("pyblockLoading")}</div>}>
+        <FlowchartEditor
+          ast={flowAst}
+          onAstChange={(nextAst) => {
+            viewEditedRef.current.flow = true;
+            setFlowAst(nextAst);
+          }}
+          lang={lang}
+        />
+      </Suspense>
+    );
+  } else {
+    editorSurface = (
+      <Editor
+        height="100%"
+        language="python"
+        theme={monacoTheme}
+        value={code}
+        onChange={(v) => setCode(v ?? "")}
+        onMount={handleEditorMount}
+        options={monacoOptions}
+      />
+    );
+  }
+
+  const editorShell = (
+    <div className="editor-shell">
+      <div className="editor-area">{editorSurface}</div>
+    </div>
   );
 
   return (
@@ -1020,6 +1260,7 @@ export default function PyBotIDE() {
                     <span className="tb-btn__label">{t("stop")}</span>
                   </button>
                 </div>
+                {viewMenu}
                 <div className="tb-group tb-group--muted" ref={boardMenuRef}>
                   <button
                     type="button"
@@ -1237,43 +1478,7 @@ export default function PyBotIDE() {
 
             {terminalPosition === "right" ? (
               <div className="workspace-panels workspace-panels--right">
-                <div className="editor-shell">
-                  <div className="editor-area">
-                    {editorMode === "pyblock" ? (
-                      <Suspense
-                        fallback={<div className="pyblock-loading">{t("pyblockLoading")}</div>}
-                      >
-                        <PyBlockEditor
-                          theme={theme}
-                          lang={lang}
-                          onGenerated={setPyblockCode}
-                          onCopyToPython={onCopyToPython}
-                        />
-                      </Suspense>
-                    ) : (
-                      <Editor
-                        height="100%"
-                        language="python"
-                        theme={monacoTheme}
-                        value={code}
-                        onChange={(v) => setCode(v ?? "")}
-                        onMount={handleEditorMount}
-                        options={{
-                          fontSize: 15 + fontDelta,
-                          fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-                          minimap: { enabled: false },
-                          wordWrap: "on",
-                          scrollBeyondLastLine: false,
-                          tabSize: 4,
-                          padding: { top: 12, bottom: 12 },
-                          smoothScrolling: true,
-                          cursorBlinking: "smooth",
-                          renderLineHighlight: "line",
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
+                {editorShell}
                 <div
                   className="splitter splitter-vertical"
                   role="separator"
@@ -1328,43 +1533,7 @@ export default function PyBotIDE() {
               </div>
             ) : (
               <>
-                <div className="editor-shell">
-                  <div className="editor-area">
-                    {editorMode === "pyblock" ? (
-                      <Suspense
-                        fallback={<div className="pyblock-loading">{t("pyblockLoading")}</div>}
-                      >
-                        <PyBlockEditor
-                          theme={theme}
-                          lang={lang}
-                          onGenerated={setPyblockCode}
-                          onCopyToPython={onCopyToPython}
-                        />
-                      </Suspense>
-                    ) : (
-                      <Editor
-                        height="100%"
-                        language="python"
-                        theme={monacoTheme}
-                        value={code}
-                        onChange={(v) => setCode(v ?? "")}
-                        onMount={handleEditorMount}
-                        options={{
-                          fontSize: 15 + fontDelta,
-                          fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-                          minimap: { enabled: false },
-                          wordWrap: "on",
-                          scrollBeyondLastLine: false,
-                          tabSize: 4,
-                          padding: { top: 12, bottom: 12 },
-                          smoothScrolling: true,
-                          cursorBlinking: "smooth",
-                          renderLineHighlight: "line",
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
+                {editorShell}
 
                 <div
                   className="splitter splitter-horizontal"
@@ -1501,9 +1670,11 @@ export default function PyBotIDE() {
                 <span className="modal-label">{t("editorLabel")}</span>
                 <select
                   value={editorMode}
-                  onChange={(e) => setEditorMode(e.target.value)}
+                  onChange={(e) => switchRepresentation(e.target.value)}
                   className="modal-select"
                 >
+                  <option value="flow">{t("repFlow")}</option>
+                  <option value="pseudo">{t("repPseudo")}</option>
                   <option value="python">{t("editorPython")}</option>
                   <option value="pyblock">{t("editorPyblock")}</option>
                 </select>
