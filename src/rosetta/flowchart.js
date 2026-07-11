@@ -272,11 +272,26 @@ function layoutIf(stmt, labels) {
 }
 
 // Bucle pre-test (while / for-each).
-// Rombo de 4 puertos para evitar que dos flechas compartan el mismo vertice:
-//   - Entrada:  vertice SUPERIOR  (viene de arriba en la pila de fragmentos)
-//   - Si / Yes: vertice INFERIOR  (baja al cuerpo del bucle)
-//   - No:       vertice DERECHO   (sale del bucle hacia la derecha)
-//   - Retorno:  vertice IZQUIERDO (sube por el lado izquierdo despues del cuerpo)
+//
+// Patron T-junction: la flecha de retorno NO entra al rombo sino que se une
+// a la linea de entrada SOBRE el rombo (punto de union). Asi la cabeza del
+// rombo solo recibe UNA linea (limpia) y el retorno se conecta a la misma
+// "wire" que llega de arriba.
+//
+//   ─── [prev box] ───
+//          │
+//          ●   <- PUNTO DE UNION (y=0 del fragmento)
+//          │        ^
+//       ◇ cond ◇    │ retorno sube por la izquierda y entra aqui
+//          │ Si      │
+//         ...        │
+//          │ ────────┘  (baja por el fondo y va a la izquierda)
+//          │
+//      No salida
+//
+const MERGE_ABOVE = 20; // espacio entre el punto de union y el vertice superior del rombo
+const LOOP_DROP   = 14; // descenso minimo desde el fondo del ultimo bloque antes de girar
+
 function layoutLoop(condText, body, labels, _post) {
   const dia = simpleFrag("diamond", condText);
   const bodyFrag = layoutList(body, labels);
@@ -286,10 +301,12 @@ function layoutLoop(condText, body, labels, _post) {
   const dH = dia.height;
   const dCenter = dW / 2;
 
-  translate(dia, 0, 0);
+  // El rombo se coloca con MERGE_ABOVE de margen en la parte superior,
+  // dejando espacio para el punto de union con la flecha de retorno.
+  translate(dia, 0, MERGE_ABOVE);
   merge(out, dia);
 
-  const branchTop = dH + VGAP;
+  const branchTop = MERGE_ABOVE + dH + VGAP;
   const bodyW = bodyFrag ? bodyFrag.width : 40;
   if (bodyFrag) {
     translate(bodyFrag, dCenter - bodyFrag.portX, branchTop);
@@ -297,35 +314,42 @@ function layoutLoop(condText, body, labels, _post) {
   }
   const bodyBottom = branchTop + (bodyFrag ? bodyFrag.height : 0);
 
-  // Sí: vertice inferior -> cuerpo (linea recta vertical).
-  out.edges.push(edge([{ x: dCenter, y: dH }, { x: dCenter, y: branchTop }], labels.yes));
+  // Segmento interno: punto de union (y=0) -> vertice superior del rombo.
+  // Sin punta de flecha: es solo la continuacion de la linea de entrada.
+  out.edges.push({ points: [{ x: dCenter, y: 0 }, { x: dCenter, y: MERGE_ABOVE }], noArrow: true });
 
-  // Retorno: sale del fondo del cuerpo, va por la izquierda y entra al vertice IZQUIERDO
-  // del rombo (centro-izquierdo). Sin coordenadas negativas.
+  // Si: vertice inferior del rombo -> cuerpo.
+  out.edges.push(edge([
+    { x: dCenter, y: MERGE_ABOVE + dH },
+    { x: dCenter, y: branchTop },
+  ], labels.yes));
+
+  // Retorno: baja del fondo del cuerpo (LOOP_DROP para salir por abajo del rectangulo,
+  // NO por el costado), va por el carril izquierdo, sube hasta el punto de union.
   const leftLane = -LANE;
   out.edges.push(
     edge([
-      { x: dCenter, y: bodyBottom },   // fondo del cuerpo
-      { x: leftLane, y: bodyBottom },  // horizontal izq al carril
-      { x: leftLane, y: dH / 2 },     // sube hasta la altura del centro del rombo
-      { x: 0, y: dH / 2 },            // entra al vertice izquierdo del rombo
+      { x: dCenter, y: bodyBottom },             // puerto de salida del cuerpo (fondo)
+      { x: dCenter, y: bodyBottom + LOOP_DROP },  // baja un poco (sale por el FONDO del bloque)
+      { x: leftLane, y: bodyBottom + LOOP_DROP }, // va al carril izquierdo
+      { x: leftLane, y: 0 },                     // sube hasta el punto de union
+      { x: dCenter, y: 0 },                      // llega al punto de union (T-junction)
     ]),
   );
 
-  // No: sale del vertice DERECHO, va a la derecha y baja hasta el punto de salida.
+  // No: vertice derecho del rombo -> carril derecho -> punto de salida del fragmento.
   const rightLane = Math.max(dW, dCenter + bodyW / 2) + LANE;
   const exitY = bodyBottom + VGAP;
   out.edges.push(
     edge([
-      { x: dW, y: dH / 2 },          // vertice derecho del rombo
-      { x: rightLane, y: dH / 2 },   // horizontal der al carril
-      { x: rightLane, y: exitY },     // baja hasta el punto de salida
-      { x: dCenter, y: exitY },       // vuelve al centro
+      { x: dW, y: MERGE_ABOVE + dH / 2 },          // vertice derecho del rombo
+      { x: rightLane, y: MERGE_ABOVE + dH / 2 },    // horizontal al carril derecho
+      { x: rightLane, y: exitY },                   // baja hasta el punto de salida
+      { x: dCenter, y: exitY },                     // vuelve al eje central
     ], labels.no),
   );
 
-  // Desplaza todo LANE pixels a la derecha para que el carril izquierdo quede en x=0.
-  // Ya no hay coordenadas negativas en Y, por lo que dy=0.
+  // Desplazar todo LANE pixels a la derecha para que el carril izquierdo quede en x=0.
   translate(out, LANE, 0);
   out.width = rightLane + LANE;
   out.height = exitY;
@@ -475,7 +499,8 @@ function renderNode(n) {
 
 function renderEdge(e) {
   const pts = e.points.map((p) => `${p.x},${p.y}`).join(" ");
-  const line = `<polyline points="${pts}" class="fc-edge" marker-end="url(#fc-arrow)"/>`;
+  const arrowAttr = e.noArrow ? "" : ` marker-end="url(#fc-arrow)"`;
+  const line = `<polyline points="${pts}" class="fc-edge"${arrowAttr}/>`;
   let label = "";
   if (e.label && e.labelPos) {
     label = `<text x="${e.labelPos.x}" y="${e.labelPos.y}" class="fc-elabel">${esc(e.label)}</text>`;
