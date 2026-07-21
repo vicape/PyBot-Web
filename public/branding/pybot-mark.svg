@@ -1,0 +1,47 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PyBot">
+  <defs>
+    <linearGradient id="pybot-body" x1="30" y1="24" x2="98" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1B2130"/>
+      <stop offset="1" stop-color="#0B0E15"/>
+    </linearGradient>
+    <linearGradient id="pybot-eye" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#3DEBE2"/>
+      <stop offset="1" stop-color="#17C2C4"/>
+    </linearGradient>
+    <linearGradient id="pybot-pin" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#F6C060"/>
+      <stop offset="1" stop-color="#E39A34"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Pins -->
+  <g fill="url(#pybot-pin)">
+    <rect x="37" y="16" width="14" height="16" rx="4"/>
+    <rect x="57" y="16" width="14" height="16" rx="4"/>
+    <rect x="77" y="16" width="14" height="16" rx="4"/>
+    <rect x="37" y="96" width="14" height="16" rx="4"/>
+    <rect x="57" y="96" width="14" height="16" rx="4"/>
+    <rect x="77" y="96" width="14" height="16" rx="4"/>
+    <rect x="16" y="43" width="16" height="14" rx="4"/>
+    <rect x="16" y="71" width="16" height="14" rx="4"/>
+    <rect x="96" y="43" width="16" height="14" rx="4"/>
+    <rect x="96" y="71" width="16" height="14" rx="4"/>
+  </g>
+
+  <!-- Status LED on top-center pin -->
+  <circle cx="64" cy="24" r="4" fill="#3DEBE2"/>
+
+  <!-- Chip body -->
+  <rect x="26" y="26" width="76" height="76" rx="22" fill="url(#pybot-body)" stroke="#2A3346" stroke-width="2"/>
+
+  <!-- Eyes -->
+  <g>
+    <rect x="43" y="52" width="16" height="22" rx="8" fill="url(#pybot-eye)"/>
+    <rect x="69" y="52" width="16" height="22" rx="8" fill="url(#pybot-eye)"/>
+    <circle cx="47.5" cy="57" r="2.4" fill="#EAFFFE" opacity="0.9"/>
+    <circle cx="73.5" cy="57" r="2.4" fill="#EAFFFE" opacity="0.9"/>
+  </g>
+
+  <!-- Smile -->
+  <path d="M46 82 h8 l4 4 h12 l4 -4 h8" stroke="#F0B44A" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

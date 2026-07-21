@@ -124,7 +124,6 @@ export default function PyBotIDE() {
   const [fontDelta, setFontDelta] = useState(
     () => parseInt(localStorage.getItem("pybot_font_delta") || "0", 10),
   );
-  const [showPybotLogo, setShowPybotLogo] = useState(true);
   const [showSchoolLogo, setShowSchoolLogo] = useState(true);
   const [currentFileName, setCurrentFileName] = useState("programa.py");
   const consoleEndRef = useRef(null);
@@ -1218,22 +1217,13 @@ export default function PyBotIDE() {
           <div className="main-stack">
             <header className="toolbar">
               <div className="toolbar-brand">
-                <div className="brand-mark" aria-hidden>
-                  <img src="/branding/pybot-logo.png" alt="" className="brand-main-logo" />
-                </div>
-                <div className="brand-copy">
-                  <span className="brand-title">{t("appTitle")}</span>
-                  <span className="brand-sub">{t("brandSub")}</span>
-                </div>
+                <img
+                  src="/branding/pybot-logo-full.svg"
+                  alt={t("appTitle")}
+                  className="brand-logo-full"
+                />
+                <span className="brand-sub">{t("brandSub")}</span>
                 <div className="brand-logos">
-                  {showPybotLogo ? (
-                    <img
-                      src="/branding/pybot-logo.png"
-                      alt="Logo PyBot"
-                      className="brand-logo-img"
-                      onError={() => setShowPybotLogo(false)}
-                    />
-                  ) : null}
                   {showSchoolLogo ? (
                     <img
                       src="/branding/colegio-escudo.png"
@@ -1879,7 +1869,8 @@ export default function PyBotIDE() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="about-card">
-              <img src="/branding/pybot-logo.png" alt="PyBot logo" className="about-logo" />
+              <img src="/branding/pybot-logo-full.svg" alt="PyBot" className="about-logo" />
+              <span className="about-byline">// by VIC</span>
               <h3 id="about-title" className="about-title">
                 {t("aboutName")}
               </h3>

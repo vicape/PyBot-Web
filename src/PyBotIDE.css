@@ -377,45 +377,100 @@
 }
 
 .brand-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid var(--ide-border);
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.brand-mark-img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.brand-logo-full {
+  height: 44px;
+  width: auto;
+  max-width: min(220px, 42vw);
+  object-fit: contain;
+  display: block;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.brand-robot {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  display: block;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.brand-wordmark {
+  height: 26px;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 .brand-main-logo {
-  width: 36px;
-  height: 36px;
-  object-fit: cover;
-  border-radius: 10px;
+  height: 44px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
 }
 
 .brand-copy {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  justify-content: center;
+  gap: 0;
   min-width: 0;
 }
 
 .brand-title {
-  font-size: 1.05rem;
+  font-size: 1.22rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  display: inline-flex;
+  align-items: baseline;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+
+.brand-title-bracket {
+  color: #c4a574;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--fg-bright);
-  line-height: 1.2;
+}
+
+.brand-title-name {
+  color: #f3f5f7;
+  font-weight: 800;
+  padding: 0 1px;
+}
+
+.ide-root[data-theme="light"] .brand-title-name {
+  color: #1a1d22;
+}
+
+.ide-root[data-theme="light"] .brand-title-bracket {
+  color: #b0894f;
 }
 
 .brand-sub {
-  font-size: clamp(12px, calc(12px + var(--font-delta, 0px)), 14px);
+  font-size: clamp(11px, calc(11px + var(--font-delta, 0px)), 12px);
   color: var(--fg-muted);
   font-weight: 450;
+  font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -760,13 +815,13 @@
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url("/branding/pybot-logo.png");
+  background-image: url("/branding/pybot-mark-robot.svg");
   background-repeat: no-repeat;
   background-position: center 45%;
-  background-size: min(34vw, 340px);
-  opacity: 0.035;
-  filter: grayscale(1) contrast(0.86) brightness(1.1);
-  clip-path: circle(31% at 50% 45%);
+  background-size: min(28vw, 260px);
+  opacity: 0.05;
+  filter: grayscale(0.2) contrast(0.9) brightness(1.05);
+  clip-path: circle(34% at 50% 45%);
   pointer-events: none;
   z-index: 0;
 }
@@ -1262,10 +1317,41 @@
 }
 
 .about-logo {
-  width: min(170px, 65vw);
+  width: min(240px, 74vw);
   height: auto;
-  border-radius: 8px;
+  border-radius: 0;
   object-fit: contain;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.35));
+}
+
+.about-lockup {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 0;
+  margin-bottom: 6px;
+}
+
+.about-mark {
+  grid-row: 1 / span 2;
+  width: 76px;
+  height: 76px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.35));
+}
+
+.about-wordmark {
+  align-self: end;
+  font: 800 2rem/1 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  letter-spacing: -0.035em;
+}
+
+.about-byline {
+  align-self: start;
+  margin-top: 2px;
+  font: 0.85rem ui-monospace, "Cascadia Mono", "Consolas", monospace;
+  color: var(--fg-muted);
 }
 
 .about-title {
@@ -1753,13 +1839,24 @@
   .sidebar {
     min-width: 160px;
   }
-  .brand-mark {
-    width: 40px;
-    height: 40px;
+  .brand-mark,
+  .brand-mark-img {
+    width: 36px;
+    height: 36px;
   }
-  .brand-main-logo {
-    width: 32px;
-    height: 32px;
+  .brand-logo-full {
+    height: 38px;
+    max-width: min(170px, 46vw);
+  }
+  .brand-robot {
+    width: 38px;
+    height: 38px;
+  }
+  .brand-wordmark {
+    height: 22px;
+  }
+  .brand-title {
+    font-size: 1.08rem;
   }
   .help-course-layout {
     grid-template-columns: 1fr;
