@@ -815,7 +815,8 @@
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url("/branding/pybot-mark-robot.svg");
+  /* LOGO PROVISORIO: watermark con el PNG nuevo. Para revertir, volver a url("/branding/pybot-mark-robot.svg"). */
+  background-image: url("/branding/pybot-logo-provisional.png");
   background-repeat: no-repeat;
   background-position: center 45%;
   background-size: min(28vw, 260px);

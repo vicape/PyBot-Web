@@ -1219,8 +1219,10 @@ export default function PyBotIDE() {
           <div className="main-stack">
             <header className="toolbar">
               <div className="toolbar-brand">
+                {/* LOGO PROVISORIO: PNG nuevo (incluye el texto "PyBot"/"by VIC" dentro de la imagen).
+                    Para revertir, volver a src="/branding/pybot-logo-full.svg" (sin el ?v=prov1). */}
                 <img
-                  src="/branding/pybot-logo-full.svg"
+                  src="/branding/pybot-logo-provisional.png?v=prov1"
                   alt={t("appTitle")}
                   className="brand-logo-full"
                 />
@@ -1870,7 +1872,8 @@ export default function PyBotIDE() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="about-card">
-              <img src="/branding/pybot-logo-full.svg" alt="PyBot" className="about-logo" />
+              {/* LOGO PROVISORIO: PNG nuevo. Para revertir, volver a src="/branding/pybot-logo-full.svg" (sin ?v=prov1). */}
+              <img src="/branding/pybot-logo-provisional.png?v=prov1" alt="PyBot" className="about-logo" />
               <h3 id="about-title" className="about-title">
                 {t("aboutName")}
               </h3>
