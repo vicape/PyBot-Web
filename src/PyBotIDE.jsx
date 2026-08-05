@@ -461,8 +461,10 @@ export default function PyBotIDE() {
 
   const codeNeedsHardware = useCallback((source) => {
     const s = String(source ?? "");
+    // wait() es solo una pausa: funciona en Pyodide sin placa, por eso no exige
+    // conexion. Solo pin/motor/servo/sensores y la API EDA6 requieren hardware.
     return (
-      /\b(pin|motor|servo|wait)\s*\(/.test(s) ||
+      /\b(pin|motor|servo)\s*\(/.test(s) ||
       /\b(entradaDigital|entradaAnalogica|salidaDigital|motorRC|servomotor|sensorDistancia|detenerTodo|printLCD|limpiarLCD|asciiLCD|luzLCD|cursorLCD|parpadeoLCD)\s*\(/.test(
         s,
       )
@@ -1222,7 +1224,6 @@ export default function PyBotIDE() {
                   alt={t("appTitle")}
                   className="brand-logo-full"
                 />
-                <span className="brand-sub">{t("brandSub")}</span>
                 <div className="brand-logos">
                   {showSchoolLogo ? (
                     <img
@@ -1870,7 +1871,6 @@ export default function PyBotIDE() {
           >
             <div className="about-card">
               <img src="/branding/pybot-logo-full.svg" alt="PyBot" className="about-logo" />
-              <span className="about-byline">// by VIC</span>
               <h3 id="about-title" className="about-title">
                 {t("aboutName")}
               </h3>

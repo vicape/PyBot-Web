@@ -1,7 +1,7 @@
 const STRINGS = {
   es: {
     appTitle: "PyBot Web",
-    brandSub: "// by VIC",
+    brandSub: "",
     explorer: "EXPLORADOR",
     examples: "EJEMPLOS",
     terminal: "TERMINAL",
@@ -317,7 +317,7 @@ Creado por VIC.`,
   },
   en: {
     appTitle: "PyBot Web",
-    brandSub: "// by VIC",
+    brandSub: "",
     explorer: "EXPLORER",
     examples: "EXAMPLES",
     terminal: "TERMINAL",
