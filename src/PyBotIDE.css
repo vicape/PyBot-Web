@@ -402,11 +402,10 @@
   object-fit: contain;
   display: block;
   flex-shrink: 0;
-  /* El PNG del logo trae fondo negro sólido: le damos un "badge" oscuro con bordes
-     redondeados para que en el tema claro no se vea un rectángulo negro cortado. */
-  background: #0d0d0d;
+  /* El PNG nuevo ya trae su propio badge negro redondeado con esquinas transparentes,
+     así que NO agregamos fondo/padding extra (evita el doble borde). Solo una sombra
+     sutil y el mismo radio para que se vea prolijo en tema claro y oscuro. */
   border-radius: 10px;
-  padding: 4px 8px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
@@ -1331,10 +1330,9 @@
 .about-logo {
   width: min(240px, 74vw);
   height: auto;
-  /* Mismo criterio que el header: badge oscuro redondeado para el PNG de fondo negro. */
-  background: #0d0d0d;
+  /* Mismo criterio que el header: el PNG nuevo ya incluye su badge negro redondeado,
+     por lo que no duplicamos fondo/padding. Solo sombra y radio para un remate prolijo. */
   border-radius: 14px;
-  padding: 10px 14px;
   object-fit: contain;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
