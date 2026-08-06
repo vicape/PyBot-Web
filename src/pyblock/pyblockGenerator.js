@@ -83,6 +83,62 @@ pythonGenerator.forBlock["pyblock_motor"] = function (block, generator) {
   return "motor(" + pin + ", " + speed + ")\n";
 };
 
+// ----- Hardware EDA6 (placa esp32-eda6) -----
+// Cada generador emite EXACTAMENTE la llamada a la función pública de EDA6.py,
+// sin async/await. El puerto sale de un dropdown (cadena "1".."4").
+pythonGenerator.forBlock["pyblock_eda6_salida_digital"] = function (block, generator) {
+  const n = block.getFieldValue("N");
+  const val = valOr(generator, block, "VAL", "1");
+  return "salidaDigital(" + n + ", " + val + ")\n";
+};
+
+pythonGenerator.forBlock["pyblock_eda6_entrada_digital"] = function (block) {
+  const n = block.getFieldValue("N");
+  return ["entradaDigital(" + n + ")", Order.FUNCTION_CALL];
+};
+
+pythonGenerator.forBlock["pyblock_eda6_entrada_analogica"] = function (block) {
+  const n = block.getFieldValue("N");
+  return ["entradaAnalogica(" + n + ")", Order.FUNCTION_CALL];
+};
+
+pythonGenerator.forBlock["pyblock_eda6_servomotor"] = function (block, generator) {
+  const n = block.getFieldValue("N");
+  const ang = valOr(generator, block, "ANG", "90");
+  return "servomotor(" + n + ", " + ang + ")\n";
+};
+
+pythonGenerator.forBlock["pyblock_eda6_motor_rc"] = function (block, generator) {
+  const n = block.getFieldValue("N");
+  const speed = valOr(generator, block, "SPEED", "0");
+  return "motorRC(" + n + ", " + speed + ")\n";
+};
+
+pythonGenerator.forBlock["pyblock_eda6_sensor_distancia"] = function (block) {
+  const n = block.getFieldValue("N");
+  return ["sensorDistancia(" + n + ")", Order.FUNCTION_CALL];
+};
+
+pythonGenerator.forBlock["pyblock_eda6_detener"] = function () {
+  return "detenerTodo()\n";
+};
+
+pythonGenerator.forBlock["pyblock_eda6_print_lcd"] = function (block, generator) {
+  const col = valOr(generator, block, "COL", "0");
+  const fila = valOr(generator, block, "FILA", "0");
+  const txt = valOr(generator, block, "TEXT", '""');
+  return "printLCD(" + col + ", " + fila + ", " + txt + ")\n";
+};
+
+pythonGenerator.forBlock["pyblock_eda6_limpiar_lcd"] = function () {
+  return "limpiarLCD()\n";
+};
+
+pythonGenerator.forBlock["pyblock_eda6_luz_lcd"] = function (block) {
+  const estado = block.getFieldValue("ESTADO");
+  return "luzLCD(" + estado + ")\n";
+};
+
 // Junta las piezas de un bloque "crear texto con" (text_join) sin usar join().
 function textJoinItems(block, generator) {
   const n = block.itemCount_ ?? 0;

@@ -120,6 +120,23 @@ function isName(node, id) {
   return node && node.type === "Name" && node.id === id;
 }
 
+// Los puertos EDA6 son un dropdown 1-4. Sólo se pueden representar como bloque
+// nativo si el argumento es un literal entero 1..4; si no, devolvemos null y el
+// llamador cae a un marcador de texto (raw) para no perder el código.
+function eda6PortField(node) {
+  if (node && node.type === "Num" && Number.isInteger(node.value) && node.value >= 1 && node.value <= 4) {
+    return String(node.value);
+  }
+  return null;
+}
+
+// Estado on/off de luzLCD: dropdown "1"/"0".
+function eda6StateField(node) {
+  if (node && node.type === "Num") return node.value ? "1" : "0";
+  if (node && node.type === "Bool") return node.value ? "1" : "0";
+  return null;
+}
+
 // Remapea llamadas de la API PyBot que devuelven valor.
 function mapCallExpr(call) {
   const f = call.func;
@@ -135,6 +152,18 @@ function mapCallExpr(call) {
   }
   if (isName(f, "tecla") && a.length >= 1) {
     return { type: "pyblock_canvas_key", id: nid(), inputs: { KEY: { block: exprToBlock(a[0]) } } };
+  }
+  // Funciones EDA6 que devuelven valor: entradaDigital / entradaAnalogica /
+  // sensorDistancia. Sólo se mapean si el puerto es un literal 1-4; si no,
+  // cae a un marcador de texto con el código original (sin romper).
+  const eda6Reporter = {
+    entradaDigital: "pyblock_eda6_entrada_digital",
+    entradaAnalogica: "pyblock_eda6_entrada_analogica",
+    sensorDistancia: "pyblock_eda6_sensor_distancia",
+  };
+  if (f && f.type === "Name" && eda6Reporter[f.id] && a.length >= 1) {
+    const port = eda6PortField(a[0]);
+    if (port !== null) return { type: eda6Reporter[f.id], id: nid(), fields: { N: port } };
   }
   return null;
 }
@@ -174,6 +203,37 @@ function mapCallStmt(call) {
       id: nid(),
       inputs: { PIN: valueInput(a[1]), VAL: valueInput(a[2]) },
     };
+  }
+  // Funciones EDA6 usadas como sentencia. El puerto es un dropdown (field N):
+  // sólo se mapea a bloque nativo si es un literal 1-4; si no, devolvemos null
+  // (el ExprStmt cae al marcador de texto, sin perder ni romper el código).
+  if (isName(f, "detenerTodo")) return { type: "pyblock_eda6_detener", id: nid() };
+  if (isName(f, "limpiarLCD")) return { type: "pyblock_eda6_limpiar_lcd", id: nid() };
+  if (isName(f, "salidaDigital") && a.length >= 2) {
+    const port = eda6PortField(a[0]);
+    if (port !== null)
+      return { type: "pyblock_eda6_salida_digital", id: nid(), fields: { N: port }, inputs: { VAL: valueInput(a[1]) } };
+  }
+  if (isName(f, "servomotor") && a.length >= 2) {
+    const port = eda6PortField(a[0]);
+    if (port !== null)
+      return { type: "pyblock_eda6_servomotor", id: nid(), fields: { N: port }, inputs: { ANG: valueInput(a[1]) } };
+  }
+  if (isName(f, "motorRC") && a.length >= 2) {
+    const port = eda6PortField(a[0]);
+    if (port !== null)
+      return { type: "pyblock_eda6_motor_rc", id: nid(), fields: { N: port }, inputs: { SPEED: valueInput(a[1]) } };
+  }
+  if (isName(f, "printLCD") && a.length >= 3) {
+    return {
+      type: "pyblock_eda6_print_lcd",
+      id: nid(),
+      inputs: { COL: valueInput(a[0]), FILA: valueInput(a[1]), TEXT: valueInput(a[2]) },
+    };
+  }
+  if (isName(f, "luzLCD") && a.length >= 1) {
+    const estado = eda6StateField(a[0]);
+    if (estado !== null) return { type: "pyblock_eda6_luz_lcd", id: nid(), fields: { ESTADO: estado } };
   }
   return null;
 }

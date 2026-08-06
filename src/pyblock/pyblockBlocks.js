@@ -31,6 +31,15 @@ try {
   /* ya estaba registrada (re-import en dev) o no disponible */
 }
 
+// Puertos EDA6: 1 a 4 (dropdown). El valor guardado es la cadena "1".."4",
+// que el generador inserta tal cual en la llamada Python.
+const eda6PortOptions = () => [
+  ["1", "1"],
+  ["2", "2"],
+  ["3", "3"],
+  ["4", "4"],
+];
+
 const HUE_CONTROL = 210;
 const HUE_HARDWARE = 25;
 const HUE_OUTPUT = 160;
@@ -199,6 +208,124 @@ export function definePyblockBlocks(lang) {
       nextStatement: null,
       colour: HUE_HARDWARE,
       tooltip: t("pyblockTipMotor"),
+    },
+
+    // ----- Hardware EDA6 (placa esp32-eda6) -----
+    // Cada bloque representa una función pública real de EDA6.py y genera
+    // EXACTAMENTE su llamada Python (ver pyblockGenerator.js). Las etiquetas
+    // muestran el nombre de la función tal cual (coherencia bloque<->Python).
+    // Los puertos son 1-4 (dropdown).
+    {
+      type: "pyblock_eda6_salida_digital",
+      message0: t("pyblockMsgEda6SalidaDigital"),
+      args0: [
+        { type: "field_dropdown", name: "N", options: eda6PortOptions() },
+        { type: "input_value", name: "VAL", check: "Number" },
+      ],
+      inputsInline: true,
+      previousStatement: null,
+      nextStatement: null,
+      colour: HUE_HARDWARE,
+      tooltip: t("pyblockTipEda6SalidaDigital"),
+    },
+    {
+      type: "pyblock_eda6_entrada_digital",
+      message0: t("pyblockMsgEda6EntradaDigital"),
+      args0: [{ type: "field_dropdown", name: "N", options: eda6PortOptions() }],
+      output: "Number",
+      colour: HUE_HARDWARE,
+      tooltip: t("pyblockTipEda6EntradaDigital"),
+    },
+    {
+      type: "pyblock_eda6_entrada_analogica",
+      message0: t("pyblockMsgEda6EntradaAnalogica"),
+      args0: [{ type: "field_dropdown", name: "N", options: eda6PortOptions() }],
+      output: "Number",
+      colour: HUE_HARDWARE,
+      tooltip: t("pyblockTipEda6EntradaAnalogica"),
+    },
+    {
+      type: "pyblock_eda6_servomotor",
+      message0: t("pyblockMsgEda6Servomotor"),
+      args0: [
+        { type: "field_dropdown", name: "N", options: eda6PortOptions() },
+        { type: "input_value", name: "ANG", check: "Number" },
+      ],
+      inputsInline: true,
+      previousStatement: null,
+      nextStatement: null,
+      colour: HUE_HARDWARE,
+      tooltip: t("pyblockTipEda6Servomotor"),
+    },
+    {
+      type: "pyblock_eda6_motor_rc",
+      message0: t("pyblockMsgEda6MotorRC"),
+      args0: [
+        { type: "field_dropdown", name: "N", options: eda6PortOptions() },
+        { type: "input_value", name: "SPEED", check: "Number" },
+      ],
+      inputsInline: true,
+      previousStatement: null,
+      nextStatement: null,
+      colour: HUE_HARDWARE,
+      tooltip: t("pyblockTipEda6MotorRC"),
+    },
+    {
+      type: "pyblock_eda6_sensor_distancia",
+      message0: t("pyblockMsgEda6SensorDistancia"),
+      args0: [{ type: "field_dropdown", name: "N", options: eda6PortOptions() }],
+      output: "Number",
+      colour: HUE_HARDWARE,
+      tooltip: t("pyblockTipEda6SensorDistancia"),
+    },
+    {
+      type: "pyblock_eda6_detener",
+      message0: t("pyblockMsgEda6Detener"),
+      previousStatement: null,
+      nextStatement: null,
+      colour: HUE_HARDWARE,
+      tooltip: t("pyblockTipEda6Detener"),
+    },
+    {
+      type: "pyblock_eda6_print_lcd",
+      message0: t("pyblockMsgEda6PrintLCD"),
+      args0: [
+        { type: "input_value", name: "COL", check: "Number" },
+        { type: "input_value", name: "FILA", check: "Number" },
+        { type: "input_value", name: "TEXT", check: "String" },
+      ],
+      inputsInline: true,
+      previousStatement: null,
+      nextStatement: null,
+      colour: HUE_HARDWARE,
+      tooltip: t("pyblockTipEda6PrintLCD"),
+    },
+    {
+      type: "pyblock_eda6_limpiar_lcd",
+      message0: t("pyblockMsgEda6LimpiarLCD"),
+      previousStatement: null,
+      nextStatement: null,
+      colour: HUE_HARDWARE,
+      tooltip: t("pyblockTipEda6LimpiarLCD"),
+    },
+    {
+      type: "pyblock_eda6_luz_lcd",
+      message0: t("pyblockMsgEda6LuzLCD"),
+      args0: [
+        {
+          type: "field_dropdown",
+          name: "ESTADO",
+          options: [
+            [t("pyblockEda6On"), "1"],
+            [t("pyblockEda6Off"), "0"],
+          ],
+        },
+      ],
+      inputsInline: true,
+      previousStatement: null,
+      nextStatement: null,
+      colour: HUE_HARDWARE,
+      tooltip: t("pyblockTipEda6LuzLCD"),
     },
 
     // ----- Salida -----

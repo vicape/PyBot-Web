@@ -25,6 +25,7 @@ const WORKSPACE_KEY = "pybot_pyblock_workspace";
 export default function PyBlockEditor({
   theme,
   lang,
+  boardType,
   incoming,
   onGenerated,
   onEdited,
@@ -34,6 +35,7 @@ export default function PyBlockEditor({
   const workspaceRef = useRef(null);
   const regenerateRef = useRef(() => {});
   const langRef = useRef(lang);
+  const boardTypeRef = useRef(boardType);
   const incomingRef = useRef(incoming);
   const [python, setPython] = useState("");
 
@@ -46,7 +48,7 @@ export default function PyBlockEditor({
     let workspace;
     try {
       workspace = Blockly.inject(host, {
-        toolbox: getPyblockToolbox(),
+        toolbox: getPyblockToolbox(boardTypeRef.current),
         trashcan: true,
         scrollbars: true,
         move: { scrollbars: true, drag: true, wheel: true },
@@ -171,7 +173,7 @@ export default function PyBlockEditor({
     definePyblockBlocks(lang);
 
     try {
-      workspace.updateToolbox(getPyblockToolbox());
+      workspace.updateToolbox(getPyblockToolbox(boardTypeRef.current));
     } catch {
       /* si falla, la toolbox queda en el idioma anterior */
     }
@@ -186,6 +188,21 @@ export default function PyBlockEditor({
     }
     regenerateRef.current?.();
   }, [lang]);
+
+  // Cuando cambia la placa seleccionada: se reconstruye la categoría Hardware
+  // de la toolbox para mostrar los bloques que corresponden (EDA6 vs genéricos).
+  // Lo que el alumno ya armó en el workspace no se toca.
+  useEffect(() => {
+    if (boardTypeRef.current === boardType) return;
+    boardTypeRef.current = boardType;
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
+    try {
+      workspace.updateToolbox(getPyblockToolbox(boardType));
+    } catch {
+      /* si falla, la toolbox queda con los bloques anteriores */
+    }
+  }, [boardType]);
 
   return (
     <div className="pyblock-root" data-theme={theme}>

@@ -1051,6 +1051,7 @@ export default function PyBotIDE() {
         <PyBlockEditor
           theme={theme}
           lang={lang}
+          boardType={boardType}
           incoming={pyblockIncoming}
           onGenerated={setPyblockCode}
           onEdited={() => {

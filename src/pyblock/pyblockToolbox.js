@@ -25,7 +25,76 @@ const trueShadow = () => ({
   shadow: { kind: "block", type: "logic_boolean", fields: { BOOL: "TRUE" } },
 });
 
-export function getPyblockToolbox() {
+// Bloques de hardware genéricos (API pin/servo/motor) para arduino-firmata y
+// esp32-micropython. Comparten la misma API pin(...), así que se reutilizan.
+const genericHardwareContents = () => [
+  {
+    kind: "block",
+    type: "pyblock_pin_write",
+    inputs: { PIN: numberShadow(13), VAL: numberShadow(1) },
+  },
+  {
+    kind: "block",
+    type: "pyblock_pin_read",
+    inputs: { PIN: numberShadow(2) },
+  },
+  { kind: "block", type: "pyblock_analog_read" },
+  {
+    kind: "block",
+    type: "pyblock_servo",
+    inputs: { PIN: numberShadow(9), ANG: numberShadow(90) },
+  },
+  {
+    kind: "block",
+    type: "pyblock_motor",
+    inputs: { PIN: numberShadow(10), SPEED: numberShadow(80) },
+  },
+];
+
+// Bloques de hardware EDA6: representan las funciones reales de EDA6.py con el
+// mismo nombre que en Python. Puertos 1-4 (dropdown). Sólo para esp32-eda6.
+const eda6HardwareContents = () => [
+  {
+    kind: "block",
+    type: "pyblock_eda6_salida_digital",
+    inputs: { VAL: numberShadow(1) },
+  },
+  { kind: "block", type: "pyblock_eda6_entrada_digital" },
+  { kind: "block", type: "pyblock_eda6_entrada_analogica" },
+  {
+    kind: "block",
+    type: "pyblock_eda6_servomotor",
+    inputs: { ANG: numberShadow(90) },
+  },
+  {
+    kind: "block",
+    type: "pyblock_eda6_motor_rc",
+    inputs: { SPEED: numberShadow(0) },
+  },
+  { kind: "block", type: "pyblock_eda6_sensor_distancia" },
+  { kind: "block", type: "pyblock_eda6_detener" },
+  {
+    kind: "block",
+    type: "pyblock_eda6_print_lcd",
+    inputs: {
+      COL: numberShadow(0),
+      FILA: numberShadow(0),
+      TEXT: textShadow("Hola"),
+    },
+  },
+  { kind: "block", type: "pyblock_eda6_limpiar_lcd" },
+  { kind: "block", type: "pyblock_eda6_luz_lcd" },
+];
+
+/**
+ * Construye la toolbox de PyBlock. La categoría Hardware depende del `boardType`
+ * seleccionado: los bloques EDA6 reales para "esp32-eda6", y los bloques
+ * genéricos (pin/servo/motor) para el resto.
+ * @param {string} [boardType] - "arduino-firmata" | "esp32-micropython" | "esp32-eda6"
+ */
+export function getPyblockToolbox(boardType) {
+  const hardwareContents =
+    boardType === "esp32-eda6" ? eda6HardwareContents() : genericHardwareContents();
   return {
     kind: "categoryToolbox",
     contents: [
@@ -112,29 +181,7 @@ export function getPyblockToolbox() {
         kind: "category",
         name: t("pyblockCatHardware"),
         colour: "25",
-        contents: [
-          {
-            kind: "block",
-            type: "pyblock_pin_write",
-            inputs: { PIN: numberShadow(13), VAL: numberShadow(1) },
-          },
-          {
-            kind: "block",
-            type: "pyblock_pin_read",
-            inputs: { PIN: numberShadow(2) },
-          },
-          { kind: "block", type: "pyblock_analog_read" },
-          {
-            kind: "block",
-            type: "pyblock_servo",
-            inputs: { PIN: numberShadow(9), ANG: numberShadow(90) },
-          },
-          {
-            kind: "block",
-            type: "pyblock_motor",
-            inputs: { PIN: numberShadow(10), SPEED: numberShadow(80) },
-          },
-        ],
+        contents: hardwareContents,
       },
       {
         kind: "category",

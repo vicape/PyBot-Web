@@ -155,6 +155,38 @@ const STRINGS = {
     pyblockTipServo: "Mueve un servo a un ángulo 0–180 (servo).",
     pyblockMsgMotor: "motor pin %1 velocidad %2",
     pyblockTipMotor: "Controla un motor con velocidad -100..100 (motor).",
+    pyblockEda6PortLabel: "puerto",
+    pyblockMsgEda6SalidaDigital: "salidaDigital puerto %1 valor %2",
+    pyblockTipEda6SalidaDigital:
+      "Enciende (1) o apaga (0) una salida digital de la placa EDA6 (salidaDigital(puerto, valor)).",
+    pyblockMsgEda6EntradaDigital: "entradaDigital puerto %1",
+    pyblockTipEda6EntradaDigital:
+      "Lee una entrada digital (0 o 1) de la placa EDA6 (entradaDigital(puerto)).",
+    pyblockMsgEda6EntradaAnalogica: "entradaAnalogica puerto %1",
+    pyblockTipEda6EntradaAnalogica:
+      "Lee una entrada analógica de la placa EDA6 como porcentaje 0–100 (entradaAnalogica(puerto)).",
+    pyblockMsgEda6Servomotor: "servomotor puerto %1 ángulo %2",
+    pyblockTipEda6Servomotor:
+      "Mueve un servomotor a un ángulo 0–180 en la placa EDA6 (servomotor(puerto, ángulo)).",
+    pyblockMsgEda6MotorRC: "motorRC puerto %1 velocidad %2",
+    pyblockTipEda6MotorRC:
+      "Controla un motor RC con velocidad -100..100 en la placa EDA6 (motorRC(puerto, velocidad)).",
+    pyblockMsgEda6SensorDistancia: "sensorDistancia puerto %1",
+    pyblockTipEda6SensorDistancia:
+      "Devuelve la distancia en cm medida por el sensor ultrasónico de la placa EDA6 (sensorDistancia(puerto)).",
+    pyblockMsgEda6Detener: "detenerTodo",
+    pyblockTipEda6Detener:
+      "Detiene motores y apaga todas las salidas de la placa EDA6 (detenerTodo()).",
+    pyblockMsgEda6PrintLCD: "printLCD columna %1 fila %2 texto %3",
+    pyblockTipEda6PrintLCD:
+      "Escribe un texto en la pantalla LCD de la placa EDA6 (printLCD(columna, fila, texto)).",
+    pyblockMsgEda6LimpiarLCD: "limpiarLCD",
+    pyblockTipEda6LimpiarLCD: "Borra la pantalla LCD de la placa EDA6 (limpiarLCD()).",
+    pyblockEda6On: "encendida",
+    pyblockEda6Off: "apagada",
+    pyblockMsgEda6LuzLCD: "luzLCD %1",
+    pyblockTipEda6LuzLCD:
+      "Enciende o apaga la luz de fondo de la pantalla LCD de la placa EDA6 (luzLCD(estado)).",
     pyblockMsgPrint: "imprimir %1",
     pyblockTipPrint: "Muestra un texto o valor en la terminal (print).",
     pyblockMsgCanvasScreen: "crear pantalla ancho %1 alto %2",
@@ -471,6 +503,38 @@ Creado por VIC.`,
     pyblockTipServo: "Moves a servo to an angle 0-180 (servo).",
     pyblockMsgMotor: "motor pin %1 speed %2",
     pyblockTipMotor: "Controls a motor with speed -100..100 (motor).",
+    pyblockEda6PortLabel: "port",
+    pyblockMsgEda6SalidaDigital: "salidaDigital port %1 value %2",
+    pyblockTipEda6SalidaDigital:
+      "Turns an EDA6 digital output on (1) or off (0) (salidaDigital(port, value)).",
+    pyblockMsgEda6EntradaDigital: "entradaDigital port %1",
+    pyblockTipEda6EntradaDigital:
+      "Reads an EDA6 digital input (0 or 1) (entradaDigital(port)).",
+    pyblockMsgEda6EntradaAnalogica: "entradaAnalogica port %1",
+    pyblockTipEda6EntradaAnalogica:
+      "Reads an EDA6 analog input as a 0–100 percentage (entradaAnalogica(port)).",
+    pyblockMsgEda6Servomotor: "servomotor port %1 angle %2",
+    pyblockTipEda6Servomotor:
+      "Moves an EDA6 servo to an angle 0–180 (servomotor(port, angle)).",
+    pyblockMsgEda6MotorRC: "motorRC port %1 speed %2",
+    pyblockTipEda6MotorRC:
+      "Controls an EDA6 RC motor with speed -100..100 (motorRC(port, speed)).",
+    pyblockMsgEda6SensorDistancia: "sensorDistancia port %1",
+    pyblockTipEda6SensorDistancia:
+      "Returns the distance in cm from the EDA6 ultrasonic sensor (sensorDistancia(port)).",
+    pyblockMsgEda6Detener: "detenerTodo",
+    pyblockTipEda6Detener:
+      "Stops motors and turns off every EDA6 output (detenerTodo()).",
+    pyblockMsgEda6PrintLCD: "printLCD column %1 row %2 text %3",
+    pyblockTipEda6PrintLCD:
+      "Writes text on the EDA6 LCD screen (printLCD(column, row, text)).",
+    pyblockMsgEda6LimpiarLCD: "limpiarLCD",
+    pyblockTipEda6LimpiarLCD: "Clears the EDA6 LCD screen (limpiarLCD()).",
+    pyblockEda6On: "on",
+    pyblockEda6Off: "off",
+    pyblockMsgEda6LuzLCD: "luzLCD %1",
+    pyblockTipEda6LuzLCD:
+      "Turns the EDA6 LCD backlight on or off (luzLCD(state)).",
     pyblockMsgPrint: "print %1",
     pyblockTipPrint: "Shows a text or value in the terminal (print).",
     pyblockMsgCanvasScreen: "create screen width %1 height %2",
