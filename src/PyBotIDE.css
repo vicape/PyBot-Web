@@ -396,9 +396,9 @@
 }
 
 .brand-logo-full {
-  height: 44px;
+  height: 55px;
   width: auto;
-  max-width: min(220px, 42vw);
+  max-width: min(280px, 46vw);
   object-fit: contain;
   display: block;
   flex-shrink: 0;
@@ -823,11 +823,11 @@
   content: "";
   position: absolute;
   inset: 0;
-  /* LOGO PyBot WEB: el watermark central ahora usa el PNG nuevo (pybot-logo-web3.png), que
+  /* LOGO PyBot WEB: el watermark central ahora usa el PNG nuevo (pybot-logo-web4.png), que
      tiene FONDO TRANSPARENTE, por lo que ya no queda el bloque oscuro que tenía el PNG anterior.
      Es un logo HORIZONTAL: usamos background-size con un único valor (width) para que la altura
      se calcule sola y NO se deforme, sin clip-path circular (recortaría los costados). */
-  background-image: url("/branding/pybot-logo-web3.png");
+  background-image: url("/branding/pybot-logo-web4.png");
   background-repeat: no-repeat;
   background-position: center;
   background-size: min(60%, 640px);
@@ -1858,8 +1858,8 @@
     height: 36px;
   }
   .brand-logo-full {
-    height: 38px;
-    max-width: min(170px, 46vw);
+    height: 46px;
+    max-width: min(210px, 50vw);
   }
   .brand-robot {
     width: 38px;
