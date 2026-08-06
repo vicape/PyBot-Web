@@ -823,11 +823,11 @@
   content: "";
   position: absolute;
   inset: 0;
-  /* LOGO PyBot WEB: el watermark central ahora usa el PNG nuevo (pybot-logo-web4.png), que
+  /* LOGO PyBot WEB: el watermark central ahora usa el PNG nuevo (Image5.png), que
      tiene FONDO TRANSPARENTE, por lo que ya no queda el bloque oscuro que tenía el PNG anterior.
      Es un logo HORIZONTAL: usamos background-size con un único valor (width) para que la altura
      se calcule sola y NO se deforme, sin clip-path circular (recortaría los costados). */
-  background-image: url("/branding/pybot-logo-web4.png");
+  background-image: url("/branding/Image5.png");
   background-repeat: no-repeat;
   background-position: center;
   background-size: min(60%, 640px);

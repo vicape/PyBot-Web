@@ -1220,10 +1220,10 @@ export default function PyBotIDE() {
           <div className="main-stack">
             <header className="toolbar">
               <div className="toolbar-brand">
-                {/* LOGO PyBot WEB: PNG nuevo (pybot-logo-web4.png, logo horizontal transparente con la mascota, wordmark "PyBot" y tagline "Python · Arduino · in the browser").
-                    Para revertir a los SVG originales, volver a src="/branding/pybot-logo-full.svg" (sin el ?v=web4). */}
+                {/* LOGO PyBot WEB: PNG nuevo (Image5.png, logo horizontal transparente con la mascota, wordmark "PyBot" y tagline "Python · Arduino · in the browser").
+                    Para revertir a los SVG originales, volver a src="/branding/pybot-logo-full.svg" (sin el ?v=img5). */}
                 <img
-                  src="/branding/pybot-logo-web4.png?v=web4"
+                  src="/branding/Image5.png?v=img5"
                   alt={t("appTitle")}
                   className="brand-logo-full"
                 />
@@ -1873,8 +1873,8 @@ export default function PyBotIDE() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="about-card">
-              {/* LOGO PyBot WEB: PNG nuevo (pybot-logo-web4.png, logo horizontal transparente con tagline). Para revertir a los SVG originales, volver a src="/branding/pybot-logo-full.svg" (sin ?v=web4). */}
-              <img src="/branding/pybot-logo-web4.png?v=web4" alt="PyBot" className="about-logo" />
+              {/* LOGO PyBot WEB: PNG nuevo (Image5.png, logo horizontal transparente con tagline). Para revertir a los SVG originales, volver a src="/branding/pybot-logo-full.svg" (sin ?v=img5). */}
+              <img src="/branding/Image5.png?v=img5" alt="PyBot" className="about-logo" />
               <h3 id="about-title" className="about-title">
                 {t("aboutName")}
               </h3>
