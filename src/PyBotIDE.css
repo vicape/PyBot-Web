@@ -335,7 +335,7 @@
   justify-content: space-between;
   gap: 16px;
   flex-wrap: nowrap;
-  padding: 4px 18px;
+  padding: 2px 18px;
   min-height: 56px;
   background: var(--ide-toolbar);
   border-bottom: 1px solid var(--ide-border);
@@ -396,9 +396,9 @@
 }
 
 .brand-logo-full {
-  height: 66px;
+  height: 73px;
   width: auto;
-  max-width: min(320px, 46vw);
+  max-width: min(352px, 46vw);
   object-fit: contain;
   display: block;
   flex-shrink: 0;
@@ -1858,8 +1858,8 @@
     height: 36px;
   }
   .brand-logo-full {
-    height: 54px;
-    max-width: min(240px, 50vw);
+    height: 59px;
+    max-width: min(264px, 50vw);
   }
   .brand-robot {
     width: 38px;
