@@ -46,6 +46,11 @@ import { downloadProgramToArduino } from "./arduinoVmSession.js";
 import { getBleRuntimeSource, BLE_RUNTIME_FILENAME } from "./pybotBleRuntime.js";
 import { BluetoothTransport } from "./bluetoothTransport.js";
 import { BleRunSession } from "./bleRunSession.js";
+import {
+  COMMANDS,
+  parseInfoResponse,
+  runtimeSupportsRun,
+} from "./bleProtocol.js";
 
 let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
 let _mpSession = null;     // ESP32 MicroPython / EDA6 (ejecución en placa por SERIAL)
@@ -382,10 +387,38 @@ async function runOnBoardBle(code, cb = {}) {
   const boardType = getBoardType();
   const mode = boardType === "esp32-eda6" ? "eda6" : "mpy";
   const profile = getEda6Profile();
+  // Diagnostico: la placa DEBE tener el runtime nuevo (protocolo RUN 2.0). Con el
+  // MVP viejo (FW 1.x) los frames RUN:* se ignoran y el Run muere por timeout;
+  // detectarlo aca da un error claro y guia a reinstalar por USB.
+  await ensureBleRuntimeSupportsRun();
   // El firmware hace `from EDA6 import *`; el import del alumno es redundante e
-  // inofensivo. Enviamos el codigo tal cual (sin el wrap/prelude serial).
+  // inofensivo. Enviamos el codigo tal cual (sin el wrap/prelude serial). La
+  // libreria EDA6/pybot_mpy NO viaja por BLE: vive en la placa (instalada por USB).
   const userCode = mode === "eda6" ? prepareUserCodeForExec(code) : String(code ?? "");
   return _bleRun.runProgram(userCode, { ...cb, mode, profile });
+}
+
+/**
+ * Verifica (via INFO) que la ESP32 conectada por BLE tenga el runtime con soporte
+ * RUN. Usa el INFO cacheado del transporte si existe; si no, hace una consulta
+ * corta. Lanza BLE_RUNTIME_OUTDATED si confirma un runtime viejo. Si INFO no
+ * responde, no bloquea (deja que el timeout de RUN sea el fallback).
+ */
+async function ensureBleRuntimeSupportsRun() {
+  if (!_bleTransport) return;
+  let info = _bleTransport.getDeviceInfo?.().info ?? null;
+  if (!info) {
+    try {
+      const raw = await _bleTransport.sendAndWait(COMMANDS.INFO, 3000);
+      info = parseInfoResponse(raw);
+      if (info) _bleTransport.setDeviceInfo?.(info);
+    } catch {
+      info = null; // INFO no respondio: no bloquear, RUN maneja el timeout.
+    }
+  }
+  if (info && !runtimeSupportsRun(info)) {
+    throw new Error("BLE_RUNTIME_OUTDATED");
+  }
 }
 
 /** Interrumpe el programa en ejecución en la placa (Ctrl-C serial o STOP por BLE). */

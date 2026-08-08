@@ -635,7 +635,12 @@ export default function PyBotIDE() {
           (eda6Profile === "ESP32" ? t("eda6ProfileWarnEsp32") : t("eda6ProfileWarnWemos")) + "\n",
           eda6Profile === "ESP32" ? "err" : "info",
         );
-        appendConsole(t("eda6RunUploading") + "\n", "info");
+        // Por USB (serial) el preludio EDA6 se inyecta al ejecutar ("subiendo
+        // librería"). Por BLE la librería YA está en la placa (instalada por USB):
+        // solo viaja el código del alumno, así que ese mensaje no aplica.
+        if (hardwareIsConnected()) {
+          appendConsole(t("eda6RunUploading") + "\n", "info");
+        }
       }
       const msg = boardType === "esp32-eda6" ? t("eda6Running") : t("mpyRunning");
       await runBoardProgram(msg, activeCode);

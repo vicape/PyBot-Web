@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { t } from "./i18n.js";
 import { isWebBluetoothSupported, BLE_STATE } from "./bluetoothTransport.js";
-import { COMMANDS, parseInfoResponse } from "./bleProtocol.js";
+import { COMMANDS, parseInfoResponse, runtimeSupportsRun } from "./bleProtocol.js";
 import {
   bleRunConnect,
   bleRunDisconnect,
@@ -176,6 +176,12 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
               </span>
             </li>
           </ul>
+        ) : null}
+
+        {connected && info && !runtimeSupportsRun(info) ? (
+          <div className="connect-modal-error" role="alert">
+            {t("bleFirmwareOutdated")}
+          </div>
         ) : null}
 
         <div className="connect-modal-actions">

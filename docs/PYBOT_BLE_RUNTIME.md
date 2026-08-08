@@ -183,6 +183,19 @@ activa (`_mpSession`); si no hay serial pero hay una ESP32 por BLE (`_bleRun`), 
 Bluetooth. `interruptBoard()` manda `Ctrl-C` por serial o `STOP` por BLE según corresponda.
 El serial tiene prioridad, así su comportamiento no cambia.
 
+> **Nota de UI (solo BLE).** El mensaje del terminal *"Subiendo la librería EDA6…"*
+> (`eda6RunUploading`) aplica **solo al camino serial** (donde el preludio EDA6 se inyecta al
+> ejecutar). Por **BLE** la librería ya vive en la placa (instalada por USB): solo viaja el
+> código del alumno, así que ese mensaje **no** se muestra.
+
+**Chequeo de compatibilidad de versión (preflight BLE).** Antes de ejecutar por Bluetooth,
+`runOnBoardBle()` verifica que la placa tenga el runtime con soporte RUN, usando el `INFO`
+(cacheado o consultado al momento) y `runtimeSupportsRun(info)` (en `bleProtocol.js`). Si el
+`INFO` confirma un runtime **viejo** (protocol/firmware `1.x`), lanza `BLE_RUNTIME_OUTDATED`
+con un mensaje claro que guía a **reinstalar por USB** — en vez de dejar que el Run muera por
+timeout a los 6 s. Si `INFO` no responde, no bloquea (fallback al timeout de `RUN:READY`). El
+panel BLE de diagnóstico también muestra un aviso cuando el firmware es viejo.
+
 ## 6. Identidad única y estable
 
 - `deviceId` = **últimos 6 hex en MAYÚSCULA** de `machine.unique_id()` (MAC del chip).
@@ -196,6 +209,22 @@ El serial tiene prioridad, así su comportamiento no cambia.
 - Se subió a **2.0** porque el protocolo agrega la ejecución de programas (RUN/OUT/STOP);
   PING/INFO/LED se mantienen 100% compatibles.
 - Definidos tanto en el runtime (`main.py`) como en `src/bleProtocol.js`.
+- **Compatibilidad de ejecución:** una placa con el MVP **1.x** responde PING/INFO/LED pero
+  **no** entiende `RUN:*`. `runtimeSupportsRun(info)` distingue una de otra por la versión
+  (`INFO`): protocol/firmware con mayor `>= 2` ⇒ soporta RUN. Si una placa reporta **FW 1.0.0**
+  hay que **reinstalar** el runtime nuevo por USB ("Instalar PyBot Bluetooth").
+
+### 7-bis. Troubleshooting: "La placa no respondió por Bluetooth"
+
+Si al **Ejecutar** por BLE aparece *"The board did not respond over Bluetooth"* /
+*"La placa tiene una versión vieja del PyBot BLE Runtime…"* y el `INFO` muestra **FW 1.0.0**:
+
+1. La placa tiene el runtime **MVP viejo** (1.0.0), que no ejecuta programas por BLE.
+2. Conectá la placa por **USB** y elegí la placa correcta (`ESP32 MicroPython` o `ESP32 EDA6`).
+3. Menú **Placa → Herramientas de la placa → "Instalar PyBot Bluetooth"**. Esperá el progreso
+   y el mensaje de éxito (instala `main.py` 2.0.0 + `pybot_mpy.py` + `EDA6.py` y reinicia).
+4. Desconectá el cable, **reconectá por Bluetooth** y verificá con **INFO** que ahora reporta
+   **FW 2.0.0 / protocol 2.0**. Volvé a Ejecutar.
 
 ## 8. Cómo se genera / instala el runtime
 
@@ -242,8 +271,10 @@ y opcional; no reemplaza el cable.
     - `test/bleRunSession.test.mjs`: `BleRunSession` con un **mock del firmware**: envía
       BEGIN con modo/perfil, reensambla el programa exacto, streamea OUT, resuelve en DONE;
       `stop()` y el poller `shouldStop()` abortan un programa largo; rechazo por tamaño;
-      error si no hay conexión; desconexión durante la ejecución.
-  - Total: **45 tests** en verde (14 preexistentes + 31 nuevos).
+      error si no hay conexión; desconexión durante la ejecución. Incluye: **el camino BLE
+    envía SOLO el código del alumno** (nunca la librería EDA6) y `runtimeSupportsRun()`
+    distingue el runtime viejo (1.x) del nuevo (2.0) por la versión de `INFO`.
+  - Total: **49 tests** en verde.
 - `npm run build`: compila sin errores nuevos (solo el warning preexistente de tamaño de chunk).
 - **No** hay lint/typecheck configurados en el repo (proyecto JS con Vite); no se agregaron.
 

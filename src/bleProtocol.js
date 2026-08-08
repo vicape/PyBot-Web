@@ -92,6 +92,31 @@ export function parseInfoResponse(raw) {
 }
 
 /**
+ * Determina si el runtime instalado en la placa (segun su INFO) entiende el
+ * protocolo de EJECUCION (RUN 2.0). El MVP viejo (firmware/protocolo 1.x) solo
+ * respondia PING/INFO/LED: nunca contesta RUN:READY y provoca un timeout.
+ *
+ * Conservador: solo devuelve `false` cuando puede CONFIRMAR una version vieja
+ * (mayor < 2). Sin datos o formato desconocido -> `true` (no bloquear; que el
+ * flujo RUN maneje el timeout como fallback).
+ *
+ * @param {null | { protocol?: string, firmware?: string }} info
+ * @returns {boolean}
+ */
+export function runtimeSupportsRun(info) {
+  if (!info || typeof info !== "object") return true;
+  const major = (v) => {
+    const n = parseInt(String(v ?? "").split(".")[0], 10);
+    return Number.isFinite(n) ? n : null;
+  };
+  const proto = major(info.protocol);
+  if (proto != null) return proto >= 2;
+  const fw = major(info.firmware);
+  if (fw != null) return fw >= 2;
+  return true;
+}
+
+/**
  * Espejo JS del CommandProcessor del firmware (para tests y documentacion).
  * No toca hardware real; `ledOn` refleja el estado simulado del LED.
  * @param {string} command

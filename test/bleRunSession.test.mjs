@@ -110,6 +110,34 @@ test("runProgram sends BEGIN with mode/profile, streams OUT and resolves on DONE
   assert.equal(session.isRunning(), false);
 });
 
+test("BLE run sends ONLY the student code (never the EDA6 library over Bluetooth)", async () => {
+  const tr = makeFirmwareMock();
+  const session = new BleRunSession(tr);
+
+  // Programa EDA6 tipico de bloques (el mismo que falló en hardware real).
+  const program =
+    "while True:\n    salidaDigital(1, 1)\n    wait(0.5)\n    salidaDigital(1, 0)\n    wait(0.5)\n";
+
+  const runP = session.runProgram(program, { mode: "eda6", profile: "WEMOS" });
+  await new Promise((r) => setTimeout(r, 30));
+  await session.stop();
+  await runP;
+
+  // El firmware reensambló EXACTAMENTE el código del alumno: nada de librería.
+  assert.equal(tr._state.program, program);
+
+  // Ningún frame RUN:CHUNK debe contener la definición de la librería EDA6/mpy
+  // (esas viven en la placa, instaladas por USB). Verificamos sobre el texto
+  // decodificado de todos los chunks enviados.
+  const sentChunks = tr._state.sent
+    .filter((l) => l.startsWith(RUN.CHUNK + ":"))
+    .map((l) => l.slice((RUN.CHUNK + ":").length));
+  const reassembled = reassembleProgram(sentChunks);
+  assert.equal(reassembled, program);
+  assert.ok(!/def\s+salidaDigital/.test(reassembled), "no debe viajar la librería EDA6");
+  assert.ok(!/PLACA_ACTUAL/.test(reassembled), "no debe viajar estado del perfil EDA6");
+});
+
 test("runProgram defaults to mpy/WEMOS when mode/profile are omitted", async () => {
   const tr = makeFirmwareMock();
   const session = new BleRunSession(tr);

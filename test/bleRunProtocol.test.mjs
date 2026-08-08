@@ -17,6 +17,7 @@ import {
   chunkProgram,
   reassembleProgram,
   parseRunFrame,
+  runtimeSupportsRun,
 } from "../src/bleProtocol.js";
 
 test("base64 round-trip for arbitrary bytes", () => {
@@ -114,4 +115,28 @@ test("parseRunFrame surfaces protocol errors and ignores unrelated frames", () =
 test("MAX_PROGRAM_LENGTH is a sane, documented limit", () => {
   assert.equal(typeof MAX_PROGRAM_LENGTH, "number");
   assert.ok(MAX_PROGRAM_LENGTH >= 2048);
+});
+
+test("runtimeSupportsRun detects the old MVP runtime (protocol/firmware 1.x)", () => {
+  // Runtime viejo (commit MVP): reportaba protocol 1.0 / firmware 1.0.0 y NO
+  // entiende RUN:* -> debe considerarse SIN soporte de ejecucion.
+  assert.equal(
+    runtimeSupportsRun({ protocol: "1.0", firmware: "1.0.0", runtime: "PyBot BLE Runtime" }),
+    false,
+  );
+  // Solo firmware viejo, sin campo protocol (INFO minimal del MVP).
+  assert.equal(runtimeSupportsRun({ firmware: "1.0.0" }), false);
+});
+
+test("runtimeSupportsRun accepts the new RUN 2.0 runtime", () => {
+  assert.equal(runtimeSupportsRun({ protocol: "2.0", firmware: "2.0.0" }), true);
+  assert.equal(runtimeSupportsRun({ firmware: "2.1.3" }), true);
+  // El protocolo manda sobre el firmware si esta presente.
+  assert.equal(runtimeSupportsRun({ protocol: "2.0", firmware: "1.9.9" }), true);
+});
+
+test("runtimeSupportsRun is permissive with missing/unknown info (fallback a timeout de RUN)", () => {
+  assert.equal(runtimeSupportsRun(null), true);
+  assert.equal(runtimeSupportsRun({}), true);
+  assert.equal(runtimeSupportsRun({ firmware: "dev" }), true);
 });

@@ -273,6 +273,8 @@ const STRINGS = {
     bleRunHint:
       "Ejecutá con el botón Ejecutar: la salida llega por Bluetooth. Detené con Detener.",
     bleRunDisconnected: "Bluetooth de ejecución desconectado.",
+    bleFirmwareOutdated:
+      "Runtime viejo: esta placa no puede ejecutar programas por Bluetooth. Actualizala con “Instalar PyBot Bluetooth” por USB.",
     eda6PortOutOfRange: "Puerto EDA6 fuera de rango. Usá 1, 2, 3 o 4.",
     eda6LcdNotFound:
       "LCD no detectado. Conectá un LCD I2C o quitá las funciones LCD del programa.",
@@ -662,6 +664,8 @@ Creado por VIC.`,
     bleRunHint:
       "Run with the Run button: output arrives over Bluetooth. Stop with Stop.",
     bleRunDisconnected: "Execution Bluetooth disconnected.",
+    bleFirmwareOutdated:
+      "Old runtime: this board cannot run programs over Bluetooth. Update it with “Install PyBot Bluetooth” over USB.",
     eda6PortOutOfRange: "EDA6 port out of range. Use 1, 2, 3, or 4.",
     eda6LcdNotFound:
       "LCD not detected. Connect an I2C LCD or remove LCD functions from your program.",
@@ -852,10 +856,16 @@ export function formatPythonError(message) {
       "The program is too large to send over Bluetooth. Shorten it or flash it to the board over USB.",
     );
   }
+  if (/BLE_RUNTIME_OUTDATED/i.test(m)) {
+    return pick(
+      "La placa tiene una versión vieja del PyBot BLE Runtime que no puede ejecutar programas por Bluetooth. Conectala por USB y usá “Instalar PyBot Bluetooth” para actualizarla, después reconectá por Bluetooth.",
+      "The board has an old version of the PyBot BLE Runtime that cannot run programs over Bluetooth. Connect it over USB and use “Install PyBot Bluetooth” to update it, then reconnect over Bluetooth.",
+    );
+  }
   if (/BLE_RUN_NO_READY/i.test(m)) {
     return pick(
-      "La placa no respondió por Bluetooth. Reconectá y probá de nuevo.",
-      "The board did not respond over Bluetooth. Reconnect and try again.",
+      "La placa no respondió por Bluetooth. Puede tener un runtime viejo sin soporte de ejecución: reinstalá “Instalar PyBot Bluetooth” por USB. Si no, reconectá y probá de nuevo.",
+      "The board did not respond over Bluetooth. It may have an old runtime without run support: reinstall via “Install PyBot Bluetooth” over USB. Otherwise, reconnect and try again.",
     );
   }
   if (/BLE_RUN_DISCONNECTED|BLE_NOT_CONNECTED/i.test(m)) {
