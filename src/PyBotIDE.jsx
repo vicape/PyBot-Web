@@ -35,6 +35,7 @@ import {
   checkMainPyInstalled,
   recoverEsp32Repl,
   downloadToArduino,
+  installBleRuntime,
 } from "./hardwareBridge.js";
 import {
   filterExamplesForBoard,
@@ -45,6 +46,7 @@ import { checkPythonSyntax } from "./pythonSyntaxDiagnostics.js";
 import { hasCanvasCode } from "./canvasCodeDetect.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
+import BluetoothPanel from "./BluetoothPanel.jsx";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
 import {
   IconExplorer,
@@ -137,6 +139,8 @@ export default function PyBotIDE() {
   const inputFieldRef = useRef(null);
   const [waitingInput, setWaitingInput] = useState(false);
   const [downloadingArduino, setDownloadingArduino] = useState(false);
+  const [bleModalOpen, setBleModalOpen] = useState(false);
+  const [bleInstalling, setBleInstalling] = useState(false);
   const [editorMode, setEditorMode] = useState(() => {
     try {
       const saved = localStorage.getItem("pybot_editor_mode");
@@ -788,6 +792,43 @@ export default function PyBotIDE() {
     }
   }, [boardType, downloadingArduino, code, editorMode, pyblockCode, currentPythonCode, appendConsole]);
 
+  const onInstallBleRuntime = useCallback(async () => {
+    if (!connected) {
+      appendConsole(t("needConnect") + "\n", "err");
+      return;
+    }
+    if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") {
+      return;
+    }
+    if (bleInstalling) return;
+    setBleInstalling(true);
+    appendConsole(t("bleInstallStart") + "\n", "info");
+    let lastPct = -1;
+    try {
+      const { size } = await installBleRuntime({
+        onProgress: (info) => {
+          if (info.phase === "installing" && typeof info.pct === "number" && info.pct !== lastPct) {
+            lastPct = info.pct;
+            appendConsole(t("bleInstallProgress").replace("{pct}", String(info.pct)) + "\n", "info");
+          } else if (info.phase === "verifying") {
+            appendConsole(t("bleInstallVerifying") + "\n", "info");
+          } else if (info.phase === "resetting") {
+            appendConsole(t("bleInstallResetting") + "\n", "info");
+          }
+        },
+      });
+      await hardwareDisconnect();
+      setConnected(false);
+      appendConsole(t("bleInstallOk").replace("{size}", String(size)) + "\n", "info");
+      appendConsole(t("bleInstallReady") + "\n", "info");
+      appendConsole(t("bleInstallUnplug") + "\n", "info");
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    } finally {
+      setBleInstalling(false);
+    }
+  }, [connected, boardType, bleInstalling, appendConsole]);
+
   const onRecoverRepl = useCallback(async () => {
     if (!connected) {
       appendConsole(t("needConnect") + "\n", "err");
@@ -1356,6 +1397,19 @@ export default function PyBotIDE() {
                           >
                             {t("esp32VerifyMainBtn")}
                           </button>
+                          <div className="toolbar-menu-divider" />
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--highlight"
+                            onClick={() => {
+                              onInstallBleRuntime();
+                              setBoardMenuOpen(false);
+                            }}
+                            disabled={bleInstalling}
+                          >
+                            {t("bleInstallBtn")}
+                          </button>
+                          <div className="toolbar-menu-hint">{t("bleInstallMenuHint")}</div>
                           {boardType === "esp32-eda6" ? (
                             <>
                               <button
@@ -1399,6 +1453,18 @@ export default function PyBotIDE() {
                           <div className="toolbar-menu-hint">{t("arduinoDownloadMenuHint")}</div>
                         </>
                       ) : null}
+                      <div className="toolbar-menu-divider" />
+                      <button
+                        type="button"
+                        className="toolbar-menu-item toolbar-menu-item--secondary"
+                        onClick={() => {
+                          setBleModalOpen(true);
+                          setBoardMenuOpen(false);
+                        }}
+                      >
+                        {t("bleConnectMenuBtn")}
+                      </button>
+                      <div className="toolbar-menu-hint">{t("bleConnectMenuHint")}</div>
                     </div>
                   ) : null}
                 </div>
@@ -1626,6 +1692,8 @@ export default function PyBotIDE() {
         onConnect={onConnectFromModal}
         onToggleHelp={() => setConnectModalShowHelp((v) => !v)}
       />
+
+      <BluetoothPanel open={bleModalOpen} onClose={() => setBleModalOpen(false)} />
 
       {settingsOpen ? (
         <div className="modal-back" role="presentation" onClick={() => setSettingsOpen(false)}>

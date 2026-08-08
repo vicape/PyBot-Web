@@ -482,8 +482,12 @@ export class MicroPythonSession {
     return stdout.includes("PYBOT_FILE_EXISTS");
   }
 
-  /** @param {string} path @param {string} content */
-  async installFile(path, content) {
+  /**
+   * @param {string} path @param {string} content
+   * @param {{ onProgress?: (info: { done: number, total: number, pct: number }) => void }} [options]
+   */
+  async installFile(path, content, options = {}) {
+    const onProgress = options.onProgress;
     const bytes = new TextEncoder().encode(String(content ?? ""));
     let binary = "";
     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
@@ -500,6 +504,8 @@ export class MicroPythonSession {
       { timeout: 8000 },
     );
 
+    const total = chunks.length || 1;
+    let done = 0;
     for (const chunk of chunks) {
       const safeChunk = chunk.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
       const code = [
@@ -511,6 +517,10 @@ export class MicroPythonSession {
       const { stdout } = await this.execRaw(code, { timeout: 15000 });
       if (!stdout.includes("PYBOT_INSTALL_OK")) {
         throw new Error("INSTALL_FAIL");
+      }
+      done += 1;
+      if (onProgress) {
+        onProgress({ done, total, pct: Math.round((done / total) * 100) });
       }
     }
   }

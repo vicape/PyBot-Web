@@ -2197,3 +2197,54 @@
     display: none;
   }
 }
+
+/* --- Panel de diagnóstico BLE (encapsulado, aditivo) --- */
+.ble-diag {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ble-diag__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ble-diag__log {
+  margin-top: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ble-diag__empty {
+  opacity: 0.6;
+}
+
+.ble-diag__line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ble-diag__line--send {
+  opacity: 0.85;
+}
+
+.ble-diag__line--recv {
+  color: #7ee0a1;
+}
+
+.ble-diag__line--ok {
+  color: #7ee0a1;
+}
+
+.ble-diag__line--err {
+  color: #ff8a80;
+}

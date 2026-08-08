@@ -43,6 +43,7 @@ import {
 } from "./esp32Flash.js";
 import { compileToBytecode } from "./arduino/pybotArduinoCompiler.js";
 import { downloadProgramToArduino } from "./arduinoVmSession.js";
+import { getBleRuntimeSource, BLE_RUNTIME_FILENAME } from "./pybotBleRuntime.js";
 
 let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
 let _mpSession = null;     // ESP32 MicroPython / EDA6 (ejecución en placa)
@@ -425,6 +426,44 @@ export async function flashGpioProgramToBoard(code) {
   await _mpSession.installFile(PYBOT_HW_FILENAME, getPybotHwLibrarySource());
   await _mpSession.installFile(MAIN_PY_FILENAME, prepareMainPyForGpioFlash(code));
   return flashAndReset(false);
+}
+
+/**
+ * Instala el PyBot BLE Runtime (MicroPython) en la placa ESP32 conectada por USB.
+ * REUTILIZA la transferencia por raw REPL (installFile), igual que EDA6: escribe
+ * el runtime como main.py, verifica y reinicia (softReset) para que arranque solo.
+ * No inventa esptool/offsets; requiere una ESP32 con MicroPython ya presente.
+ *
+ * @param {{ onProgress?: (info: { phase: string, done?: number, total?: number, pct?: number }) => void }} [hooks]
+ * @returns {Promise<{ size: number }>}
+ */
+export async function installBleRuntime(hooks = {}) {
+  if (!_mpSession) throw new Error("not_connected");
+  if (_mode !== "esp32-micropython" && _mode !== "esp32-eda6") {
+    throw new Error("not_esp32");
+  }
+  const onProgress = hooks.onProgress;
+  onProgress?.({ phase: "start" });
+  await _mpSession.interruptAndRecoverRepl();
+
+  const source = getBleRuntimeSource();
+  onProgress?.({ phase: "installing", done: 0, total: 100, pct: 0 });
+  await _mpSession.installFile(BLE_RUNTIME_FILENAME, source, {
+    onProgress: (info) => onProgress?.({ phase: "installing", ...info }),
+  });
+
+  onProgress?.({ phase: "verifying" });
+  const exists = await _mpSession.fileExists(BLE_RUNTIME_FILENAME);
+  const size = exists ? await _mpSession.getFileSize(BLE_RUNTIME_FILENAME) : -1;
+  if (!exists || size < 8) {
+    throw new Error("BLE_INSTALL_VERIFY_FAIL");
+  }
+
+  onProgress?.({ phase: "resetting" });
+  await _mpSession.softReset();
+  await clearMpSessionAfterReset();
+  onProgress?.({ phase: "done", size });
+  return { size };
 }
 
 /** Detiene main.py en la placa y deja el REPL listo (sin desconectar). */
