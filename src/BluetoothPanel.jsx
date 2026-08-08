@@ -1,19 +1,23 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { t } from "./i18n.js";
-import {
-  BluetoothTransport,
-  isWebBluetoothSupported,
-  BLE_STATE,
-} from "./bluetoothTransport.js";
+import { isWebBluetoothSupported, BLE_STATE } from "./bluetoothTransport.js";
 import { COMMANDS, parseInfoResponse } from "./bleProtocol.js";
+import {
+  bleRunConnect,
+  bleRunDisconnect,
+  bleRunTransport,
+} from "./hardwareBridge.js";
 
 /**
  * Panel de conexion + diagnostico BLE (encapsulado). No toca USB / Web Serial.
  *
- * @param {{ open: boolean, onClose: () => void }} props
+ * Reutiliza la MISMA conexion BLE que usa el Run inalámbrico (bridge): así, al
+ * conectar acá, el botón Ejecutar corre el programa por Bluetooth. El transporte
+ * lo administra `hardwareBridge` (bleRunConnect/bleRunTransport/bleRunDisconnect).
+ *
+ * @param {{ open: boolean, onClose: () => void, onConnectionChange?: (connected:boolean, name:string|null) => void }} props
  */
-export default function BluetoothPanel({ open, onClose }) {
-  const transportRef = useRef(null);
+export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
   const [supported] = useState(() => isWebBluetoothSupported());
   const [state, setState] = useState(BLE_STATE.IDLE);
   const [deviceName, setDeviceName] = useState(null);
@@ -26,31 +30,39 @@ export default function BluetoothPanel({ open, onClose }) {
     setLog((prev) => [...prev.slice(-40), { line, kind, ts: Date.now() }]);
   }, []);
 
-  const getTransport = useCallback(() => {
-    if (!transportRef.current) {
-      const tr = new BluetoothTransport();
-      tr.onStateChange((s) => setState(s));
-      transportRef.current = tr;
-    }
-    return transportRef.current;
-  }, []);
+  const notifyConnection = useCallback(
+    (connected, name) => {
+      if (typeof onConnectionChange === "function") onConnectionChange(connected, name);
+    },
+    [onConnectionChange],
+  );
 
+  // Refleja el estado del transporte compartido al montar (por si ya estaba conectado).
   useEffect(() => {
-    return () => {
-      const tr = transportRef.current;
-      if (tr && tr.isConnected()) {
-        tr.disconnect().catch(() => {});
-      }
-    };
-  }, []);
+    const tr = bleRunTransport();
+    if (tr && tr.isConnected()) {
+      setState(BLE_STATE.CONNECTED);
+      setDeviceName(tr.getDeviceInfo?.().deviceName ?? null);
+    }
+  }, [open]);
 
   const handleConnect = useCallback(async () => {
     setError(null);
     setBusy(true);
     try {
-      const tr = getTransport();
-      const { deviceName: name } = await tr.connect();
+      const { deviceName: name } = await bleRunConnect();
+      const tr = bleRunTransport();
+      if (tr && typeof tr.onStateChange === "function") {
+        tr.onStateChange((s) => {
+          setState(s);
+          if (s === BLE_STATE.DISCONNECTED || s === BLE_STATE.IDLE) {
+            notifyConnection(false, null);
+          }
+        });
+      }
+      setState(BLE_STATE.CONNECTED);
       setDeviceName(name);
+      notifyConnection(true, name);
       appendLog(t("bleLogConnected").replace("{name}", name ?? "PYBOT"), "ok");
       try {
         const resp = await tr.sendAndWait(COMMANDS.INFO, 4000);
@@ -75,19 +87,20 @@ export default function BluetoothPanel({ open, onClose }) {
     } finally {
       setBusy(false);
     }
-  }, [getTransport, appendLog]);
+  }, [appendLog, notifyConnection]);
 
   const handleDisconnect = useCallback(async () => {
-    const tr = transportRef.current;
-    if (tr) await tr.disconnect().catch(() => {});
+    await bleRunDisconnect().catch(() => {});
+    setState(BLE_STATE.IDLE);
     setDeviceName(null);
     setInfo(null);
+    notifyConnection(false, null);
     appendLog(t("bleLogDisconnected"), "info");
-  }, [appendLog]);
+  }, [appendLog, notifyConnection]);
 
   const sendCommand = useCallback(
     async (command, label) => {
-      const tr = transportRef.current;
+      const tr = bleRunTransport();
       if (!tr || !tr.isConnected()) {
         setError(t("bleNotConnected"));
         return;

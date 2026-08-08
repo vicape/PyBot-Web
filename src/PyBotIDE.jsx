@@ -141,6 +141,7 @@ export default function PyBotIDE() {
   const [downloadingArduino, setDownloadingArduino] = useState(false);
   const [bleModalOpen, setBleModalOpen] = useState(false);
   const [bleInstalling, setBleInstalling] = useState(false);
+  const [bleConnected, setBleConnected] = useState(false);
   const [editorMode, setEditorMode] = useState(() => {
     try {
       const saved = localStorage.getItem("pybot_editor_mode");
@@ -620,7 +621,8 @@ export default function PyBotIDE() {
       !canvasCode &&
       (boardType === "esp32-micropython" || boardType === "esp32-eda6")
     ) {
-      if (!hardwareIsConnected()) {
+      // La placa puede estar conectada por USB (serial) o por Bluetooth (BLE).
+      if (!hardwareIsConnected() && !bleConnected) {
         appendConsole(t("needConnect") + "\n", "err");
         return;
       }
@@ -681,7 +683,7 @@ export default function PyBotIDE() {
       setInputPrompt("");
       inputResolveRef.current = null;
     }
-  }, [running, code, editorMode, pyblockCode, currentPythonCode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, applySyntaxResult]);
+  }, [running, code, editorMode, pyblockCode, currentPythonCode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, bleConnected, applySyntaxResult]);
 
   const onInstallEda6 = useCallback(async () => {
     if (!connected) {
@@ -807,7 +809,9 @@ export default function PyBotIDE() {
     try {
       const { size } = await installBleRuntime({
         onProgress: (info) => {
-          if (info.phase === "installing" && typeof info.pct === "number" && info.pct !== lastPct) {
+          if (info.phase === "installing-libs") {
+            appendConsole(t("bleInstallLibs") + "\n", "info");
+          } else if (info.phase === "installing" && typeof info.pct === "number" && info.pct !== lastPct) {
             lastPct = info.pct;
             appendConsole(t("bleInstallProgress").replace("{pct}", String(info.pct)) + "\n", "info");
           } else if (info.phase === "verifying") {
@@ -868,10 +872,26 @@ export default function PyBotIDE() {
     }
   }, [connected, appendConsole]);
 
+  const onBleConnectionChange = useCallback(
+    (isConnected, name) => {
+      setBleConnected(isConnected);
+      if (isConnected) {
+        appendConsole(
+          t("bleRunConnected").replace("{name}", name ?? "PYBOT") + "\n",
+          "info",
+        );
+        appendConsole(t("bleRunHint") + "\n", "info");
+      } else {
+        appendConsole(t("bleRunDisconnected") + "\n", "info");
+      }
+    },
+    [appendConsole],
+  );
+
   const onStop = useCallback(() => {
     signalStop();
     if (boardType === "esp32-micropython" || boardType === "esp32-eda6") {
-      if (hardwareIsConnected()) interruptBoard();
+      if (hardwareIsConnected() || bleConnected) interruptBoard();
     }
     setRunning(false);
     if (inputResolveRef.current) {
@@ -881,7 +901,7 @@ export default function PyBotIDE() {
       setInputPrompt("");
     }
     appendConsole("\n[Stop solicitado]\n", "info");
-  }, [appendConsole, boardType]);
+  }, [appendConsole, boardType, bleConnected]);
 
   const onOpenLocal = useCallback(() => {
     fileInputRef.current?.click();
@@ -1693,7 +1713,11 @@ export default function PyBotIDE() {
         onToggleHelp={() => setConnectModalShowHelp((v) => !v)}
       />
 
-      <BluetoothPanel open={bleModalOpen} onClose={() => setBleModalOpen(false)} />
+      <BluetoothPanel
+        open={bleModalOpen}
+        onClose={() => setBleModalOpen(false)}
+        onConnectionChange={onBleConnectionChange}
+      />
 
       {settingsOpen ? (
         <div className="modal-back" role="presentation" onClick={() => setSettingsOpen(false)}>

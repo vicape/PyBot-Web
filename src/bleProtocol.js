@@ -15,8 +15,9 @@ export const SERVICE_UUID = "8fbc0001-4d5a-4b8c-9a1f-123456789001";
 export const RX_UUID = "8fbc0002-4d5a-4b8c-9a1f-123456789002"; // Web -> ESP32 (WRITE)
 export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web (NOTIFY)
 
-export const PYBOT_RUNTIME_VERSION = "1.0.0";
-export const PYBOT_PROTOCOL_VERSION = "1.0";
+export const PYBOT_RUNTIME_VERSION = "2.0.0";
+// Protocolo 2.0: agrega ejecucion de programas (RUN/OUT/STOP). PING/INFO/LED intactos.
+export const PYBOT_PROTOCOL_VERSION = "2.0";
 export const PYBOT_RUNTIME_NAME = "PyBot BLE Runtime";
 export const PYBOT_BOARD = "ESP32";
 
@@ -135,4 +136,173 @@ export function splitMessages(buffer) {
   const rest = parts.pop() ?? "";
   const messages = parts.map((p) => p.trim()).filter((p) => p.length > 0);
   return { messages, rest };
+}
+
+// ===========================================================================
+// Protocolo de EJECUCION sobre GATT (protocolo 2.0)
+// ---------------------------------------------------------------------------
+// El codigo del alumno se envia por RX en varios paquetes (base64) y la salida
+// se recibe por TX en tiempo real (base64). Framing por lineas ('\n'); los
+// payloads binarios/arbitrarios (codigo, OUT, ERR) van en base64 para no chocar
+// con el delimitador. Los preludios (MPY/EDA6) viven como archivos .py en la
+// placa: por BLE solo viaja el codigo del alumno + modo + perfil.
+// ===========================================================================
+
+/** Tamano maximo del programa del alumno (bytes de fuente UTF-8) transferible por BLE. */
+export const MAX_PROGRAM_LENGTH = 8192;
+
+/** Bytes de fuente por chunk antes de base64 (chico para tolerar el MTU BLE). */
+export const RUN_SOURCE_CHUNK = 96;
+
+/** Modos de ejecucion soportados por el runtime. */
+export const RUN_MODES = Object.freeze({ MPY: "mpy", EDA6: "eda6" });
+
+/** Perfiles EDA6 validos (deben coincidir con eda6Profile.js / EDA6.py). */
+export const RUN_PROFILES = Object.freeze({ WEMOS: "WEMOS", ESP32: "ESP32" });
+
+/** Tokens del protocolo de ejecucion (deben coincidir con el firmware). */
+export const RUN = Object.freeze({
+  // PyBot Web -> ESP32
+  BEGIN: "RUN:BEGIN", // RUN:BEGIN:<mode>:<profile>
+  CHUNK: "RUN:CHUNK", // RUN:CHUNK:<base64>
+  END: "RUN:END", // fin de la transferencia -> ejecutar
+  STOP: "STOP", // abortar ejecucion
+  // ESP32 -> PyBot Web
+  READY: "RUN:READY", // listo para recibir chunks
+  STARTED: "RUN:STARTED", // el programa empezo a ejecutarse
+  OUT: "RUN:OUT", // RUN:OUT:<base64> (stdout del programa)
+  ERR: "RUN:ERR", // RUN:ERR:<base64> (traceback / error de runtime)
+  DONE: "RUN:DONE", // el programa termino (normal o detenido)
+  ERROR: "RUN:ERROR", // RUN:ERROR:<code> (error de protocolo)
+});
+
+const _B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/**
+ * Codifica bytes a base64 (JS puro, identico en Node y navegador; compatible con
+ * ubinascii.a2b_base64 del firmware). @param {Uint8Array|number[]} bytes @returns {string}
+ */
+export function bytesToBase64(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes ?? []);
+  let out = "";
+  for (let i = 0; i < b.length; i += 3) {
+    const b0 = b[i];
+    const b1 = i + 1 < b.length ? b[i + 1] : 0;
+    const b2 = i + 2 < b.length ? b[i + 2] : 0;
+    out += _B64[b0 >> 2];
+    out += _B64[((b0 & 3) << 4) | (b1 >> 4)];
+    out += i + 1 < b.length ? _B64[((b1 & 15) << 2) | (b2 >> 6)] : "=";
+    out += i + 2 < b.length ? _B64[b2 & 63] : "=";
+  }
+  return out;
+}
+
+/** Decodifica base64 a bytes (JS puro). @param {string} b64 @returns {Uint8Array} */
+export function base64ToBytes(b64) {
+  const s = String(b64 ?? "").replace(/[^A-Za-z0-9+/=]/g, "");
+  const clean = s.replace(/=+$/, "");
+  const out = [];
+  let buffer = 0;
+  let bits = 0;
+  for (let i = 0; i < clean.length; i++) {
+    const idx = _B64.indexOf(clean[i]);
+    if (idx < 0) continue;
+    buffer = (buffer << 6) | idx;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push((buffer >> bits) & 0xff);
+    }
+  }
+  return Uint8Array.from(out);
+}
+
+const _enc = new TextEncoder();
+const _dec = new TextDecoder();
+
+/** @param {string} text @returns {string} */
+export function utf8ToBase64(text) {
+  return bytesToBase64(_enc.encode(String(text ?? "")));
+}
+
+/** @param {string} b64 @returns {string} */
+export function base64ToUtf8(b64) {
+  return _dec.decode(base64ToBytes(b64));
+}
+
+/** @param {"mpy"|"eda6"} mode @param {"WEMOS"|"ESP32"} profile @returns {string} */
+export function buildRunBegin(mode, profile) {
+  const m = mode === RUN_MODES.EDA6 ? RUN_MODES.EDA6 : RUN_MODES.MPY;
+  const p = profile === RUN_PROFILES.ESP32 ? RUN_PROFILES.ESP32 : RUN_PROFILES.WEMOS;
+  return `${RUN.BEGIN}:${m}:${p}`;
+}
+
+/** @param {string} b64Chunk @returns {string} */
+export function buildRunChunk(b64Chunk) {
+  return `${RUN.CHUNK}:${b64Chunk}`;
+}
+
+/**
+ * Parsea `RUN:BEGIN:<mode>:<profile>` (usado por el espejo/tests del firmware).
+ * @param {string} line @returns {null | { mode:string, profile:string }}
+ */
+export function parseRunBegin(line) {
+  const text = String(line ?? "").trim();
+  if (!text.startsWith(RUN.BEGIN + ":")) return null;
+  const rest = text.slice(RUN.BEGIN.length + 1);
+  const parts = rest.split(":");
+  const mode = (parts[0] || "").toLowerCase() === RUN_MODES.EDA6 ? RUN_MODES.EDA6 : RUN_MODES.MPY;
+  const profile = (parts[1] || "").toUpperCase() === RUN_PROFILES.ESP32 ? RUN_PROFILES.ESP32 : RUN_PROFILES.WEMOS;
+  return { mode, profile };
+}
+
+/**
+ * Parte el codigo fuente en chunks base64 listos para enviar como RUN:CHUNK.
+ * @param {string} code @param {number} [chunkBytes]
+ * @returns {string[]} lista de fragmentos base64
+ */
+export function chunkProgram(code, chunkBytes = RUN_SOURCE_CHUNK) {
+  const bytes = _enc.encode(String(code ?? ""));
+  const size = chunkBytes > 0 ? chunkBytes : RUN_SOURCE_CHUNK;
+  const chunks = [];
+  for (let i = 0; i < bytes.length; i += size) {
+    chunks.push(bytesToBase64(bytes.subarray(i, i + size)));
+  }
+  return chunks;
+}
+
+/**
+ * Reensambla una lista de chunks base64 en el texto original (inverso de chunkProgram).
+ * @param {string[]} b64Chunks @returns {string}
+ */
+export function reassembleProgram(b64Chunks) {
+  const parts = Array.isArray(b64Chunks) ? b64Chunks : [];
+  const out = [];
+  for (const c of parts) {
+    const bytes = base64ToBytes(c);
+    for (let i = 0; i < bytes.length; i++) out.push(bytes[i]);
+  }
+  return _dec.decode(Uint8Array.from(out));
+}
+
+/**
+ * Parsea un frame recibido del runtime durante la ejecucion (TX -> Web).
+ * @param {string} raw
+ * @returns {{ type:"ready"|"started"|"out"|"err"|"done"|"error"|"unknown", text?:string, code?:string, raw:string }}
+ */
+export function parseRunFrame(raw) {
+  const text = String(raw ?? "").trim();
+  if (text === RUN.READY) return { type: "ready", raw: text };
+  if (text === RUN.STARTED) return { type: "started", raw: text };
+  if (text === RUN.DONE) return { type: "done", raw: text };
+  if (text.startsWith(RUN.OUT + ":")) {
+    return { type: "out", text: base64ToUtf8(text.slice(RUN.OUT.length + 1)), raw: text };
+  }
+  if (text.startsWith(RUN.ERR + ":")) {
+    return { type: "err", text: base64ToUtf8(text.slice(RUN.ERR.length + 1)), raw: text };
+  }
+  if (text.startsWith(RUN.ERROR + ":")) {
+    return { type: "error", code: text.slice(RUN.ERROR.length + 1), raw: text };
+  }
+  return { type: "unknown", raw: text };
 }

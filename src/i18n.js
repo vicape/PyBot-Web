@@ -236,6 +236,7 @@ const STRINGS = {
     bleInstallMenuHint:
       "Prepara la ESP32 para usarse sin cables por Bluetooth desde PyBot.",
     bleInstallStart: "Instalando PyBot Bluetooth en la ESP32 (por USB)…",
+    bleInstallLibs: "Instalando librerías en la placa (MicroPython + EDA6)…",
     bleInstallProgress: "Instalando runtime BLE… {pct}%",
     bleInstallVerifying: "Verificando el runtime en la placa…",
     bleInstallResetting: "Reiniciando la ESP32…",
@@ -268,6 +269,10 @@ const STRINGS = {
     bleNotConnected: "No hay conexión Bluetooth activa.",
     bleTimeout: "sin respuesta (timeout)",
     bleSendFail: "error al enviar",
+    bleRunConnected: "Bluetooth conectado a {name}. El programa correrá por BLE.",
+    bleRunHint:
+      "Ejecutá con el botón Ejecutar: la salida llega por Bluetooth. Detené con Detener.",
+    bleRunDisconnected: "Bluetooth de ejecución desconectado.",
     eda6PortOutOfRange: "Puerto EDA6 fuera de rango. Usá 1, 2, 3 o 4.",
     eda6LcdNotFound:
       "LCD no detectado. Conectá un LCD I2C o quitá las funciones LCD del programa.",
@@ -620,6 +625,7 @@ Creado por VIC.`,
     bleInstallMenuHint:
       "Prepares the ESP32 to be used wirelessly over Bluetooth from PyBot.",
     bleInstallStart: "Installing PyBot Bluetooth on the ESP32 (over USB)…",
+    bleInstallLibs: "Installing libraries on the board (MicroPython + EDA6)…",
     bleInstallProgress: "Installing BLE runtime… {pct}%",
     bleInstallVerifying: "Verifying the runtime on the board…",
     bleInstallResetting: "Restarting the ESP32…",
@@ -652,6 +658,10 @@ Creado por VIC.`,
     bleNotConnected: "No active Bluetooth connection.",
     bleTimeout: "no response (timeout)",
     bleSendFail: "send error",
+    bleRunConnected: "Bluetooth connected to {name}. The program will run over BLE.",
+    bleRunHint:
+      "Run with the Run button: output arrives over Bluetooth. Stop with Stop.",
+    bleRunDisconnected: "Execution Bluetooth disconnected.",
     eda6PortOutOfRange: "EDA6 port out of range. Use 1, 2, 3, or 4.",
     eda6LcdNotFound:
       "LCD not detected. Connect an I2C LCD or remove LCD functions from your program.",
@@ -835,6 +845,31 @@ export function formatPythonError(message) {
   );
 
   const firstDefinedName = m.match(/name ['"]([^'"]+)['"] is not defined/i)?.[1];
+
+  if (/BLE_PROGRAM_TOO_LONG/i.test(m)) {
+    return pick(
+      "El programa es demasiado grande para enviarlo por Bluetooth. Reducilo o grabalo en la placa por USB.",
+      "The program is too large to send over Bluetooth. Shorten it or flash it to the board over USB.",
+    );
+  }
+  if (/BLE_RUN_NO_READY/i.test(m)) {
+    return pick(
+      "La placa no respondió por Bluetooth. Reconectá y probá de nuevo.",
+      "The board did not respond over Bluetooth. Reconnect and try again.",
+    );
+  }
+  if (/BLE_RUN_DISCONNECTED|BLE_NOT_CONNECTED/i.test(m)) {
+    return pick(
+      "Se perdió la conexión Bluetooth. Reconectá la placa.",
+      "The Bluetooth connection was lost. Reconnect the board.",
+    );
+  }
+  if (/BLE_RUN_BUSY/i.test(m)) {
+    return pick(
+      "Ya hay un programa ejecutándose por Bluetooth. Detenelo antes de correr otro.",
+      "A program is already running over Bluetooth. Stop it before running another.",
+    );
+  }
 
   if (/canvas_not_ready/i.test(m)) {
     return pick(

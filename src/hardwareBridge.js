@@ -44,11 +44,21 @@ import {
 import { compileToBytecode } from "./arduino/pybotArduinoCompiler.js";
 import { downloadProgramToArduino } from "./arduinoVmSession.js";
 import { getBleRuntimeSource, BLE_RUNTIME_FILENAME } from "./pybotBleRuntime.js";
+import { BluetoothTransport } from "./bluetoothTransport.js";
+import { BleRunSession } from "./bleRunSession.js";
 
 let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
-let _mpSession = null;     // ESP32 MicroPython / EDA6 (ejecución en placa)
+let _mpSession = null;     // ESP32 MicroPython / EDA6 (ejecución en placa por SERIAL)
 let _mode = null;          // "arduino-firmata" | "esp32-micropython" | "esp32-eda6" | "esp32-serial"
 let _baudRate = null;
+
+// Transporte de EJECUCION por BLE (independiente del serial). Cuando hay una
+// ESP32 conectada por Bluetooth, el Run se ejecuta por aca en vez de por serial.
+let _bleTransport = null;  // BluetoothTransport (Web Bluetooth)
+let _bleRun = null;        // BleRunSession (protocolo de ejecucion 2.0)
+
+/** Nombre del archivo del preludio MPY (pin/servo/motor/wait) instalado en la placa. */
+export const PYBOT_MPY_FILENAME = "pybot_mpy.py";
 
 export function getBoardType() {
   try {
@@ -337,26 +347,48 @@ export async function hardwareDisconnect() {
  * @param {{onOut?:Function,onErr?:Function,shouldStop?:Function}} cb
  */
 export async function runOnBoard(code, cb = {}) {
-  if (!_mpSession) throw new Error("not_connected");
-  // Detener main.py o un while True previo antes de subir el nuevo programa.
-  try {
-    await _mpSession.interruptAndRecoverRepl();
-  } catch {
-    /* ignore */
+  // Adaptador de transporte: si hay una sesion SERIAL activa, se usa el camino
+  // serial EXACTAMENTE como hasta hoy. Si no, y hay una ESP32 por BLE, se ejecuta
+  // por Bluetooth. El serial tiene prioridad para no alterar su comportamiento.
+  if (_mpSession) {
+    // Detener main.py o un while True previo antes de subir el nuevo programa.
+    try {
+      await _mpSession.interruptAndRecoverRepl();
+    } catch {
+      /* ignore */
+    }
+    if (_mode === "esp32-eda6") {
+      const profile = getEda6Profile();
+      const body = prepareUserCodeForExec(code);
+      const probe =
+        'print("EDA6", PLACA_ACTUAL, "salida 1 -> GPIO", _pins()["digital_outputs"][0])\n';
+      const userCode = probe + "detenerTodo()\n" + wrapEda6UserCodeForRun(body);
+      const prelude = buildEda6RunPrelude(code, profile);
+      return _mpSession.runProgram(userCode, { ...cb, prelude });
+    }
+    return _mpSession.runProgram(code, cb);
   }
-  if (_mode === "esp32-eda6") {
-    const profile = getEda6Profile();
-    const body = prepareUserCodeForExec(code);
-    const probe =
-      'print("EDA6", PLACA_ACTUAL, "salida 1 -> GPIO", _pins()["digital_outputs"][0])\n';
-    const userCode = probe + "detenerTodo()\n" + wrapEda6UserCodeForRun(body);
-    const prelude = buildEda6RunPrelude(code, profile);
-    return _mpSession.runProgram(userCode, { ...cb, prelude });
+  if (_bleRun && _bleRun.isConnected()) {
+    return runOnBoardBle(code, cb);
   }
-  return _mpSession.runProgram(code, cb);
+  throw new Error("not_connected");
 }
 
-/** Interrumpe (Ctrl-C) el programa en ejecución en la placa MicroPython. */
+/**
+ * Ejecuta el programa del alumno por BLE. El preludio (mpy/eda6) vive en la placa
+ * como archivos .py; aca solo enviamos el codigo + modo + perfil.
+ */
+async function runOnBoardBle(code, cb = {}) {
+  const boardType = getBoardType();
+  const mode = boardType === "esp32-eda6" ? "eda6" : "mpy";
+  const profile = getEda6Profile();
+  // El firmware hace `from EDA6 import *`; el import del alumno es redundante e
+  // inofensivo. Enviamos el codigo tal cual (sin el wrap/prelude serial).
+  const userCode = mode === "eda6" ? prepareUserCodeForExec(code) : String(code ?? "");
+  return _bleRun.runProgram(userCode, { ...cb, mode, profile });
+}
+
+/** Interrumpe el programa en ejecución en la placa (Ctrl-C serial o STOP por BLE). */
 export async function interruptBoard() {
   if (_mpSession) {
     try {
@@ -364,7 +396,58 @@ export async function interruptBoard() {
     } catch {
       /* ignore */
     }
+    return;
   }
+  if (_bleRun && _bleRun.isConnected()) {
+    try {
+      await _bleRun.stop();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+// ===========================================================================
+// Conexion de EJECUCION por BLE (Web Bluetooth). Encapsulada: no toca el serial.
+// ===========================================================================
+
+/**
+ * Conecta una ESP32 por BLE para EJECUTAR programas (Run inalámbrico).
+ * Devuelve el nombre del dispositivo. Reutiliza BluetoothTransport.
+ * @returns {Promise<{ deviceName: string|null }>}
+ */
+export async function bleRunConnect() {
+  if (_bleTransport && _bleTransport.isConnected()) {
+    return { deviceName: _bleTransport.getDeviceInfo?.().deviceName ?? null };
+  }
+  const tr = new BluetoothTransport();
+  const info = await tr.connect();
+  _bleTransport = tr;
+  _bleRun = new BleRunSession(tr);
+  return info;
+}
+
+/** @returns {boolean} true si hay una ESP32 conectada por BLE para ejecucion. */
+export function bleRunIsConnected() {
+  return !!_bleRun && _bleRun.isConnected();
+}
+
+/** Devuelve el BluetoothTransport activo (para diagnostico PING/INFO/LED) o null. */
+export function bleRunTransport() {
+  return _bleTransport;
+}
+
+/** Desconecta la ESP32 BLE de ejecucion (no afecta el serial). */
+export async function bleRunDisconnect() {
+  if (_bleTransport) {
+    try {
+      await _bleTransport.disconnect();
+    } catch {
+      /* ignore */
+    }
+  }
+  _bleTransport = null;
+  _bleRun = null;
 }
 
 async function clearMpSessionAfterReset() {
@@ -446,6 +529,14 @@ export async function installBleRuntime(hooks = {}) {
   onProgress?.({ phase: "start" });
   await _mpSession.interruptAndRecoverRepl();
 
+  // 1) Preludios en la placa: pin/servo/motor/wait (mpy) y librería EDA6.
+  //    Así por BLE solo viaja el código del alumno + modo/perfil (no la librería).
+  //    Se reutiliza el MISMO texto fuente que el flujo serial (única fuente).
+  onProgress?.({ phase: "installing-libs" });
+  await _mpSession.installFile(PYBOT_MPY_FILENAME, MPY_PRELUDE);
+  await _mpSession.installFile(EDA6_FILENAME, getEda6LibrarySource(getEda6Profile()));
+
+  // 2) Runtime BLE como main.py (arranca solo al boot).
   const source = getBleRuntimeSource();
   onProgress?.({ phase: "installing", done: 0, total: 100, pct: 0 });
   await _mpSession.installFile(BLE_RUNTIME_FILENAME, source, {

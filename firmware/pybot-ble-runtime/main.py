@@ -11,9 +11,17 @@
 #
 # Separacion conceptual (aunque en un solo archivo por simplicidad de instalacion):
 #   - BluetoothTransport : solo recibe/envia bytes por BLE.
-#   - CommandProcessor   : interpreta texto y decide la respuesta (no toca BLE).
+#   - CommandProcessor   : interpreta texto simple y decide la respuesta (PING/INFO/LED).
+#   - ProgramRunner      : recibe el codigo del alumno por BLE, lo ejecuta y
+#                          transmite la salida (protocolo 2.0: RUN/OUT/STOP).
 #   - HardwareController : acciones fisicas (LED integrado).
-# Flujo: BLE RX -> CommandProcessor.process() -> HardwareController -> BLE TX notify.
+# Flujo simple : BLE RX -> CommandProcessor.process() -> HardwareController -> TX notify.
+# Flujo RUN    : BLE RX -> ProgramRunner (reensambla codigo) -> exec() -> TX (OUT/ERR/DONE).
+#
+# Los PRELUDIOS (pin/servo/motor/wait de "GPIO directo" y las funciones EDA6) NO
+# viajan por BLE: viven como archivos .py instalados en la placa (`pybot_mpy.py`
+# y `EDA6.py`, instalados por USB junto con este runtime). Por BLE solo viaja el
+# codigo del alumno + el modo (mpy/eda6) + el perfil (WEMOS/ESP32).
 #
 # Placa objetivo: ESP32 clasico (WROOM). LED integrado en GPIO 2.
 # La API `bluetooth` de MicroPython es comun a las variantes ESP32; si el LED no
@@ -22,13 +30,14 @@
 import bluetooth
 import struct
 import time
+import sys
 import machine
 import ubinascii
 from micropython import const
 
 # --- Version / protocolo (legibles por el comando INFO) ---
-PYBOT_RUNTIME_VERSION = "1.0.0"
-PYBOT_PROTOCOL_VERSION = "1.0"
+PYBOT_RUNTIME_VERSION = "2.0.0"
+PYBOT_PROTOCOL_VERSION = "2.0"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
 
@@ -38,6 +47,13 @@ BUILTIN_LED_PIN = 2
 # --- Limites de robustez ---
 MAX_COMMAND_LENGTH = const(64)
 _TX_CHUNK = const(20)  # margen seguro para MTU BLE por defecto (23 -> 20 utiles)
+_RX_BUF_MAX = const(512)  # una linea de protocolo cabe holgada; evita crecer sin limite
+_OUT_CHUNK = const(120)  # bytes de fuente por frame OUT antes de base64
+_MAX_PROGRAM_B64 = const(12000)  # ~8 KB de fuente (base64 ~1.34x)
+
+# Preludios instalados en la placa (por USB) que el runtime importa al ejecutar.
+_MPY_LIB = "pybot_mpy"  # define pin/servo/motor/wait (GPIO directo)
+_EDA6_LIB = "EDA6"      # define salidaDigital/servomotor/motorRC/... (EDA6)
 
 # --- IRQ BLE ---
 _IRQ_CENTRAL_CONNECT = const(1)
@@ -67,10 +83,18 @@ STATE_WAITING = "WAITING"
 STATE_CONNECTED = "CONNECTED"
 STATE_DISCONNECTED = "DISCONNECTED"
 
+# Comandos simples aceptados SIN delimitador '\n' (herramientas BLE genericas).
+_NO_NL_COMMANDS = ("PING", "INFO", "LED,1", "LED,0", "STOP")
+
 # Tipos de dato para el payload de advertising
 _ADV_TYPE_FLAGS = const(0x01)
 _ADV_TYPE_NAME = const(0x09)
 _ADV_TYPE_UUID128_COMPLETE = const(0x07)
+
+
+class _PyBotStop(Exception):
+    """Se lanza para abortar el programa del alumno cuando llega STOP/desconexion."""
+    pass
 
 
 def _advertising_payload(name=None, services=None):
@@ -127,7 +151,7 @@ class HardwareController:
 
 
 class CommandProcessor:
-    """Interpreta comandos de texto y devuelve la respuesta. No toca BLE."""
+    """Interpreta comandos de texto SIMPLES y devuelve la respuesta. No toca BLE."""
 
     def __init__(self, hardware, dev_name, dev_id):
         self._hw = hardware
@@ -172,12 +196,273 @@ class CommandProcessor:
         return "ERR,UNKNOWN_COMMAND"
 
 
-class BluetoothTransport:
-    """Capa BLE: advertising, conexion y RX/TX. Delega la logica al callback."""
+class _StrSink:
+    """Sumidero de texto para sys.print_exception (captura el traceback como string)."""
 
-    def __init__(self, name, on_command):
+    def __init__(self):
+        self.parts = []
+
+    def write(self, s):
+        try:
+            self.parts.append(s if isinstance(s, str) else str(s))
+        except Exception:
+            pass
+
+    def text(self):
+        return "".join(self.parts)
+
+
+class ProgramRunner:
+    """Recibe el codigo del alumno por BLE (en chunks base64), lo ejecuta con el
+    preludio correcto (mpy/eda6) y transmite la salida por TX en tiempo real.
+
+    Concurrencia: MicroPython es mono-hilo. El IRQ de BLE es un callback
+    "soft" que corre ENTRE bytecodes; por eso el programa del alumno NO se
+    ejecuta dentro del IRQ (bloquearia la recepcion de STOP). El IRQ solo
+    reensambla y marca `pending`; el bucle principal invoca `run_pending()`.
+    Mientras el programa corre, un STOP entrante dispara el IRQ soft-callback
+    que setea la bandera de stop; `time.sleep` (parcheado) la observa y corta.
+    """
+
+    def __init__(self, send):
+        self._send = send            # send(text): envia un frame por TX
+        self._chunks = []            # chunks base64 acumulados
+        self._b64_len = 0
+        self._mode = "mpy"
+        self._profile = "WEMOS"
+        self._collecting = False
+        self.running = False
+        self.pending = False
+        self._stop = False
+
+    # --- Fase de recepcion (llamada desde el IRQ: debe ser rapida) ---
+
+    def begin(self, mode, profile):
+        if self.running:
+            self._send("RUN:ERROR:BUSY")
+            return
+        self._chunks = []
+        self._b64_len = 0
+        self._mode = "eda6" if mode == "eda6" else "mpy"
+        self._profile = "ESP32" if profile == "ESP32" else "WEMOS"
+        self._collecting = True
+        self._stop = False
+        self.pending = False
+        self._send("RUN:READY")
+
+    def chunk(self, b64):
+        if not self._collecting:
+            return
+        self._b64_len += len(b64)
+        if self._b64_len > _MAX_PROGRAM_B64:
+            self._collecting = False
+            self._chunks = []
+            self._send("RUN:ERROR:TOO_LONG")
+            return
+        self._chunks.append(b64)
+
+    def mark_end(self):
+        if not self._collecting:
+            self._send("RUN:ERROR:NO_PROGRAM")
+            return
+        self._collecting = False
+        self.pending = True
+
+    def request_stop(self):
+        self._stop = True
+
+    def should_stop(self):
+        return self._stop
+
+    # --- Fase de ejecucion (llamada desde el bucle principal) ---
+
+    def _decode(self):
+        out = bytearray()
+        for c in self._chunks:
+            try:
+                out.extend(ubinascii.a2b_base64(c))
+            except Exception:
+                raise ValueError("bad_b64")
+        self._chunks = []
+        return out.decode("utf-8")
+
+    def _emit_out(self, text):
+        try:
+            data = text.encode("utf-8")
+        except Exception:
+            return
+        for i in range(0, len(data), _OUT_CHUNK):
+            piece = data[i:i + _OUT_CHUNK]
+            try:
+                b64 = ubinascii.b2a_base64(piece).decode().strip()
+            except Exception:
+                continue
+            self._send("RUN:OUT:" + b64)
+
+    def _emit_err(self, text):
+        try:
+            data = text.encode("utf-8")
+        except Exception:
+            return
+        for i in range(0, len(data), _OUT_CHUNK):
+            piece = data[i:i + _OUT_CHUNK]
+            try:
+                b64 = ubinascii.b2a_base64(piece).decode().strip()
+            except Exception:
+                continue
+            self._send("RUN:ERR:" + b64)
+
+    def _emit_err_exc(self, exc):
+        sink = _StrSink()
+        try:
+            sys.print_exception(exc, sink)
+            self._emit_err(sink.text())
+        except Exception:
+            try:
+                self._emit_err(str(exc))
+            except Exception:
+                self._emit_err("error")
+
+    def _make_print(self):
+        emit = self._emit_out
+
+        def _p(*args, **kwargs):
+            sep = kwargs.get("sep", " ")
+            end = kwargs.get("end", "\n")
+            try:
+                s = sep.join(str(a) for a in args) + end
+            except Exception:
+                s = end
+            emit(s)
+
+        return _p
+
+    def _load_prelude(self, ns):
+        """Carga en el namespace las funciones del preludio segun el modo.
+        Los preludios estan instalados como archivos .py en la placa."""
+        try:
+            if self._mode == "eda6":
+                mod_eda6 = __import__(_EDA6_LIB)
+                try:
+                    mod_eda6.PLACA_ACTUAL = self._profile
+                except Exception:
+                    pass
+                for k in dir(mod_eda6):
+                    if not k.startswith("_"):
+                        ns[k] = getattr(mod_eda6, k)
+                # Estado seguro antes de correr (igual que el flujo serial EDA6).
+                try:
+                    mod_eda6.detenerTodo()
+                except Exception:
+                    pass
+            # pin/servo/motor/wait siempre disponibles (GPIO directo).
+            mod_mpy = __import__(_MPY_LIB)
+            for k in dir(mod_mpy):
+                if not k.startswith("_"):
+                    ns[k] = getattr(mod_mpy, k)
+            return True
+        except Exception as e:
+            self._emit_err_exc(e)
+            return False
+
+    def _eda6_cleanup(self, ns):
+        if self._mode != "eda6":
+            return
+        fn = ns.get("detenerTodo")
+        if fn:
+            try:
+                fn()
+            except Exception:
+                pass
+
+    def run_pending(self):
+        if not self.pending:
+            return
+        self.pending = False
+        self.running = True
+        try:
+            code = self._decode()
+        except Exception:
+            self._send("RUN:ERROR:BAD_ENCODING")
+            self.running = False
+            self._send("RUN:DONE")
+            return
+
+        self._send("RUN:STARTED")
+
+        ns = {"__name__": "__main__"}
+        ns["print"] = self._make_print()
+
+        if not self._load_prelude(ns):
+            self.running = False
+            self._send("RUN:DONE")
+            return
+
+        # Sleep INTERRUMPIBLE: duerme en tramos chequeando el stop flag y lanza
+        # _PyBotStop para cortar cualquier bucle que use wait()/sleep.
+        orig_sleep = time.sleep
+        should_stop = self.should_stop
+
+        def _checked_sleep(secs):
+            try:
+                total = float(secs)
+            except Exception:
+                total = 0.0
+            if total <= 0:
+                if should_stop():
+                    raise _PyBotStop()
+                return
+            step = 0.02
+            elapsed = 0.0
+            while elapsed < total:
+                if should_stop():
+                    raise _PyBotStop()
+                d = step if (total - elapsed) > step else (total - elapsed)
+                orig_sleep(d)
+                elapsed += d
+            if should_stop():
+                raise _PyBotStop()
+
+        # 1) Siempre exponer wait()/sleep() interrumpibles en el namespace del
+        #    programa (tienen prioridad sobre los del preludio). Cubre el caso
+        #    tipico `while True: ...; wait(...)`.
+        ns["wait"] = _checked_sleep
+        ns["sleep"] = _checked_sleep
+
+        # 2) Best-effort: parchear time.sleep para cubrir tambien `import time` /
+        #    `from time import sleep` y los sleeps internos de las librerias. En
+        #    algunos ports `time` es de solo lectura; si falla, seguimos con (1).
+        patched = False
+        try:
+            time.sleep = _checked_sleep
+            patched = True
+        except Exception:
+            patched = False
+
+        try:
+            exec(code, ns)
+        except _PyBotStop:
+            self._emit_out("\n[Detenido]\n")
+        except Exception as e:
+            self._emit_err_exc(e)
+        finally:
+            if patched:
+                try:
+                    time.sleep = orig_sleep
+                except Exception:
+                    pass
+            self._eda6_cleanup(ns)
+            self.running = False
+            self._send("RUN:DONE")
+
+
+class BluetoothTransport:
+    """Capa BLE: advertising, conexion y RX/TX. Delega la logica a callbacks."""
+
+    def __init__(self, name, on_command, on_disconnect=None):
         self._name = name
         self._on_command = on_command
+        self._on_disconnect = on_disconnect
         self.state = STATE_BOOT
         self._conn_handle = None
         self._rx_buf = bytearray()
@@ -216,7 +501,12 @@ class BluetoothTransport:
                 self._conn_handle = None
                 self.state = STATE_DISCONNECTED
                 self._rx_buf = bytearray()
-                # Volver a advertising automaticamente (sin reset manual).
+                # Abortar cualquier programa en ejecucion y volver a advertising.
+                if self._on_disconnect:
+                    try:
+                        self._on_disconnect()
+                    except Exception:
+                        pass
                 self._advertise()
             elif event == _IRQ_GATTS_WRITE:
                 conn_handle, value_handle = data
@@ -235,22 +525,29 @@ class BluetoothTransport:
             return
         self._rx_buf.extend(chunk)
         # Evitar crecer sin limite ante datos corruptos/sin delimitador.
-        if len(self._rx_buf) > (MAX_COMMAND_LENGTH * 4):
+        if len(self._rx_buf) > _RX_BUF_MAX:
             self._rx_buf = bytearray()
             return
-        # Procesar por lineas (delimitador '\n'); tolera comandos sin '\n'.
+        # Procesar SOLO lineas completas (delimitador '\n'). Esto es clave para
+        # el protocolo RUN: nunca despachar un frame a medias.
         while True:
             idx = self._rx_buf.find(b"\n")
             if idx < 0:
                 break
             line = self._rx_buf[:idx]
-            self._rx_buf = self._rx_buf[idx + 1 :]
+            self._rx_buf = self._rx_buf[idx + 1:]
             self._dispatch(line)
-        # Si no hay delimitador pero ya llego un comando completo razonable,
-        # procesarlo igual (PyBot Web puede no enviar '\n').
-        if self._rx_buf and len(self._rx_buf) <= MAX_COMMAND_LENGTH:
-            self._dispatch(bytes(self._rx_buf))
-            self._rx_buf = bytearray()
+        # Fallback acotado: comando corto conocido enviado SIN '\n' (herramientas
+        # BLE genericas). No aplica a frames RUN (que siempre llevan '\n').
+        if self._rx_buf:
+            try:
+                probe = bytes(self._rx_buf).decode("utf-8").strip().upper()
+            except Exception:
+                probe = ""
+            if probe in _NO_NL_COMMANDS:
+                buf = self._rx_buf
+                self._rx_buf = bytearray()
+                self._dispatch(buf)
 
     def _dispatch(self, raw_bytes):
         try:
@@ -274,7 +571,7 @@ class BluetoothTransport:
         except Exception:
             return
         for i in range(0, len(data), _TX_CHUNK):
-            piece = data[i : i + _TX_CHUNK]
+            piece = data[i: i + _TX_CHUNK]
             try:
                 self._ble.gatts_notify(self._conn_handle, self._tx_handle, piece)
             except Exception:
@@ -287,11 +584,71 @@ def main():
     dev_name = device_name()
     hardware = HardwareController()
     processor = CommandProcessor(hardware, dev_name, dev_id)
-    transport = BluetoothTransport(dev_name, processor.process)
 
-    # Bucle principal: mantener vivo el runtime; el trabajo real ocurre en el IRQ.
+    # send() se asigna despues de construir el transport (dependencia circular
+    # controlada): el runner necesita enviar frames por TX.
+    runner_holder = {}
+
+    def _send(text):
+        tr = runner_holder.get("transport")
+        if tr:
+            tr.send(text)
+
+    runner = ProgramRunner(_send)
+
+    def on_command(text):
+        try:
+            t = text.strip()
+        except Exception:
+            return "ERR,UNKNOWN_COMMAND"
+        if not t:
+            return None
+        upper = t.upper()
+        if upper == "STOP":
+            runner.request_stop()
+            return None
+        if t.startswith("RUN:"):
+            _handle_run(runner, t)
+            return None
+        return processor.process(t)
+
+    def on_disconnect():
+        # Si habia un programa corriendo, abortarlo al perder la conexion.
+        runner.request_stop()
+
+    transport = BluetoothTransport(dev_name, on_command, on_disconnect)
+    runner_holder["transport"] = transport
+
+    # Bucle principal: la recepcion ocurre en el IRQ; aca ejecutamos el programa
+    # del alumno cuando quedo pendiente (fuera del IRQ, para poder recibir STOP).
     while True:
-        time.sleep_ms(200)
+        if runner.pending and not runner.running:
+            try:
+                runner.run_pending()
+            except Exception:
+                runner.running = False
+                runner.pending = False
+                try:
+                    _send("RUN:DONE")
+                except Exception:
+                    pass
+        time.sleep_ms(50)
+
+
+def _handle_run(runner, line):
+    """Interpreta un frame RUN:* recibido de PyBot Web."""
+    if line.startswith("RUN:BEGIN:"):
+        rest = line[len("RUN:BEGIN:"):]
+        parts = rest.split(":")
+        mode = parts[0].strip().lower() if len(parts) >= 1 else "mpy"
+        profile = parts[1].strip().upper() if len(parts) >= 2 else "WEMOS"
+        runner.begin(mode, profile)
+    elif line.startswith("RUN:CHUNK:"):
+        runner.chunk(line[len("RUN:CHUNK:"):].strip())
+    elif line == "RUN:END":
+        runner.mark_end()
+    else:
+        runner._send("RUN:ERROR:BAD_FRAME")
 
 
 main()

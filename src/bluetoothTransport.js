@@ -178,6 +178,34 @@ export class BluetoothTransport {
   }
 
   /**
+   * Envia un mensaje de texto por RX partiendolo en escrituras GATT pequenas
+   * (<= chunkBytes) para tolerar el MTU BLE por defecto (23 -> ~20 utiles),
+   * independientemente del MTU negociado. El firmware reensambla por '\n'.
+   *
+   * Se usa para el protocolo de EJECUCION (frames RUN largos). NO cambia el
+   * comportamiento de `send()` (comandos cortos PING/INFO/LED).
+   * @param {string} data
+   * @param {number} [chunkBytes]
+   */
+  async sendChunked(data, chunkBytes = 20) {
+    if (!this.isConnected() || !this._rxChar) {
+      throw new Error("BLE_NOT_CONNECTED");
+    }
+    const payload = String(data ?? "");
+    const withDelim = payload.endsWith(MSG_DELIMITER) ? payload : payload + MSG_DELIMITER;
+    const bytes = this._enc.encode(withDelim);
+    const size = chunkBytes > 0 ? chunkBytes : 20;
+    for (let i = 0; i < bytes.length; i += size) {
+      const piece = bytes.slice(i, i + size);
+      if (typeof this._rxChar.writeValueWithoutResponse === "function") {
+        await this._rxChar.writeValueWithoutResponse(piece);
+      } else {
+        await this._rxChar.writeValue(piece);
+      }
+    }
+  }
+
+  /**
    * Envia un comando y espera la primera respuesta (con timeout).
    * @param {string} command
    * @param {number} [timeoutMs]
