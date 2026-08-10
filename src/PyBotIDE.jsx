@@ -25,7 +25,7 @@ import {
   hardwareBaudRate,
   hardwareMode,
   runOnBoard,
-  interruptBoard,
+  stopBoardExecution,
   getBoardType,
   getEda6Profile,
   installEda6Library,
@@ -39,7 +39,6 @@ import {
   bleDeployProgram,
   bleRunSavedApp,
   bleGetAppInfo,
-  bleStopApp,
   bleDeleteApp,
   bleSetAutostart,
 } from "./hardwareBridge.js";
@@ -97,6 +96,10 @@ export default function PyBotIDE() {
   const [consoleLines, setConsoleLines] = useState([]);
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState(false);
+  // Estado explícito de STOP (P0-2): mientras se espera la confirmación real de
+  // detención (RUN:STOPPED / desconexión por reset) mostramos "Deteniendo…" y no
+  // permitimos un nuevo RUN. El run en curso limpia ambos flags al resolver.
+  const [stopping, setStopping] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [connectModalPhase, setConnectModalPhase] = useState("ready");
@@ -589,17 +592,29 @@ export default function PyBotIDE() {
       globalThis.__PYBOT_STOP__ = false;
       appendConsole(runningMsg + "\n", "info");
       try {
-        await runOnBoard(sourceCode ?? code, {
+        const result = await runOnBoard(sourceCode ?? code, {
           onOut: (s) => appendConsole(s, "out"),
           onErr: (s) => appendConsole(String(s).trim() + "\n", "err"),
           onStarted: () => appendConsole(t("boardProgramRunning") + "\n", "info"),
           shouldStop: () => globalThis.__PYBOT_STOP__ === true,
         });
-        appendConsole("\n[Fin]\n", "info");
+        // Respetar el desenlace real: nunca "[Fin]" si no terminó normalmente.
+        // El camino serial no devuelve outcome (undefined) → se mantiene "[Fin]".
+        const outcome = result?.outcome;
+        if (outcome === "stopped") {
+          appendConsole(t("boardProgramStopped") + "\n", "info");
+        } else if (outcome === "error") {
+          /* el traceback / RUN:ERROR ya se informó por onErr; no marcar [Fin] */
+        } else if (outcome === "disconnected") {
+          appendConsole(t("bleRunDisconnectedErr") + "\n", "err");
+        } else {
+          appendConsole("\n[Fin]\n", "info");
+        }
       } catch (e) {
         appendConsole(formatPythonError(e?.message) + "\n", "err");
       } finally {
         setRunning(false);
+        setStopping(false);
       }
     },
     [code, appendConsole],
@@ -612,7 +627,7 @@ export default function PyBotIDE() {
   }, [appendConsole]);
 
   const onRun = useCallback(async () => {
-    if (running) return;
+    if (running || stopping) return;
     // En PyBlock se ejecuta el Python generado por los bloques.
     const activeCode = currentPythonCode();
     if (!activeCode.trim()) {
@@ -692,11 +707,12 @@ export default function PyBotIDE() {
       /* logged */
     } finally {
       setRunning(false);
+      setStopping(false);
       setWaitingInput(false);
       setInputPrompt("");
       inputResolveRef.current = null;
     }
-  }, [running, code, editorMode, pyblockCode, currentPythonCode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, bleConnected, applySyntaxResult]);
+  }, [running, stopping, code, editorMode, pyblockCode, currentPythonCode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, bleConnected, applySyntaxResult]);
 
   const onInstallEda6 = useCallback(async () => {
     if (!connected) {
@@ -896,6 +912,39 @@ export default function PyBotIDE() {
     }
   }, []);
 
+  // Ejecuta la app persistente guardada y transmite su salida, respetando el
+  // desenlace real (done/stopped/error/disconnected). Reutilizada por "Ejecutar
+  // guardado" y por "Bajar" (ejecución inmediata post-deploy, P0-6).
+  const streamSavedApp = useCallback(async () => {
+    setRunning(true);
+    signalStop();
+    await new Promise((r) => setTimeout(r, 20));
+    globalThis.__PYBOT_STOP__ = false;
+    appendConsole(t("bleAppRunningMsg") + "\n", "info");
+    try {
+      const { outcome } = await bleRunSavedApp({
+        onOut: (s) => appendConsole(s, "out"),
+        onErr: (s) => appendConsole(String(s).trim() + "\n", "err"),
+        onStarted: () => appendConsole(t("boardProgramRunning") + "\n", "info"),
+        shouldStop: () => globalThis.__PYBOT_STOP__ === true,
+      });
+      if (outcome === "stopped") {
+        appendConsole(t("boardProgramStopped") + "\n", "info");
+      } else if (outcome === "done") {
+        appendConsole("\n[Fin]\n", "info");
+      } else if (outcome === "disconnected") {
+        appendConsole(t("bleRunDisconnectedErr") + "\n", "err");
+      }
+      /* outcome === "error": el traceback / APP error ya se informó por onErr */
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    } finally {
+      setRunning(false);
+      setStopping(false);
+      await refreshBleAppStatus();
+    }
+  }, [appendConsole, refreshBleAppStatus]);
+
   const onBleDeploy = useCallback(async () => {
     if (bleDeploying) return;
     if (!bleConnected) {
@@ -930,6 +979,11 @@ export default function PyBotIDE() {
       appendConsole(t("bleDeployOk") + "\n", "info");
       appendConsole(t("bleDeployAutostart") + "\n", "info");
       await refreshBleAppStatus();
+      // "Bajar a ESP32" = guardar → verificar → autostart ON → EJECUTAR inmediato (P0-6).
+      setBleDeploying(false);
+      appendConsole(t("bleDeployRunNow") + "\n", "info");
+      await streamSavedApp();
+      return;
     } catch (e) {
       const code = e?.message ?? "";
       if (code === "BLE_DEPLOY_UNSUPPORTED") {
@@ -946,51 +1000,33 @@ export default function PyBotIDE() {
     } finally {
       setBleDeploying(false);
     }
-  }, [bleDeploying, bleConnected, boardType, currentPythonCode, appendConsole, refreshBleAppStatus]);
+  }, [bleDeploying, bleConnected, boardType, currentPythonCode, appendConsole, refreshBleAppStatus, streamSavedApp]);
 
   const onBleRunSaved = useCallback(async () => {
-    if (running) return;
+    if (running || stopping) return;
     if (!bleConnected) {
       appendConsole(t("bleNotConnected") + "\n", "err");
       return;
     }
-    setRunning(true);
-    signalStop();
-    await new Promise((r) => setTimeout(r, 20));
-    globalThis.__PYBOT_STOP__ = false;
-    appendConsole(t("bleAppRunningMsg") + "\n", "info");
-    try {
-      const { outcome } = await bleRunSavedApp({
-        onOut: (s) => appendConsole(s, "out"),
-        onErr: (s) => appendConsole(String(s).trim() + "\n", "err"),
-        onStarted: () => appendConsole(t("boardProgramRunning") + "\n", "info"),
-        shouldStop: () => globalThis.__PYBOT_STOP__ === true,
-      });
-      if (outcome === "stopped") {
-        appendConsole(t("boardProgramStopped") + "\n", "info");
-      } else if (outcome === "done") {
-        appendConsole("\n[Fin]\n", "info");
-      } else if (outcome === "disconnected") {
-        appendConsole(t("bleRunDisconnectedErr") + "\n", "err");
-      }
-    } catch (e) {
-      appendConsole(formatPythonError(e?.message) + "\n", "err");
-    } finally {
-      setRunning(false);
-      await refreshBleAppStatus();
-    }
-  }, [running, bleConnected, appendConsole, refreshBleAppStatus]);
+    await streamSavedApp();
+  }, [running, stopping, bleConnected, appendConsole, streamSavedApp]);
 
   const onBleStopApp = useCallback(async () => {
     signalStop();
     globalThis.__PYBOT_STOP__ = true;
+    setStopping(true);
+    appendConsole(t("bleAppStopping") + "\n", "info");
     try {
-      await bleStopApp();
-      appendConsole(t("bleAppStopping") + "\n", "info");
+      // STOP unificado: el ESP32 es la fuente de verdad (RUN temporal vs app
+      // persistente) y escala a STOP:FORCE si no responde. Si hay un run en curso
+      // (streamSavedApp), su outcome limpiará stopping/running al resolver.
+      await stopBoardExecution();
     } catch (e) {
       appendConsole(formatPythonError(e?.message) + "\n", "err");
+    } finally {
+      if (!running) setStopping(false);
     }
-  }, [appendConsole]);
+  }, [appendConsole, running]);
 
   const onBleDeleteApp = useCallback(async () => {
     try {
@@ -1033,18 +1069,35 @@ export default function PyBotIDE() {
 
   const onStop = useCallback(() => {
     signalStop();
-    if (boardType === "esp32-micropython" || boardType === "esp32-eda6") {
-      if (hardwareIsConnected() || bleConnected) interruptBoard();
-    }
-    setRunning(false);
+    globalThis.__PYBOT_STOP__ = true;
+    // Liberar cualquier input() pendiente (Pyodide) siempre.
     if (inputResolveRef.current) {
       inputResolveRef.current("");
       inputResolveRef.current = null;
       setWaitingInput(false);
       setInputPrompt("");
     }
-    appendConsole("\n[Stop solicitado]\n", "info");
-  }, [appendConsole, boardType, bleConnected]);
+    // Programa en la placa (serial o BLE): NO marcar detenido antes de la
+    // confirmación real (P0-2). Mostramos "Deteniendo…" y dejamos que el run en
+    // curso resuelva su outcome (RUN:STOPPED / desconexión) y limpie los flags.
+    const onBoard =
+      (boardType === "esp32-micropython" || boardType === "esp32-eda6") &&
+      (hardwareIsConnected() || bleConnected);
+    if (onBoard && (running || stopping)) {
+      setStopping(true);
+      appendConsole("\n" + t("stoppingMsg") + "\n", "info");
+      // Operación unificada de STOP (serial Ctrl-C / BLE RUN o APP + escalado FORCE).
+      stopBoardExecution().catch(() => {});
+      return;
+    }
+    // Pyodide o sin programa en placa: el run local resuelve por signalStop.
+    if (running) {
+      setStopping(true);
+      appendConsole("\n" + t("stoppingMsg") + "\n", "info");
+    } else {
+      appendConsole("\n[Stop solicitado]\n", "info");
+    }
+  }, [appendConsole, boardType, bleConnected, running, stopping]);
 
   const onOpenLocal = useCallback(() => {
     fileInputRef.current?.click();
@@ -1340,7 +1393,7 @@ export default function PyBotIDE() {
             title={t("run")}
             aria-label={t("run")}
             onClick={onRun}
-            disabled={running}
+            disabled={running || stopping}
           >
             <IconPlay width={22} height={22} />
           </button>
@@ -1449,7 +1502,7 @@ export default function PyBotIDE() {
                     type="button"
                     className="tb-btn tb-btn--run tb-btn--primary"
                     onClick={onRun}
-                    disabled={running}
+                    disabled={running || stopping}
                   >
                     <IconPlay width={16} height={16} />
                     <span className="tb-btn__label">{t("run")}</span>
@@ -1905,11 +1958,11 @@ export default function PyBotIDE() {
 
       <footer className="status-bar">
         <span
-          className={`status-pill ${running ? "status-pill--busy" : connected ? "status-pill--ok" : "status-pill--idle"}`}
+          className={`status-pill ${running || stopping ? "status-pill--busy" : connected ? "status-pill--ok" : "status-pill--idle"}`}
           aria-hidden
         />
         <span className="status-main">
-          {running ? t("statusRunning") : t("statusReady")}
+          {stopping ? t("statusStopping") : running ? t("statusRunning") : t("statusReady")}
           <span className="status-sep">·</span>
           {pythonOnly
             ? t("pythonOnlyOn")

@@ -278,6 +278,9 @@ const STRINGS = {
     bleFirmwareOutdated:
       "Runtime viejo: esta placa no puede ejecutar programas por Bluetooth. Actualizala con “Instalar PyBot Bluetooth” por USB.",
     boardProgramStopped: "Programa detenido.",
+    stoppingMsg: "Deteniendo…",
+    statusStopping: "Deteniendo",
+    bleDeployRunNow: "Ejecutando el programa en la placa…",
     bleAppSectionLabel: "App en la placa (Bluetooth)",
     bleDeployBtn: "Bajar a ESP32 (Bluetooth)",
     bleDeployHint:
@@ -707,6 +710,9 @@ Creado por VIC.`,
     bleFirmwareOutdated:
       "Old runtime: this board cannot run programs over Bluetooth. Update it with “Install PyBot Bluetooth” over USB.",
     boardProgramStopped: "Program stopped.",
+    stoppingMsg: "Stopping…",
+    statusStopping: "Stopping",
+    bleDeployRunNow: "Running the program on the board…",
     bleAppSectionLabel: "App on board (Bluetooth)",
     bleDeployBtn: "Download to ESP32 (Bluetooth)",
     bleDeployHint:

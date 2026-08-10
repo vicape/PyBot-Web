@@ -15,10 +15,13 @@ export const SERVICE_UUID = "8fbc0001-4d5a-4b8c-9a1f-123456789001";
 export const RX_UUID = "8fbc0002-4d5a-4b8c-9a1f-123456789002"; // Web -> ESP32 (WRITE)
 export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web (NOTIFY)
 
-export const PYBOT_RUNTIME_VERSION = "3.0.0";
+export const PYBOT_RUNTIME_VERSION = "3.0.1";
 // Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
 // verificado (size+hash), control de app (APP:*) y autostart con safe boot.
 // El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
+// 3.0.1 (runtime, framing compatible): DEPLOY transaccional con backup/rollback,
+// HASH obligatorio si se declara (DEPLOY:ERROR:HASH_UNAVAILABLE), APP:STOP/DELETE
+// confirmados de verdad y errores de filesystem explicitos (APP:ERROR:*).
 export const PYBOT_PROTOCOL_VERSION = "3.0";
 export const PYBOT_RUNTIME_NAME = "PyBot BLE Runtime";
 export const PYBOT_BOARD = "ESP32";
@@ -284,11 +287,24 @@ export const DEPLOY_ERRORS = Object.freeze([
   "TOO_LONG",
   "BAD_ENCODING",
   "BAD_HASH",
+  // Se declaro VERIFY por hash pero el port no tiene uhashlib: no se afirma una
+  // verificacion criptografica que no ocurrio (la app anterior queda intacta).
+  "HASH_UNAVAILABLE",
   "WRITE_FAILED",
   "VERIFY_FAILED",
   "INVALID_MODE",
   "INVALID_PROFILE",
   "NO_SPACE",
+  "BAD_FRAME",
+]);
+
+/** Codigos de error APP:* que puede emitir el firmware (deben coincidir). */
+export const APP_ERRORS = Object.freeze([
+  "NO_APP",
+  "BUSY",
+  "READ_FAILED",
+  "WRITE_FAILED",
+  "DELETE_FAILED",
   "BAD_FRAME",
 ]);
 

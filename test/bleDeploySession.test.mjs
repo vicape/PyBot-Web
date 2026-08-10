@@ -186,6 +186,11 @@ function makeMock(opts = {}) {
       }
       emit(APP.OK_PREFIX + "START");
       emit(RUN.STARTED);
+      if (opts.appRunError) {
+        // Error de protocolo TERMINAL durante la app: RUN:ERROR:<code> SIN DONE.
+        emit(RUN.ERROR + ":BAD_FRAME");
+        return;
+      }
       emit(RUN.OUT + ":" + utf8ToBase64("saved-app-output\n"));
       emit(RUN.DONE);
       return;
@@ -391,6 +396,16 @@ test("runSavedApp streams output and resolves with outcome done", async () => {
   const { outcome } = await runSavedApp(mock, { onOut: (s) => out.push(s) });
   assert.equal(outcome, "done");
   assert.equal(out.join(""), "saved-app-output\n");
+});
+
+test("runSavedApp treats RUN:ERROR as terminal (outcome 'error', no hanging promise)", async () => {
+  const mock = makeMock({ appRunError: true });
+  await new BleDeploySession(mock).deploy("x=1\n", { mode: "mpy", profile: "WEMOS" });
+  const errs = [];
+  // Sin RUN:DONE posterior: si RUN:ERROR no cerrara la sesion, colgaria.
+  const { outcome } = await runSavedApp(mock, { onErr: (s) => errs.push(s) });
+  assert.equal(outcome, "error");
+  assert.ok(errs.join("").includes("BAD_FRAME"));
 });
 
 test("runSavedApp on empty board surfaces an app error and resolves", async () => {

@@ -13,6 +13,14 @@ nuevos; no altera EDA6, USB/Firmata, Pyodide ni el mecanismo de ejecución exist
 > confiable** (confirmación `RUN:STOPPED` + recuperación real `STOP:FORCE` con *safe boot*),
 > **DEPLOY persistente verificado** (transferencia atómica con size+hash a `pybot_app.py`),
 > **control de la app** (`APP:*`) y **autostart** al encender. Ver **5-ter. Protocolo 3.0**.
+>
+> **Runtime 3.0.1 (framing compatible, endurecimiento):** DEPLOY **realmente
+> transaccional** con backup/rollback (`pybot_app.bak` / `pybot_app.json.tmp` / `.bak`),
+> **hash obligatorio** si se declaró verificación (`DEPLOY:ERROR:HASH_UNAVAILABLE` cuando no hay
+> `uhashlib`), **`APP:STOP`/`APP:DELETE` confirmados de verdad** (responden cuando la app
+> **realmente** paró, no al recibir el pedido), errores de filesystem explícitos
+> (`APP:ERROR:WRITE_FAILED` / `DELETE_FAILED`), *safe boot* verificado antes del reset y
+> watchdog de recuperación del RUN temporal al perder el BLE. El framing 3.0 **no** cambia.
 > EJECUTAR (temporal) vs BAJAR (persistente/autónomo): *EJECUTAR* corre el programa en la
 > placa mientras estás conectado; *BAJAR* lo guarda en la placa para que corra **solo, sin PC/
 > navegador/BLE/Internet**, y sobreviva un power cycle, mientras el BLE sigue disponible para
@@ -226,7 +234,8 @@ PERSISTENT (app instalada por DEPLOY / autostart) comparten namespace, preludio 
 | `pybot_mpy.py` / `EDA6.py` | Preludios (GPIO directo / EDA6). | Sí (se reescriben). |
 | `pybot_app.py` | **Programa del alumno persistente**. | **No** (se conserva). |
 | `pybot_app.json` | Metadata: `version/mode/profile/autostart/size/hash/runtime`. | **No** (se conserva si es compatible). |
-| `pybot_app.tmp` | Temporal de la escritura atómica del DEPLOY. | — (efímero). |
+| `pybot_app.tmp` / `pybot_app.bak` | Temporal y **backup** del reemplazo transaccional del programa. | — (efímeros; se limpian al terminar o al boot). |
+| `pybot_app.json.tmp` / `pybot_app.json.bak` | Temporal y **backup** del reemplazo transaccional de la metadata. | — (efímeros). |
 | `pybot_state.json` | `safe_boot` + `fail_count` + `last_error` (autostart / recuperación). | **No**. |
 
 El programa del alumno **nunca** reemplaza el runtime; son archivos distintos.
@@ -248,9 +257,25 @@ El programa del alumno **nunca** reemplaza el runtime; son archivos distintos.
   web escala a `STOP:FORCE` automáticamente si tras `STOP` no llega confirmación (~3.5 s). La UI
   muestra *"Deteniendo…"* mientras espera y *"Programa detenido"* solo con evidencia
   (`RUN:STOPPED` o la desconexión por el reset).
+  **El reset por hardware ES el mecanismo final de recuperación:** al reiniciar, todos los
+  GPIO/PWM vuelven a su estado por defecto (entradas), por lo que el hardware queda seguro **sin**
+  ejecutar un cleanup complejo dentro del IRQ (que sería riesgoso: no se hace). Antes del reset se
+  persiste *safe boot* y se **verifica** el write; si no se pudo persistir, como *fallback* se
+  intenta desactivar el autostart de la metadata (y el `fail_count` sigue siendo la última red).
 - **SAFE BOOT (anti boot-loop):** tras un `STOP:FORCE` (o 3 fallos consecutivos de autostart),
   el runtime arranca con BLE pero **no** relanza la app; luego limpia el flag. Así no hay
   ciclos de reinicio.
+- **Recuperación del RUN temporal sin desenchufar:** al perder el BLE con un RUN **temporal** en
+  curso, el runtime pide STOP cooperativo y arma un *watchdog* (soft `Timer`) que, si el programa
+  no cede en ~1.8 s y seguimos desconectados, fuerza el reset — así un programa temporal no queda
+  huérfano ejecutando sin controlador. La **app persistente** autónoma, en cambio, **sigue**
+  corriendo al perder el BLE (esa es su función). Si el port no soporta `Timer`, queda el STOP
+  cooperativo (cubre los programas con `wait()`); un bucle 100% *tight* sin controlador requeriría
+  power cycle.
+- **STOP unificado (web).** Una sola abstracción `stopBoardExecution()` decide con el ESP32 como
+  fuente de verdad: serial → `Ctrl-C`; BLE RUN temporal → `STOP`/escalado; **app persistente
+  corriendo** (aunque haya arrancado por autostart, sin sesión web) → `APP:STOP` y, si no cede,
+  `STOP:FORCE`.
 
 ### DEPLOY (transferencia atómica verificada)
 
@@ -263,12 +288,24 @@ DEPLOY:ABORT                                  (cancela; conserva la app anterior
 ```
 
 - Escribe a `pybot_app.tmp`; al `END` verifica **tamaño** y **hash SHA-256** (`uhashlib` en la
-  placa; JS puro en la web) y solo entonces hace el **reemplazo atómico** de `pybot_app.py` +
-  metadata. Si algo falla, borra el tmp y **conserva la app anterior intacta**.
+  placa; JS puro en la web) y solo entonces hace el **reemplazo transaccional** de `pybot_app.py`
+  + metadata. Si algo falla, borra el tmp y **conserva la app anterior intacta**.
+- **Reemplazo REALMENTE transaccional (con backup/rollback).** Esquema
+  `pybot_app.py` / `.bak` / `.tmp` y `pybot_app.json` / `.tmp` / `.bak`:
+  metadata nueva → `pybot_app.json.tmp` (se verifica releyéndola) → si hay app actual `app→bak`
+  → `tmp→app` → `meta→meta.bak` → `meta.tmp→meta` → **verificar** app (size) + metadata
+  (relegible) → borrar backups. Si **cualquier** paso falla, se **restaura** desde el backup: nunca
+  queda sin una app válida si la había, ni con **programa nuevo + metadata vieja** (o al revés):
+  programa y metadata **siempre** se corresponden. Al boot, `_recover_incomplete_deploy()` repara
+  un DEPLOY cortado por un corte de energía (restaura desde backup y limpia temporales).
+- **Hash obligatorio si se declara VERIFY (P0-9).** Si se envió un hash pero el port **no** tiene
+  `uhashlib` (no se puede verificar la integridad criptográfica), el runtime **no** afirma una
+  verificación que no ocurrió: responde **`DEPLOY:ERROR:HASH_UNAVAILABLE`** y conserva la app
+  anterior. En ESP32 `uhashlib` está presente (caso normal → `VERIFY:OK`).
 - **ACK por bloque** (una línea `DEPLOY:CHUNK`, no por fragmento GATT de 20 B): da backpressure
   y detección de pérdidas sin miles de round-trips.
-- Códigos de error: `BUSY`, `TOO_LONG`, `BAD_ENCODING`, `BAD_HASH`, `WRITE_FAILED`,
-  `VERIFY_FAILED`, `INVALID_MODE`, `INVALID_PROFILE`, `NO_SPACE`, `BAD_FRAME`.
+- Códigos de error: `BUSY`, `TOO_LONG`, `BAD_ENCODING`, `BAD_HASH`, `HASH_UNAVAILABLE`,
+  `WRITE_FAILED`, `VERIFY_FAILED`, `INVALID_MODE`, `INVALID_PROFILE`, `NO_SPACE`, `BAD_FRAME`.
 - Límites separados: **`MAX_RUN_PROGRAM_SIZE = 8192`** (RUN temporal, en RAM) y
   **`MAX_DEPLOY_PROGRAM_SIZE = 16384`** (persistente, a flash por chunks).
 
@@ -276,11 +313,13 @@ DEPLOY:ABORT                                  (cancela; conserva la app anterior
 
 | Comando | Respuesta | Efecto |
 | --- | --- | --- |
-| `APP:INFO` | `APP:INFO:<json>` | `installed/running/autostart/mode/profile/size/hash/safe/fail/error`. |
+| `APP:INFO` | `APP:INFO:<json>` | `installed/running/autostart/mode/profile/size/hash/safe/fail/error`. Fuente de verdad para la web. |
 | `APP:START` | `APP:OK:START` + frames `RUN:*` | Ejecuta `pybot_app.py` y streamea salida. |
-| `APP:STOP` | `APP:OK:STOP` | STOP cooperativo de la app. |
-| `APP:DELETE` | `APP:OK:DELETE` | Detiene + cleanup + borra `pybot_app.py`/metadata (NO `main.py`/`EDA6.py`/`pybot_mpy.py`). |
-| `APP:AUTOSTART:1\|0` | `APP:OK:AUTOSTART` | Habilita/deshabilita autostart. |
+| `APP:STOP` | `APP:OK:STOP` (diferido) / `APP:ERROR:*` | Si hay app corriendo, pide STOP y responde **`APP:OK:STOP` cuando realmente paró** (no al recibir el pedido). Si no hay nada corriendo, confirma de inmediato. Un bucle que no cede **no** confirma: la web escala a `STOP:FORCE`. |
+| `APP:DELETE` | `APP:OK:DELETE` / `APP:ERROR:DELETE_FAILED` | Si corre: detiene → borra al terminar. Si no: borra ya. En ambos casos **verifica la ausencia** de `pybot_app.py`/metadata (sin éxito ficticio). NO borra `main.py`/`EDA6.py`/`pybot_mpy.py`. |
+| `APP:AUTOSTART:1\|0` | `APP:OK:AUTOSTART` / `APP:ERROR:WRITE_FAILED` | Habilita/deshabilita autostart; **no** confirma OK si la persistencia falló. |
+
+Errores APP: `NO_APP`, `BUSY`, `READ_FAILED`, `WRITE_FAILED`, `DELETE_FAILED`, `BAD_FRAME`.
 
 ### Autostart en boot
 
@@ -292,11 +331,22 @@ por `APP:INFO` y **no** borra el código del alumno ni entra en boot-loop. La ap
 
 ### "Bajar a ESP32" (BLE) — flujo
 
-`Bajar = guardar + verificar (size+hash) + autostart + ejecutar`. Reemplazo de app existente:
-STOP de la actual → cleanup → transferir la nueva a `tmp` → verificar → reemplazo atómico →
-metadata → ejecutar; si falla, la anterior queda intacta. Mensaje de éxito: *"Programa
-verificado y guardado en ESP32. La placa puede ejecutarlo sin la computadora. Autostart
-activado."*
+`Bajar = guardar + verificar (size+hash) + autostart + EJECUTAR inmediato`. Tras un DEPLOY
+exitoso la web ejecuta la app guardada de una (`APP:START`) y streamea su salida — no se da por
+terminado solo por guardar. **Reemplazo de app existente (redeploy):** antes del DEPLOY, la web
+detiene la ejecución en curso (RUN temporal y/o app persistente) de forma **cooperativa** para no
+chocar con `DEPLOY:ERROR:BUSY`; luego transfiere la nueva a `tmp` → verifica → reemplazo
+transaccional → metadata → ejecuta. Si algo falla, la anterior queda intacta.
+
+> **Limitación honesta (redeploy).** La detención previa al redeploy es **cooperativa** (cubre los
+> programas con `wait()`, que son casi todos). Si la app en curso es un bucle que **no** cede, el
+> DEPLOY responde `BUSY` y la UI lo informa (no se fuerza un reset a mitad del deploy porque el
+> reset caería el BLE y abortaría la transferencia). En ese caso, detené con **Detener** (que sí
+> escala a `STOP:FORCE`) y reintentá. Si un `STOP:FORCE` reinicia la placa, la reconexión GATT por
+> **Web Bluetooth** puede requerir volver a elegir el dispositivo según el navegador.
+
+Mensaje de éxito: *"Programa verificado y guardado en ESP32. La placa puede ejecutarlo sin la
+computadora. Autostart activado."*
 
 ### Compatibilidad e INFO.capabilities
 
@@ -314,10 +364,16 @@ PyBot Bluetooth para usar Bajar a ESP32"* y **no** impide RUN.
 
 ## 7. Versionado
 
-- `PYBOT_RUNTIME_VERSION = "3.0.0"`, `PYBOT_PROTOCOL_VERSION = "3.0"` (legibles por `INFO`).
+- `PYBOT_RUNTIME_VERSION = "3.0.1"`, `PYBOT_PROTOCOL_VERSION = "3.0"` (legibles por `INFO`).
 - Se subió a **3.0** porque el protocolo agrega STOP confiable (`RUN:STOPPED` + `STOP:FORCE`),
   DEPLOY persistente verificado, control de app (`APP:*`) y autostart. RUN 2.0 y PING/INFO/LED
   se mantienen compatibles.
+- **3.0.1** es un *release de endurecimiento* **compatible en framing** (no cambia el 3.0): DEPLOY
+  realmente transaccional con backup/rollback, hash obligatorio si se declara VERIFY
+  (`HASH_UNAVAILABLE`), `APP:STOP`/`APP:DELETE` confirmados de verdad, errores de filesystem
+  explícitos (`WRITE_FAILED`/`DELETE_FAILED`/`STATE_FAILED`), *safe boot* verificado antes del
+  reset y watchdog de recuperación del RUN temporal al perder el BLE. Por ser aditivo/compatible
+  **no** se subió a 3.1.
 - Definidos en una **única fuente coherente**: el runtime (`main.py`), `src/bleProtocol.js`,
   los tests y esta doc. `INFO` incluye `capabilities`.
 - **Compatibilidad de ejecución:** una placa con el MVP **1.x** responde PING/INFO/LED pero
@@ -365,6 +421,17 @@ Menú **Placa → "Conectar por Bluetooth (BLE)"** abre el panel BLE:
 
 USB conserva **exactamente** su comportamiento actual: BLE es un transporte independiente
 y opcional; no reemplaza el cable.
+
+> **Limitación conocida (USB "Bajar a ESP32" vs. runtime BLE) — P1-5.** El flujo histórico
+> **"Bajar a ESP32" por USB** (`flashProgramToBoard` / `flashGpioProgramToBoard`) escribe el
+> programa del alumno **como `main.py`** y reinicia. Si la placa tenía instalado el **runtime BLE
+> 3.x** (que también vive en `main.py`), ese flujo USB lo **reemplaza** y la placa deja de exponer
+> BLE hasta reinstalar el runtime (Placa → *Instalar PyBot Bluetooth*). Es el comportamiento USB
+> **histórico** y se mantiene deliberadamente sin cambios para no romperlo. **No** se modificó para
+> escribir en `pybot_app.py` en su lugar porque hacerlo a ciegas rompería el flujo USB clásico
+> (placas sin runtime BLE) y la ejecución `main.py`-autoarranque que muchos usan. Queda como
+> **limitación documentada**: si querés app persistente **conservando** el runtime BLE, usá
+> **"Bajar por Bluetooth"** (DEPLOY → `pybot_app.py`), no el "Bajar a ESP32" por USB.
 
 ## 11. Tests automatizados
 

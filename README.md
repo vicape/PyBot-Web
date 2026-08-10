@@ -56,7 +56,7 @@ Con la placa **Arduino Uno/Nano** seleccionada, el menú ofrece **"Bajar a Ardui
 
 Con una ESP32 preparada (menú **Placa → Herramientas → "Instalar PyBot Bluetooth"** por USB, que
 graba `main.py` + `pybot_mpy.py` + `EDA6.py`), se puede trabajar **sin cables** por Bluetooth
-(**Chrome/Edge de escritorio**). Runtime/protocolo **3.0**.
+(**Chrome/Edge de escritorio**). Runtime **3.0.1** / protocolo **3.0** (framing compatible).
 
 Dos formas de correr el programa del alumno:
 
@@ -65,14 +65,19 @@ Dos formas de correr el programa del alumno:
   es confiable: STOP cooperativo con confirmación y, si un bucle no cede, escala a un reinicio
   seguro (*safe boot*) sin desenchufar. Deja el hardware seguro (motores/PWM/salidas apagados).
 - **BAJAR (persistente/autónomo):** menú **Placa → "Bajar a ESP32 (Bluetooth)"**. Transferencia
-  **verificada** (tamaño + hash SHA-256), reemplazo atómico de `pybot_app.py`, **autostart**
-  activado y ejecución. Después la placa **corre sola al encender, sin PC/navegador/BLE/Internet**
-  y sobrevive un power cycle, mientras el Bluetooth sigue disponible para administrarla
-  (**Ejecutar guardado / Detener / Borrar / Autostart**).
+  **verificada** (tamaño + hash SHA-256), reemplazo **transaccional** de `pybot_app.py` + metadata
+  (con backup/rollback: nunca queda a medias), **autostart** activado y **ejecución inmediata**.
+  Después la placa **corre sola al encender, sin PC/navegador/BLE/Internet** y sobrevive un power
+  cycle, mientras el Bluetooth sigue disponible para administrarla (**Ejecutar guardado / Detener /
+  Borrar / Autostart**). El **Detener** también controla una app autónoma corriendo (incluso si
+  arrancó por autostart, sin sesión previa): el ESP32 es la fuente de verdad.
 
 También podés **Bajar a ESP32** por **USB** (flujo existente): se sigue priorizando el cable
-cuando hay sesión serial. Ver **[docs/PYBOT_BLE_RUNTIME.md](docs/PYBOT_BLE_RUNTIME.md)** y el
-checklist físico **[docs/PYBOT_BLE_TEST_PLAN.md](docs/PYBOT_BLE_TEST_PLAN.md)**.
+cuando hay sesión serial. **Nota:** ese "Bajar a ESP32" por **USB** escribe el programa como
+`main.py` y, si la placa tenía el runtime BLE, lo reemplaza (habría que reinstalarlo); para app
+persistente **conservando** el BLE, usá "Bajar por Bluetooth". Ver
+**[docs/PYBOT_BLE_RUNTIME.md](docs/PYBOT_BLE_RUNTIME.md)** y el checklist físico
+**[docs/PYBOT_BLE_TEST_PLAN.md](docs/PYBOT_BLE_TEST_PLAN.md)**.
 
 ### ESP32 Serial JSON (experimental, no usado)
 

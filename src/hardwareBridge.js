@@ -56,6 +56,7 @@ import {
 } from "./bleDeploySession.js";
 import {
   COMMANDS,
+  RUN,
   parseInfoResponse,
   runtimeSupportsRun,
   runtimeSupportsDeploy,
@@ -486,6 +487,11 @@ export async function bleDeployProgram(code, hooks = {}) {
   // se transfiere el codigo del alumno (con el import EDA6 redundante removido).
   const userCode = mode === "eda6" ? prepareUserCodeForExec(code) : String(code ?? "");
 
+  // Redeploy con app corriendo (P0-7): detener la ejecucion actual ANTES del
+  // DEPLOY para no chocar con DEPLOY:ERROR:BUSY. Cooperativo (cubre los programas
+  // con wait()); si la app no cede, el DEPLOY reportara BUSY y la UI lo informa.
+  await stopBleExecutionBeforeDeploy();
+
   const result = await _bleDeploy.deploy(userCode, {
     mode,
     profile,
@@ -531,22 +537,99 @@ export async function bleSetAutostart(on) {
   return appAutostart(_bleTransport, !!on);
 }
 
-/** Interrumpe el programa en ejecución en la placa (Ctrl-C serial o STOP por BLE). */
-export async function interruptBoard() {
+/**
+ * Operación UNIFICADA de STOP del programa en la placa (P0-5 / P1-4). Una sola
+ * abstracción para todos los transportes, con el ESP32 como fuente de verdad:
+ *   1) SERIAL (_mpSession) → Ctrl-C existente (prioridad serial intacta).
+ *   2) BLE, RUN temporal (sesión web) → STOP cooperativo con escalado a FORCE.
+ *   3) BLE, app persistente corriendo (aunque haya arrancado por autostart, sin
+ *      sesión web) → APP:STOP y, si no cede, escalado a STOP:FORCE (reset).
+ * @returns {Promise<{transport:string, kind?:string}>}
+ */
+export async function stopBoardExecution() {
   if (_mpSession) {
     try {
       await _mpSession.interrupt();
     } catch {
       /* ignore */
     }
-    return;
+    return { transport: "serial" };
   }
-  if (_bleRun && _bleRun.isConnected()) {
+  if (_bleTransport && _bleTransport.isConnected()) {
+    // RUN temporal gestionado por la sesión web (BleRunSession sabe escalar a FORCE).
+    if (_bleRun && _bleRun.isRunning && _bleRun.isRunning()) {
+      try {
+        await _bleRun.stop();
+      } catch {
+        /* ignore */
+      }
+      return { transport: "ble", kind: "run" };
+    }
+    // El ESP32 es la fuente de verdad: consultar si hay una app persistente
+    // corriendo (puede haber arrancado antes de que exista la sesión web).
+    let info = null;
+    try {
+      info = await appInfo(_bleTransport);
+    } catch {
+      info = null;
+    }
+    if (info && info.running) {
+      try {
+        // APP:OK:STOP significa "detenida de verdad" (confirmación real).
+        await appStop(_bleTransport);
+      } catch {
+        // No cooperativo / timeout → escalado a STOP:FORCE (reset + safe boot).
+        try {
+          await _bleTransport.send(RUN.STOP_FORCE);
+        } catch {
+          /* ignore */
+        }
+      }
+      return { transport: "ble", kind: "app" };
+    }
+    // Sin evidencia de ejecución: STOP cooperativo best-effort.
+    if (_bleRun) {
+      try {
+        await _bleRun.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+    return { transport: "ble", kind: "none" };
+  }
+  return { transport: "none" };
+}
+
+/** @deprecated Alias histórico de {@link stopBoardExecution} (misma semántica unificada). */
+export async function interruptBoard() {
+  await stopBoardExecution();
+}
+
+/**
+ * Detiene cualquier ejecución BLE ANTES de un DEPLOY para no chocar con
+ * DEPLOY:ERROR:BUSY (redeploy con app corriendo, P0-7). Cooperativo: NO escala a
+ * STOP:FORCE porque el reset caería el BLE y abortaría el propio DEPLOY. Si la app
+ * no cede, el DEPLOY responde BUSY y la UI lo informa.
+ */
+async function stopBleExecutionBeforeDeploy() {
+  if (_bleRun && _bleRun.isRunning && _bleRun.isRunning()) {
     try {
       await _bleRun.stop();
     } catch {
       /* ignore */
     }
+  }
+  try {
+    const info = await appInfo(_bleTransport);
+    if (info && info.running) {
+      try {
+        await appStop(_bleTransport);
+      } catch {
+        /* timeout / no cooperativo: el DEPLOY reportará BUSY */
+      }
+    }
+  } catch {
+    /* INFO no responde: el DEPLOY reportará BUSY si sigue corriendo */
   }
 }
 

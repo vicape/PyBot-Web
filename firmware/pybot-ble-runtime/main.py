@@ -58,9 +58,13 @@ except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
 # --- Version / protocolo (legibles por el comando INFO) ---
-PYBOT_RUNTIME_VERSION = "3.0.0"
+PYBOT_RUNTIME_VERSION = "3.0.1"
 # Protocolo 3.0: agrega STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY
 # persistente verificado, control de app (APP:*) y autostart con safe boot.
+# 3.0.1 (compatible): DEPLOY realmente transaccional con backup/rollback,
+# HASH obligatorio si se declara (DEPLOY:ERROR:HASH_UNAVAILABLE), APP:STOP/DELETE
+# confirmados de verdad (detienen antes de responder) y errores de filesystem
+# explicitos (APP:ERROR:WRITE_FAILED / DELETE_FAILED). El framing NO cambia.
 PYBOT_PROTOCOL_VERSION = "3.0"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
@@ -89,10 +93,13 @@ _MPY_LIB = "pybot_mpy"  # define pin/servo/motor/wait (GPIO directo)
 _EDA6_LIB = "EDA6"      # define salidaDigital/servomotor/motorRC/... (EDA6)
 
 # Archivos de la app persistente y estado (NO se tocan al actualizar el runtime).
-_APP_FILE = "pybot_app.py"       # programa del alumno persistente
-_APP_TMP = "pybot_app.tmp"       # escritura atomica: tmp -> verify -> rename
-_APP_META = "pybot_app.json"     # metadata: version/mode/profile/autostart/size/hash
-_STATE_FILE = "pybot_state.json" # safe boot + contador de fallos de autostart
+_APP_FILE = "pybot_app.py"        # programa del alumno persistente
+_APP_TMP = "pybot_app.tmp"        # escritura atomica: tmp -> verify -> rename
+_APP_BAK = "pybot_app.bak"        # backup del programa anterior (rollback del commit)
+_APP_META = "pybot_app.json"      # metadata: version/mode/profile/autostart/size/hash
+_APP_META_TMP = "pybot_app.json.tmp"  # metadata transaccional (write -> verify -> rename)
+_APP_META_BAK = "pybot_app.json.bak"  # backup de la metadata anterior (rollback)
+_STATE_FILE = "pybot_state.json"  # safe boot + contador de fallos de autostart
 
 # Tras N fallos consecutivos de autostart, no relanzar (safe boot por fallos).
 _MAX_AUTOSTART_FAILS = const(3)
@@ -210,13 +217,19 @@ def _load_state():
 
 
 def _save_state(st):
-    _write_json(_STATE_FILE, st)
+    return _write_json(_STATE_FILE, st)
 
 
 def _set_safe_boot(flag):
+    """Persiste el flag safe_boot y CONFIRMA el write releyendo el archivo.
+    Devuelve True solo si quedo escrito (usado antes de un reset para no
+    relanzar una app problematica sabiendo que el flag pudo no persistir)."""
     st = _load_state()
     st["safe_boot"] = bool(flag)
-    _save_state(st)
+    if not _save_state(st):
+        return False
+    check = _read_json(_STATE_FILE)
+    return bool(check) and bool(check.get("safe_boot")) == bool(flag)
 
 
 def _load_app_meta():
@@ -376,6 +389,10 @@ class ProgramManager:
         self._stop = False
         self._force = False
         self._pending_code = None
+        # Accion a CONFIRMAR cuando termine una app persistente detenida a pedido:
+        #   "stop"   -> responder APP:OK:STOP (solo cuando realmente paro)
+        #   "delete" -> borrar la app y responder APP:OK:DELETE / APP:ERROR:DELETE_FAILED
+        self._app_ack = None
 
     # --- Fase de recepcion RUN temporal (llamada desde el IRQ: debe ser rapida) ---
 
@@ -454,6 +471,13 @@ class ProgramManager:
 
     def request_stop(self):
         self._stop = True
+
+    def request_app_stop(self, action):
+        """Pide detener la app persistente y DIFIERE la confirmacion (APP:OK:STOP /
+        APP:OK:DELETE) hasta que realmente termine (RUN:STOPPED en _finish). Asi el
+        ACK significa 'detenida de verdad', no 'pedido recibido'."""
+        self._stop = True
+        self._app_ack = action
 
     def request_force_stop(self):
         self._stop = True
@@ -668,6 +692,17 @@ class ProgramManager:
             self._send("RUN:DONE")
         if persistent:
             _update_app_run_state(outcome, err_text)
+        # Confirmacion diferida de APP:STOP / APP:DELETE: recien ahora la app
+        # esta DETENIDA de verdad, asi que respondemos (o borramos + respondemos).
+        ack = self._app_ack
+        self._app_ack = None
+        if ack == "stop":
+            self._send("APP:OK:STOP")
+        elif ack == "delete":
+            if _delete_app():
+                self._send("APP:OK:DELETE")
+            else:
+                self._send("APP:ERROR:DELETE_FAILED")
 
 
 def _update_app_run_state(outcome, err_text):
@@ -681,6 +716,123 @@ def _update_app_run_state(outcome, err_text):
         st["last_error"] = ""
         st["last_outcome"] = outcome
     _save_state(st)
+
+
+def _rename(src, dst):
+    try:
+        os.rename(src, dst)
+        return True
+    except Exception:
+        return False
+
+
+def _atomic_install_app(meta, expected_size):
+    """Reemplazo REALMENTE transaccional de pybot_app.py + pybot_app.json.
+
+    Esquema de backup (pybot_app.py / .bak / .tmp y pybot_app.json / .tmp / .bak):
+      0) metadata nueva -> pybot_app.json.tmp (y se verifica releyendola)
+      1) si hay app actual: pybot_app.py -> pybot_app.bak
+      2) pybot_app.tmp -> pybot_app.py
+      3) si hay metadata actual: pybot_app.json -> pybot_app.json.bak
+      4) pybot_app.json.tmp -> pybot_app.json
+      5) verificar app (size) + metadata (relegible) -> si algo falla, RESTAURAR.
+      6) exito: borrar backups y resetear estado de fallos / safe boot.
+    Nunca se queda sin una app valida si habia una, ni con programa nuevo + metadata
+    vieja (o al reves): programa y metadata SIEMPRE se corresponden.
+    """
+    # 0) metadata transaccional: escribir tmp y confirmar que se relee.
+    _remove(_APP_META_TMP)
+    if not _write_json(_APP_META_TMP, meta) or _read_json(_APP_META_TMP) is None:
+        _remove(_APP_META_TMP)
+        return False
+
+    had_app = _file_exists(_APP_FILE)
+    had_meta = _file_exists(_APP_META)
+    _remove(_APP_BAK)
+    _remove(_APP_META_BAK)
+
+    # 1) backup de la app actual.
+    if had_app and not _rename(_APP_FILE, _APP_BAK):
+        _remove(_APP_META_TMP)
+        return False
+
+    # 2) activar la app nueva.
+    if not _rename(_APP_TMP, _APP_FILE):
+        if had_app:
+            _rename(_APP_BAK, _APP_FILE)  # restaurar la anterior
+        _remove(_APP_META_TMP)
+        return False
+
+    # 3) backup de la metadata actual.
+    if had_meta:
+        _rename(_APP_META, _APP_META_BAK)
+
+    # 4) activar la metadata nueva.
+    if not _rename(_APP_META_TMP, _APP_META):
+        # revertir app y metadata para no quedar con nuevo+vieja.
+        _remove(_APP_FILE)
+        if had_app:
+            _rename(_APP_BAK, _APP_FILE)
+        if had_meta:
+            _rename(_APP_META_BAK, _APP_META)
+        _remove(_APP_META_TMP)
+        return False
+
+    # 5) verificar correspondencia app + metadata.
+    if _file_size(_APP_FILE) != expected_size or _read_json(_APP_META) is None:
+        _remove(_APP_FILE)
+        _remove(_APP_META)
+        if had_app:
+            _rename(_APP_BAK, _APP_FILE)
+        if had_meta:
+            _rename(_APP_META_BAK, _APP_META)
+        return False
+
+    # 6) exito: limpiar backups y estado.
+    _remove(_APP_BAK)
+    _remove(_APP_META_BAK)
+    st = _load_state()
+    st["fail_count"] = 0
+    st["last_error"] = ""
+    st["safe_boot"] = False
+    _save_state(st)
+    return True
+
+
+def _delete_app():
+    """Borra pybot_app.py + metadata (NO el runtime) y VERIFICA la ausencia.
+    Devuelve True solo si ambos archivos ya no existen. Limpia estado."""
+    _remove(_APP_TMP)
+    _remove(_APP_BAK)
+    _remove(_APP_META_TMP)
+    _remove(_APP_META_BAK)
+    if _file_exists(_APP_FILE):
+        _remove(_APP_FILE)
+    if _file_exists(_APP_META):
+        _remove(_APP_META)
+    st = _load_state()
+    st["fail_count"] = 0
+    st["last_error"] = ""
+    st["safe_boot"] = False
+    _save_state(st)
+    # Sin exito ficticio: confirmar que realmente se borro.
+    if _file_exists(_APP_FILE) or _file_exists(_APP_META):
+        return False
+    return True
+
+
+def _recover_incomplete_deploy():
+    """Si un DEPLOY se corto entre pasos (corte de energia), dejar un estado
+    consistente al boot: restaurar la app/metadata anterior desde el backup y
+    limpiar temporales. Se llama antes del autostart."""
+    if not _file_exists(_APP_FILE) and _file_exists(_APP_BAK):
+        _rename(_APP_BAK, _APP_FILE)
+    if not _file_exists(_APP_META) and _file_exists(_APP_META_BAK):
+        _rename(_APP_META_BAK, _APP_META)
+    _remove(_APP_TMP)
+    _remove(_APP_META_TMP)
+    _remove(_APP_BAK)
+    _remove(_APP_META_BAK)
 
 
 class DeployReceiver:
@@ -784,9 +936,15 @@ class DeployReceiver:
             return
         if self._hash:
             digest = _sha256_file(_APP_TMP)
-            # Si el port no tiene uhashlib, digest es None: no podemos verificar
-            # el hash pero si el tamano (arriba). En ESP32 uhashlib esta presente.
-            if digest is not None and digest != self._hash:
+            # HASH obligatorio si se declaro: si uhashlib no esta disponible no
+            # podemos verificar la integridad criptografica, asi que NO afirmamos
+            # una verificacion que no ocurrio: se rechaza con HASH_UNAVAILABLE y la
+            # app anterior queda intacta. En ESP32 uhashlib esta presente.
+            if digest is None:
+                self._cleanup_tmp()
+                self._send("DEPLOY:ERROR:HASH_UNAVAILABLE")
+                return
+            if digest != self._hash:
                 self._cleanup_tmp()
                 self._send("DEPLOY:ERROR:BAD_HASH")
                 return
@@ -825,7 +983,9 @@ class DeployReceiver:
         self._send("DEPLOY:ERROR:" + code)
 
     def _commit(self):
-        """Reemplazo atomico: metadata + rename tmp->app. Conserva la anterior si falla."""
+        """Reemplazo REALMENTE transaccional (con backup/rollback). Conserva la
+        app anterior intacta si algo falla; nunca deja programa nuevo + metadata
+        vieja. Ver _atomic_install_app."""
         meta = {
             "version": 3,
             "mode": self._mode,
@@ -835,20 +995,7 @@ class DeployReceiver:
             "hash": self._hash,
             "runtime": PYBOT_RUNTIME_VERSION,
         }
-        try:
-            _remove(_APP_FILE)  # os.rename no reemplaza en algunos ports
-            os.rename(_APP_TMP, _APP_FILE)
-        except Exception:
-            return False
-        if not _write_json(_APP_META, meta):
-            return False
-        # Nueva app valida: resetear estado de fallos / safe boot.
-        st = _load_state()
-        st["fail_count"] = 0
-        st["last_error"] = ""
-        st["safe_boot"] = False
-        _save_state(st)
-        return True
+        return _atomic_install_app(meta, self._size)
 
 
 def _app_info_json(manager):
@@ -1024,12 +1171,28 @@ def main():
     deploy = DeployReceiver(_send, manager)
 
     def _force_reset():
-        # Recuperacion REAL desde el IRQ (corre entre bytecodes -> corta cualquier
-        # bucle). Marca safe boot para NO relanzar la app tras el reinicio.
+        # Recuperacion REAL desde el IRQ (soft-callback: corre entre bytecodes ->
+        # corta cualquier bucle, incluso `while True: pass`). El reset por hardware
+        # ES el mecanismo final de recuperacion: al reiniciar, todos los GPIO/PWM
+        # vuelven a su estado por defecto (entradas), por lo que el hardware queda
+        # seguro sin ejecutar cleanup complejo dentro del IRQ (que seria arriesgado).
+        # Antes del reset marcamos SAFE BOOT para NO relanzar la app problematica.
+        ok = False
         try:
-            _set_safe_boot(True)
+            ok = _set_safe_boot(True)
         except Exception:
-            pass
+            ok = False
+        if not ok:
+            # Fallback seguro (P1-2): si no se pudo persistir safe_boot, intentar
+            # desactivar el autostart para no relanzar la app tras el reset. El
+            # fail_count (3 fallos) sigue siendo la ultima red de seguridad.
+            try:
+                meta = _load_app_meta()
+                if meta:
+                    meta["autostart"] = False
+                    _write_json(_APP_META, meta)
+            except Exception:
+                pass
         try:
             _send("RUN:STOPPED")
         except Exception:
@@ -1047,19 +1210,25 @@ def main():
             if manager.start_app():
                 _send("APP:OK:START")
         elif cmd == "APP:STOP":
-            manager.request_stop()
-            _send("APP:OK:STOP")
+            # APP:OK:STOP debe significar "detenida de verdad": si hay una app
+            # persistente corriendo, DIFERIMOS el ACK hasta que realmente pare
+            # (RUN:STOPPED en _finish). Si no hay nada persistente corriendo, ya
+            # esta detenida. Un bucle que no cede no respondera: la web escala a
+            # STOP:FORCE (timeout) para la recuperacion real.
+            if manager.running and manager._persistent:
+                manager.request_app_stop("stop")
+            else:
+                _send("APP:OK:STOP")
         elif cmd == "APP:DELETE":
-            manager.request_stop()
-            _remove(_APP_FILE)
-            _remove(_APP_META)
-            _remove(_APP_TMP)
-            st = _load_state()
-            st["fail_count"] = 0
-            st["last_error"] = ""
-            st["safe_boot"] = False
-            _save_state(st)
-            _send("APP:OK:DELETE")
+            # Detener antes de borrar: si la app corre, se detiene y el borrado +
+            # APP:OK:DELETE ocurre al terminar (_finish). Si no corre, borramos ya
+            # y verificamos la ausencia (sin exito ficticio).
+            if manager.running and manager._persistent:
+                manager.request_app_stop("delete")
+            elif _delete_app():
+                _send("APP:OK:DELETE")
+            else:
+                _send("APP:ERROR:DELETE_FAILED")
         elif cmd.startswith("APP:AUTOSTART:"):
             val = cmd[len("APP:AUTOSTART:"):].strip()
             meta = _load_app_meta()
@@ -1067,8 +1236,11 @@ def main():
                 _send("APP:ERROR:NO_APP")
                 return
             meta["autostart"] = (val == "1")
-            _write_json(_APP_META, meta)
-            _send("APP:OK:AUTOSTART")
+            # No afirmar OK si la persistencia fallo.
+            if _write_json(_APP_META, meta):
+                _send("APP:OK:AUTOSTART")
+            else:
+                _send("APP:ERROR:WRITE_FAILED")
         else:
             _send("APP:ERROR:BAD_FRAME")
 
@@ -1099,16 +1271,50 @@ def main():
             return None
         return processor.process(t)
 
+    recovery = {"timer": None}
+
+    def _arm_disconnect_recovery():
+        # Watchdog de recuperacion (P0-11): si tras perder el BLE un RUN TEMPORAL
+        # no cede al STOP cooperativo en una ventana corta, forzamos un reset para
+        # recuperar la placa SIN desenchufar. Se usa un soft timer (id=-1): su
+        # callback corre entre bytecodes (como el IRQ BLE), por eso puede cortar
+        # incluso `while True: pass`. Solo actua si seguimos desconectados y el
+        # programa temporal sigue vivo (un stop cooperativo ya lo habria terminado).
+        try:
+            t = recovery.get("timer")
+            if t is None:
+                t = machine.Timer(-1)
+                recovery["timer"] = t
+
+            def _cb(_t):
+                tr = holder.get("transport")
+                reconnected = tr is not None and tr.state == STATE_CONNECTED
+                if manager.running and not manager._persistent and not reconnected:
+                    _force_reset()  # no retorna
+
+            t.init(period=1800, mode=machine.Timer.ONE_SHOT, callback=_cb)
+        except Exception:
+            # Si el port no soporta Timer, queda el STOP cooperativo (cubre los
+            # programas con wait()); un bucle 100% tight sin controlador requeriria
+            # power cycle. Documentado como limitacion.
+            pass
+
     def on_disconnect():
         # DEPLOY en curso -> cancelar (conserva la app anterior).
         deploy.abort()
-        # RUN temporal -> detener al perder el controlador BLE.
+        # RUN temporal -> detener al perder el controlador BLE (cooperativo) y
+        # armar el watchdog de reset por si el programa no cede.
         # APP persistente autonoma -> NO detener (ese es el punto).
         if manager.running and not manager._persistent:
             manager.request_stop()
+            _arm_disconnect_recovery()
 
     transport = BluetoothTransport(dev_name, on_command, on_disconnect)
     holder["transport"] = transport
+
+    # Si un DEPLOY quedo a medias por un corte de energia, restaurar un estado
+    # consistente (app/metadata anterior desde el backup) y limpiar temporales.
+    _recover_incomplete_deploy()
 
     # Autostart de la app persistente (si corresponde) tras levantar el BLE.
     _maybe_autostart(manager)

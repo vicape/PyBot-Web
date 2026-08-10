@@ -10,7 +10,7 @@ offsets ni compilacion: el "binario" es este archivo `.py` versionado en el repo
 - `main.py` — runtime completo (BluetoothTransport + CommandProcessor + **ProgramManager** +
   **DeployReceiver** + HardwareController). Además de PING/INFO/LED: **ejecuta** el programa del
   alumno recibido por BLE (RUN temporal) y **lo baja** de forma persistente (DEPLOY) para que
-  corra solo al encender (autostart). Protocolo **3.0**.
+  corra solo al encender (autostart). Runtime **3.0.1**, protocolo **3.0** (framing compatible).
 
 El runtime importa dos preludios instalados en la placa (por USB, junto con `main.py`):
 `pybot_mpy.py` (`pin/servo/motor/wait` + cleanup `_pybot_cleanup`) y `EDA6.py` (funciones EDA6).
@@ -18,7 +18,9 @@ Por BLE solo viaja el código del alumno + modo + perfil.
 
 Archivos que crea/gestiona el runtime en la placa (NO se borran al actualizar el runtime):
 `pybot_app.py` (programa persistente), `pybot_app.json` (metadata), `pybot_state.json`
-(safe boot / fallos de autostart) y `pybot_app.tmp` (efímero, escritura atómica del DEPLOY).
+(safe boot / fallos de autostart) y los efímeros del reemplazo **transaccional** del DEPLOY:
+`pybot_app.tmp`/`pybot_app.bak` (programa) y `pybot_app.json.tmp`/`pybot_app.json.bak` (metadata).
+Al boot, un DEPLOY interrumpido por un corte de energía se **repara** desde los backups.
 
 ## Requisito
 
@@ -68,14 +70,21 @@ MicroPython base en una placa en blanco requeriria esptool-js y queda fuera de e
 | `DEPLOY:END` | `DEPLOY:VERIFY:OK` / `DEPLOY:ERROR:<code>` |
 | `DEPLOY:ABORT` | (conserva la app anterior) |
 
-Escritura **atómica** a `pybot_app.tmp` + verificación **size + SHA-256** + reemplazo de
-`pybot_app.py` con metadata. Errores: `BUSY, TOO_LONG, BAD_ENCODING, BAD_HASH, WRITE_FAILED,
-VERIFY_FAILED, INVALID_MODE, INVALID_PROFILE, NO_SPACE, BAD_FRAME`.
+Escritura a `pybot_app.tmp` + verificación **size + SHA-256** + reemplazo **transaccional** de
+`pybot_app.py` y metadata con **backup/rollback** (nunca queda programa nuevo + metadata vieja, ni
+sin app válida si la había). Si se declaró hash pero el port **no** tiene `uhashlib`, responde
+`DEPLOY:ERROR:HASH_UNAVAILABLE` (no afirma una verificación que no ocurrió). Errores:
+`BUSY, TOO_LONG, BAD_ENCODING, BAD_HASH, HASH_UNAVAILABLE, WRITE_FAILED, VERIFY_FAILED,
+INVALID_MODE, INVALID_PROFILE, NO_SPACE, BAD_FRAME`.
 
 ## Control de la app (APP) — protocolo 3.0
 
 `APP:INFO` → `APP:INFO:<json>`; `APP:START`/`APP:STOP`/`APP:DELETE`/`APP:AUTOSTART:1|0` →
 `APP:OK:<action>` / `APP:ERROR:<code>`. Autostart en boot con **safe boot** anti boot-loop.
+`APP:STOP` y `APP:DELETE` se confirman **cuando la app realmente paró/se borró** (respuesta
+diferida), no al recibir el pedido; si la persistencia falla, responden `APP:ERROR:WRITE_FAILED`
+/ `DELETE_FAILED` (sin éxito ficticio). Errores APP: `NO_APP, BUSY, READ_FAILED, WRITE_FAILED,
+DELETE_FAILED, BAD_FRAME`.
 
 Ver `docs/PYBOT_BLE_RUNTIME.md` (secciones 5-bis y **5-ter**) para el detalle de modos,
 streaming, STOP confiable, DEPLOY, autostart y límites. Las respuestas se envían por TX en

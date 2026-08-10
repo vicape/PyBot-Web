@@ -47,6 +47,11 @@ function makeMock(opts = {}) {
         st.program = reassembleProgram(st.chunks);
         emit(RUN.STARTED);
         if (st.program.includes("LOOP") || st.program.includes("TIGHT")) return;
+        if (st.program.includes("PROTOERR")) {
+          // Error de protocolo TERMINAL: RUN:ERROR:<code> SIN un RUN:DONE posterior.
+          emit(RUN.ERROR + ":BAD_FRAME");
+          return;
+        }
         if (st.program.includes("ERR")) {
           emit(RUN.ERR + ":" + utf8ToBase64("Traceback: boom\n"));
           emit(RUN.DONE);
@@ -166,6 +171,20 @@ test("STOP escalates to STOP:FORCE when the program does not yield", async () =>
   assert.equal(outcome, "stopped");
   assert.ok(mock._state.sent.includes(RUN.STOP));
   assert.ok(mock._state.sent.includes(RUN.STOP_FORCE));
+});
+
+test("RUN:ERROR is terminal: resolves with outcome 'error' and cleans up (no hanging promise)", async () => {
+  const mock = makeMock();
+  const session = new BleRunSession(mock);
+  const errs = [];
+  // Sin RUN:DONE posterior: si RUN:ERROR no cerrara la sesion, la promesa colgaria
+  // (y este test agotaria el timeout). Debe resolver como "error".
+  const { outcome } = await session.runProgram("x = 1  # PROTOERR\n", {
+    onErr: (s) => errs.push(s),
+  });
+  assert.equal(outcome, "error");
+  assert.equal(session.isRunning(), false);
+  assert.ok(errs.join("").includes("BAD_FRAME"));
 });
 
 test("disconnect before STARTED still rejects with BLE_RUN_DISCONNECTED", async () => {

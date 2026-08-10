@@ -141,7 +141,11 @@ export class BleRunSession {
           onErr(frame.text ?? "");
           break;
         case "error":
+          // RUN:ERROR:<code> es un estado TERMINAL (error de protocolo/arranque:
+          // BUSY/TOO_LONG/NO_PROGRAM/BAD_ENCODING/BAD_FRAME). No esperamos RUN:DONE:
+          // informamos y cerramos la sesion (settle -> limpieza en finally).
           onErr("[BLE RUN] " + (frame.code ?? "ERROR"));
+          settle("error");
           break;
         case "stopped":
           if (onStopped) {

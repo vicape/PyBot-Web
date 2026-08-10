@@ -5,6 +5,7 @@ import {
   RUN,
   DEPLOY,
   DEPLOY_ERRORS,
+  APP_ERRORS,
   APP,
   PYBOT_CAPABILITIES,
   PYBOT_RUNTIME_VERSION,
@@ -32,7 +33,7 @@ import {
 } from "../src/bleProtocol.js";
 
 test("version and protocol bumped to 3.x", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.0.0");
+  assert.equal(PYBOT_RUNTIME_VERSION, "3.0.1");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.0");
 });
 
@@ -138,6 +139,7 @@ test("DEPLOY error codes are the documented set", () => {
     "TOO_LONG",
     "BAD_ENCODING",
     "BAD_HASH",
+    "HASH_UNAVAILABLE",
     "WRITE_FAILED",
     "VERIFY_FAILED",
     "INVALID_MODE",
@@ -146,6 +148,19 @@ test("DEPLOY error codes are the documented set", () => {
     "BAD_FRAME",
   ]) {
     assert.ok(DEPLOY_ERRORS.includes(code), `falta ${code}`);
+  }
+});
+
+test("APP error codes are the documented set", () => {
+  for (const code of [
+    "NO_APP",
+    "BUSY",
+    "READ_FAILED",
+    "WRITE_FAILED",
+    "DELETE_FAILED",
+    "BAD_FRAME",
+  ]) {
+    assert.ok(APP_ERRORS.includes(code), `falta ${code}`);
   }
 });
 

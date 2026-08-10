@@ -275,7 +275,10 @@ export async function runSavedApp(transport, opts = {}) {
         onErr(f.text ?? "");
         break;
       case "error":
+        // RUN:ERROR:<code> es TERMINAL (igual que en BleRunSession): informar y
+        // cerrar la sesion de la app en vez de quedar esperando RUN:DONE.
         onErr("[BLE RUN] " + (f.code ?? "ERROR"));
+        settle("error");
         break;
       case "stopped":
         if (onStopped) {
