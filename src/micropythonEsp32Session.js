@@ -40,6 +40,7 @@ def wait(seconds):
 _pwm_cache = {}
 _pwm_freq = {}
 _adc_cache = {}
+_out_pins = {}
 
 def _pwm(gpio, freq):
     p = _pwm_cache.get(gpio)
@@ -116,7 +117,37 @@ def _write(gpio, value):
     if v > 1:
         _set_duty(_pwm(gpio, 1000), v)
     else:
-        machine.Pin(gpio, machine.Pin.OUT).value(1 if v == 1 else 0)
+        p = _out_pins.get(gpio)
+        if p is None:
+            p = machine.Pin(gpio, machine.Pin.OUT)
+            _out_pins[gpio] = p
+        p.value(1 if v == 1 else 0)
+
+def _pybot_cleanup():
+    # Cleanup de hardware para GPIO directo: apaga y libera SOLO lo creado por
+    # PyBot (PWM y salidas), a estado seguro. No toca entradas. Lo llama el
+    # runtime BLE al detener/terminar/reemplazar un programa.
+    for gpio in list(_pwm_cache.keys()):
+        p = _pwm_cache.get(gpio)
+        try:
+            p.duty_u16(0)
+        except Exception:
+            try:
+                p.duty(0)
+            except Exception:
+                pass
+        try:
+            p.deinit()
+        except Exception:
+            pass
+    _pwm_cache.clear()
+    _pwm_freq.clear()
+    for gpio in list(_out_pins.keys()):
+        p = _out_pins.get(gpio)
+        try:
+            p.value(0)
+        except Exception:
+            pass
 
 def pin(*args):
     if len(args) == 0:

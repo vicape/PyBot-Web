@@ -36,6 +36,12 @@ import {
   recoverEsp32Repl,
   downloadToArduino,
   installBleRuntime,
+  bleDeployProgram,
+  bleRunSavedApp,
+  bleGetAppInfo,
+  bleStopApp,
+  bleDeleteApp,
+  bleSetAutostart,
 } from "./hardwareBridge.js";
 import {
   filterExamplesForBoard,
@@ -142,6 +148,8 @@ export default function PyBotIDE() {
   const [bleModalOpen, setBleModalOpen] = useState(false);
   const [bleInstalling, setBleInstalling] = useState(false);
   const [bleConnected, setBleConnected] = useState(false);
+  const [bleDeploying, setBleDeploying] = useState(false);
+  const [bleAppStatus, setBleAppStatus] = useState(null);
   const [editorMode, setEditorMode] = useState(() => {
     try {
       const saved = localStorage.getItem("pybot_editor_mode");
@@ -877,6 +885,134 @@ export default function PyBotIDE() {
     }
   }, [connected, appendConsole]);
 
+  const refreshBleAppStatus = useCallback(async () => {
+    try {
+      const info = await bleGetAppInfo();
+      setBleAppStatus(info);
+      return info;
+    } catch {
+      setBleAppStatus(null);
+      return null;
+    }
+  }, []);
+
+  const onBleDeploy = useCallback(async () => {
+    if (bleDeploying) return;
+    if (!bleConnected) {
+      appendConsole(t("bleNotConnected") + "\n", "err");
+      return;
+    }
+    if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") return;
+    const activeCode = currentPythonCode();
+    if (!activeCode.trim()) {
+      appendConsole(t("pyblockEmpty") + "\n", "err");
+      return;
+    }
+    if (hasCanvasCode(activeCode)) {
+      appendConsole(t("boardNoCanvas") + "\n", "err");
+      return;
+    }
+    setBleDeploying(true);
+    appendConsole(t("bleDeployStart") + "\n", "info");
+    let lastPct = -1;
+    try {
+      const { size } = await bleDeployProgram(activeCode, {
+        onProgress: (info) => {
+          if (info.phase === "chunk" && typeof info.pct === "number" && info.pct !== lastPct) {
+            lastPct = info.pct;
+            appendConsole(t("bleDeployProgress").replace("{pct}", String(info.pct)) + "\n", "info");
+          } else if (info.phase === "done") {
+            appendConsole(t("bleDeployVerifying") + "\n", "info");
+          }
+        },
+      });
+      appendConsole(t("bleDeployVerified").replace("{size}", String(size)) + "\n", "info");
+      appendConsole(t("bleDeployOk") + "\n", "info");
+      appendConsole(t("bleDeployAutostart") + "\n", "info");
+      await refreshBleAppStatus();
+    } catch (e) {
+      const code = e?.message ?? "";
+      if (code === "BLE_DEPLOY_UNSUPPORTED") {
+        appendConsole(t("bleDeployUnsupported") + "\n", "err");
+      } else if (code === "BLE_DEPLOY_TOO_LONG") {
+        appendConsole(t("bleDeployTooLong") + "\n", "err");
+      } else if (code.startsWith("BLE_DEPLOY_ERROR:")) {
+        appendConsole(t("bleDeployFail").replace("{code}", code.slice("BLE_DEPLOY_ERROR:".length)) + "\n", "err");
+      } else if (code === "BLE_DEPLOY_DISCONNECTED") {
+        appendConsole(t("bleDeployDisconnected") + "\n", "err");
+      } else {
+        appendConsole(t("bleDeployFail").replace("{code}", code || "ERROR") + "\n", "err");
+      }
+    } finally {
+      setBleDeploying(false);
+    }
+  }, [bleDeploying, bleConnected, boardType, currentPythonCode, appendConsole, refreshBleAppStatus]);
+
+  const onBleRunSaved = useCallback(async () => {
+    if (running) return;
+    if (!bleConnected) {
+      appendConsole(t("bleNotConnected") + "\n", "err");
+      return;
+    }
+    setRunning(true);
+    signalStop();
+    await new Promise((r) => setTimeout(r, 20));
+    globalThis.__PYBOT_STOP__ = false;
+    appendConsole(t("bleAppRunningMsg") + "\n", "info");
+    try {
+      const { outcome } = await bleRunSavedApp({
+        onOut: (s) => appendConsole(s, "out"),
+        onErr: (s) => appendConsole(String(s).trim() + "\n", "err"),
+        onStarted: () => appendConsole(t("boardProgramRunning") + "\n", "info"),
+        shouldStop: () => globalThis.__PYBOT_STOP__ === true,
+      });
+      if (outcome === "stopped") {
+        appendConsole(t("boardProgramStopped") + "\n", "info");
+      } else if (outcome === "done") {
+        appendConsole("\n[Fin]\n", "info");
+      } else if (outcome === "disconnected") {
+        appendConsole(t("bleRunDisconnectedErr") + "\n", "err");
+      }
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    } finally {
+      setRunning(false);
+      await refreshBleAppStatus();
+    }
+  }, [running, bleConnected, appendConsole, refreshBleAppStatus]);
+
+  const onBleStopApp = useCallback(async () => {
+    signalStop();
+    globalThis.__PYBOT_STOP__ = true;
+    try {
+      await bleStopApp();
+      appendConsole(t("bleAppStopping") + "\n", "info");
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    }
+  }, [appendConsole]);
+
+  const onBleDeleteApp = useCallback(async () => {
+    try {
+      await bleDeleteApp();
+      appendConsole(t("bleAppDeleted") + "\n", "info");
+      await refreshBleAppStatus();
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    }
+  }, [appendConsole, refreshBleAppStatus]);
+
+  const onBleToggleAutostart = useCallback(async () => {
+    const next = !(bleAppStatus?.autostart);
+    try {
+      await bleSetAutostart(next);
+      appendConsole((next ? t("bleAppAutostartEnabled") : t("bleAppAutostartDisabled")) + "\n", "info");
+      await refreshBleAppStatus();
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    }
+  }, [bleAppStatus, appendConsole, refreshBleAppStatus]);
+
   const onBleConnectionChange = useCallback(
     (isConnected, name) => {
       setBleConnected(isConnected);
@@ -886,11 +1022,13 @@ export default function PyBotIDE() {
           "info",
         );
         appendConsole(t("bleRunHint") + "\n", "info");
+        refreshBleAppStatus();
       } else {
         appendConsole(t("bleRunDisconnected") + "\n", "info");
+        setBleAppStatus(null);
       }
     },
-    [appendConsole],
+    [appendConsole, refreshBleAppStatus],
   );
 
   const onStop = useCallback(() => {
@@ -1456,6 +1594,93 @@ export default function PyBotIDE() {
                                 }}
                               >
                                 {t("eda6VerifyBtn")}
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {(boardType === "esp32-eda6" || boardType === "esp32-micropython") &&
+                      bleConnected ? (
+                        <div className="toolbar-menu-subgroup">
+                          <div className="toolbar-menu-divider" />
+                          <span className="toolbar-menu-mode__label">{t("bleAppSectionLabel")}</span>
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--highlight"
+                            onClick={() => {
+                              onBleDeploy();
+                              setBoardMenuOpen(false);
+                            }}
+                            disabled={bleDeploying}
+                          >
+                            {t("bleDeployBtn")}
+                          </button>
+                          <div className="toolbar-menu-hint">{t("bleDeployHint")}</div>
+                          <div className="toolbar-menu-hint">
+                            {bleAppStatus
+                              ? bleAppStatus.installed
+                                ? t("bleAppStatusInstalled")
+                                : t("bleAppStatusNotInstalled")
+                              : t("bleAppStatusUnknown")}
+                          </div>
+                          {bleAppStatus && bleAppStatus.installed ? (
+                            <div className="toolbar-menu-hint">
+                              {(bleAppStatus.autostart
+                                ? t("bleAppAutostartOn")
+                                : t("bleAppAutostartOff")) +
+                                (bleAppStatus.running ? " · " + t("bleAppRunningTag") : "") +
+                                (bleAppStatus.safe ? " · " + t("bleAppSafeTag") : "")}
+                            </div>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
+                            onClick={() => {
+                              refreshBleAppStatus();
+                            }}
+                          >
+                            {t("bleAppRefresh")}
+                          </button>
+                          {bleAppStatus && bleAppStatus.installed ? (
+                            <>
+                              <button
+                                type="button"
+                                className="toolbar-menu-item toolbar-menu-item--secondary"
+                                onClick={() => {
+                                  onBleRunSaved();
+                                  setBoardMenuOpen(false);
+                                }}
+                              >
+                                {t("bleAppRunSaved")}
+                              </button>
+                              <button
+                                type="button"
+                                className="toolbar-menu-item toolbar-menu-item--secondary"
+                                onClick={() => {
+                                  onBleStopApp();
+                                }}
+                              >
+                                {t("bleAppStopBtn")}
+                              </button>
+                              <button
+                                type="button"
+                                className="toolbar-menu-item toolbar-menu-item--secondary"
+                                onClick={() => {
+                                  onBleToggleAutostart();
+                                }}
+                              >
+                                {bleAppStatus.autostart
+                                  ? t("bleAppAutostartDisableBtn")
+                                  : t("bleAppAutostartEnableBtn")}
+                              </button>
+                              <button
+                                type="button"
+                                className="toolbar-menu-item toolbar-menu-item--secondary"
+                                onClick={() => {
+                                  onBleDeleteApp();
+                                }}
+                              >
+                                {t("bleAppDeleteBtn")}
                               </button>
                             </>
                           ) : null}

@@ -7,13 +7,18 @@ offsets ni compilacion: el "binario" es este archivo `.py` versionado en el repo
 
 ## Archivos
 
-- `main.py` — runtime completo (BluetoothTransport + CommandProcessor + ProgramRunner +
-  HardwareController). Además de PING/INFO/LED, **ejecuta el programa del alumno recibido
-  por BLE** (modos `mpy`/`eda6`) y streamea la salida, con Stop (protocolo 2.0).
+- `main.py` — runtime completo (BluetoothTransport + CommandProcessor + **ProgramManager** +
+  **DeployReceiver** + HardwareController). Además de PING/INFO/LED: **ejecuta** el programa del
+  alumno recibido por BLE (RUN temporal) y **lo baja** de forma persistente (DEPLOY) para que
+  corra solo al encender (autostart). Protocolo **3.0**.
 
 El runtime importa dos preludios instalados en la placa (por USB, junto con `main.py`):
-`pybot_mpy.py` (`pin/servo/motor/wait`) y `EDA6.py` (funciones EDA6). Por BLE solo viaja el
-código del alumno + modo + perfil.
+`pybot_mpy.py` (`pin/servo/motor/wait` + cleanup `_pybot_cleanup`) y `EDA6.py` (funciones EDA6).
+Por BLE solo viaja el código del alumno + modo + perfil.
+
+Archivos que crea/gestiona el runtime en la placa (NO se borran al actualizar el runtime):
+`pybot_app.py` (programa persistente), `pybot_app.json` (metadata), `pybot_state.json`
+(safe boot / fallos de autostart) y `pybot_app.tmp` (efímero, escritura atómica del DEPLOY).
 
 ## Requisito
 
@@ -44,18 +49,38 @@ MicroPython base en una placa en blanco requeriria esptool-js y queda fuera de e
 | `LED,0` | `OK` (apaga LED) |
 | (desconocido) | `ERR,UNKNOWN_COMMAND` |
 
-## Ejecución de programas (protocolo 2.0)
+## Ejecución temporal (RUN) — protocolo 2.0/3.0
 
 | Web → ESP32 | ESP32 → Web |
 | --- | --- |
 | `RUN:BEGIN:<mode>:<profile>` | `RUN:READY` |
 | `RUN:CHUNK:<base64>` | `RUN:STARTED` |
 | `RUN:END` | `RUN:OUT:<base64>` / `RUN:ERR:<base64>` |
-| `STOP` | `RUN:DONE` / `RUN:ERROR:<code>` |
+| `STOP` (cooperativo) | `RUN:DONE` (fin) / `RUN:STOPPED` (detenido) |
+| `STOP:FORCE` (reset + safe boot) | `RUN:ERROR:<code>` |
 
-Ver `docs/PYBOT_BLE_RUNTIME.md` (sección 5-bis) para el detalle de modos, streaming, stop y
-límites. Las respuestas se envían por TX en trozos de 20 bytes con `\n` final para tolerar el
-MTU BLE por defecto; los payloads arbitrarios van en base64.
+## Deploy persistente (DEPLOY) — protocolo 3.0
+
+| Web → ESP32 | ESP32 → Web |
+| --- | --- |
+| `DEPLOY:BEGIN:<mode>:<profile>:<size>:<hash>` | `DEPLOY:READY` |
+| `DEPLOY:CHUNK:<base64>` | `DEPLOY:ACK:<n>` (ACK por bloque) |
+| `DEPLOY:END` | `DEPLOY:VERIFY:OK` / `DEPLOY:ERROR:<code>` |
+| `DEPLOY:ABORT` | (conserva la app anterior) |
+
+Escritura **atómica** a `pybot_app.tmp` + verificación **size + SHA-256** + reemplazo de
+`pybot_app.py` con metadata. Errores: `BUSY, TOO_LONG, BAD_ENCODING, BAD_HASH, WRITE_FAILED,
+VERIFY_FAILED, INVALID_MODE, INVALID_PROFILE, NO_SPACE, BAD_FRAME`.
+
+## Control de la app (APP) — protocolo 3.0
+
+`APP:INFO` → `APP:INFO:<json>`; `APP:START`/`APP:STOP`/`APP:DELETE`/`APP:AUTOSTART:1|0` →
+`APP:OK:<action>` / `APP:ERROR:<code>`. Autostart en boot con **safe boot** anti boot-loop.
+
+Ver `docs/PYBOT_BLE_RUNTIME.md` (secciones 5-bis y **5-ter**) para el detalle de modos,
+streaming, STOP confiable, DEPLOY, autostart y límites. Las respuestas se envían por TX en
+trozos de 20 bytes con `\n` final para tolerar el MTU BLE por defecto; los payloads arbitrarios
+van en base64.
 
 ## Identidad
 

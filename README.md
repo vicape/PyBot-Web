@@ -52,6 +52,28 @@ Con la placa **Arduino Uno/Nano** seleccionada, el menú ofrece **"Bajar a Ardui
 - **Subset soportado**: variables enteras, `if/elif/else`, `while` (incl. `while True`), `for i in range(...)`, aritmética y comparaciones, `and/or/not`. Lo no soportado da un **aviso con número de línea** ("esto todavía no se puede bajar al Arduino, probalo en vivo").
 - Ejemplos listos en el explorador: **Arduino solo: Semáforo** y **Arduino solo: Latido (PWM)**.
 
+### Bluetooth (BLE): usar la ESP32 sin cables
+
+Con una ESP32 preparada (menú **Placa → Herramientas → "Instalar PyBot Bluetooth"** por USB, que
+graba `main.py` + `pybot_mpy.py` + `EDA6.py`), se puede trabajar **sin cables** por Bluetooth
+(**Chrome/Edge de escritorio**). Runtime/protocolo **3.0**.
+
+Dos formas de correr el programa del alumno:
+
+- **EJECUTAR (temporal):** conectá por Bluetooth y usá **Ejecutar**. El programa corre en la
+  placa **mientras estás conectado** y la salida (`print`, errores) llega a la terminal. **Detener**
+  es confiable: STOP cooperativo con confirmación y, si un bucle no cede, escala a un reinicio
+  seguro (*safe boot*) sin desenchufar. Deja el hardware seguro (motores/PWM/salidas apagados).
+- **BAJAR (persistente/autónomo):** menú **Placa → "Bajar a ESP32 (Bluetooth)"**. Transferencia
+  **verificada** (tamaño + hash SHA-256), reemplazo atómico de `pybot_app.py`, **autostart**
+  activado y ejecución. Después la placa **corre sola al encender, sin PC/navegador/BLE/Internet**
+  y sobrevive un power cycle, mientras el Bluetooth sigue disponible para administrarla
+  (**Ejecutar guardado / Detener / Borrar / Autostart**).
+
+También podés **Bajar a ESP32** por **USB** (flujo existente): se sigue priorizando el cable
+cuando hay sesión serial. Ver **[docs/PYBOT_BLE_RUNTIME.md](docs/PYBOT_BLE_RUNTIME.md)** y el
+checklist físico **[docs/PYBOT_BLE_TEST_PLAN.md](docs/PYBOT_BLE_TEST_PLAN.md)**.
+
 ### ESP32 Serial JSON (experimental, no usado)
 
 El firmware `firmware/pybot-esp32/pybot-esp32.ino` y `src/esp32Session.js` implementan un enfoque alternativo por comandos JSON serial. **No es el flujo principal**, no aparece en el selector y no afecta a Arduino. Queda como experimento (`pybot_board_type = "esp32-serial"` por edición manual).

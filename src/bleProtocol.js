@@ -15,11 +15,22 @@ export const SERVICE_UUID = "8fbc0001-4d5a-4b8c-9a1f-123456789001";
 export const RX_UUID = "8fbc0002-4d5a-4b8c-9a1f-123456789002"; // Web -> ESP32 (WRITE)
 export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web (NOTIFY)
 
-export const PYBOT_RUNTIME_VERSION = "2.0.0";
-// Protocolo 2.0: agrega ejecucion de programas (RUN/OUT/STOP). PING/INFO/LED intactos.
-export const PYBOT_PROTOCOL_VERSION = "2.0";
+export const PYBOT_RUNTIME_VERSION = "3.0.0";
+// Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
+// verificado (size+hash), control de app (APP:*) y autostart con safe boot.
+// El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
+export const PYBOT_PROTOCOL_VERSION = "3.0";
 export const PYBOT_RUNTIME_NAME = "PyBot BLE Runtime";
 export const PYBOT_BOARD = "ESP32";
+
+/** Capacidades declaradas por el runtime 3.0 (via INFO). */
+export const PYBOT_CAPABILITIES = Object.freeze([
+  "run",
+  "stop",
+  "deploy",
+  "app-control",
+  "autostart",
+]);
 
 export const MAX_COMMAND_LENGTH = 64;
 export const MSG_DELIMITER = "\n";
@@ -117,6 +128,43 @@ export function runtimeSupportsRun(info) {
 }
 
 /**
+ * Devuelve la lista de capabilities declaradas por el runtime (via INFO), o [].
+ * @param {null | { capabilities?: string[] }} info
+ * @returns {string[]}
+ */
+export function parseCapabilities(info) {
+  if (!info || typeof info !== "object") return [];
+  const caps = info.capabilities;
+  if (!Array.isArray(caps)) return [];
+  return caps.map((c) => String(c).trim().toLowerCase()).filter(Boolean);
+}
+
+/**
+ * Determina si el runtime soporta DEPLOY persistente por BLE. Prefiere las
+ * `capabilities` declaradas (fuente confiable) sobre inferencias por version.
+ * Conservador: solo `true` cuando puede CONFIRMAR el soporte (capability
+ * "deploy" o protocolo/firmware mayor >= 3). El runtime 2.x permite RUN pero no
+ * DEPLOY: en ese caso `false` y la web sugiere actualizar el runtime.
+ *
+ * @param {null | { protocol?: string, firmware?: string, capabilities?: string[] }} info
+ * @returns {boolean}
+ */
+export function runtimeSupportsDeploy(info) {
+  const caps = parseCapabilities(info);
+  if (caps.includes("deploy")) return true;
+  if (!info || typeof info !== "object") return false;
+  const major = (v) => {
+    const n = parseInt(String(v ?? "").split(".")[0], 10);
+    return Number.isFinite(n) ? n : null;
+  };
+  const proto = major(info.protocol);
+  if (proto != null) return proto >= 3;
+  const fw = major(info.firmware);
+  if (fw != null) return fw >= 3;
+  return false;
+}
+
+/**
  * Espejo JS del CommandProcessor del firmware (para tests y documentacion).
  * No toca hardware real; `ledOn` refleja el estado simulado del LED.
  * @param {string} command
@@ -143,6 +191,7 @@ export function simulateDeviceResponse(command, ctx = {}) {
       protocol: PYBOT_PROTOCOL_VERSION,
       runtime: PYBOT_RUNTIME_NAME,
       board: PYBOT_BOARD,
+      capabilities: [...PYBOT_CAPABILITIES],
     });
   }
   if (upper === COMMANDS.LED_ON) return hasLed ? "OK" : "ERR,NO_LED";
@@ -173,11 +222,23 @@ export function splitMessages(buffer) {
 // placa: por BLE solo viaja el codigo del alumno + modo + perfil.
 // ===========================================================================
 
-/** Tamano maximo del programa del alumno (bytes de fuente UTF-8) transferible por BLE. */
-export const MAX_PROGRAM_LENGTH = 8192;
+/** Tamano maximo del programa del alumno para RUN temporal (bytes de fuente UTF-8). */
+export const MAX_RUN_PROGRAM_SIZE = 8192;
+
+/** Tamano maximo del programa persistente (DEPLOY): se escribe a flash por chunks. */
+export const MAX_DEPLOY_PROGRAM_SIZE = 16384;
+
+/**
+ * Alias historico de MAX_RUN_PROGRAM_SIZE (RUN temporal). Se mantiene para no
+ * romper llamadores existentes; nuevos usos deben preferir los nombres explicitos.
+ */
+export const MAX_PROGRAM_LENGTH = MAX_RUN_PROGRAM_SIZE;
 
 /** Bytes de fuente por chunk antes de base64 (chico para tolerar el MTU BLE). */
 export const RUN_SOURCE_CHUNK = 96;
+
+/** Bytes de fuente por chunk DEPLOY antes de base64 (mas grande: ACK por bloque). */
+export const DEPLOY_SOURCE_CHUNK = 192;
 
 /** Modos de ejecucion soportados por el runtime. */
 export const RUN_MODES = Object.freeze({ MPY: "mpy", EDA6: "eda6" });
@@ -191,14 +252,58 @@ export const RUN = Object.freeze({
   BEGIN: "RUN:BEGIN", // RUN:BEGIN:<mode>:<profile>
   CHUNK: "RUN:CHUNK", // RUN:CHUNK:<base64>
   END: "RUN:END", // fin de la transferencia -> ejecutar
-  STOP: "STOP", // abortar ejecucion
+  STOP: "STOP", // abortar ejecucion (STOP cooperativo)
+  STOP_FORCE: "STOP:FORCE", // recuperacion real: reset + safe boot (no cooperativo)
   // ESP32 -> PyBot Web
   READY: "RUN:READY", // listo para recibir chunks
   STARTED: "RUN:STARTED", // el programa empezo a ejecutarse
   OUT: "RUN:OUT", // RUN:OUT:<base64> (stdout del programa)
   ERR: "RUN:ERR", // RUN:ERR:<base64> (traceback / error de runtime)
-  DONE: "RUN:DONE", // el programa termino (normal o detenido)
+  DONE: "RUN:DONE", // el programa termino normalmente
+  STOPPED: "RUN:STOPPED", // el programa fue DETENIDO (confirmacion de STOP)
   ERROR: "RUN:ERROR", // RUN:ERROR:<code> (error de protocolo)
+});
+
+/** Tokens del protocolo DEPLOY (transferencia de la app persistente). */
+export const DEPLOY = Object.freeze({
+  // PyBot Web -> ESP32
+  BEGIN: "DEPLOY:BEGIN", // DEPLOY:BEGIN:<mode>:<profile>:<size>:<hash>
+  CHUNK: "DEPLOY:CHUNK", // DEPLOY:CHUNK:<base64>
+  END: "DEPLOY:END", // fin -> verificar + reemplazo atomico
+  ABORT: "DEPLOY:ABORT", // cancelar transferencia (conserva app anterior)
+  // ESP32 -> PyBot Web
+  READY: "DEPLOY:READY", // listo para recibir chunks
+  ACK: "DEPLOY:ACK", // DEPLOY:ACK:<n> (ACK por bloque, backpressure)
+  VERIFY_OK: "DEPLOY:VERIFY:OK", // guardado y verificado (size+hash)
+  ERROR: "DEPLOY:ERROR", // DEPLOY:ERROR:<code>
+});
+
+/** Codigos de error DEPLOY (deben coincidir con el firmware). */
+export const DEPLOY_ERRORS = Object.freeze([
+  "BUSY",
+  "TOO_LONG",
+  "BAD_ENCODING",
+  "BAD_HASH",
+  "WRITE_FAILED",
+  "VERIFY_FAILED",
+  "INVALID_MODE",
+  "INVALID_PROFILE",
+  "NO_SPACE",
+  "BAD_FRAME",
+]);
+
+/** Tokens del control de app persistente. */
+export const APP = Object.freeze({
+  // PyBot Web -> ESP32
+  INFO: "APP:INFO",
+  START: "APP:START",
+  STOP: "APP:STOP",
+  DELETE: "APP:DELETE",
+  AUTOSTART: "APP:AUTOSTART", // APP:AUTOSTART:1 / APP:AUTOSTART:0
+  // ESP32 -> PyBot Web
+  INFO_PREFIX: "APP:INFO:", // APP:INFO:<json>
+  OK_PREFIX: "APP:OK:", // APP:OK:<action>
+  ERROR_PREFIX: "APP:ERROR:", // APP:ERROR:<code>
 });
 
 const _B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -319,6 +424,7 @@ export function parseRunFrame(raw) {
   const text = String(raw ?? "").trim();
   if (text === RUN.READY) return { type: "ready", raw: text };
   if (text === RUN.STARTED) return { type: "started", raw: text };
+  if (text === RUN.STOPPED) return { type: "stopped", raw: text };
   if (text === RUN.DONE) return { type: "done", raw: text };
   if (text.startsWith(RUN.OUT + ":")) {
     return { type: "out", text: base64ToUtf8(text.slice(RUN.OUT.length + 1)), raw: text };
@@ -330,4 +436,190 @@ export function parseRunFrame(raw) {
     return { type: "error", code: text.slice(RUN.ERROR.length + 1), raw: text };
   }
   return { type: "unknown", raw: text };
+}
+
+// ===========================================================================
+// SHA-256 puro (JS) — identico en Node y navegador. Se usa para verificar la
+// transferencia DEPLOY (el firmware calcula el mismo hash con uhashlib.sha256).
+// ===========================================================================
+
+const _SHA_K = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+  0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+  0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+  0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+  0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+  0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+  0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+  0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+]);
+
+function _rotr(x, n) {
+  return (x >>> n) | (x << (32 - n));
+}
+
+/**
+ * SHA-256 de un arreglo de bytes -> string hex (64 chars, minuscula).
+ * @param {Uint8Array|number[]} bytes @returns {string}
+ */
+export function sha256Hex(bytes) {
+  const msg = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes ?? []);
+  const h = new Uint32Array([
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c,
+    0x1f83d9ab, 0x5be0cd19,
+  ]);
+
+  const bitLen = msg.length * 8;
+  const withOne = msg.length + 1;
+  const total = withOne + ((56 - (withOne % 64) + 64) % 64) + 8;
+  const buf = new Uint8Array(total);
+  buf.set(msg);
+  buf[msg.length] = 0x80;
+  // Longitud (64 bits big-endian). bitLen cabe en 32 bits para nuestros tamanos.
+  const hi = Math.floor(bitLen / 0x100000000);
+  const lo = bitLen >>> 0;
+  buf[total - 8] = (hi >>> 24) & 0xff;
+  buf[total - 7] = (hi >>> 16) & 0xff;
+  buf[total - 6] = (hi >>> 8) & 0xff;
+  buf[total - 5] = hi & 0xff;
+  buf[total - 4] = (lo >>> 24) & 0xff;
+  buf[total - 3] = (lo >>> 16) & 0xff;
+  buf[total - 2] = (lo >>> 8) & 0xff;
+  buf[total - 1] = lo & 0xff;
+
+  const w = new Uint32Array(64);
+  for (let off = 0; off < total; off += 64) {
+    for (let i = 0; i < 16; i++) {
+      const j = off + i * 4;
+      w[i] = (buf[j] << 24) | (buf[j + 1] << 16) | (buf[j + 2] << 8) | buf[j + 3];
+    }
+    for (let i = 16; i < 64; i++) {
+      const s0 = _rotr(w[i - 15], 7) ^ _rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = _rotr(w[i - 2], 17) ^ _rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+    }
+    let a = h[0], b = h[1], c = h[2], d = h[3];
+    let e = h[4], f = h[5], g = h[6], hh = h[7];
+    for (let i = 0; i < 64; i++) {
+      const S1 = _rotr(e, 6) ^ _rotr(e, 11) ^ _rotr(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (hh + S1 + ch + _SHA_K[i] + w[i]) | 0;
+      const S0 = _rotr(a, 2) ^ _rotr(a, 13) ^ _rotr(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) | 0;
+      hh = g; g = f; f = e; e = (d + t1) | 0;
+      d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    h[0] = (h[0] + a) | 0; h[1] = (h[1] + b) | 0; h[2] = (h[2] + c) | 0;
+    h[3] = (h[3] + d) | 0; h[4] = (h[4] + e) | 0; h[5] = (h[5] + f) | 0;
+    h[6] = (h[6] + g) | 0; h[7] = (h[7] + hh) | 0;
+  }
+
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    out += (h[i] >>> 0).toString(16).padStart(8, "0");
+  }
+  return out;
+}
+
+/** SHA-256 (hex) del texto UTF-8. @param {string} text @returns {string} */
+export function sha256HexUtf8(text) {
+  return sha256Hex(_enc.encode(String(text ?? "")));
+}
+
+// ===========================================================================
+// Protocolo DEPLOY (app persistente) — builders + parser de frames
+// ===========================================================================
+
+/**
+ * Construye DEPLOY:BEGIN:<mode>:<profile>:<size>:<hash>.
+ * @param {"mpy"|"eda6"} mode @param {"WEMOS"|"ESP32"} profile
+ * @param {number} size (bytes de fuente UTF-8) @param {string} hash (sha256 hex)
+ * @returns {string}
+ */
+export function buildDeployBegin(mode, profile, size, hash) {
+  const m = mode === RUN_MODES.EDA6 ? RUN_MODES.EDA6 : RUN_MODES.MPY;
+  const p = profile === RUN_PROFILES.ESP32 ? RUN_PROFILES.ESP32 : RUN_PROFILES.WEMOS;
+  return `${DEPLOY.BEGIN}:${m}:${p}:${size}:${String(hash ?? "").toLowerCase()}`;
+}
+
+/** @param {string} b64Chunk @returns {string} */
+export function buildDeployChunk(b64Chunk) {
+  return `${DEPLOY.CHUNK}:${b64Chunk}`;
+}
+
+/**
+ * Parsea un frame DEPLOY:* recibido del runtime (TX -> Web).
+ * @param {string} raw
+ * @returns {{ type:"ready"|"ack"|"verify_ok"|"error"|"unknown", index?:number, code?:string, raw:string }}
+ */
+export function parseDeployFrame(raw) {
+  const text = String(raw ?? "").trim();
+  if (text === DEPLOY.READY) return { type: "ready", raw: text };
+  if (text === DEPLOY.VERIFY_OK) return { type: "verify_ok", raw: text };
+  if (text.startsWith(DEPLOY.ACK + ":")) {
+    const n = parseInt(text.slice(DEPLOY.ACK.length + 1), 10);
+    return { type: "ack", index: Number.isFinite(n) ? n : -1, raw: text };
+  }
+  if (text.startsWith(DEPLOY.ERROR + ":")) {
+    return { type: "error", code: text.slice(DEPLOY.ERROR.length + 1), raw: text };
+  }
+  return { type: "unknown", raw: text };
+}
+
+/**
+ * Parte el codigo fuente en chunks base64 para DEPLOY (chunk mas grande que RUN).
+ * @param {string} code @param {number} [chunkBytes]
+ * @returns {string[]}
+ */
+export function chunkDeployProgram(code, chunkBytes = DEPLOY_SOURCE_CHUNK) {
+  return chunkProgram(code, chunkBytes > 0 ? chunkBytes : DEPLOY_SOURCE_CHUNK);
+}
+
+// ===========================================================================
+// Control de app persistente (APP:*) — builders + parser
+// ===========================================================================
+
+/** @param {boolean} on @returns {string} APP:AUTOSTART:1 / APP:AUTOSTART:0 */
+export function buildAppAutostart(on) {
+  return `${APP.AUTOSTART}:${on ? "1" : "0"}`;
+}
+
+/**
+ * Parsea un frame APP:* recibido del runtime (TX -> Web).
+ * @param {string} raw
+ * @returns {{ type:"info"|"ok"|"error"|"unknown", info?:object|null, action?:string, code?:string, raw:string }}
+ */
+export function parseAppFrame(raw) {
+  const text = String(raw ?? "").trim();
+  if (text.startsWith(APP.INFO_PREFIX)) {
+    return { type: "info", info: parseAppInfo(text), raw: text };
+  }
+  if (text.startsWith(APP.OK_PREFIX)) {
+    return { type: "ok", action: text.slice(APP.OK_PREFIX.length), raw: text };
+  }
+  if (text.startsWith(APP.ERROR_PREFIX)) {
+    return { type: "error", code: text.slice(APP.ERROR_PREFIX.length), raw: text };
+  }
+  return { type: "unknown", raw: text };
+}
+
+/**
+ * Parsea la respuesta APP:INFO:<json> a objeto. Devuelve null si no es valida.
+ * @param {string} raw
+ * @returns {null | {installed:boolean, running:boolean, autostart:boolean, mode:string, profile:string, size:number, hash:string, safe:boolean, fail:number, error:string}}
+ */
+export function parseAppInfo(raw) {
+  const text = String(raw ?? "").trim();
+  const body = text.startsWith(APP.INFO_PREFIX) ? text.slice(APP.INFO_PREFIX.length) : text;
+  if (!body.startsWith("{")) return null;
+  try {
+    const obj = JSON.parse(body);
+    return obj && typeof obj === "object" ? obj : null;
+  } catch {
+    return null;
+  }
 }

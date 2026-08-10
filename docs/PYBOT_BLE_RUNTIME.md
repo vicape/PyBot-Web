@@ -5,9 +5,18 @@ Bluetooth BLE** desde PyBot Web. Todo lo nuevo está encapsulado en módulos/arc
 nuevos; no altera EDA6, USB/Firmata, Pyodide ni el mecanismo de ejecución existente.
 
 > **Protocolo 2.0 (ejecución completa):** además de PING/INFO/LED (MVP 1.0), el runtime
-> ahora **ejecuta los programas del alumno recibidos por BLE** y transmite la salida por
-> Bluetooth, en los dos modos **ESP32 MicroPython (GPIO directo)** y **ESP32 EDA6**, con
-> Stop y manejo de errores. Ver la sección **5-bis. Protocolo de ejecución**.
+> ejecuta los programas del alumno recibidos por BLE y transmite la salida por Bluetooth,
+> en los dos modos **ESP32 MicroPython (GPIO directo)** y **ESP32 EDA6**, con Stop y manejo
+> de errores. Ver la sección **5-bis. Protocolo de ejecución**.
+>
+> **Protocolo 3.0 (STOP confiable + DEPLOY autónomo):** el runtime ahora agrega **STOP
+> confiable** (confirmación `RUN:STOPPED` + recuperación real `STOP:FORCE` con *safe boot*),
+> **DEPLOY persistente verificado** (transferencia atómica con size+hash a `pybot_app.py`),
+> **control de la app** (`APP:*`) y **autostart** al encender. Ver **5-ter. Protocolo 3.0**.
+> EJECUTAR (temporal) vs BAJAR (persistente/autónomo): *EJECUTAR* corre el programa en la
+> placa mientras estás conectado; *BAJAR* lo guarda en la placa para que corra **solo, sin PC/
+> navegador/BLE/Internet**, y sobreviva un power cycle, mientras el BLE sigue disponible para
+> administrarlo.
 
 ## 1. Arquitectura y enfoque elegido
 
@@ -196,6 +205,106 @@ con un mensaje claro que guía a **reinstalar por USB** — en vez de dejar que 
 timeout a los 6 s. Si `INFO` no responde, no bloquea (fallback al timeout de `RUN:READY`). El
 panel BLE de diagnóstico también muestra un aviso cuando el firmware es viejo.
 
+## 5-ter. Protocolo 3.0 — STOP confiable + DEPLOY autónomo + control de app
+
+Arquitectura de ejecución (motor único):
+
+```
+PyBot Web → BleRunSession / BleDeploySession → BluetoothTransport → GATT →
+  Runtime (main.py) → ProgramManager [TEMPORARY | PERSISTENT] → EDA6 / pybot_mpy → hardware
+```
+
+`ProgramManager` es el **motor único** de ejecución: los modos TEMPORARY (RUN por BLE) y
+PERSISTENT (app instalada por DEPLOY / autostart) comparten namespace, preludio (mpy/eda6),
+`print`, manejo de errores, STOP cooperativo, cleanup de hardware, estado y recuperación.
+
+### Archivos en la placa (protocolo 3.0)
+
+| Archivo | Rol | ¿Lo toca una actualización de runtime? |
+| --- | --- | --- |
+| `main.py` | Runtime permanente (BLE + ProgramManager + DeployReceiver). | Sí (se reescribe). |
+| `pybot_mpy.py` / `EDA6.py` | Preludios (GPIO directo / EDA6). | Sí (se reescriben). |
+| `pybot_app.py` | **Programa del alumno persistente**. | **No** (se conserva). |
+| `pybot_app.json` | Metadata: `version/mode/profile/autostart/size/hash/runtime`. | **No** (se conserva si es compatible). |
+| `pybot_app.tmp` | Temporal de la escritura atómica del DEPLOY. | — (efímero). |
+| `pybot_state.json` | `safe_boot` + `fail_count` + `last_error` (autostart / recuperación). | **No**. |
+
+El programa del alumno **nunca** reemplaza el runtime; son archivos distintos.
+
+### STOP confiable
+
+- **`STOP` (cooperativo):** el runtime parchea `time.sleep`/`sleep_ms`/`sleep_us` y ofrece
+  `wait()`/`sleep()` interrumpibles; cualquier espera chequea la bandera y lanza `_PyBotStop`.
+  Cubre `sensorDistancia`/`servomotor`/`motorRC`/LCD/PWM/`while` que usen esperas — es decir,
+  prácticamente todos los programas educativos. `sleep_us` **no** se parte en tramos (timing
+  crítico de HC-SR04/LCD): solo se chequea el stop tras el retardo exacto. La API pública de
+  EDA6 **no** cambia. Al detener se confirma con **`RUN:STOPPED`** (distinto de `RUN:DONE`).
+- **Cleanup SIEMPRE:** fin normal, STOP, excepción, STOP FORCE, reemplazo de programa y
+  recuperación llaman `detenerTodo()` (EDA6) y `_pybot_cleanup()` (GPIO directo: apaga/libera
+  PWM y salidas creadas por PyBot, no toca entradas).
+- **`STOP:FORCE` (recuperación REAL):** un bucle que **no** cede (`while True: pass`) no puede
+  cortarse por software cooperativo. `STOP:FORCE` marca *safe boot* y hace `machine.reset()`
+  **desde el propio IRQ BLE** (que corre entre bytecodes), lo que detiene cualquier bucle. La
+  web escala a `STOP:FORCE` automáticamente si tras `STOP` no llega confirmación (~3.5 s). La UI
+  muestra *"Deteniendo…"* mientras espera y *"Programa detenido"* solo con evidencia
+  (`RUN:STOPPED` o la desconexión por el reset).
+- **SAFE BOOT (anti boot-loop):** tras un `STOP:FORCE` (o 3 fallos consecutivos de autostart),
+  el runtime arranca con BLE pero **no** relanza la app; luego limpia el flag. Así no hay
+  ciclos de reinicio.
+
+### DEPLOY (transferencia atómica verificada)
+
+```
+PyBot Web → ESP32                     ESP32 → PyBot Web
+DEPLOY:BEGIN:<mode>:<profile>:<size>:<hash>   DEPLOY:READY
+DEPLOY:CHUNK:<base64>   (una por bloque)      DEPLOY:ACK:<n>   (ACK por bloque)
+DEPLOY:END                                    DEPLOY:VERIFY:OK | DEPLOY:ERROR:<code>
+DEPLOY:ABORT                                  (cancela; conserva la app anterior)
+```
+
+- Escribe a `pybot_app.tmp`; al `END` verifica **tamaño** y **hash SHA-256** (`uhashlib` en la
+  placa; JS puro en la web) y solo entonces hace el **reemplazo atómico** de `pybot_app.py` +
+  metadata. Si algo falla, borra el tmp y **conserva la app anterior intacta**.
+- **ACK por bloque** (una línea `DEPLOY:CHUNK`, no por fragmento GATT de 20 B): da backpressure
+  y detección de pérdidas sin miles de round-trips.
+- Códigos de error: `BUSY`, `TOO_LONG`, `BAD_ENCODING`, `BAD_HASH`, `WRITE_FAILED`,
+  `VERIFY_FAILED`, `INVALID_MODE`, `INVALID_PROFILE`, `NO_SPACE`, `BAD_FRAME`.
+- Límites separados: **`MAX_RUN_PROGRAM_SIZE = 8192`** (RUN temporal, en RAM) y
+  **`MAX_DEPLOY_PROGRAM_SIZE = 16384`** (persistente, a flash por chunks).
+
+### Control de la app (APP:*)
+
+| Comando | Respuesta | Efecto |
+| --- | --- | --- |
+| `APP:INFO` | `APP:INFO:<json>` | `installed/running/autostart/mode/profile/size/hash/safe/fail/error`. |
+| `APP:START` | `APP:OK:START` + frames `RUN:*` | Ejecuta `pybot_app.py` y streamea salida. |
+| `APP:STOP` | `APP:OK:STOP` | STOP cooperativo de la app. |
+| `APP:DELETE` | `APP:OK:DELETE` | Detiene + cleanup + borra `pybot_app.py`/metadata (NO `main.py`/`EDA6.py`/`pybot_mpy.py`). |
+| `APP:AUTOSTART:1\|0` | `APP:OK:AUTOSTART` | Habilita/deshabilita autostart. |
+
+### Autostart en boot
+
+El runtime arranca → levanta BLE → si hay app instalada con `autostart` y **no** hay safe boot
+ni demasiados fallos, ejecuta `pybot_app.py`. Si la app lanza una excepción: captura el
+traceback, hace cleanup de hardware, incrementa `fail_count`, **mantiene el BLE**, lo informa
+por `APP:INFO` y **no** borra el código del alumno ni entra en boot-loop. La app autónoma
+**no** se detiene al perder el controlador BLE (ese es el punto); un RUN temporal sí.
+
+### "Bajar a ESP32" (BLE) — flujo
+
+`Bajar = guardar + verificar (size+hash) + autostart + ejecutar`. Reemplazo de app existente:
+STOP de la actual → cleanup → transferir la nueva a `tmp` → verificar → reemplazo atómico →
+metadata → ejecutar; si falla, la anterior queda intacta. Mensaje de éxito: *"Programa
+verificado y guardado en ESP32. La placa puede ejecutarlo sin la computadora. Autostart
+activado."*
+
+### Compatibilidad e INFO.capabilities
+
+`INFO` ahora expone `"capabilities":["run","stop","deploy","app-control","autostart"]`. La web
+**prefiere capabilities** sobre inferencias por versión: `runtimeSupportsDeploy(info)`. Un
+runtime **2.x** permite RUN pero **no** DEPLOY: la web informa *"Esta placa necesita actualizar
+PyBot Bluetooth para usar Bajar a ESP32"* y **no** impide RUN.
+
 ## 6. Identidad única y estable
 
 - `deviceId` = **últimos 6 hex en MAYÚSCULA** de `machine.unique_id()` (MAC del chip).
@@ -205,14 +314,16 @@ panel BLE de diagnóstico también muestra un aviso cuando el firmware es viejo.
 
 ## 7. Versionado
 
-- `PYBOT_RUNTIME_VERSION = "2.0.0"`, `PYBOT_PROTOCOL_VERSION = "2.0"` (legibles por `INFO`).
-- Se subió a **2.0** porque el protocolo agrega la ejecución de programas (RUN/OUT/STOP);
-  PING/INFO/LED se mantienen 100% compatibles.
-- Definidos tanto en el runtime (`main.py`) como en `src/bleProtocol.js`.
+- `PYBOT_RUNTIME_VERSION = "3.0.0"`, `PYBOT_PROTOCOL_VERSION = "3.0"` (legibles por `INFO`).
+- Se subió a **3.0** porque el protocolo agrega STOP confiable (`RUN:STOPPED` + `STOP:FORCE`),
+  DEPLOY persistente verificado, control de app (`APP:*`) y autostart. RUN 2.0 y PING/INFO/LED
+  se mantienen compatibles.
+- Definidos en una **única fuente coherente**: el runtime (`main.py`), `src/bleProtocol.js`,
+  los tests y esta doc. `INFO` incluye `capabilities`.
 - **Compatibilidad de ejecución:** una placa con el MVP **1.x** responde PING/INFO/LED pero
-  **no** entiende `RUN:*`. `runtimeSupportsRun(info)` distingue una de otra por la versión
-  (`INFO`): protocol/firmware con mayor `>= 2` ⇒ soporta RUN. Si una placa reporta **FW 1.0.0**
-  hay que **reinstalar** el runtime nuevo por USB ("Instalar PyBot Bluetooth").
+  **no** entiende `RUN:*`. `runtimeSupportsRun(info)` (protocol/firmware mayor `>= 2`) habilita
+  RUN; `runtimeSupportsDeploy(info)` (capability `deploy` o mayor `>= 3`) habilita BAJAR. Un
+  runtime 2.x permite RUN pero pide **reinstalar por USB** para usar DEPLOY.
 
 ### 7-bis. Troubleshooting: "La placa no respondió por Bluetooth"
 
@@ -274,7 +385,20 @@ y opcional; no reemplaza el cable.
       error si no hay conexión; desconexión durante la ejecución. Incluye: **el camino BLE
     envía SOLO el código del alumno** (nunca la librería EDA6) y `runtimeSupportsRun()`
     distingue el runtime viejo (1.x) del nuevo (2.0) por la versión de `INFO`.
-  - Total: **49 tests** en verde.
+  - **Nuevos (protocolo 3.0):**
+    - `test/bleProtocolV3.test.mjs`: versión 3.x, capabilities, SHA-256 (vectores NIST),
+      builders/parsers DEPLOY y APP, `runtimeSupportsDeploy`, límites RUN vs DEPLOY,
+      `RUN:STOPPED` como terminal distinto de `RUN:DONE`.
+    - `test/bleDeploySession.test.mjs`: DEPLOY con **mock de firmware** (READY/ACK/VERIFY),
+      tamaños ~1/2/4/8 KB y cerca del máximo, hash correcto→OK / incorrecto→`BAD_HASH`
+      **sin destruir la app anterior**, errores `BAD_ENCODING/WRITE_FAILED/TOO_LONG/BAD_FRAME`,
+      desconexión a mitad, y control `APP:INFO/START/STOP/DELETE/AUTOSTART`.
+    - `test/bleRunStop.test.mjs`: `RUN:STOPPED`, STOP durante `wait()`, poller `shouldStop`,
+      escalado a `STOP:FORCE` cuando el programa no cede, excepción→ERR+DONE, y desconexiones
+      (antes de STARTED → rechazo; inesperada → `disconnected`; tras stop → `stopped`).
+    - `test/hardwareBridgeSerialPriority.test.mjs`: regresión — `runOnBoard` prioriza serial
+      (`_mpSession`) antes que BLE (`_bleRun`).
+  - Total: **94 tests** en verde (49 previos + 45 nuevos).
 - `npm run build`: compila sin errores nuevos (solo el warning preexistente de tamaño de chunk).
 - **No** hay lint/typecheck configurados en el repo (proyecto JS con Vite); no se agregaron.
 

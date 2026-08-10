@@ -182,12 +182,17 @@ export class BluetoothTransport {
    * (<= chunkBytes) para tolerar el MTU BLE por defecto (23 -> ~20 utiles),
    * independientemente del MTU negociado. El firmware reensambla por '\n'.
    *
-   * Se usa para el protocolo de EJECUCION (frames RUN largos). NO cambia el
-   * comportamiento de `send()` (comandos cortos PING/INFO/LED).
+   * Se usa para el protocolo de EJECUCION (frames RUN largos) y DEPLOY. NO cambia
+   * el comportamiento de `send()` (comandos cortos PING/INFO/LED).
+   *
+   * Pacing/backpressure: entre fragmentos GATT se intercala una pausa minima
+   * cuando se usa writeValueWithoutResponse (que no espera confirmacion del
+   * peripheral) para no desbordar el buffer RX del ESP32 con el MTU por defecto.
    * @param {string} data
    * @param {number} [chunkBytes]
+   * @param {number} [paceMs] pausa entre fragmentos (0 = sin pausa)
    */
-  async sendChunked(data, chunkBytes = 20) {
+  async sendChunked(data, chunkBytes = 20, paceMs = 4) {
     if (!this.isConnected() || !this._rxChar) {
       throw new Error("BLE_NOT_CONNECTED");
     }
@@ -195,13 +200,21 @@ export class BluetoothTransport {
     const withDelim = payload.endsWith(MSG_DELIMITER) ? payload : payload + MSG_DELIMITER;
     const bytes = this._enc.encode(withDelim);
     const size = chunkBytes > 0 ? chunkBytes : 20;
+    const hasNoResponse = typeof this._rxChar.writeValueWithoutResponse === "function";
+    let first = true;
     for (let i = 0; i < bytes.length; i += size) {
       const piece = bytes.slice(i, i + size);
-      if (typeof this._rxChar.writeValueWithoutResponse === "function") {
+      if (hasNoResponse) {
+        // Sin respuesta: aplicar pacing para dar tiempo al reensamblado en placa.
+        if (!first && paceMs > 0) {
+          await new Promise((r) => setTimeout(r, paceMs));
+        }
         await this._rxChar.writeValueWithoutResponse(piece);
       } else {
+        // writeValue espera confirmacion: ya hay backpressure natural.
         await this._rxChar.writeValue(piece);
       }
+      first = false;
     }
   }
 

@@ -47,9 +47,18 @@ import { getBleRuntimeSource, BLE_RUNTIME_FILENAME } from "./pybotBleRuntime.js"
 import { BluetoothTransport } from "./bluetoothTransport.js";
 import { BleRunSession } from "./bleRunSession.js";
 import {
+  BleDeploySession,
+  runSavedApp,
+  appInfo,
+  appStop,
+  appDelete,
+  appAutostart,
+} from "./bleDeploySession.js";
+import {
   COMMANDS,
   parseInfoResponse,
   runtimeSupportsRun,
+  runtimeSupportsDeploy,
 } from "./bleProtocol.js";
 
 let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
@@ -60,7 +69,8 @@ let _baudRate = null;
 // Transporte de EJECUCION por BLE (independiente del serial). Cuando hay una
 // ESP32 conectada por Bluetooth, el Run se ejecuta por aca en vez de por serial.
 let _bleTransport = null;  // BluetoothTransport (Web Bluetooth)
-let _bleRun = null;        // BleRunSession (protocolo de ejecucion 2.0)
+let _bleRun = null;        // BleRunSession (RUN temporal, protocolo 3.0)
+let _bleDeploy = null;     // BleDeploySession (DEPLOY persistente, protocolo 3.0)
 
 /** Nombre del archivo del preludio MPY (pin/servo/motor/wait) instalado en la placa. */
 export const PYBOT_MPY_FILENAME = "pybot_mpy.py";
@@ -421,6 +431,106 @@ async function ensureBleRuntimeSupportsRun() {
   }
 }
 
+/**
+ * Obtiene el INFO del runtime BLE (cacheado o consultado). Puede devolver null
+ * si la placa no responde INFO (no bloquea).
+ */
+async function getBleInfo() {
+  if (!_bleTransport) return null;
+  let info = _bleTransport.getDeviceInfo?.().info ?? null;
+  if (!info) {
+    try {
+      const raw = await _bleTransport.sendAndWait(COMMANDS.INFO, 3000);
+      info = parseInfoResponse(raw);
+      if (info) _bleTransport.setDeviceInfo?.(info);
+    } catch {
+      info = null;
+    }
+  }
+  return info;
+}
+
+/** @returns {boolean} true si hay una ESP32 por BLE lista para EJECUTAR (RUN). */
+export function bleRunReady() {
+  return !!_bleRun && _bleRun.isConnected();
+}
+
+/**
+ * Indica si el runtime BLE conectado soporta DEPLOY persistente. Prefiere las
+ * capabilities declaradas por INFO. @returns {Promise<boolean>}
+ */
+export async function bleSupportsDeploy() {
+  if (!_bleTransport || !_bleTransport.isConnected()) return false;
+  const info = await getBleInfo();
+  return runtimeSupportsDeploy(info);
+}
+
+/**
+ * "Bajar a ESP32" por BLE (DEPLOY persistente): transfiere y guarda el programa
+ * verificado (size+hash), habilita autostart y lo ejecuta. La placa lo corre
+ * sin PC/navegador/BLE/Internet y sobrevive power cycle.
+ *
+ * @param {string} code
+ * @param {{ onProgress?: Function }} [hooks]
+ * @returns {Promise<{ mode:string, profile:string, size:number, hash:string }>}
+ */
+export async function bleDeployProgram(code, hooks = {}) {
+  if (!_bleDeploy || !_bleDeploy.isConnected()) throw new Error("BLE_NOT_CONNECTED");
+  const supported = await bleSupportsDeploy();
+  if (!supported) throw new Error("BLE_DEPLOY_UNSUPPORTED");
+
+  const boardType = getBoardType();
+  const mode = boardType === "esp32-eda6" ? "eda6" : "mpy";
+  const profile = getEda6Profile();
+  // Igual que el RUN por BLE: la libreria EDA6/pybot_mpy vive en la placa; solo
+  // se transfiere el codigo del alumno (con el import EDA6 redundante removido).
+  const userCode = mode === "eda6" ? prepareUserCodeForExec(code) : String(code ?? "");
+
+  const result = await _bleDeploy.deploy(userCode, {
+    mode,
+    profile,
+    onProgress: hooks.onProgress,
+  });
+  // El firmware ya deja autostart=True tras un DEPLOY exitoso; lo reafirmamos por
+  // claridad (idempotente) para el caso "Bajar = guardar + verificar + autostart".
+  try {
+    await appAutostart(_bleTransport, true);
+  } catch {
+    /* metadata ya quedo con autostart=true en el commit del firmware */
+  }
+  return result;
+}
+
+/** Ejecuta la app persistente ya guardada y transmite su salida a la consola. */
+export async function bleRunSavedApp(cb = {}) {
+  if (!_bleTransport || !_bleTransport.isConnected()) throw new Error("BLE_NOT_CONNECTED");
+  return runSavedApp(_bleTransport, cb);
+}
+
+/** Consulta el estado de la app persistente en la placa (por BLE). */
+export async function bleGetAppInfo() {
+  if (!_bleTransport || !_bleTransport.isConnected()) throw new Error("BLE_NOT_CONNECTED");
+  return appInfo(_bleTransport);
+}
+
+/** Detiene la app persistente en ejecucion (por BLE). */
+export async function bleStopApp() {
+  if (!_bleTransport || !_bleTransport.isConnected()) throw new Error("BLE_NOT_CONNECTED");
+  return appStop(_bleTransport);
+}
+
+/** Borra la app persistente y su metadata (NO el runtime/EDA6/pybot_mpy). */
+export async function bleDeleteApp() {
+  if (!_bleTransport || !_bleTransport.isConnected()) throw new Error("BLE_NOT_CONNECTED");
+  return appDelete(_bleTransport);
+}
+
+/** Habilita/deshabilita el autostart de la app persistente (por BLE). */
+export async function bleSetAutostart(on) {
+  if (!_bleTransport || !_bleTransport.isConnected()) throw new Error("BLE_NOT_CONNECTED");
+  return appAutostart(_bleTransport, !!on);
+}
+
 /** Interrumpe el programa en ejecución en la placa (Ctrl-C serial o STOP por BLE). */
 export async function interruptBoard() {
   if (_mpSession) {
@@ -457,6 +567,7 @@ export async function bleRunConnect() {
   const info = await tr.connect();
   _bleTransport = tr;
   _bleRun = new BleRunSession(tr);
+  _bleDeploy = new BleDeploySession(tr);
   return info;
 }
 
@@ -481,6 +592,7 @@ export async function bleRunDisconnect() {
   }
   _bleTransport = null;
   _bleRun = null;
+  _bleDeploy = null;
 }
 
 async function clearMpSessionAfterReset() {
