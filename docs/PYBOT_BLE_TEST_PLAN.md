@@ -1,4 +1,4 @@
-# PyBot BLE — Plan de pruebas físicas (runtime 3.0.1 / protocolo 3.0)
+# PyBot BLE — Plan de pruebas físicas (runtime 3.1.0 / protocolo 3.1)
 
 > **Estado: NO EJECUTADO.** Este entorno **no** tiene una ESP32 real. Este documento es un
 > *checklist* para verificar en hardware el STOP confiable y el DEPLOY autónomo por Bluetooth.
@@ -8,11 +8,11 @@
 ## Entorno
 
 - **Navegador:** Chrome/Edge de escritorio (Web Bluetooth) sobre HTTPS o `localhost`.
-- **Placa:** ESP32 con MicroPython y runtime PyBot **3.0** instalado por USB
-  (`main.py` + `pybot_mpy.py` + `EDA6.py`).
+- **Placa:** ESP32 con MicroPython y runtime PyBot **3.1** instalado por USB
+  (`boot.py` + `main.py` + `pybot_mpy.py` + `EDA6.py`).
 - **Perfiles a cubrir:** `mpy` (GPIO directo) y `eda6` (WEMOS).
-- **Versiones esperadas por `INFO`:** runtime `3.0.1`, protocolo `3.0`,
-  `capabilities = ["run","stop","deploy","app-control","autostart"]`.
+- **Versiones esperadas por `INFO`:** runtime `3.1.0`, protocolo `3.1`,
+  `capabilities = ["run","stop","deploy","app-control","autostart","runtime-update"]`.
 
 Convención: `[ ]` pendiente · `[x]` OK · `[!]` falla (anotar observación).
 
@@ -150,3 +150,37 @@ Convención: `[ ]` pendiente · `[x]` OK · `[!]` falla (anotar observación).
 - [ ] **C20 — 20 ciclos Deploy + 20 ciclos autostart/reconnect:** 20 deploys de programas grandes
       cerca del máximo (hash siempre OK, sin corrupción) y 20 power cycle/reconexión con la app
       autónoma corriendo, verificando `APP:INFO` coherente en cada vuelta.
+
+## 13. OTA Runtime Update 3.1 — OTA-1..OTA-10 (NO EJECUTADO, requieren ESP32 real)
+
+> Casos que cubren la actualización del runtime **por Bluetooth** (transaccional, verificada por
+> SHA-256, con rollback). **Ninguno** ejecutado en este entorno (sin hardware): son *software
+> PASS* por mocks/modelo fiel, **no** *hardware PASS*. Requisito: primero una **última instalación
+> por USB** que deje `boot.py` + runtime **3.1** (habilita la capability `runtime-update`).
+
+- [ ] **OTA-1 — Detección:** conectar por BLE una placa con runtime **anterior** al publicado; la
+      UI muestra *"Actualización de PyBot Bluetooth disponible X→Y"* y el botón **Actualizar**.
+      Una placa **sin** `runtime-update` (3.0.x) muestra el aviso de *"última actualización por
+      USB"* y **no** ofrece OTA (pero RUN/STOP/DEPLOY/APP siguen).
+- [ ] **OTA-2 — Update normal:** pulsar **Actualizar**; el progreso avanza por **bytes
+      confirmados** (Actualizando…% → Verificando… → Aplicando… → Reiniciando… → Reconectando…)
+      y termina en *"PyBot Bluetooth actualizado correctamente."*
+- [ ] **OTA-3 — Reconexión automática:** tras `UPDATE:APPLY` la placa resetea y el BLE se cae; la
+      web reconecta **al mismo dispositivo** sin volver a mostrar el chooser.
+- [ ] **OTA-4 — Verificación por INFO:** el éxito se declara **solo** tras reconectar + `INFO` con
+      `firmware == target` (no solo por `VERIFY:OK`). Confirmar la nueva versión en el panel.
+- [ ] **OTA-5 — APP persiste:** con una app instalada (`pybot_app.py`/metadata) antes del update,
+      verificar que tras actualizar **sigue intacta** (mismo `size`/`hash`/`mode`/`profile`).
+- [ ] **OTA-6 — Power cycle + autostart:** si el autostart estaba en ON, apagar/encender tras el
+      update: la app del alumno **arranca sola** con el runtime nuevo.
+- [ ] **OTA-7 — Disconnect durante la transferencia:** desconectar el BLE **a mitad** del envío de
+      chunks → la web informa el fallo y la placa conserva el **runtime anterior intacto** (el
+      `.new` incompleto se descarta; `main.py` nunca se tocó).
+- [ ] **OTA-8 — Power off durante la transferencia:** cortar la energía mientras se descarga →
+      al reencender, `boot.py` no ve `pending` → arranca el **runtime anterior** y limpia el `.new`.
+- [ ] **OTA-9 — Power off durante el apply:** cortar la energía justo tras `APPLY`/reset (estado
+      `pending`/`applied`) → al reencender, `boot.py` deja **siempre** un `main.py` válido (aplica
+      de forma re-entrante o restaura el backup); nunca queda un runtime corrupto.
+- [ ] **OTA-10 — Rollback:** simular que el runtime nuevo **no confirma** su arranque (no levanta
+      BLE) → en el siguiente boot, `boot.py` restaura `pybot_runtime.bak`→`main.py` y arranca el
+      **runtime anterior** (conocido-bueno), sin boot-loop.

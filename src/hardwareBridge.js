@@ -43,7 +43,13 @@ import {
 } from "./esp32Flash.js";
 import { compileToBytecode } from "./arduino/pybotArduinoCompiler.js";
 import { downloadProgramToArduino } from "./arduinoVmSession.js";
-import { getBleRuntimeSource, BLE_RUNTIME_FILENAME } from "./pybotBleRuntime.js";
+import {
+  getBleRuntimeSource,
+  getBleBootSource,
+  getBleRuntimeVersion,
+  BLE_RUNTIME_FILENAME,
+  BLE_BOOT_FILENAME,
+} from "./pybotBleRuntime.js";
 import { BluetoothTransport } from "./bluetoothTransport.js";
 import { BleRunSession } from "./bleRunSession.js";
 import {
@@ -55,11 +61,17 @@ import {
   appAutostart,
 } from "./bleDeploySession.js";
 import {
+  BleRuntimeUpdateSession,
+  UPDATE_RECONNECT_TIMEOUT_MS,
+} from "./bleRuntimeUpdateSession.js";
+import {
   COMMANDS,
   RUN,
   parseInfoResponse,
   runtimeSupportsRun,
   runtimeSupportsDeploy,
+  runtimeSupportsUpdate,
+  runtimeUpdateStatus,
 } from "./bleProtocol.js";
 
 let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
@@ -72,6 +84,7 @@ let _baudRate = null;
 let _bleTransport = null;  // BluetoothTransport (Web Bluetooth)
 let _bleRun = null;        // BleRunSession (RUN temporal, protocolo 3.0)
 let _bleDeploy = null;     // BleDeploySession (DEPLOY persistente, protocolo 3.0)
+let _bleUpdate = null;     // BleRuntimeUpdateSession (OTA del runtime, protocolo 3.1)
 
 /** Nombre del archivo del preludio MPY (pin/servo/motor/wait) instalado en la placa. */
 export const PYBOT_MPY_FILENAME = "pybot_mpy.py";
@@ -537,6 +550,110 @@ export async function bleSetAutostart(on) {
   return appAutostart(_bleTransport, !!on);
 }
 
+// ===========================================================================
+// Actualización OTA del runtime por BLE (protocolo 3.1). Canal ADMINISTRATIVO:
+// no se expone ninguna función educativa (no hay updateRuntime() para el alumno).
+// ===========================================================================
+
+/**
+ * Indica si el runtime BLE conectado soporta la actualización OTA (capability
+ * "runtime-update"). Una placa 3.0.x NO la declara → necesita una última
+ * instalación por USB para habilitar el OTA. @returns {Promise<boolean>}
+ */
+export async function bleSupportsUpdate() {
+  if (!_bleTransport || !_bleTransport.isConnected()) return false;
+  const info = await getBleInfo();
+  return runtimeSupportsUpdate(info);
+}
+
+/**
+ * Estado de actualización del runtime: compara la versión INSTALADA (INFO) con la
+ * versión PUBLICADA por esta versión de PyBot Web (fuente de verdad única). La UI
+ * decide en base a esto (detección automática; instalación NO silenciosa).
+ * @returns {Promise<{ installed:string|null, latest:string, updateAvailable:boolean,
+ *   supportsOta:boolean, canUpdateOta:boolean, needsUsb:boolean }>}
+ */
+export async function bleRuntimeUpdateInfo() {
+  if (!_bleTransport || !_bleTransport.isConnected()) throw new Error("BLE_NOT_CONNECTED");
+  const info = await getBleInfo();
+  return runtimeUpdateStatus(info, getBleRuntimeVersion());
+}
+
+/**
+ * Actualiza el runtime de la ESP32 por BLE (OTA), de forma segura y verificada:
+ *   1) Estado seguro: detiene RUN temporal / APP en curso (cooperativo).
+ *   2) Transfiere el runtime nuevo a pybot_runtime.new, verifica size + SHA-256.
+ *   3) UPDATE:APPLY → la placa escribe el estado pendiente y RESETEA; boot.py hace
+ *      el swap transaccional (backup + rollback) en el arranque.
+ *   4) Reconecta automáticamente al MISMO dispositivo (sin chooser), lee INFO y
+ *      verifica que la versión instalada == destino.
+ *
+ * NO declara éxito solo por VERIFY: recién con reconnect + INFO con firmware ==
+ * target se considera verificado. Si la reconexión automática no es posible (no es
+ * corrupción), devuelve reconnected=false para que el usuario reconecte a mano.
+ *
+ * @param {{ onProgress?: (info:{phase:string, pct?:number, sent?:number, total?:number}) => void }} [hooks]
+ * @returns {Promise<{ ok:true, applied:boolean, reconnected:boolean, verified:boolean, target:string, installed:string|null }>}
+ */
+export async function bleUpdateRuntime(hooks = {}) {
+  if (!_bleUpdate || !_bleUpdate.isConnected()) throw new Error("BLE_NOT_CONNECTED");
+  const onProgress = hooks.onProgress ?? (() => {});
+
+  // 0) Confirmar (por capability) que la placa expone el canal OTA. Una placa
+  //    3.0.x sin "runtime-update" requiere una última actualización por USB.
+  const status = await bleRuntimeUpdateInfo();
+  if (!status.supportsOta) throw new Error("BLE_UPDATE_UNSUPPORTED");
+
+  // 1) Estado seguro: detener RUN temporal / APP corriendo (cooperativo). El
+  //    firmware además rechaza con UPDATE:ERROR:BUSY si algo sigue en ejecución.
+  await stopBleExecutionBeforeDeploy();
+
+  const source = getBleRuntimeSource();
+  const version = getBleRuntimeVersion();
+
+  // 2-3) Transferir + verificar + aplicar. Al aplicar, la placa RESETEA (BLE cae).
+  await _bleUpdate.update(source, { version, onProgress });
+
+  // 4) Reconectar al MISMO device (sin volver a mostrar el selector del navegador).
+  onProgress({ phase: "reconnecting", pct: 100 });
+  let reconnected = false;
+  try {
+    await _bleTransport.reconnect(UPDATE_RECONNECT_TIMEOUT_MS);
+    reconnected = true;
+  } catch {
+    reconnected = false;
+  }
+
+  if (!reconnected) {
+    // La actualización se aplicó; solo no pudimos reconectar automáticamente
+    // (posible limitación de Web Bluetooth). NO es corrupción.
+    onProgress({ phase: "applied-no-reconnect", pct: 100 });
+    return {
+      ok: true,
+      applied: true,
+      reconnected: false,
+      verified: false,
+      target: version,
+      installed: null,
+    };
+  }
+
+  // Reconectado: leer INFO y verificar la versión instalada == destino.
+  onProgress({ phase: "verifying-version", pct: 100 });
+  const info = await getBleInfo();
+  const installed = info && info.firmware ? String(info.firmware) : null;
+  const verified = installed === version;
+  onProgress({ phase: verified ? "done" : "version-mismatch", pct: 100 });
+  return {
+    ok: true,
+    applied: true,
+    reconnected: true,
+    verified,
+    target: version,
+    installed,
+  };
+}
+
 /**
  * Operación UNIFICADA de STOP del programa en la placa (P0-5 / P1-4). Una sola
  * abstracción para todos los transportes, con el ESP32 como fuente de verdad:
@@ -651,6 +768,7 @@ export async function bleRunConnect() {
   _bleTransport = tr;
   _bleRun = new BleRunSession(tr);
   _bleDeploy = new BleDeploySession(tr);
+  _bleUpdate = new BleRuntimeUpdateSession(tr);
   return info;
 }
 
@@ -676,6 +794,7 @@ export async function bleRunDisconnect() {
   _bleTransport = null;
   _bleRun = null;
   _bleDeploy = null;
+  _bleUpdate = null;
 }
 
 async function clearMpSessionAfterReset() {
@@ -764,7 +883,14 @@ export async function installBleRuntime(hooks = {}) {
   await _mpSession.installFile(PYBOT_MPY_FILENAME, MPY_PRELUDE);
   await _mpSession.installFile(EDA6_FILENAME, getEda6LibrarySource(getEda6Profile()));
 
-  // 2) Runtime BLE como main.py (arranca solo al boot).
+  // 2) boot.py: el update/rollback manager estable. MicroPython lo ejecuta ANTES
+  //    de main.py y HABILITA las futuras actualizaciones OTA por Bluetooth (esta
+  //    es la última instalación por USB necesaria para el OTA). NO borra
+  //    pybot_app.py/pybot_app.json si existen (son del alumno, archivos distintos).
+  onProgress?.({ phase: "installing-boot" });
+  await _mpSession.installFile(BLE_BOOT_FILENAME, getBleBootSource());
+
+  // 3) Runtime BLE como main.py (arranca solo al boot).
   const source = getBleRuntimeSource();
   onProgress?.({ phase: "installing", done: 0, total: 100, pct: 0 });
   await _mpSession.installFile(BLE_RUNTIME_FILENAME, source, {
@@ -772,6 +898,11 @@ export async function installBleRuntime(hooks = {}) {
   });
 
   onProgress?.({ phase: "verifying" });
+  const bootExists = await _mpSession.fileExists(BLE_BOOT_FILENAME);
+  const bootSize = bootExists ? await _mpSession.getFileSize(BLE_BOOT_FILENAME) : -1;
+  if (!bootExists || bootSize < 8) {
+    throw new Error("BLE_INSTALL_VERIFY_FAIL");
+  }
   const exists = await _mpSession.fileExists(BLE_RUNTIME_FILENAME);
   const size = exists ? await _mpSession.getFileSize(BLE_RUNTIME_FILENAME) : -1;
   if (!exists || size < 8) {

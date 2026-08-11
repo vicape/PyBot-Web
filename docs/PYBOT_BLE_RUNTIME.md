@@ -25,6 +25,16 @@ nuevos; no altera EDA6, USB/Firmata, Pyodide ni el mecanismo de ejecución exist
 > placa mientras estás conectado; *BAJAR* lo guarda en la placa para que corra **solo, sin PC/
 > navegador/BLE/Internet**, y sobreviva un power cycle, mientras el BLE sigue disponible para
 > administrarlo.
+>
+> **Runtime 3.1.0 / protocolo 3.1 (OTA Runtime Update):** el runtime puede **actualizarse a sí
+> mismo por Bluetooth** (OTA), sin volver a USB salvo recuperación extrema. Nueva capability
+> `runtime-update`, comandos `UPDATE:*` (transferencia verificada por SHA-256 a
+> `pybot_runtime.new`), un `boot.py` **mínimo y estable** que aplica el swap con backup
+> (`pybot_runtime.bak`) y **rollback** si el runtime nuevo no confirma su arranque, y estado
+> transaccional en `pybot_update.json`. La primera instalación sigue siendo por **USB** (para
+> dejar `boot.py` + `main.py`); a partir de ahí las futuras se hacen por **BLE**. El programa del
+> alumno (`pybot_app.py`/`pybot_app.json`) y el autostart se **conservan** intactos. Ver
+> **5-quater. Protocolo 3.1 — OTA Runtime Update**.
 
 ## 1. Arquitectura y enfoque elegido
 
@@ -230,7 +240,8 @@ PERSISTENT (app instalada por DEPLOY / autostart) comparten namespace, preludio 
 
 | Archivo | Rol | ¿Lo toca una actualización de runtime? |
 | --- | --- | --- |
-| `main.py` | Runtime permanente (BLE + ProgramManager + DeployReceiver). | Sí (se reescribe). |
+| `boot.py` | Updater/rollback manager (aplica/revierte OTA antes de `main.py`). | Sí (por USB; muy estable). |
+| `main.py` | Runtime permanente (BLE + ProgramManager + DeployReceiver + RuntimeUpdateReceiver). | Sí (se reescribe, por OTA o USB). |
 | `pybot_mpy.py` / `EDA6.py` | Preludios (GPIO directo / EDA6). | Sí (se reescriben). |
 | `pybot_app.py` | **Programa del alumno persistente**. | **No** (se conserva). |
 | `pybot_app.json` | Metadata: `version/mode/profile/autostart/size/hash/runtime`. | **No** (se conserva si es compatible). |
@@ -350,10 +361,138 @@ computadora. Autostart activado."*
 
 ### Compatibilidad e INFO.capabilities
 
-`INFO` ahora expone `"capabilities":["run","stop","deploy","app-control","autostart"]`. La web
+`INFO` ahora expone `"capabilities":["run","stop","deploy","app-control","autostart","runtime-update"]`
+(la última, `runtime-update`, se agregó en 3.1 para el OTA). La web
 **prefiere capabilities** sobre inferencias por versión: `runtimeSupportsDeploy(info)`. Un
 runtime **2.x** permite RUN pero **no** DEPLOY: la web informa *"Esta placa necesita actualizar
 PyBot Bluetooth para usar Bajar a ESP32"* y **no** impide RUN.
+
+## 5-quater. Protocolo 3.1 — OTA Runtime Update (actualización del runtime por BLE)
+
+Permite que una ESP32 con runtime compatible **actualice su propio `main.py`** a una versión
+más nueva **por Bluetooth**, de forma **transaccional, verificada (SHA-256) y con rollback**,
+sin volver a USB salvo recuperación extrema. Es un canal **administrativo** (no una función
+educativa expuesta al alumno).
+
+### Arquitectura: `boot.py` (updater) + `main.py` (runtime)
+
+```
+Arranque ESP32:
+  boot.py  (MÍNIMO, sin BLE/EDA6/hardware)  → aplica/revierte update pendiente → 
+  main.py  (runtime BLE, ProgramManager, RuntimeUpdateReceiver) → confirma su arranque
+```
+
+- **`boot.py`** MicroPython lo ejecuta **antes** de `main.py` en cada boot. Su única
+  responsabilidad es aplicar o revertir de forma segura una actualización antes de que el
+  runtime corra. Es deliberadamente estable: **no** usa BLE, EDA6 ni hardware, y **nunca**
+  impide que `main.py` arranque (todo va envuelto en try/except → ante cualquier imprevisto se
+  prefiere dejar el runtime existente corriendo).
+- **`main.py`** (el runtime) recibe la transferencia por BLE, la verifica y, tras `UPDATE:APPLY`,
+  escribe el estado y hace `machine.reset()`. **Nunca** se sobrescribe `main.py` durante la
+  transferencia: el runtime nuevo se descarga completo a `pybot_runtime.new` y **`boot.py`** hace
+  el swap con backup + rollback.
+
+### Archivos en la placa (OTA)
+
+| Archivo | Rol | Efímero |
+| --- | --- | --- |
+| `boot.py` | Updater/rollback manager (se instala por USB, muy estable). | No |
+| `pybot_runtime.new` | Runtime nuevo descargado por BLE (aún no aplicado). | Sí (se limpia) |
+| `pybot_runtime.bak` | Backup del `main.py` anterior (conocido-bueno) para rollback. | Sí |
+| `pybot_update.json` | Estado transaccional: `state` + `from/to/size/hash`. | Sí |
+
+`pybot_app.py`/`pybot_app.json`/`pybot_state.json` **no se tocan** durante un update de runtime.
+
+### Comandos `UPDATE:*` (protocolo 3.1)
+
+```
+PyBot Web → ESP32                              ESP32 → PyBot Web
+UPDATE:INFO                                    UPDATE:INFO:<json>
+UPDATE:BEGIN:<version>:<size>:<hash>           UPDATE:READY | UPDATE:ERROR:<code>
+UPDATE:CHUNK:<base64>   (una por bloque)       UPDATE:ACK:<n>
+UPDATE:END                                     UPDATE:VERIFY:OK | UPDATE:ERROR:<code>
+UPDATE:APPLY                                   (la placa resetea → boot.py hace el swap)
+UPDATE:ABORT                                   (borra el .new; main.py intacto)
+```
+
+- Escribe a `pybot_runtime.new`; al `END` verifica **tamaño** y **hash SHA-256** (`uhashlib` en
+  la placa; JS puro en la web). Solo si coinciden responde **`UPDATE:VERIFY:OK`**. Si el port
+  **no** tiene `uhashlib`, responde **`UPDATE:ERROR:HASH_UNAVAILABLE`** (nunca afirma una
+  verificación que no ocurrió).
+- **ACK por bloque** (backpressure/detección de pérdidas) reutilizando la infra de DEPLOY
+  (base64/chunking/pacing/cleanup) sin acoplarse: sesión propia `src/bleRuntimeUpdateSession.js`
+  con timeouts propios (`UPDATE_READY/ACK/VERIFY/RECONNECT_TIMEOUT`, distintos de los de RUN) y
+  `onProgress(percent)` basado en **bytes confirmados** (no falsos).
+- `MAX_RUNTIME_UPDATE_SIZE` acota el tamaño; si MicroPython expone el espacio libre y no alcanza →
+  `UPDATE:ERROR:NO_SPACE`.
+- Códigos de error: `BUSY, UNSUPPORTED, BAD_VERSION, TOO_LONG, BAD_ENCODING, BAD_HASH,
+  HASH_UNAVAILABLE, WRITE_FAILED, VERIFY_FAILED, NO_SPACE, BAD_FRAME, INCOMPATIBLE`.
+
+### Estados y transacción (rollback)
+
+`pybot_update.json.state` ∈ `pending → applied → confirmed` (o `rollback_failed`):
+
+1. **`pending`** — el runtime, tras `VERIFY:OK` y `UPDATE:APPLY`, escribe `pending` (from/to/
+   size/hash) y hace `machine.reset()`. En el próximo boot, **`boot.py`** valida el `.new`
+   (existe + tamaño + SHA-256), respalda `main.py`→`pybot_runtime.bak`, instala
+   `pybot_runtime.new`→`main.py`, marca **`applied`** y arranca el nuevo.
+2. **`applied`** — significa que un boot ya instaló el nuevo runtime **pero este nunca confirmó**
+   su arranque (no importó / no levantó BLE / no registró GATT). Se asume fallo → **ROLLBACK**:
+   `boot.py` restaura `pybot_runtime.bak`→`main.py` y arranca el runtime anterior (conocido-bueno).
+3. **`confirmed`** — el runtime nuevo, **solo** tras importar OK + iniciar BLE + registrar GATT +
+   quedar operacional, limpia `pybot_update.json` y borra `pybot_runtime.bak` (confirmación de
+   arranque). Desde ese momento **no** hay rollback posible.
+
+**Modelo de falla de energía** (el filesystem de MicroPython **no** garantiza atomicidad
+perfecta; se diseñó para dejar **siempre** un `main.py` o un backup válido):
+
+- **Durante la descarga:** aún no hay `pending` → `main.py` anterior intacto; se borra el `.new`
+  incompleto.
+- **`pending` escrito, corte antes/durante el apply:** el apply es **re-entrante** (idempotente):
+  si `main.py` ya es el nuevo (hash coincide) no se re-respalda; si `main.py` falta, se instala el
+  `.new` válido o se restaura el backup.
+- **Anti boot-loop:** el estado se limpia tras el rollback, así no se reintenta en ciclo.
+
+### Llevar a estado seguro antes de actualizar
+
+No se actualiza si hay actividad: **RUN temporal** (se detiene primero, *"Deteniendo programa
+antes de actualizar…"*), **APP corriendo** (`APP:STOP` cooperativo + cleanup; si no coopera, la
+recuperación existente) o **DEPLOY en curso** (`UPDATE:ERROR:BUSY`). El runtime **nunca** se
+escribe mientras hay una APP corriendo.
+
+### UI, reconexión y verificación final
+
+Panel: *"Runtime instalado: X / Última versión: Y / [Actualizar PyBot Bluetooth]"*, con progreso
+real (**Actualizando…% → Verificando… → Aplicando… → Reiniciando… → Reconectando…**). Tras
+`UPDATE:APPLY` la placa resetea y el BLE se cae: la web intenta **reconectar automáticamente al
+mismo `BluetoothDevice`** (sin volver a mostrar el chooser), espera el advertising/GATT y lee
+`INFO`. El éxito **no** se declara por `VERIFY`: recién tras reconectar + `INFO` con
+`firmware == target` se muestra *"PyBot Bluetooth actualizado correctamente."* Si la reconexión
+automática no es posible (limitación de Web Bluetooth), **no** se trata como corrupción:
+*"La actualización fue instalada. La placa se reinició. Volvé a conectar por Bluetooth para
+verificar la nueva versión."*
+
+### Compatibilidad hacia atrás (capability `runtime-update`)
+
+`INFO.capabilities` ahora incluye `"runtime-update"`. La web se basa en **capabilities**, no en
+la versión: una placa **sin** `runtime-update` (p. ej. 3.0.x) muestra *"Esta placa necesita una
+última actualización por USB para habilitar futuras actualizaciones por Bluetooth."* y **no**
+envía `UPDATE:*`, pero sigue permitiendo RUN/STOP/DEPLOY/APP. Esa **última instalación por USB**
+(que agrega `boot.py` + el runtime 3.1) es la que habilita el OTA de ahí en adelante.
+
+### Instalación por USB (habilita OTA)
+
+"Instalar PyBot Bluetooth" ahora graba **`boot.py`** (updater estable) + **`main.py`** (runtime
+3.1) + `pybot_mpy.py` + `EDA6.py`, sin borrar `pybot_app.py`/`pybot_app.json` si existen.
+
+### Limitaciones honestas
+
+- **No** se afirma "imposible de brickear": es una **actualización transaccional con rollback**.
+  El diseño garantiza que una transferencia interrumpida **no** deja `main.py` corrupto (siempre
+  queda el runtime anterior o un backup válido), pero un fallo de hardware/flash catastrófico
+  fuera del modelo requeriría **recuperación por USB** como último recurso.
+- La reconexión automática depende del navegador (Web Bluetooth); si no es posible, la web pide
+  reconectar manualmente (sin tratarlo como fallo del update).
 
 ## 6. Identidad única y estable
 
@@ -364,7 +503,14 @@ PyBot Bluetooth para usar Bajar a ESP32"* y **no** impide RUN.
 
 ## 7. Versionado
 
-- `PYBOT_RUNTIME_VERSION = "3.0.1"`, `PYBOT_PROTOCOL_VERSION = "3.0"` (legibles por `INFO`).
+- `PYBOT_RUNTIME_VERSION = "3.1.0"`, `PYBOT_PROTOCOL_VERSION = "3.1"` (legibles por `INFO`).
+- Se subió a **3.1** porque el protocolo agrega, de forma **compatible/aditiva**, el OTA Runtime
+  Update: nueva capability `runtime-update` y los comandos `UPDATE:*` (BEGIN/READY/CHUNK/ACK/END/
+  VERIFY/APPLY/ABORT/INFO + `UPDATE:ERROR:<code>`). El framing 3.0 (RUN/DEPLOY/APP) **no** cambia;
+  un runtime 3.0.x sigue interoperando (sin la capability `runtime-update`).
+- `PYBOT_RUNTIME_VERSION` es la **única fuente de verdad** de la versión publicada: `bleProtocol.js`
+  la exporta y la UI/detección de OTA la usan para comparar contra el `INFO` de la placa. No se
+  tocó `package.json` (esta release es del runtime BLE, no de la app web).
 - Se subió a **3.0** porque el protocolo agrega STOP confiable (`RUN:STOPPED` + `STOP:FORCE`),
   DEPLOY persistente verificado, control de app (`APP:*`) y autostart. RUN 2.0 y PING/INFO/LED
   se mantienen compatibles.
@@ -465,7 +611,21 @@ y opcional; no reemplaza el cable.
       (antes de STARTED → rechazo; inesperada → `disconnected`; tras stop → `stopped`).
     - `test/hardwareBridgeSerialPriority.test.mjs`: regresión — `runOnBoard` prioriza serial
       (`_mpSession`) antes que BLE (`_bleRun`).
-  - Total: **94 tests** en verde (49 previos + 45 nuevos).
+  - **Nuevos (protocolo 3.1 — OTA Runtime Update):**
+    - `test/bleRuntimeUpdateProtocol.test.mjs`: versión/protocolo `3.1`, capability
+      `runtime-update`, `compareRuntimeVersions` (same/older/newer), `runtimeUpdateStatus`
+      (al día / disponible / necesita USB / sin soporte), tokens `UPDATE:*`, códigos de error,
+      builders y parsers.
+    - `test/bleRuntimeUpdateSession.test.mjs`: `BleRuntimeUpdateSession` con **mock fiel** del
+      firmware (`RuntimeUpdateReceiver`): transferencia + verify + apply OK, progreso por **bytes
+      confirmados**, y errores (`BUSY/BAD_VERSION/NO_SPACE/WRITE_FAILED/BAD_HASH/HASH_UNAVAILABLE`)
+      + desconexión a mitad (**runtime viejo intacto**, nunca *bricked*).
+    - `test/firmwareBootUpdate.test.mjs`: **modelo fiel del `boot.py`** — ciclo OTA completo
+      (swap/boot/confirm), `.new` huérfano, pending válido/corrupto, `.new` ausente, backup
+      presente, `main.py` ausente, confirmación faltante → **rollback**, y **power-loss** en cada
+      etapa (durante descarga / tras verify / tras backup / tras rename / antes de confirmar) →
+      siempre queda un `main.py` o backup válido; preserva `pybot_app.py`/metadata.
+  - Total: **155 tests** en verde (110 previos + 45 nuevos: protocolo OTA, sesión OTA y boot manager).
 - `npm run build`: compila sin errores nuevos (solo el warning preexistente de tamaño de chunk).
 - **No** hay lint/typecheck configurados en el repo (proyecto JS con Vite); no se agregaron.
 

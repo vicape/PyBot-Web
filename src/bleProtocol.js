@@ -15,24 +15,37 @@ export const SERVICE_UUID = "8fbc0001-4d5a-4b8c-9a1f-123456789001";
 export const RX_UUID = "8fbc0002-4d5a-4b8c-9a1f-123456789002"; // Web -> ESP32 (WRITE)
 export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web (NOTIFY)
 
-export const PYBOT_RUNTIME_VERSION = "3.0.1";
+// ===========================================================================
+// FUENTE DE VERDAD UNICA de la version del runtime publicada por esta version de
+// PyBot Web. El firmware (main.py) declara la MISMA version por INFO. La web
+// compara la version INSTALADA (INFO.firmware) contra PYBOT_RUNTIME_VERSION para
+// decidir si ofrecer una actualizacion OTA por BLE. NO duplicar esta constante:
+// pybotBleRuntime.js la reexporta; los tests y la UI la importan de aca.
+// ===========================================================================
+export const PYBOT_RUNTIME_VERSION = "3.1.0";
 // Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
 // verificado (size+hash), control de app (APP:*) y autostart con safe boot.
 // El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
 // 3.0.1 (runtime, framing compatible): DEPLOY transaccional con backup/rollback,
 // HASH obligatorio si se declara (DEPLOY:ERROR:HASH_UNAVAILABLE), APP:STOP/DELETE
 // confirmados de verdad y errores de filesystem explicitos (APP:ERROR:*).
-export const PYBOT_PROTOCOL_VERSION = "3.0";
+// 3.1 (extension COMPATIBLE): agrega la actualizacion OTA del propio runtime por
+// BLE (UPDATE:*), con verificacion SHA-256, apply transaccional (boot.py) y
+// rollback. Se sube el protocolo a 3.1 porque agrega comandos nuevos versionados
+// (aditivos, no rompen 3.0) y el runtime a 3.1.0. La capability "runtime-update"
+// permite a la web decidir por capabilities (no por numero de version).
+export const PYBOT_PROTOCOL_VERSION = "3.1";
 export const PYBOT_RUNTIME_NAME = "PyBot BLE Runtime";
 export const PYBOT_BOARD = "ESP32";
 
-/** Capacidades declaradas por el runtime 3.0 (via INFO). */
+/** Capacidades declaradas por el runtime (via INFO). */
 export const PYBOT_CAPABILITIES = Object.freeze([
   "run",
   "stop",
   "deploy",
   "app-control",
   "autostart",
+  "runtime-update",
 ]);
 
 export const MAX_COMMAND_LENGTH = 64;
@@ -165,6 +178,80 @@ export function runtimeSupportsDeploy(info) {
   const fw = major(info.firmware);
   if (fw != null) return fw >= 3;
   return false;
+}
+
+/**
+ * Determina si el runtime soporta la ACTUALIZACION OTA por BLE (UPDATE:*).
+ * Estrictamente por capability (fuente confiable): una placa 3.0.x NO declara
+ * "runtime-update" y por lo tanto necesita una ultima actualizacion por USB para
+ * habilitar el OTA. No se infiere por numero de version (evita falsos positivos).
+ * @param {null | { capabilities?: string[] }} info
+ * @returns {boolean}
+ */
+export function runtimeSupportsUpdate(info) {
+  return parseCapabilities(info).includes("runtime-update");
+}
+
+/**
+ * Compara dos versiones "x.y.z" numericamente. Devuelve -1 si a<b, 0 si igual,
+ * 1 si a>b. Tolerante: partes no numericas o faltantes cuentan como 0. Cualquier
+ * entrada invalida se trata conservadoramente como "igual" (0) para no ofrecer
+ * actualizaciones espurias.
+ * @param {string} a @param {string} b @returns {-1|0|1}
+ */
+export function compareRuntimeVersions(a, b) {
+  const parse = (v) =>
+    String(v ?? "")
+      .trim()
+      .split(".")
+      .map((p) => {
+        const n = parseInt(p, 10);
+        return Number.isFinite(n) ? n : 0;
+      });
+  const pa = parse(a);
+  const pb = parse(b);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const x = pa[i] ?? 0;
+    const y = pb[i] ?? 0;
+    if (x < y) return -1;
+    if (x > y) return 1;
+  }
+  return 0;
+}
+
+/**
+ * Estado de actualizacion del runtime BLE segun el INFO instalado y la version
+ * PUBLICADA por esta version de PyBot Web (fuente de verdad unica). No decide por
+ * si sola instalar nada: solo informa para que la UI ofrezca (no silenciosa) la
+ * actualizacion.
+ *
+ * @param {null | { firmware?: string, capabilities?: string[] }} info
+ * @param {string} [published] version publicada (default: PYBOT_RUNTIME_VERSION)
+ * @returns {{ installed:string|null, latest:string, updateAvailable:boolean,
+ *             supportsOta:boolean, canUpdateOta:boolean, needsUsb:boolean }}
+ */
+export function runtimeUpdateStatus(info, published = PYBOT_RUNTIME_VERSION) {
+  const installed =
+    info && typeof info === "object" && info.firmware
+      ? String(info.firmware)
+      : null;
+  const latest = String(published);
+  const supportsOta = runtimeSupportsUpdate(info);
+  // Solo hay actualizacion disponible si conocemos la version instalada y es
+  // ESTRICTAMENTE menor que la publicada.
+  const updateAvailable =
+    installed != null && compareRuntimeVersions(installed, latest) < 0;
+  return {
+    installed,
+    latest,
+    updateAvailable,
+    supportsOta,
+    // Se puede actualizar por BLE si hay novedad Y la placa declara el canal OTA.
+    canUpdateOta: updateAvailable && supportsOta,
+    // Hay novedad pero la placa (p.ej. 3.0.x) no expone OTA: requiere USB una vez.
+    needsUsb: updateAvailable && !supportsOta,
+  };
 }
 
 /**
@@ -631,6 +718,130 @@ export function parseAppFrame(raw) {
 export function parseAppInfo(raw) {
   const text = String(raw ?? "").trim();
   const body = text.startsWith(APP.INFO_PREFIX) ? text.slice(APP.INFO_PREFIX.length) : text;
+  if (!body.startsWith("{")) return null;
+  try {
+    const obj = JSON.parse(body);
+    return obj && typeof obj === "object" ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
+// ===========================================================================
+// Protocolo UPDATE (actualizacion OTA del propio runtime por BLE) — protocolo 3.1
+// ---------------------------------------------------------------------------
+// La ESP32 actualiza su PROPIO runtime (main.py) a una version mas nueva por BLE,
+// de forma segura, verificada (SHA-256), transaccional y con rollback. El nuevo
+// runtime NUNCA se escribe sobre main.py durante la transferencia: se descarga
+// completo a pybot_runtime.new; boot.py aplica el swap con backup y rollback.
+//
+// Canal ADMINISTRATIVO: no se expone ninguna funcion educativa (no hay
+// updateRuntime() para el alumno). Flujo:
+//   UPDATE:INFO                          -> UPDATE:INFO:<json>
+//   UPDATE:BEGIN:<version>:<size>:<hash> -> UPDATE:READY | UPDATE:ERROR:<code>
+//   UPDATE:CHUNK:<base64>  (por bloque)  -> UPDATE:ACK:<n> | UPDATE:ERROR:<code>
+//   UPDATE:END                           -> UPDATE:VERIFY:OK | UPDATE:ERROR:<code>
+//   UPDATE:APPLY                         -> UPDATE:APPLYING (la placa resetea)
+// ===========================================================================
+
+/** Tamano maximo del runtime a actualizar por BLE (bytes de fuente UTF-8).
+ *  Holgado para el runtime actual (~45 KB) sin agotar el filesystem tipico. */
+export const MAX_RUNTIME_UPDATE_SIZE = 65536;
+
+/** Bytes de fuente por chunk UPDATE antes de base64 (ACK por bloque, como DEPLOY). */
+export const UPDATE_SOURCE_CHUNK = 192;
+
+/** Tokens del protocolo UPDATE (deben coincidir con el firmware). */
+export const UPDATE = Object.freeze({
+  // PyBot Web -> ESP32
+  INFO: "UPDATE:INFO", // consulta capacidades/version del updater
+  BEGIN: "UPDATE:BEGIN", // UPDATE:BEGIN:<version>:<size>:<hash>
+  CHUNK: "UPDATE:CHUNK", // UPDATE:CHUNK:<base64>
+  END: "UPDATE:END", // fin -> verificar size+hash
+  APPLY: "UPDATE:APPLY", // aplicar (boot.py hace el swap) -> la placa resetea
+  ABORT: "UPDATE:ABORT", // cancelar transferencia (borra el .new; main.py intacto)
+  // ESP32 -> PyBot Web
+  INFO_PREFIX: "UPDATE:INFO:", // UPDATE:INFO:<json>
+  READY: "UPDATE:READY", // listo para recibir chunks (.new abierto)
+  ACK: "UPDATE:ACK", // UPDATE:ACK:<n> (ACK por bloque, backpressure)
+  VERIFY_OK: "UPDATE:VERIFY:OK", // .new verificado (size+hash) — aun NO aplicado
+  APPLYING: "UPDATE:APPLYING", // update pendiente escrito; la placa va a resetear
+  ERROR: "UPDATE:ERROR", // UPDATE:ERROR:<code>
+});
+
+/** Codigos de error UPDATE (deben coincidir con el firmware). */
+export const UPDATE_ERRORS = Object.freeze([
+  "BUSY", // hay un RUN/APP/DEPLOY en curso: llevar a estado seguro primero
+  "UNSUPPORTED", // el runtime no soporta OTA (no deberia ocurrir si hay capability)
+  "BAD_VERSION", // version destino invalida / no mas nueva que la instalada
+  "TOO_LONG", // supera MAX_RUNTIME_UPDATE_SIZE
+  "BAD_ENCODING", // base64 invalido en un chunk
+  "BAD_HASH", // el SHA-256 recalculado no coincide con el declarado
+  "HASH_UNAVAILABLE", // no hay uhashlib: no se puede verificar -> NUNCA VERIFY:OK
+  "WRITE_FAILED", // fallo de escritura en el filesystem
+  "VERIFY_FAILED", // el tamano de .new no coincide con el declarado
+  "NO_SPACE", // no hay espacio suficiente en el filesystem (statvfs)
+  "BAD_FRAME", // frame UPDATE:* mal formado / fuera de secuencia
+  "INCOMPATIBLE", // el nuevo runtime es incompatible con esta placa
+]);
+
+/**
+ * Construye UPDATE:BEGIN:<version>:<size>:<hash>.
+ * @param {string} version version del runtime destino (x.y.z)
+ * @param {number} size bytes de fuente UTF-8 @param {string} hash sha256 hex
+ * @returns {string}
+ */
+export function buildUpdateBegin(version, size, hash) {
+  return `${UPDATE.BEGIN}:${String(version ?? "").trim()}:${size}:${String(hash ?? "").toLowerCase()}`;
+}
+
+/** @param {string} b64Chunk @returns {string} */
+export function buildUpdateChunk(b64Chunk) {
+  return `${UPDATE.CHUNK}:${b64Chunk}`;
+}
+
+/**
+ * Parte el fuente del runtime en chunks base64 para UPDATE (chunk grande, ACK por bloque).
+ * @param {string} code @param {number} [chunkBytes]
+ * @returns {string[]}
+ */
+export function chunkRuntimeUpdate(code, chunkBytes = UPDATE_SOURCE_CHUNK) {
+  return chunkProgram(code, chunkBytes > 0 ? chunkBytes : UPDATE_SOURCE_CHUNK);
+}
+
+/**
+ * Parsea un frame UPDATE:* recibido del runtime (TX -> Web).
+ * @param {string} raw
+ * @returns {{ type:"info"|"ready"|"ack"|"verify_ok"|"applying"|"error"|"unknown", info?:object|null, index?:number, code?:string, raw:string }}
+ */
+export function parseUpdateFrame(raw) {
+  const text = String(raw ?? "").trim();
+  if (text === UPDATE.READY) return { type: "ready", raw: text };
+  if (text === UPDATE.VERIFY_OK) return { type: "verify_ok", raw: text };
+  if (text === UPDATE.APPLYING) return { type: "applying", raw: text };
+  if (text.startsWith(UPDATE.INFO_PREFIX)) {
+    return { type: "info", info: parseUpdateInfo(text), raw: text };
+  }
+  if (text.startsWith(UPDATE.ACK + ":")) {
+    const n = parseInt(text.slice(UPDATE.ACK.length + 1), 10);
+    return { type: "ack", index: Number.isFinite(n) ? n : -1, raw: text };
+  }
+  if (text.startsWith(UPDATE.ERROR + ":")) {
+    return { type: "error", code: text.slice(UPDATE.ERROR.length + 1), raw: text };
+  }
+  return { type: "unknown", raw: text };
+}
+
+/**
+ * Parsea la respuesta UPDATE:INFO:<json> a objeto. Devuelve null si no es valida.
+ * @param {string} raw
+ * @returns {null | {runtime:string, protocol:string, max:number, hash:boolean, state:string}}
+ */
+export function parseUpdateInfo(raw) {
+  const text = String(raw ?? "").trim();
+  const body = text.startsWith(UPDATE.INFO_PREFIX)
+    ? text.slice(UPDATE.INFO_PREFIX.length)
+    : text;
   if (!body.startsWith("{")) return null;
   try {
     const obj = JSON.parse(body);

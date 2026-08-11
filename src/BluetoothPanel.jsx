@@ -1,11 +1,18 @@
 import { useEffect, useState, useCallback } from "react";
 import { t } from "./i18n.js";
 import { isWebBluetoothSupported, BLE_STATE } from "./bluetoothTransport.js";
-import { COMMANDS, parseInfoResponse, runtimeSupportsRun } from "./bleProtocol.js";
+import {
+  COMMANDS,
+  parseInfoResponse,
+  runtimeSupportsRun,
+  runtimeUpdateStatus,
+  PYBOT_RUNTIME_VERSION,
+} from "./bleProtocol.js";
 import {
   bleRunConnect,
   bleRunDisconnect,
   bleRunTransport,
+  bleUpdateRuntime,
 } from "./hardwareBridge.js";
 
 /**
@@ -25,6 +32,10 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState([]);
+  const [updating, setUpdating] = useState(false);
+  const [updatePhase, setUpdatePhase] = useState(null);
+  const [updatePct, setUpdatePct] = useState(0);
+  const [updateMsg, setUpdateMsg] = useState(null);
 
   const appendLog = useCallback((line, kind = "info") => {
     setLog((prev) => [...prev.slice(-40), { line, kind, ts: Date.now() }]);
@@ -125,9 +136,92 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
     [appendLog],
   );
 
+  const refreshInfo = useCallback(async () => {
+    const tr = bleRunTransport();
+    if (!tr || !tr.isConnected()) return;
+    try {
+      const resp = await tr.sendAndWait(COMMANDS.INFO, 4000);
+      const parsed = parseInfoResponse(resp);
+      if (parsed) {
+        tr.setDeviceInfo(parsed);
+        setInfo(parsed);
+      }
+    } catch {
+      /* INFO opcional */
+    }
+  }, []);
+
+  const updatePhaseText = useCallback((phase, pct) => {
+    switch (phase) {
+      case "begin":
+      case "start":
+        return t("bleUpdateStart");
+      case "transfer":
+        return t("bleUpdateTransfer").replace("{pct}", String(pct ?? 0));
+      case "verified":
+        return t("bleUpdateVerifying");
+      case "applying":
+        return t("bleUpdateApplying");
+      case "reconnecting":
+        return t("bleUpdateReconnecting");
+      case "verifying-version":
+        return t("bleUpdateRestarting");
+      default:
+        return t("bleUpdating");
+    }
+  }, []);
+
+  const handleUpdate = useCallback(async () => {
+    if (updating) return;
+    setError(null);
+    setUpdateMsg(null);
+    setUpdating(true);
+    setUpdatePhase("start");
+    setUpdatePct(0);
+    appendLog(t("bleUpdateStart"), "info");
+    try {
+      const res = await bleUpdateRuntime({
+        onProgress: (p) => {
+          setUpdatePhase(p.phase);
+          if (typeof p.pct === "number") setUpdatePct(p.pct);
+        },
+      });
+      if (res.reconnected) {
+        // Restaurar el estado de conexión tras el reset+reconexión de la placa.
+        setState(BLE_STATE.CONNECTED);
+        notifyConnection(true, deviceName);
+      }
+      if (res.verified) {
+        setUpdateMsg(t("bleUpdateOk"));
+        appendLog(t("bleUpdateOk"), "ok");
+        await refreshInfo();
+      } else if (res.reconnected) {
+        setUpdateMsg(t("bleUpdateMismatch"));
+        appendLog(t("bleUpdateMismatch"), "err");
+        await refreshInfo();
+      } else {
+        setUpdateMsg(t("bleUpdateAppliedNoReconnect"));
+        appendLog(t("bleUpdateAppliedNoReconnect"), "info");
+      }
+    } catch (e) {
+      const code = e?.message ?? "";
+      if (code === "BLE_UPDATE_UNSUPPORTED") {
+        setUpdateMsg(t("bleUpdateUnsupported"));
+      } else {
+        const short = code.replace(/^BLE_UPDATE_ERROR:/, "").replace(/^BLE_UPDATE_/, "");
+        setUpdateMsg(t("bleUpdateFail").replace("{code}", short || "ERROR"));
+      }
+      appendLog(updateMsg ?? t("bleUpdateFail").replace("{code}", code || "ERROR"), "err");
+    } finally {
+      setUpdating(false);
+      setUpdatePhase(null);
+    }
+  }, [updating, appendLog, notifyConnection, deviceName, refreshInfo, updateMsg]);
+
   if (!open) return null;
 
   const connected = state === BLE_STATE.CONNECTED;
+  const updateStatus = info ? runtimeUpdateStatus(info, PYBOT_RUNTIME_VERSION) : null;
 
   return (
     <div className="modal-back" role="presentation" onClick={onClose}>
@@ -181,6 +275,54 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
         {connected && info && !runtimeSupportsRun(info) ? (
           <div className="connect-modal-error" role="alert">
             {t("bleFirmwareOutdated")}
+          </div>
+        ) : null}
+
+        {connected && info ? (
+          <div className="ble-update">
+            <span className="toolbar-menu-mode__label">{t("bleUpdateSectionLabel")}</span>
+            <div className="ble-update__versions">
+              <span>
+                {t("bleUpdateInstalled").replace("{version}", info.firmware ?? "?")}
+              </span>
+              <span>
+                {t("bleUpdateLatest").replace("{version}", updateStatus?.latest ?? PYBOT_RUNTIME_VERSION)}
+              </span>
+            </div>
+
+            {updating ? (
+              <div className="ble-update__progress" aria-live="polite">
+                {updatePhaseText(updatePhase, updatePct)}
+              </div>
+            ) : updateStatus?.needsUsb ? (
+              <div className="connect-modal-error" role="alert">
+                {t("bleUpdateNeedsUsb")}
+              </div>
+            ) : updateStatus?.canUpdateOta ? (
+              <>
+                <div className="ble-update__available">
+                  {t("bleUpdateAvailable")
+                    .replace("{from}", updateStatus.installed ?? "?")
+                    .replace("{to}", updateStatus.latest)}
+                </div>
+                <button
+                  type="button"
+                  className="connect-btn connect-btn--primary"
+                  onClick={handleUpdate}
+                  disabled={busy || updating}
+                >
+                  {t("bleUpdateBtn")}
+                </button>
+              </>
+            ) : (
+              <div className="ble-update__uptodate">{t("bleUpdateUpToDate")}</div>
+            )}
+
+            {updateMsg ? (
+              <div className="ble-update__msg" aria-live="polite">
+                {updateMsg}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

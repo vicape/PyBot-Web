@@ -8,9 +8,16 @@ offsets ni compilacion: el "binario" es este archivo `.py` versionado en el repo
 ## Archivos
 
 - `main.py` — runtime completo (BluetoothTransport + CommandProcessor + **ProgramManager** +
-  **DeployReceiver** + HardwareController). Además de PING/INFO/LED: **ejecuta** el programa del
-  alumno recibido por BLE (RUN temporal) y **lo baja** de forma persistente (DEPLOY) para que
-  corra solo al encender (autostart). Runtime **3.0.1**, protocolo **3.0** (framing compatible).
+  **DeployReceiver** + **RuntimeUpdateReceiver** + HardwareController). Además de PING/INFO/LED:
+  **ejecuta** el programa del alumno recibido por BLE (RUN temporal), **lo baja** de forma
+  persistente (DEPLOY) para que corra solo al encender (autostart), y **se actualiza a sí mismo
+  por BLE** (OTA, comandos `UPDATE:*`). Runtime **3.1.0**, protocolo **3.1** (framing 3.0
+  compatible; el OTA es aditivo).
+- `boot.py` — **updater/rollback manager MÍNIMO y estable** (sin BLE/EDA6/hardware). MicroPython
+  lo ejecuta **antes** de `main.py` en cada boot: aplica una actualización pendiente
+  (`pybot_runtime.new` → `main.py`, con backup `pybot_runtime.bak`) o hace **rollback** si el
+  runtime nuevo no confirmó su arranque. **Nunca** impide que `main.py` arranque (try/except
+  global). Se instala por USB junto con el runtime y habilita las futuras actualizaciones OTA.
 
 El runtime importa dos preludios instalados en la placa (por USB, junto con `main.py`):
 `pybot_mpy.py` (`pin/servo/motor/wait` + cleanup `_pybot_cleanup`) y `EDA6.py` (funciones EDA6).
@@ -21,6 +28,10 @@ Archivos que crea/gestiona el runtime en la placa (NO se borran al actualizar el
 (safe boot / fallos de autostart) y los efímeros del reemplazo **transaccional** del DEPLOY:
 `pybot_app.tmp`/`pybot_app.bak` (programa) y `pybot_app.json.tmp`/`pybot_app.json.bak` (metadata).
 Al boot, un DEPLOY interrumpido por un corte de energía se **repara** desde los backups.
+
+Archivos efímeros del **OTA** (los gestiona `boot.py`; NO tocan `pybot_app.*`): `pybot_runtime.new`
+(runtime nuevo descargado por BLE, aún sin aplicar), `pybot_runtime.bak` (backup del `main.py`
+anterior para rollback) y `pybot_update.json` (estado transaccional `pending/applied/confirmed`).
 
 ## Requisito
 
@@ -86,8 +97,32 @@ diferida), no al recibir el pedido; si la persistencia falla, responden `APP:ERR
 / `DELETE_FAILED` (sin éxito ficticio). Errores APP: `NO_APP, BUSY, READ_FAILED, WRITE_FAILED,
 DELETE_FAILED, BAD_FRAME`.
 
-Ver `docs/PYBOT_BLE_RUNTIME.md` (secciones 5-bis y **5-ter**) para el detalle de modos,
-streaming, STOP confiable, DEPLOY, autostart y límites. Las respuestas se envían por TX en
+## OTA Runtime Update (UPDATE) — protocolo 3.1
+
+Actualiza el propio `main.py` **por BLE**, transaccional y verificado (SHA-256), con rollback.
+La **primera** instalación es por USB (deja `boot.py` + `main.py`); las **futuras** van por BLE.
+
+| Web → ESP32 | ESP32 → Web |
+| --- | --- |
+| `UPDATE:INFO` | `UPDATE:INFO:<json>` (versión + capabilities del updater) |
+| `UPDATE:BEGIN:<version>:<size>:<hash>` | `UPDATE:READY` / `UPDATE:ERROR:<code>` |
+| `UPDATE:CHUNK:<base64>` | `UPDATE:ACK:<n>` (ACK por bloque) |
+| `UPDATE:END` | `UPDATE:VERIFY:OK` / `UPDATE:ERROR:<code>` |
+| `UPDATE:APPLY` | (escribe `pending` + `machine.reset()` → `boot.py` hace el swap) |
+| `UPDATE:ABORT` | (borra `pybot_runtime.new`; `main.py` intacto) |
+
+Descarga a `pybot_runtime.new` + verificación **size + SHA-256** (`uhashlib`; si no hay →
+`UPDATE:ERROR:HASH_UNAVAILABLE`). Tras `APPLY`, **`boot.py`** respalda `main.py`→`pybot_runtime.bak`,
+instala el `.new`→`main.py` y el runtime nuevo **confirma** su arranque (limpia estado + borra el
+backup) o, si no confirma, el siguiente boot hace **rollback**. `main.py` **nunca** se sobrescribe
+durante la transferencia. No actualiza si hay RUN/APP/DEPLOY activos (`UPDATE:ERROR:BUSY`). Errores:
+`BUSY, UNSUPPORTED, BAD_VERSION, TOO_LONG, BAD_ENCODING, BAD_HASH, HASH_UNAVAILABLE, WRITE_FAILED,
+VERIFY_FAILED, NO_SPACE, BAD_FRAME, INCOMPATIBLE`. `pybot_app.py`/`pybot_app.json`/autostart se
+**conservan**. **No** es "imposible de brickear": es **transaccional con rollback**; la recuperación
+por USB es el último recurso.
+
+Ver `docs/PYBOT_BLE_RUNTIME.md` (secciones 5-bis, **5-ter** y **5-quater**) para el detalle de
+modos, streaming, STOP confiable, DEPLOY, autostart, **OTA** y límites. Las respuestas se envían por TX en
 trozos de 20 bytes con `\n` final para tolerar el MTU BLE por defecto; los payloads arbitrarios
 van en base64.
 

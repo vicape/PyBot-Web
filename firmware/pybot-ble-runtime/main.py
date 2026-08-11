@@ -58,19 +58,26 @@ except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
 # --- Version / protocolo (legibles por el comando INFO) ---
-PYBOT_RUNTIME_VERSION = "3.0.1"
+# FUENTE DE VERDAD: esta version debe coincidir con PYBOT_RUNTIME_VERSION en
+# src/bleProtocol.js (la web publica la MISMA version y compara contra la INFO
+# instalada para ofrecer la actualizacion OTA por BLE).
+PYBOT_RUNTIME_VERSION = "3.1.0"
 # Protocolo 3.0: agrega STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY
 # persistente verificado, control de app (APP:*) y autostart con safe boot.
 # 3.0.1 (compatible): DEPLOY realmente transaccional con backup/rollback,
 # HASH obligatorio si se declara (DEPLOY:ERROR:HASH_UNAVAILABLE), APP:STOP/DELETE
 # confirmados de verdad (detienen antes de responder) y errores de filesystem
 # explicitos (APP:ERROR:WRITE_FAILED / DELETE_FAILED). El framing NO cambia.
-PYBOT_PROTOCOL_VERSION = "3.0"
+# 3.1 (extension COMPATIBLE): actualizacion OTA del propio runtime por BLE
+# (UPDATE:*), verificada por SHA-256, con apply transaccional en boot.py y
+# rollback. Aditivo: no cambia RUN/DEPLOY/APP. La capability "runtime-update"
+# permite a la web decidir por capabilities (no por numero de version).
+PYBOT_PROTOCOL_VERSION = "3.1"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
 # Capacidades declaradas en INFO para que la web prefiera capabilities sobre
 # inferencias fragiles por numero de version.
-PYBOT_CAPABILITIES = ("run", "stop", "deploy", "app-control", "autostart")
+PYBOT_CAPABILITIES = ("run", "stop", "deploy", "app-control", "autostart", "runtime-update")
 
 # --- LED integrado (ESP32 clasico / WROOM DevKit) ---
 BUILTIN_LED_PIN = 2
@@ -87,6 +94,20 @@ _MAX_RUN_B64 = const(12000)  # ~8 KB de fuente para RUN temporal (base64 ~1.34x)
 #   - DEPLOY persistente: mas grande, se escribe a flash por chunks.
 MAX_RUN_PROGRAM_SIZE = const(8192)
 MAX_DEPLOY_PROGRAM_SIZE = const(16384)
+
+# Tamano maximo del RUNTIME nuevo para una actualizacion OTA (bytes de fuente
+# UTF-8). Holgado para el runtime actual (~45 KB) sin agotar el filesystem. Debe
+# coincidir con MAX_RUNTIME_UPDATE_SIZE en src/bleProtocol.js.
+MAX_RUNTIME_UPDATE_SIZE = const(65536)
+
+# Archivos del canal de actualizacion OTA (los gestiona boot.py en el arranque):
+#   - pybot_runtime.new : runtime nuevo descargado por BLE (NUNCA es main.py hasta
+#                         que boot.py lo instala tras verificar).
+#   - pybot_runtime.bak : backup del main.py anterior (para rollback).
+#   - pybot_update.json : estado del update (pending/applied/...).
+_RUNTIME_NEW = "pybot_runtime.new"
+_RUNTIME_BAK = "pybot_runtime.bak"
+_UPDATE_STATE = "pybot_update.json"
 
 # Preludios instalados en la placa (por USB) que el runtime importa al ejecutar.
 _MPY_LIB = "pybot_mpy"  # define pin/servo/motor/wait (GPIO directo)
@@ -136,6 +157,7 @@ STATE_DISCONNECTED = "DISCONNECTED"
 _NO_NL_COMMANDS = (
     "PING", "INFO", "LED,1", "LED,0", "STOP", "STOP:FORCE",
     "APP:INFO", "APP:START", "APP:STOP", "APP:DELETE",
+    "UPDATE:INFO", "UPDATE:END", "UPDATE:APPLY", "UPDATE:ABORT",
 )
 
 # Tipos de dato para el payload de advertising
@@ -234,6 +256,54 @@ def _set_safe_boot(flag):
 
 def _load_app_meta():
     return _read_json(_APP_META)
+
+
+def _version_is_newer(candidate, current):
+    """True si `candidate` es ESTRICTAMENTE mayor que `current` ("x.y.z").
+    Tolerante: partes no numericas o faltantes cuentan como 0. Se usa para
+    rechazar una actualizacion a la misma version o mas vieja (UPDATE BAD_VERSION).
+    """
+    def _parse(v):
+        out = []
+        for p in str(v).split("."):
+            try:
+                out.append(int(p))
+            except Exception:
+                out.append(0)
+        return out
+    a = _parse(candidate)
+    b = _parse(current)
+    n = len(a) if len(a) > len(b) else len(b)
+    for i in range(n):
+        x = a[i] if i < len(a) else 0
+        y = b[i] if i < len(b) else 0
+        if x > y:
+            return True
+        if x < y:
+            return False
+    return False
+
+
+def _fs_free_bytes():
+    """Bytes libres del filesystem raiz, o -1 si statvfs no esta disponible."""
+    try:
+        st = os.statvfs("/")
+        return st[0] * st[3]  # f_frsize * f_bavail
+    except Exception:
+        return -1
+
+
+def _confirm_update_if_pending():
+    """Confirmacion de arranque del OTA: se llama SOLO cuando el runtime ya
+    importo OK, levanto BLE y registro GATT (quedo operacional). Si venimos de un
+    update recien aplicado (state 'applied'), limpiar el estado y borrar el backup:
+    a partir de aca no hay rollback posible. Si el runtime nuevo hubiera fallado en
+    importar/levantar BLE, esto NO se ejecutaria y el proximo boot haria rollback.
+    """
+    st = _read_json(_UPDATE_STATE)
+    if isinstance(st, dict) and st.get("state") == "applied":
+        _remove(_RUNTIME_BAK)
+        _remove(_UPDATE_STATE)
 
 
 def _advertising_payload(name=None, services=None):
@@ -998,6 +1068,214 @@ class DeployReceiver:
         return _atomic_install_app(meta, self._size)
 
 
+class RuntimeUpdateReceiver:
+    """Recibe por BLE un runtime NUEVO (main.py) y lo actualiza de forma segura.
+
+    Protocolo (canal ADMINISTRATIVO, no educativo):
+      UPDATE:INFO                          -> UPDATE:INFO:<json>
+      UPDATE:BEGIN:<version>:<size>:<hash> -> UPDATE:READY | UPDATE:ERROR:<code>
+      UPDATE:CHUNK:<b64>  (por bloque)     -> UPDATE:ACK:<n> | UPDATE:ERROR:<code>
+      UPDATE:END                           -> UPDATE:VERIFY:OK | UPDATE:ERROR:<code>
+      UPDATE:APPLY                         -> UPDATE:APPLYING (la placa resetea)
+
+    NUNCA sobrescribe main.py durante la transferencia: descarga completo a
+    pybot_runtime.new, verifica size + SHA-256, y solo en APPLY escribe
+    pybot_update.json (state pending) y hace machine.reset(): el swap con backup y
+    rollback lo hace boot.py en el proximo arranque. Antes de actualizar hay que
+    estar en estado seguro (sin RUN/APP corriendo ni DEPLOY en curso): si no, BUSY.
+    """
+
+    def __init__(self, send, manager, deploy):
+        self._send = send
+        self._manager = manager
+        self._deploy = deploy
+        self._active = False
+        self._fh = None
+        self._version = ""
+        self._size = 0
+        self._hash = ""
+        self._written = 0
+        self._chunk_index = 0
+        self._verified = False
+
+    def _busy(self):
+        # Estado seguro: no actualizar con un programa (RUN temporal o APP
+        # persistente) corriendo ni con un DEPLOY en curso.
+        if self._manager.running:
+            return True
+        if getattr(self._deploy, "_active", False):
+            return True
+        return False
+
+    def info(self):
+        has_hash = uhashlib is not None
+        st = _read_json(_UPDATE_STATE)
+        state = st.get("state") if isinstance(st, dict) else "idle"
+        return (
+            'UPDATE:INFO:{"runtime":"%s","protocol":"%s","max":%d,'
+            '"hash":%s,"state":"%s"}'
+            % (
+                PYBOT_RUNTIME_VERSION,
+                PYBOT_PROTOCOL_VERSION,
+                MAX_RUNTIME_UPDATE_SIZE,
+                "true" if has_hash else "false",
+                state or "idle",
+            )
+        )
+
+    def begin(self, version, size, hexhash):
+        if self._busy():
+            self._send("UPDATE:ERROR:BUSY")
+            return
+        if self._active:
+            self._abort_file()
+        v = (version or "").strip()
+        # Rechazar version invalida o que NO sea mas nueva que la instalada.
+        if not v or not _version_is_newer(v, PYBOT_RUNTIME_VERSION):
+            self._send("UPDATE:ERROR:BAD_VERSION")
+            return
+        try:
+            sz = int(size)
+        except Exception:
+            self._send("UPDATE:ERROR:BAD_FRAME")
+            return
+        if sz <= 0 or sz > MAX_RUNTIME_UPDATE_SIZE:
+            self._send("UPDATE:ERROR:TOO_LONG")
+            return
+        # Verificar espacio si el port expone statvfs (si no, no afirmar NO_SPACE:
+        # el open/write fallara con WRITE_FAILED si realmente no hay lugar).
+        free = _fs_free_bytes()
+        if free >= 0 and free < (sz + 4096):
+            self._send("UPDATE:ERROR:NO_SPACE")
+            return
+        _remove(_RUNTIME_NEW)
+        try:
+            self._fh = open(_RUNTIME_NEW, "wb")
+        except Exception:
+            self._send("UPDATE:ERROR:WRITE_FAILED")
+            return
+        self._active = True
+        self._version = v
+        self._size = sz
+        self._hash = (hexhash or "").lower()
+        self._written = 0
+        self._chunk_index = 0
+        self._verified = False
+        self._send("UPDATE:READY")
+
+    def chunk(self, b64):
+        if not self._active:
+            self._send("UPDATE:ERROR:BAD_FRAME")
+            return
+        try:
+            data = ubinascii.a2b_base64(b64)
+        except Exception:
+            self._fail("BAD_ENCODING")
+            return
+        self._written += len(data)
+        if self._written > self._size:
+            self._fail("TOO_LONG")
+            return
+        try:
+            self._fh.write(data)
+        except Exception:
+            self._fail("WRITE_FAILED")
+            return
+        idx = self._chunk_index
+        self._chunk_index += 1
+        self._send("UPDATE:ACK:%d" % idx)
+
+    def end(self):
+        if not self._active:
+            self._send("UPDATE:ERROR:BAD_FRAME")
+            return
+        try:
+            self._fh.flush()
+            self._fh.close()
+        except Exception:
+            pass
+        self._fh = None
+        self._active = False
+
+        actual = _file_size(_RUNTIME_NEW)
+        if actual != self._size:
+            self._cleanup()
+            self._send("UPDATE:ERROR:VERIFY_FAILED")
+            return
+        if self._hash:
+            digest = _sha256_file(_RUNTIME_NEW)
+            # HASH obligatorio si se declaro: sin uhashlib no podemos verificar la
+            # integridad, asi que NO afirmamos una verificacion que no ocurrio.
+            if digest is None:
+                self._cleanup()
+                self._send("UPDATE:ERROR:HASH_UNAVAILABLE")
+                return
+            if digest != self._hash:
+                self._cleanup()
+                self._send("UPDATE:ERROR:BAD_HASH")
+                return
+        self._verified = True
+        self._send("UPDATE:VERIFY:OK")
+
+    def apply(self):
+        # Solo tras VERIFY:OK, con el .new presente y del tamano correcto.
+        if not self._verified or not _file_exists(_RUNTIME_NEW):
+            self._send("UPDATE:ERROR:BAD_FRAME")
+            return
+        if _file_size(_RUNTIME_NEW) != self._size:
+            self._cleanup()
+            self._send("UPDATE:ERROR:VERIFY_FAILED")
+            return
+        st = {
+            "state": "pending",
+            "from": PYBOT_RUNTIME_VERSION,
+            "to": self._version,
+            "size": self._size,
+            "hash": self._hash,
+        }
+        # Confirmar que el estado quedo persistido ANTES de resetear (si no, boot.py
+        # no aplicaria y quedariamos con el runtime viejo, sin corrupcion).
+        if not _write_json(_UPDATE_STATE, st) or _read_json(_UPDATE_STATE) is None:
+            self._send("UPDATE:ERROR:WRITE_FAILED")
+            return
+        self._send("UPDATE:APPLYING")
+        try:
+            time.sleep_ms(80)  # dar tiempo a que salga el frame por BLE
+        except Exception:
+            pass
+        machine.reset()  # boot.py hara el swap con backup + rollback
+
+    def abort(self):
+        if self._active or self._fh:
+            self._abort_file()
+        self._verified = False
+
+    def _abort_file(self):
+        if self._fh:
+            try:
+                self._fh.close()
+            except Exception:
+                pass
+        self._fh = None
+        self._active = False
+        self._cleanup()
+
+    def _cleanup(self):
+        _remove(_RUNTIME_NEW)
+
+    def _fail(self, code):
+        if self._fh:
+            try:
+                self._fh.close()
+            except Exception:
+                pass
+        self._fh = None
+        self._active = False
+        self._verified = False
+        self._cleanup()
+        self._send("UPDATE:ERROR:" + code)
+
+
 def _app_info_json(manager):
     meta = _load_app_meta()
     st = _load_state()
@@ -1169,6 +1447,7 @@ def main():
 
     manager = ProgramManager(_send)
     deploy = DeployReceiver(_send, manager)
+    updater = RuntimeUpdateReceiver(_send, manager, deploy)
 
     def _force_reset():
         # Recuperacion REAL desde el IRQ (soft-callback: corre entre bytecodes ->
@@ -1269,6 +1548,9 @@ def main():
         if t.startswith("APP:"):
             _handle_app(t)
             return None
+        if t.startswith("UPDATE:"):
+            _handle_update(updater, t)
+            return None
         return processor.process(t)
 
     recovery = {"timer": None}
@@ -1302,6 +1584,8 @@ def main():
     def on_disconnect():
         # DEPLOY en curso -> cancelar (conserva la app anterior).
         deploy.abort()
+        # UPDATE en curso -> cancelar (borra el .new incompleto; main.py intacto).
+        updater.abort()
         # RUN temporal -> detener al perder el controlador BLE (cooperativo) y
         # armar el watchdog de reset por si el programa no cede.
         # APP persistente autonoma -> NO detener (ese es el punto).
@@ -1311,6 +1595,13 @@ def main():
 
     transport = BluetoothTransport(dev_name, on_command, on_disconnect)
     holder["transport"] = transport
+
+    # CONFIRMACION DE ARRANQUE del OTA: el runtime ya importo OK, levanto BLE y
+    # registro el GATT (quedo operacional). Si venimos de un update recien
+    # aplicado por boot.py, confirmarlo aca (limpia el estado + borra el backup).
+    # Si el runtime nuevo hubiera fallado antes de este punto, esto no correria y
+    # el proximo boot haria rollback al runtime anterior.
+    _confirm_update_if_pending()
 
     # Si un DEPLOY quedo a medias por un corte de energia, restaurar un estado
     # consistente (app/metadata anterior desde el backup) y limpiar temporales.
@@ -1370,6 +1661,32 @@ def _handle_deploy(deploy, line):
         deploy.abort()
     else:
         deploy._send("DEPLOY:ERROR:BAD_FRAME")
+
+
+def _handle_update(updater, line):
+    """Interpreta un frame UPDATE:* (actualizacion OTA del runtime por BLE)."""
+    if line == "UPDATE:INFO":
+        updater._send(updater.info())
+    elif line.startswith("UPDATE:BEGIN:"):
+        rest = line[len("UPDATE:BEGIN:"):]
+        parts = rest.split(":")
+        if len(parts) < 3:
+            updater._send("UPDATE:ERROR:BAD_FRAME")
+            return
+        version = parts[0].strip()
+        size = parts[1].strip()
+        hexhash = parts[2].strip().lower()
+        updater.begin(version, size, hexhash)
+    elif line.startswith("UPDATE:CHUNK:"):
+        updater.chunk(line[len("UPDATE:CHUNK:"):].strip())
+    elif line == "UPDATE:END":
+        updater.end()
+    elif line == "UPDATE:APPLY":
+        updater.apply()
+    elif line == "UPDATE:ABORT":
+        updater.abort()
+    else:
+        updater._send("UPDATE:ERROR:BAD_FRAME")
 
 
 main()

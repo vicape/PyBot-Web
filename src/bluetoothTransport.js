@@ -250,6 +250,60 @@ export class BluetoothTransport {
   }
 
   /**
+   * Reconecta al MISMO `BluetoothDevice` ya autorizado, SIN volver a mostrar el
+   * selector del navegador. Se usa tras una actualizacion OTA: al aplicar, la
+   * placa se resetea y el GATT se cae; hay que esperar a que vuelva el advertising
+   * y reconectar. Reintenta hasta `timeoutMs` porque el reinicio del ESP32 tarda.
+   *
+   * NO requiere un nuevo `requestDevice()` porque `this._device` se conserva tras
+   * `gattserverdisconnected` (solo `disconnect()` lo descarta). Si el dispositivo
+   * ya no esta (p.ej. se llamo `disconnect()`), lanza `BLE_NO_DEVICE`.
+   *
+   * @param {number} [timeoutMs] ventana total de reintentos.
+   * @returns {Promise<{ deviceName: string|null }>}
+   * @throws {Error} "BLE_NO_DEVICE" | "BLE_RECONNECT_FAIL"
+   */
+  async reconnect(timeoutMs = 20000) {
+    if (!this._device) throw new Error("BLE_NO_DEVICE");
+    this._setState(BLE_STATE.CONNECTING);
+    const deadline = Date.now() + timeoutMs;
+    let attempted = false;
+    while (Date.now() < deadline) {
+      // Espaciar reintentos (dar tiempo al ESP32 a reiniciar y anunciar).
+      if (attempted) {
+        await new Promise((r) => setTimeout(r, 700));
+      }
+      attempted = true;
+      try {
+        this._device.addEventListener(
+          "gattserverdisconnected",
+          this._onDisconnected,
+        );
+        this._server = await this._device.gatt.connect();
+        this._service = await this._server.getPrimaryService(SERVICE_UUID);
+        this._rxChar = await this._service.getCharacteristic(RX_UUID);
+        this._txChar = await this._service.getCharacteristic(TX_UUID);
+        await this._txChar.startNotifications();
+        this._txChar.addEventListener(
+          "characteristicvaluechanged",
+          this._onTxValueChanged,
+        );
+        this._rxBuffer = "";
+        // El INFO cacheado corresponde al runtime ANTERIOR: se releera tras
+        // reconectar para verificar la nueva version.
+        this._deviceInfo = null;
+        this._setState(BLE_STATE.CONNECTED);
+        return { deviceName: this._device?.name ?? null };
+      } catch {
+        await this._cleanup();
+        /* reintento */
+      }
+    }
+    this._setState(BLE_STATE.DISCONNECTED);
+    throw new Error("BLE_RECONNECT_FAIL");
+  }
+
+  /**
    * Devuelve info del dispositivo (nombre BLE y, si se solicita INFO, mas datos).
    * @returns {{ deviceName: string|null, info: object|null }}
    */

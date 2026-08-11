@@ -55,8 +55,9 @@ Con la placa **Arduino Uno/Nano** seleccionada, el menú ofrece **"Bajar a Ardui
 ### Bluetooth (BLE): usar la ESP32 sin cables
 
 Con una ESP32 preparada (menú **Placa → Herramientas → "Instalar PyBot Bluetooth"** por USB, que
-graba `main.py` + `pybot_mpy.py` + `EDA6.py`), se puede trabajar **sin cables** por Bluetooth
-(**Chrome/Edge de escritorio**). Runtime **3.0.1** / protocolo **3.0** (framing compatible).
+graba `boot.py` + `main.py` + `pybot_mpy.py` + `EDA6.py`), se puede trabajar **sin cables** por
+Bluetooth (**Chrome/Edge de escritorio**). Runtime **3.1.0** / protocolo **3.1** (framing 3.0
+compatible).
 
 Dos formas de correr el programa del alumno:
 
@@ -71,6 +72,17 @@ Dos formas de correr el programa del alumno:
   cycle, mientras el Bluetooth sigue disponible para administrarla (**Ejecutar guardado / Detener /
   Borrar / Autostart**). El **Detener** también controla una app autónoma corriendo (incluso si
   arrancó por autostart, sin sesión previa): el ESP32 es la fuente de verdad.
+
+**Actualización del runtime por Bluetooth (OTA):** desde la 3.1, una placa con `boot.py` +
+runtime 3.1 puede **actualizar su propio runtime por BLE** (sin volver a USB salvo recuperación
+extrema). Al conectar, si hay una versión más nueva publicada, el panel Bluetooth muestra
+*"Actualización de PyBot Bluetooth disponible X→Y"* y un botón **Actualizar**. La transferencia es
+**verificada (SHA-256), transaccional y con rollback**: `main.py` nunca se sobrescribe durante el
+envío (se descarga a `pybot_runtime.new` y un `boot.py` estable hace el swap con backup); si el
+runtime nuevo no confirma su arranque, el siguiente boot **revierte** al anterior. El programa del
+alumno y el autostart se **conservan**. La **primera** instalación sigue siendo por USB (deja
+`boot.py`); las **futuras** van por BLE. No es "imposible de brickear": es *transaccional con
+rollback*, y la recuperación por USB queda como último recurso.
 
 También podés **Bajar a ESP32** por **USB** (flujo existente): se sigue priorizando el cable
 cuando hay sesión serial. **Nota:** ese "Bajar a ESP32" por **USB** escribe el programa como

@@ -32,18 +32,19 @@ import {
   parseInfoResponse,
 } from "../src/bleProtocol.js";
 
-test("version and protocol bumped to 3.x", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.0.1");
-  assert.equal(PYBOT_PROTOCOL_VERSION, "3.0");
+test("version and protocol bumped to 3.1 (OTA runtime update)", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "3.1.0");
+  assert.equal(PYBOT_PROTOCOL_VERSION, "3.1");
 });
 
-test("capabilities include run/stop/deploy/app-control/autostart", () => {
+test("capabilities include run/stop/deploy/app-control/autostart/runtime-update", () => {
   assert.deepEqual([...PYBOT_CAPABILITIES], [
     "run",
     "stop",
     "deploy",
     "app-control",
     "autostart",
+    "runtime-update",
   ]);
 });
 
