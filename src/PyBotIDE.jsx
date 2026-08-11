@@ -36,6 +36,7 @@ import {
   recoverEsp32Repl,
   downloadToArduino,
   installBleRuntime,
+  clearPersistentAppUsb,
   runMemoryDiagnostic,
   bleDeployProgram,
   bleRunSavedApp,
@@ -955,6 +956,23 @@ export default function PyBotIDE() {
     }
   }, [connected, appendConsole]);
 
+  const onClearPersistentAppUsb = useCallback(async () => {
+    if (!connected) {
+      appendConsole(t("needConnect") + "\n", "err");
+      return;
+    }
+    if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") return;
+    appendConsole(t("bleClearAppStart") + "\n", "info");
+    try {
+      await clearPersistentAppUsb();
+      await hardwareDisconnect();
+      setConnected(false);
+      appendConsole(t("bleClearAppOk") + "\n", "info");
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    }
+  }, [connected, boardType, appendConsole]);
+
   const refreshBleAppStatus = useCallback(async () => {
     try {
       const info = await bleGetAppInfo();
@@ -1680,6 +1698,17 @@ export default function PyBotIDE() {
                             {t("bleInstallBtn")}
                           </button>
                           <div className="toolbar-menu-hint">{t("bleInstallMenuHint")}</div>
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
+                            onClick={() => {
+                              onClearPersistentAppUsb();
+                              setBoardMenuOpen(false);
+                            }}
+                          >
+                            {t("bleClearAppBtn")}
+                          </button>
+                          <div className="toolbar-menu-hint">{t("bleClearAppHint")}</div>
                           <button
                             type="button"
                             className="toolbar-menu-item toolbar-menu-item--secondary"

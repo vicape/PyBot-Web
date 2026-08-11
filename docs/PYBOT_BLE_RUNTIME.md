@@ -47,7 +47,13 @@ nuevos; no altera EDA6, USB/Firmata, Pyodide ni el mecanismo de ejecución exist
 > GATT y se procesan en el hilo principal (`poll_commands`). Así `RUN:READY` ya no hace
 > `gatts_notify`+`sleep` dentro del IRQ (que tras un Run→Stop dejaba el segundo Run sin
 > READY y caía el BLE). `STOP`/`STOP:FORCE` siguen siendo urgentes (solo flags en IRQ).
-> Actualización desde 3.2.x: **OTA o USB**.
+>
+> **Runtime 3.2.4 (crítico aula):** con app persistente en `exec()`, el main loop no
+> drena la cola — en 3.2.3 `STOP:FORCE` solo seteaba un flag que nunca se veía → placa
+> zombie. Ahora `STOP:FORCE` agenda reset por **Timer**; `APP:STOP`/`APP:DELETE` son
+> urgentes (flags en IRQ); tras FORCE, `safe_boot` es sticky y se apaga autostart.
+> Recuperación USB: «Borrar programa BLE de la placa (USB)» (no alcanza solo reinstalar
+> el runtime: ese flujo **preserva** `pybot_app.*`). Actualización desde 3.2.x: **OTA o USB**.
 
 ## 1. Arquitectura y enfoque elegido
 
@@ -285,19 +291,17 @@ El programa del alumno **nunca** reemplaza el runtime; son archivos distintos.
   recuperación llaman `detenerTodo()` (EDA6) y `_pybot_cleanup()` (GPIO directo: apaga/libera
   PWM y salidas creadas por PyBot, no toca entradas).
 - **`STOP:FORCE` (recuperación REAL):** un bucle que **no** cede (`while True: pass`) no puede
-  cortarse por software cooperativo. `STOP:FORCE` marca *safe boot* y hace `machine.reset()`
-  **desde el propio IRQ BLE** (que corre entre bytecodes), lo que detiene cualquier bucle. La
-  web escala a `STOP:FORCE` automáticamente si tras `STOP` no llega confirmación (~3.5 s). La UI
-  muestra *"Deteniendo…"* mientras espera y *"Programa detenido"* solo con evidencia
-  (`RUN:STOPPED` o la desconexión por el reset).
-  **El reset por hardware ES el mecanismo final de recuperación:** al reiniciar, todos los
-  GPIO/PWM vuelven a su estado por defecto (entradas), por lo que el hardware queda seguro **sin**
-  ejecutar un cleanup complejo dentro del IRQ (que sería riesgoso: no se hace). Antes del reset se
-  persiste *safe boot* y se **verifica** el write; si no se pudo persistir, como *fallback* se
-  intenta desactivar el autostart de la metadata (y el `fail_count` sigue siendo la última red).
-- **SAFE BOOT (anti boot-loop):** tras un `STOP:FORCE` (o 3 fallos consecutivos de autostart),
-  el runtime arranca con BLE pero **no** relanza la app; luego limpia el flag. Así no hay
-  ciclos de reinicio.
+  cortarse por software cooperativo. `STOP:FORCE` marca *safe boot*, apaga autostart y agenda
+  `machine.reset()` por **Timer** (el IRQ GATT solo setea flags / arma el Timer — nunca hace
+  notify/sleep/reset en el IRQ). Esto funciona **aunque** el main loop esté bloqueado en
+  `exec()` de la app persistente (regresión 3.2.3 → fix 3.2.4). La web escala a `STOP:FORCE`
+  automáticamente si tras `STOP`/`APP:STOP` no llega confirmación (~3.5 s). La UI muestra
+  *"Deteniendo…"* mientras espera y *"Programa detenido"* solo con evidencia (`RUN:STOPPED` o
+  la desconexión por el reset). Si el FORCE venía de un `APP:DELETE` pendiente, borra
+  `pybot_app.*` **antes** del reset.
+- **SAFE BOOT (anti boot-loop, sticky en 3.2.4):** tras un `STOP:FORCE`, el runtime arranca con
+  BLE pero **no** relanza la app y **mantiene** `safe_boot` hasta un `APP:START` explícito o un
+  DEPLOY nuevo (no se limpia solo al boot). Además se apaga `autostart` en metadata.
 - **Recuperación del RUN temporal sin desenchufar:** al perder el BLE con un RUN **temporal** en
   curso, el runtime pide STOP cooperativo y arma un *watchdog* (soft `Timer`) que, si el programa
   no cede en ~1.8 s y seguimos desconectados, fuerza el reset — así un programa temporal no queda

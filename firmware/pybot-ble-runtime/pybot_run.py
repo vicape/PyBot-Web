@@ -144,6 +144,14 @@ class ProgramManager:
         except Exception:
             self._send("APP:ERROR:READ_FAILED")
             return False
+        # Arranque explicito del usuario: limpia safe_boot sticky (post-FORCE).
+        try:
+            st = _load_state()
+            if st.get("safe_boot"):
+                st["safe_boot"] = False
+                _save_state(st)
+        except Exception:
+            pass
         self._pending_code = code
         self._mode = "eda6" if meta.get("mode") == "eda6" else "mpy"
         self._profile = "ESP32" if meta.get("profile") == "ESP32" else "WEMOS"

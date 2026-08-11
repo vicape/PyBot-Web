@@ -234,7 +234,7 @@ const STRINGS = {
     eda6VerifyBtn: "Verificar EDA6",
     bleInstallBtn: "Instalar PyBot Bluetooth",
     bleInstallMenuHint:
-      "Prepara la ESP32 para usarse sin cables por Bluetooth desde PyBot.",
+      "Prepara la ESP32 para usarse sin cables por Bluetooth desde PyBot. No borra el programa del alumno (pybot_app).",
     bleInstallStart: "Instalando PyBot Bluetooth en la ESP32 (por USB)…",
     bleInstallLibs: "Instalando librerías en la placa (MicroPython + EDA6)…",
     bleInstallProgress: "Instalando runtime BLE… {pct}%",
@@ -243,6 +243,12 @@ const STRINGS = {
     bleInstallOk: "PyBot Bluetooth instalado correctamente. ({size} bytes)",
     bleInstallReady: "El ESP32 ya puede utilizarse mediante Bluetooth.",
     bleInstallUnplug: "Podés desconectar el cable de datos.",
+    bleClearAppBtn: "Borrar programa BLE de la placa (USB)",
+    bleClearAppHint:
+      "Recuperación: borra pybot_app.py/json (programa bajado por Bluetooth) sin quitar el runtime. Usalo si el programa quedó permanente y no responde al Stop.",
+    bleClearAppStart: "Borrando el programa persistente por USB…",
+    bleClearAppOk:
+      "Programa persistente borrado. El runtime Bluetooth sigue. Reconectá por Bluetooth si hace falta.",
     memDiagBtn: "Diagnóstico de memoria (USB)",
     memDiagMenuHint:
       "Revisa por USB si la ESP32 se queda sin memoria al preparar el runtime o activar Bluetooth. Solo lectura: no borra nada ni reinicia.",
@@ -706,7 +712,7 @@ Creado por VIC.`,
     eda6VerifyBtn: "Verify EDA6",
     bleInstallBtn: "Install PyBot Bluetooth",
     bleInstallMenuHint:
-      "Prepares the ESP32 to be used wirelessly over Bluetooth from PyBot.",
+      "Prepares the ESP32 to be used wirelessly over Bluetooth from PyBot. Does not delete the student app (pybot_app).",
     bleInstallStart: "Installing PyBot Bluetooth on the ESP32 (over USB)…",
     bleInstallLibs: "Installing libraries on the board (MicroPython + EDA6)…",
     bleInstallProgress: "Installing BLE runtime… {pct}%",
@@ -715,6 +721,12 @@ Creado por VIC.`,
     bleInstallOk: "PyBot Bluetooth installed successfully. ({size} bytes)",
     bleInstallReady: "The ESP32 can now be used over Bluetooth.",
     bleInstallUnplug: "You can unplug the data cable.",
+    bleClearAppBtn: "Clear BLE program from board (USB)",
+    bleClearAppHint:
+      "Recovery: deletes pybot_app.py/json (Bluetooth-deployed program) without removing the runtime. Use if the program is stuck and Stop does nothing.",
+    bleClearAppStart: "Clearing the persistent program over USB…",
+    bleClearAppOk:
+      "Persistent program cleared. Bluetooth runtime remains. Reconnect over Bluetooth if needed.",
     memDiagBtn: "Memory diagnostic (USB)",
     memDiagMenuHint:
       "Checks over USB whether the ESP32 runs out of memory while preparing the runtime or activating Bluetooth. Read-only: it does not delete anything or restart.",
@@ -1032,14 +1044,20 @@ export function formatPythonError(message) {
   }
   if (/BLE_RUN_NO_READY/i.test(m)) {
     return pick(
-      "La placa no confirmó el inicio por Bluetooth (sin RUN:READY). Si el runtime es anterior a 3.2.3, actualizalo por OTA o “Instalar PyBot Bluetooth” por USB; si no, reconectá y probá de nuevo.",
-      "The board did not confirm start over Bluetooth (no RUN:READY). If the runtime is older than 3.2.3, update via OTA or “Install PyBot Bluetooth” over USB; otherwise reconnect and try again.",
+      "La placa no confirmó el inicio por Bluetooth (sin RUN:READY). Si el runtime es anterior a 3.2.4, actualizalo por OTA o “Instalar PyBot Bluetooth” por USB; si no, reconectá y probá de nuevo.",
+      "The board did not confirm start over Bluetooth (no RUN:READY). If the runtime is older than 3.2.4, update via OTA or “Install PyBot Bluetooth” over USB; otherwise reconnect and try again.",
     );
   }
   if (/BLE_RUN_INTERNAL/i.test(m)) {
     return pick(
-      "La placa falló al preparar la ejecución por Bluetooth. Reinstalá “Instalar PyBot Bluetooth” por USB (runtime 3.2.3+) y volvé a conectar.",
-      "The board failed while preparing Bluetooth execution. Reinstall “Install PyBot Bluetooth” over USB (runtime 3.2.3+) and reconnect.",
+      "La placa falló al preparar la ejecución por Bluetooth. Reinstalá “Instalar PyBot Bluetooth” por USB (runtime 3.2.4+) y volvé a conectar.",
+      "The board failed while preparing Bluetooth execution. Reinstall “Install PyBot Bluetooth” over USB (runtime 3.2.4+) and reconnect.",
+    );
+  }
+  if (/BLE_CLEAR_APP_FAILED/i.test(m)) {
+    return pick(
+      "No se pudo borrar pybot_app.py por USB. Reintentá «Recuperar REPL» y «Borrar programa BLE de la placa».",
+      "Could not delete pybot_app.py over USB. Try «Recover REPL» and «Clear BLE program from board» again.",
     );
   }
   if (/BLE_RUN_ERROR:LOAD/i.test(m)) {

@@ -13,7 +13,7 @@ try:
 except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
-PYBOT_RUNTIME_VERSION = "3.2.3"
+PYBOT_RUNTIME_VERSION = "3.2.4"
 PYBOT_PROTOCOL_VERSION = "3.1"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
@@ -486,9 +486,8 @@ def _load_update():
 
 def _maybe_autostart(manager):
     st = _load_state()
+    # safe_boot sticky: no autostart y no se limpia aqui (solo APP:START/DEPLOY).
     if st.get("safe_boot"):
-        st["safe_boot"] = False
-        _save_state(st)
         return
     if int(st.get("fail_count", 0)) >= _MAX_AUTOSTART_FAILS:
         return
@@ -529,20 +528,38 @@ def main():
             )
         return ctx["updater"]
 
+    def _disable_autostart():
+        try:
+            meta = _load_app_meta()
+            if meta and meta.get("autostart"):
+                meta["autostart"] = False
+                _write_json(_APP_META, meta)
+        except Exception:
+            pass
+
     def _force_reset():
+        # Si APP:DELETE pidio borrar y el programa no cedia, borrar ANTES del reset.
+        m = ctx.get("manager")
+        if m and getattr(m, "_app_ack", None) == "delete":
+            try:
+                from pybot_deploy import _delete_app
+                _delete_app()
+            except Exception:
+                pass
+            try:
+                m._app_ack = None
+            except Exception:
+                pass
         ok = False
         try:
             ok = _set_safe_boot(True)
         except Exception:
             ok = False
+        # Siempre apagar autostart en FORCE: el aula no debe revivir el zombie
+        # en el siguiente power-cycle aunque safe_boot se limpie.
+        _disable_autostart()
         if not ok:
-            try:
-                meta = _load_app_meta()
-                if meta:
-                    meta["autostart"] = False
-                    _write_json(_APP_META, meta)
-            except Exception:
-                pass
+            _disable_autostart()
         try:
             _send("RUN:STOPPED")
         except Exception:
@@ -553,8 +570,32 @@ def main():
             pass
         machine.reset()
 
+    def _schedule_force_reset():
+        """Agenda reset fuera del IRQ. Critico: exec() bloquea el main loop, asi
+        que un flag force_reset solo NO alcanza — hay que usar Timer."""
+        ctx["force_reset"] = True
+        if ctx.get("force_timer_armed"):
+            return
+        ctx["force_timer_armed"] = True
+        try:
+            t = machine.Timer(-1)
+
+            def _cb(_t):
+                try:
+                    _force_reset()
+                except Exception:
+                    try:
+                        machine.reset()
+                    except Exception:
+                        pass
+
+            t.init(period=40, mode=machine.Timer.ONE_SHOT, callback=_cb)
+        except Exception:
+            # Sin Timer: el main loop (si no esta en exec) todavia puede resetear.
+            pass
+
     def on_urgent(text):
-        """Solo flags en IRQ: NUNCA notify/sleep/reset aqui."""
+        """Solo flags / agenda Timer en IRQ: NUNCA notify/sleep/reset directo."""
         try:
             upper = text.strip().upper()
         except Exception:
@@ -566,10 +607,25 @@ def main():
             return True
         if upper == "STOP:FORCE":
             m = ctx["manager"]
-            if m and m.running:
+            if m:
                 m.request_force_stop()
-                ctx["force_reset"] = True
+            # Siempre agendar: recuperacion real aunque exec() tenga el main ocupado.
+            _schedule_force_reset()
             return True
+        # APP:STOP/DELETE deben marcar flags YA: si van a la cola RX y el main
+        # esta bloqueado en exec(), nunca se procesan → placa zombie (regresion 3.2.3).
+        if upper == "APP:STOP":
+            m = ctx["manager"]
+            if m and m.running and m._persistent:
+                m.request_app_stop("stop")
+                return True
+            return False
+        if upper == "APP:DELETE":
+            m = ctx["manager"]
+            if m and m.running and m._persistent:
+                m.request_app_stop("delete")
+                return True
+            return False
         return False
 
     def on_command(text):
@@ -588,9 +644,9 @@ def main():
             return None
         if upper == "STOP:FORCE":
             m = ctx["manager"]
-            if m and m.running:
+            if m:
                 m.request_force_stop()
-                ctx["force_reset"] = True
+            _schedule_force_reset()
             return None
         if t.startswith("RUN:"):
             # Nunca silenciar fallos de lazy-import: el web espera RUN:READY.
@@ -637,6 +693,7 @@ def main():
 
     recovery = {"timer": None}
     ctx["force_reset"] = False
+    ctx["force_timer_armed"] = False
 
     def _arm_disconnect_recovery():
         try:
@@ -650,7 +707,7 @@ def main():
                 reconnected = tr is not None and tr.state == STATE_CONNECTED
                 m = ctx["manager"]
                 if m and m.running and not m._persistent and not reconnected:
-                    ctx["force_reset"] = True
+                    _schedule_force_reset()
 
             t.init(period=1800, mode=machine.Timer.ONE_SHOT, callback=_cb)
         except Exception:
@@ -696,9 +753,11 @@ def main():
 
     try:
         st = _load_state()
+        # safe_boot STICKY: no autostart y NO se limpia aqui. Solo APP:START /
+        # DEPLOY nuevo / clear USB lo quitan. Evita que un power-cycle reviva
+        # el programa problematico tras STOP:FORCE.
         if st.get("safe_boot"):
-            st["safe_boot"] = False
-            _save_state(st)
+            pass
         elif int(st.get("fail_count", 0)) < _MAX_AUTOSTART_FAILS:
             meta = _load_app_meta()
             if meta and meta.get("autostart") and _file_exists(_APP_FILE):

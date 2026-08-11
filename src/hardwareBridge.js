@@ -71,6 +71,7 @@ import {
 import {
   COMMANDS,
   RUN,
+  APP,
   parseInfoResponse,
   runtimeSupportsRun,
   runtimeSupportsDeploy,
@@ -549,7 +550,23 @@ export async function bleStopApp() {
 /** Borra la app persistente y su metadata (NO el runtime/EDA6/pybot_mpy). */
 export async function bleDeleteApp() {
   if (!_bleTransport || !_bleTransport.isConnected()) throw new Error("BLE_NOT_CONNECTED");
-  return appDelete(_bleTransport);
+  try {
+    return await appDelete(_bleTransport);
+  } catch {
+    // App no cooperativa: APP:DELETE (urgente) deja ack=delete; FORCE borra
+    // antes del reset (firmware 3.2.4+) y apaga autostart + safe_boot.
+    try {
+      await _bleTransport.send(APP.DELETE);
+    } catch {
+      /* ignore */
+    }
+    try {
+      await _bleTransport.send(RUN.STOP_FORCE);
+    } catch {
+      /* ignore */
+    }
+    return { ok: true, forced: true };
+  }
 }
 
 /** Habilita/deshabilita el autostart de la app persistente (por BLE). */
@@ -672,8 +689,8 @@ export async function bleUpdateRuntime(hooks = {}) {
  * abstracción para todos los transportes, con el ESP32 como fuente de verdad:
  *   1) SERIAL (_mpSession) → Ctrl-C existente (prioridad serial intacta).
  *   2) BLE, RUN temporal (sesión web) → STOP cooperativo con escalado a FORCE.
- *   3) BLE, app persistente corriendo (aunque haya arrancado por autostart, sin
- *      sesión web) → APP:STOP y, si no cede, escalado a STOP:FORCE (reset).
+ *   3) BLE, app persistente → APP:STOP (no depende de APP:INFO: con exec
+ *      bloqueante INFO puede no responder) y, si no cede, STOP + STOP:FORCE.
  * @returns {Promise<{transport:string, kind?:string}>}
  */
 export async function stopBoardExecution() {
@@ -695,37 +712,26 @@ export async function stopBoardExecution() {
       }
       return { transport: "ble", kind: "run" };
     }
-    // El ESP32 es la fuente de verdad: consultar si hay una app persistente
-    // corriendo (puede haber arrancado antes de que exista la sesión web).
-    let info = null;
+    // App persistente / autostart: pedir APP:STOP siempre (si no hay app
+    // corriendo, el firmware responde APP:OK:STOP al instante). No depender de
+    // APP:INFO: con el main bloqueado en exec() INFO no se drena.
     try {
-      info = await appInfo(_bleTransport);
-    } catch {
-      info = null;
-    }
-    if (info && info.running) {
-      try {
-        // APP:OK:STOP significa "detenida de verdad" (confirmación real).
-        await appStop(_bleTransport);
-      } catch {
-        // No cooperativo / timeout → escalado a STOP:FORCE (reset + safe boot).
-        try {
-          await _bleTransport.send(RUN.STOP_FORCE);
-        } catch {
-          /* ignore */
-        }
-      }
+      await appStop(_bleTransport);
       return { transport: "ble", kind: "app" };
-    }
-    // Sin evidencia de ejecución: STOP cooperativo best-effort.
-    if (_bleRun) {
+    } catch {
+      // Timeout / no cooperativo → STOP + FORCE (Timer en firmware 3.2.4+).
       try {
-        await _bleRun.stop();
+        await _bleTransport.send(RUN.STOP);
       } catch {
         /* ignore */
       }
+      try {
+        await _bleTransport.send(RUN.STOP_FORCE);
+      } catch {
+        /* ignore */
+      }
+      return { transport: "ble", kind: "app-force" };
     }
-    return { transport: "ble", kind: "none" };
   }
   return { transport: "none" };
 }
@@ -897,7 +903,8 @@ export async function installBleRuntime(hooks = {}) {
   await _mpSession.installFile(EDA6_FILENAME, getEda6LibrarySource(getEda6Profile()));
 
   // 2) Runtime modular 3.2+: boot.py mínimo + main.py stub + pybot_ble (núcleo) +
-  //    módulos lazy (run/deploy/update/boot_update). NO borra pybot_app.* del alumno.
+  //    módulos lazy (run/deploy/update/boot_update). NO borra pybot_app.* del alumno
+  //    (para sacar un programa zombie usar clearPersistentAppUsb).
   const files = getBleRuntimeInstallFiles();
   const totalBytes = files.reduce((n, f) => n + String(f.source ?? "").length, 0);
   let doneBytes = 0;
@@ -999,6 +1006,77 @@ export async function flashToEsp32(code) {
 export async function deleteMainPy() {
   if (!_mpSession) throw new Error("not_connected");
   return _mpSession.removeFile(MAIN_PY_FILENAME);
+}
+
+/** Archivos de la app persistente BLE (alumno). El runtime NO se toca. */
+const PERSISTENT_APP_FILES = [
+  "pybot_app.py",
+  "pybot_app.json",
+  "pybot_app.tmp",
+  "pybot_app.bak",
+  "pybot_app.json.tmp",
+  "pybot_app.json.bak",
+];
+
+/**
+ * Recuperación USB: borra la app persistente (pybot_app.*) y resetea el estado
+ * de safe_boot/autostart sin destruir el runtime BLE. Para placas zombie donde
+ * BLE no responde o "Instalar PyBot Bluetooth" no alcanza (preserva la app).
+ *
+ * @param {{ onProgress?: (info: { phase: string }) => void, reset?: boolean }} [hooks]
+ * @returns {Promise<{ removed: string[], reset: boolean }>}
+ */
+export async function clearPersistentAppUsb(hooks = {}) {
+  if (!_mpSession) throw new Error("not_connected");
+  if (_mode !== "esp32-micropython" && _mode !== "esp32-eda6") {
+    throw new Error("not_esp32");
+  }
+  const onProgress = hooks.onProgress;
+  const doReset = hooks.reset !== false;
+  onProgress?.({ phase: "interrupt" });
+  await _mpSession.interruptAndRecoverRepl();
+
+  onProgress?.({ phase: "removing" });
+  const removed = [];
+  for (const name of PERSISTENT_APP_FILES) {
+    try {
+      const ok = await _mpSession.removeFile(name);
+      if (ok) removed.push(name);
+    } catch {
+      /* ignore individual remove failures; verify below */
+    }
+  }
+
+  // Estado limpio: sin safe_boot ni contador de fallos (evita bloqueos residuales).
+  try {
+    await _mpSession.installFile(
+      "pybot_state.json",
+      JSON.stringify({
+        safe_boot: false,
+        fail_count: 0,
+        last_error: "",
+        last_outcome: "cleared",
+      }),
+    );
+  } catch {
+    /* best-effort */
+  }
+
+  // Verificar que la app principal ya no está.
+  try {
+    const still = await _mpSession.fileExists("pybot_app.py");
+    if (still) throw new Error("BLE_CLEAR_APP_FAILED");
+  } catch (e) {
+    if (e?.message === "BLE_CLEAR_APP_FAILED") throw e;
+  }
+
+  if (doReset) {
+    onProgress?.({ phase: "resetting" });
+    await _mpSession.softReset();
+    await clearMpSessionAfterReset();
+  }
+  onProgress?.({ phase: "done" });
+  return { removed, reset: doReset };
 }
 
 /**
