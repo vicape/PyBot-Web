@@ -54,11 +54,11 @@ function buildPackBytes(modules) {
   return out;
 }
 
-test("runtime modules declare 3.2.0 / protocol 3.1", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.0");
+test("runtime modules declare 3.2.1 / protocol 3.1", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.1");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.1");
   const core = readFw("pybot_ble.py");
-  assert.match(core, /PYBOT_RUNTIME_VERSION = "3\.2\.0"/);
+  assert.match(core, /PYBOT_RUNTIME_VERSION = "3\.2\.1"/);
   assert.match(core, /PYBOT_PROTOCOL_VERSION = "3\.1"/);
 });
 
@@ -88,6 +88,29 @@ test("pybot_ble lazy-loads run/deploy/update modules", () => {
   assert.doesNotMatch(core, /^import pybot_run/m);
   assert.doesNotMatch(core, /^import pybot_deploy/m);
   assert.doesNotMatch(core, /^import pybot_update/m);
+});
+
+test("pybot_ble preloads RUN after advertise and reports LOAD errors", () => {
+  const core = readFw("pybot_ble.py");
+  // Precarga en main() (fuera del IRQ) para que RUN:BEGIN no importe en GATTS_WRITE.
+  assert.match(core, /_ensure_manager\(\)/);
+  assert.match(core, /Precargar pybot_run/);
+  // Fallos de lazy-import deben emitir frames visibles, nunca silencio/timeout.
+  assert.match(core, /RUN:ERROR:LOAD:/);
+  assert.match(core, /DEPLOY:ERROR:LOAD:/);
+  assert.match(core, /APP:ERROR:LOAD:/);
+  assert.match(core, /UPDATE:ERROR:LOAD:/);
+});
+
+test("RUN:BEGIN path reaches ProgramManager.begin -> RUN:READY", () => {
+  const run = readFw("pybot_run.py");
+  assert.match(run, /def handle_run\(/);
+  assert.match(run, /RUN:BEGIN:/);
+  assert.match(run, /def begin\(/);
+  assert.match(run, /self\._send\("RUN:READY"\)/);
+  const core = readFw("pybot_ble.py");
+  assert.match(core, /startswith\("RUN:"\)/);
+  assert.match(core, /handle_run\(/);
 });
 
 test("boot core size is well below the legacy monolith", () => {

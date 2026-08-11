@@ -27,8 +27,8 @@ import {
 // Versión / capability (fuente de verdad única)
 // ---------------------------------------------------------------------------
 
-test("runtime 3.2.0 / protocol 3.1 declare runtime-update capability", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.0");
+test("runtime 3.2.1 / protocol 3.1 declare runtime-update capability", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.1");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.1");
   assert.ok(PYBOT_CAPABILITIES.includes("runtime-update"));
 });

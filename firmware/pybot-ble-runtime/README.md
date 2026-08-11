@@ -18,7 +18,8 @@ runtime ya **no** es un `main.py` monolítico:
 | `pybot_update.py` | UPDATE:* (OTA) | Lazy |
 | `pybot_boot_update.py` | Apply/rollback OTA (legacy + pack `PYBOTRT1`) | Solo si hay update pendiente |
 
-**Versión:** runtime **3.2.0**, protocolo **3.1** (comandos iguales; no rompe clientes 3.1).
+**Versión:** runtime **3.2.1**, protocolo **3.1** (comandos iguales; no rompe clientes 3.1).
+Precarga `pybot_run` fuera del IRQ BLE y reporta `RUN:ERROR:LOAD:...` si falla el import.
 
 El runtime importa dos preludios instalados en la placa (por USB, junto con el runtime):
 `pybot_mpy.py` (`pin/servo/motor/wait`) y `EDA6.py`. Por BLE solo viaja el código del alumno.

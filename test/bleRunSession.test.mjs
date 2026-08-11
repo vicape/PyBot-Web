@@ -214,3 +214,69 @@ test("disconnect before STARTED surfaces a disconnection error", async () => {
     /BLE_RUN_DISCONNECTED/,
   );
 });
+
+test("RUN:ERROR:LOAD before READY fails handshake without READY timeout", async () => {
+  // Simula firmware modular que no pudo importar pybot_run: solo ERROR, sin READY.
+  const listeners = new Set();
+  const state = { connected: true, sent: [] };
+  const emit = (text) => queueMicrotask(() => listeners.forEach((cb) => cb(text)));
+  const tr = {
+    isConnected: () => state.connected,
+    onData(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    onStateChange() {
+      return () => {};
+    },
+    async sendChunked(text) {
+      const line = String(text).replace(/\n+$/, "");
+      state.sent.push(line);
+      if (line.startsWith(RUN.BEGIN + ":")) {
+        emit(RUN.ERROR + ":LOAD:MemoryError");
+      }
+    },
+  };
+  const session = new BleRunSession(tr);
+  const errs = [];
+  const t0 = Date.now();
+  const { outcome } = await session.runProgram("print(1)\n", {
+    mode: "eda6",
+    profile: "WEMOS",
+    onErr: (s) => errs.push(s),
+  });
+  const elapsed = Date.now() - t0;
+  assert.equal(outcome, "error");
+  assert.ok(errs.join("").includes("LOAD:MemoryError"));
+  // Debe fallar al instante, no esperar READY_TIMEOUT_MS (6000).
+  assert.ok(elapsed < 2000, `elapsed=${elapsed}`);
+});
+
+test("ERR,INTERNAL before READY fails handshake fast (legacy 3.2.0 path)", async () => {
+  const listeners = new Set();
+  const state = { connected: true };
+  const emit = (text) => queueMicrotask(() => listeners.forEach((cb) => cb(text)));
+  const tr = {
+    isConnected: () => state.connected,
+    onData(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    onStateChange() {
+      return () => {};
+    },
+    async sendChunked(text) {
+      const line = String(text).replace(/\n+$/, "");
+      if (line.startsWith(RUN.BEGIN + ":")) emit("ERR,INTERNAL");
+    },
+  };
+  const session = new BleRunSession(tr);
+  const errs = [];
+  const t0 = Date.now();
+  const { outcome } = await session.runProgram("print(1)\n", {
+    onErr: (s) => errs.push(s),
+  });
+  assert.equal(outcome, "error");
+  assert.ok(errs.join("").includes("ERR,INTERNAL"));
+  assert.ok(Date.now() - t0 < 2000);
+});

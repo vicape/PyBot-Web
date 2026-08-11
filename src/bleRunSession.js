@@ -101,6 +101,7 @@ export class BleRunSession {
     let ready = false;
     let started = false;
     let settledOutcome = null;
+    let handshakeErr = null;
     let resolveReady;
     let resolveDone;
     let readyTimer = null;
@@ -114,6 +115,16 @@ export class BleRunSession {
       if (settledOutcome != null) return;
       settledOutcome = outcome;
       resolveDone(outcome);
+    };
+
+    const failHandshake = (code) => {
+      handshakeErr = code;
+      if (readyTimer) {
+        clearTimeout(readyTimer);
+        readyTimer = null;
+      }
+      resolveReady(false);
+      settle("error");
     };
 
     const onFrame = (raw) => {
@@ -142,10 +153,16 @@ export class BleRunSession {
           break;
         case "error":
           // RUN:ERROR:<code> es un estado TERMINAL (error de protocolo/arranque:
-          // BUSY/TOO_LONG/NO_PROGRAM/BAD_ENCODING/BAD_FRAME). No esperamos RUN:DONE:
-          // informamos y cerramos la sesion (settle -> limpieza en finally).
+          // BUSY/TOO_LONG/NO_PROGRAM/BAD_ENCODING/BAD_FRAME/LOAD:...). No esperamos
+          // RUN:DONE: informamos y cerramos la sesion (settle -> limpieza en finally).
+          // Si llega ANTES de READY (p.ej. lazy-import fallido), abortar el handshake
+          // de inmediato en vez de esperar el timeout de READY.
           onErr("[BLE RUN] " + (frame.code ?? "ERROR"));
-          settle("error");
+          if (!ready) {
+            failHandshake("BLE_RUN_ERROR:" + (frame.code ?? "ERROR"));
+          } else {
+            settle("error");
+          }
           break;
         case "stopped":
           if (onStopped) {
@@ -160,9 +177,16 @@ export class BleRunSession {
         case "done":
           settle(this._stopRequested ? "stopped" : "done");
           break;
-        default:
-          /* frames no relacionados con RUN (p. ej. PONG) se ignoran */
+        default: {
+          // Runtime 3.2.0 podia responder ERR,INTERNAL si el import en IRQ fallaba;
+          // no es un frame RUN, pero tampoco hay que esperar 6s a READY.
+          const rawText = String(raw ?? "").trim();
+          if (!ready && /^ERR\b/i.test(rawText)) {
+            onErr("[BLE RUN] " + rawText);
+            failHandshake("BLE_RUN_INTERNAL");
+          }
           break;
+        }
       }
     };
 
@@ -191,6 +215,10 @@ export class BleRunSession {
     try {
       await this._tr.sendChunked(buildRunBegin(mode, profile));
       const okReady = await readyPromise;
+      if (handshakeErr || settledOutcome === "error") {
+        // RUN:ERROR / ERR antes de READY: devolver outcome error (ya en onErr).
+        return { outcome: "error" };
+      }
       if (!okReady || !ready) throw new Error("BLE_RUN_NO_READY");
 
       startStopPoller();

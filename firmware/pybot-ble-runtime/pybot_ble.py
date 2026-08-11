@@ -13,7 +13,7 @@ try:
 except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
-PYBOT_RUNTIME_VERSION = "3.2.0"
+PYBOT_RUNTIME_VERSION = "3.2.1"
 PYBOT_PROTOCOL_VERSION = "3.1"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
@@ -405,26 +405,59 @@ class BluetoothTransport:
 _mod_run = None
 _mod_deploy = None
 _mod_update = None
+_load_err_run = None
+_load_err_deploy = None
+_load_err_update = None
+
+def _load_err_tag(exc):
+    try:
+        name = type(exc).__name__
+    except Exception:
+        name = "Error"
+    try:
+        msg = str(exc)
+    except Exception:
+        msg = ""
+    tag = name if not msg else (name + ":" + msg)
+    tag = tag.replace("\n", " ").replace("\r", " ")
+    if len(tag) > 48:
+        tag = tag[:48]
+    return tag
 
 def _load_run():
-    global _mod_run
+    global _mod_run, _load_err_run
     if _mod_run is None:
-        import pybot_run as _m
-        _mod_run = _m
+        try:
+            import pybot_run as _m
+            _mod_run = _m
+            _load_err_run = None
+        except Exception as e:
+            _load_err_run = _load_err_tag(e)
+            raise
     return _mod_run
 
 def _load_deploy():
-    global _mod_deploy
+    global _mod_deploy, _load_err_deploy
     if _mod_deploy is None:
-        import pybot_deploy as _m
-        _mod_deploy = _m
+        try:
+            import pybot_deploy as _m
+            _mod_deploy = _m
+            _load_err_deploy = None
+        except Exception as e:
+            _load_err_deploy = _load_err_tag(e)
+            raise
     return _mod_deploy
 
 def _load_update():
-    global _mod_update
+    global _mod_update, _load_err_update
     if _mod_update is None:
-        import pybot_update as _m
-        _mod_update = _m
+        try:
+            import pybot_update as _m
+            _mod_update = _m
+            _load_err_update = None
+        except Exception as e:
+            _load_err_update = _load_err_tag(e)
+            raise
     return _mod_update
 
 def _maybe_autostart(manager):
@@ -516,16 +549,45 @@ def main():
                 _force_reset()
             return None
         if t.startswith("RUN:"):
-            _load_run().handle_run(_ensure_manager(), t)
+            # Nunca silenciar fallos de lazy-import: el web espera RUN:READY.
+            try:
+                _load_run().handle_run(_ensure_manager(), t)
+            except Exception as e:
+                tag = _load_err_run or _load_err_tag(e)
+                try:
+                    _send("RUN:ERROR:LOAD:" + tag)
+                except Exception:
+                    pass
             return None
         if t.startswith("DEPLOY:"):
-            _load_deploy().handle_deploy(_ensure_deploy(), t)
+            try:
+                _load_deploy().handle_deploy(_ensure_deploy(), t)
+            except Exception as e:
+                tag = _load_err_deploy or _load_err_tag(e)
+                try:
+                    _send("DEPLOY:ERROR:LOAD:" + tag)
+                except Exception:
+                    pass
             return None
         if t.startswith("APP:"):
-            _load_deploy().handle_app(_send, _ensure_manager(), t)
+            try:
+                _load_deploy().handle_app(_send, _ensure_manager(), t)
+            except Exception as e:
+                tag = _load_err_deploy or _load_err_run or _load_err_tag(e)
+                try:
+                    _send("APP:ERROR:LOAD:" + tag)
+                except Exception:
+                    pass
             return None
         if t.startswith("UPDATE:"):
-            _load_update().handle_update(_ensure_updater(), t)
+            try:
+                _load_update().handle_update(_ensure_updater(), t)
+            except Exception as e:
+                tag = _load_err_update or _load_err_tag(e)
+                try:
+                    _send("UPDATE:ERROR:LOAD:" + tag)
+                except Exception:
+                    pass
             return None
         return processor.process(t)
 
@@ -564,6 +626,14 @@ def main():
     transport = BluetoothTransport(dev_name, on_command, on_disconnect)
     holder["transport"] = transport
     _confirm_update_if_pending()
+
+    # Precargar pybot_run en el hilo principal DESPUÉS de advertising.
+    # El import lazy dentro del IRQ GATTS_WRITE (stack/heap limitados) puede
+    # fallar o colgarse: PING/INFO siguen OK pero RUN:BEGIN nunca emite READY.
+    try:
+        _ensure_manager()
+    except Exception:
+        pass
 
     try:
         need = (

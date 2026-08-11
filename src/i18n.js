@@ -1028,6 +1028,18 @@ export function formatPythonError(message) {
       "The board did not respond over Bluetooth. It may have an old runtime without run support: reinstall via “Install PyBot Bluetooth” over USB. Otherwise, reconnect and try again.",
     );
   }
+  if (/BLE_RUN_INTERNAL/i.test(m)) {
+    return pick(
+      "La placa falló al preparar la ejecución por Bluetooth. Reinstalá “Instalar PyBot Bluetooth” por USB (runtime 3.2.1+) y volvé a conectar.",
+      "The board failed while preparing Bluetooth execution. Reinstall “Install PyBot Bluetooth” over USB (runtime 3.2.1+) and reconnect.",
+    );
+  }
+  if (/BLE_RUN_ERROR:LOAD/i.test(m)) {
+    return pick(
+      "La placa no pudo cargar el módulo de ejecución. Reinstalá “Instalar PyBot Bluetooth” por USB.",
+      "The board could not load the run module. Reinstall “Install PyBot Bluetooth” over USB.",
+    );
+  }
   if (/BLE_RUN_DISCONNECTED|BLE_NOT_CONNECTED/i.test(m)) {
     return pick(
       "Se perdió la conexión Bluetooth. Reconectá la placa.",
