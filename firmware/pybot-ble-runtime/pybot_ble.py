@@ -13,7 +13,7 @@ try:
 except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
-PYBOT_RUNTIME_VERSION = "3.2.1"
+PYBOT_RUNTIME_VERSION = "3.2.2"
 PYBOT_PROTOCOL_VERSION = "3.1"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
@@ -24,8 +24,10 @@ BUILTIN_LED_PIN = 2
 MAX_COMMAND_LENGTH = const(96)
 _TX_CHUNK = const(20)  # margen seguro para MTU BLE por defecto (23 -> 20 utiles)
 _RX_BUF_MAX = const(600)  # una linea de protocolo (incluye DEPLOY:CHUNK) cabe holgada
-_OUT_CHUNK = const(120)  # bytes de fuente por frame OUT antes de base64
-_MAX_RUN_B64 = const(12000)  # ~8 KB de fuente para RUN temporal (base64 ~1.34x)
+# Sin prefijo _: en MicroPython, `_NAME = const(...)` se elimina del modulo y
+# no se puede importar desde pybot_run / otros (ImportError al preload).
+OUT_CHUNK = const(120)  # bytes de fuente por frame OUT antes de base64
+MAX_RUN_B64 = const(12000)  # ~8 KB de fuente para RUN temporal (base64 ~1.34x)
 
 MAX_RUN_PROGRAM_SIZE = const(8192)
 MAX_DEPLOY_PROGRAM_SIZE = const(16384)

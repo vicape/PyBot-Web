@@ -2,11 +2,11 @@ import sys
 import time
 import ubinascii
 from pybot_ble import (
+    MAX_RUN_B64,
+    OUT_CHUNK,
     _APP_FILE,
     _EDA6_LIB,
-    _MAX_RUN_B64,
     _MPY_LIB,
-    _OUT_CHUNK,
     _PyBotStop,
     _file_exists,
     _load_app_meta,
@@ -88,7 +88,7 @@ class ProgramManager:
         if not self._collecting:
             return
         self._b64_len += len(b64)
-        if self._b64_len > _MAX_RUN_B64:
+        if self._b64_len > MAX_RUN_B64:
             self._collecting = False
             self._chunks = []
             self._send("RUN:ERROR:TOO_LONG")
@@ -158,8 +158,8 @@ class ProgramManager:
             data = text.encode("utf-8")
         except Exception:
             return
-        for i in range(0, len(data), _OUT_CHUNK):
-            piece = data[i:i + _OUT_CHUNK]
+        for i in range(0, len(data), OUT_CHUNK):
+            piece = data[i:i + OUT_CHUNK]
             try:
                 b64 = ubinascii.b2a_base64(piece).decode().strip()
             except Exception:

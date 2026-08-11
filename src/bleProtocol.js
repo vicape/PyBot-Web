@@ -22,7 +22,7 @@ export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web (
 // decidir si ofrecer una actualizacion OTA por BLE. NO duplicar esta constante:
 // pybotBleRuntime.js la reexporta; los tests y la UI la importan de aca.
 // ===========================================================================
-export const PYBOT_RUNTIME_VERSION = "3.2.1";
+export const PYBOT_RUNTIME_VERSION = "3.2.2";
 // Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
 // verificado (size+hash), control de app (APP:*) y autostart con safe boot.
 // El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
@@ -39,6 +39,8 @@ export const PYBOT_RUNTIME_VERSION = "3.2.1";
 // deben reinstalar una vez por USB (boot.py viejo no entiende el pack).
 // 3.2.1 (runtime; protocolo sigue 3.1): precarga pybot_run fuera del IRQ BLE y
 // reporta RUN:ERROR:LOAD:... si el lazy-import falla (evita timeout de READY).
+// 3.2.2 (runtime; protocolo sigue 3.1): constantes compartidas exportables
+// (MAX_RUN_B64/OUT_CHUNK) — MicroPython borra `_NAME = const(...)` del modulo.
 export const PYBOT_PROTOCOL_VERSION = "3.1";
 
 /** Primera version de runtime con boot/OTA multi-archivo (pack PYBOTRT1). */

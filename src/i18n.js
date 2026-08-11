@@ -1030,8 +1030,8 @@ export function formatPythonError(message) {
   }
   if (/BLE_RUN_INTERNAL/i.test(m)) {
     return pick(
-      "La placa falló al preparar la ejecución por Bluetooth. Reinstalá “Instalar PyBot Bluetooth” por USB (runtime 3.2.1+) y volvé a conectar.",
-      "The board failed while preparing Bluetooth execution. Reinstall “Install PyBot Bluetooth” over USB (runtime 3.2.1+) and reconnect.",
+      "La placa falló al preparar la ejecución por Bluetooth. Reinstalá “Instalar PyBot Bluetooth” por USB (runtime 3.2.2+) y volvé a conectar.",
+      "The board failed while preparing Bluetooth execution. Reinstall “Install PyBot Bluetooth” over USB (runtime 3.2.2+) and reconnect.",
     );
   }
   if (/BLE_RUN_ERROR:LOAD/i.test(m)) {

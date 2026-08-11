@@ -54,12 +54,87 @@ function buildPackBytes(modules) {
   return out;
 }
 
-test("runtime modules declare 3.2.1 / protocol 3.1", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.1");
+test("runtime modules declare 3.2.2 / protocol 3.1", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.2");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.1");
   const core = readFw("pybot_ble.py");
-  assert.match(core, /PYBOT_RUNTIME_VERSION = "3\.2\.1"/);
+  assert.match(core, /PYBOT_RUNTIME_VERSION = "3\.2\.2"/);
   assert.match(core, /PYBOT_PROTOCOL_VERSION = "3\.1"/);
+});
+
+/**
+ * MicroPython: `_NAME = const(...)` is optimised away and cannot be imported.
+ * Static check: every `from <fw_mod> import name` must resolve to a real binding
+ * in the exporting module, and must not be a private const.
+ */
+function parseFromImports(source) {
+  const out = [];
+  const re = /from\s+(\w+)\s+import\s*\(([^)]*)\)|from\s+(\w+)\s+import\s+([^\n#]+)/g;
+  let m;
+  while ((m = re.exec(source))) {
+    const mod = m[1] || m[3];
+    const body = m[2] != null ? m[2] : m[4];
+    const names = body
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => s.replace(/\s+as\s+\w+$/, "").trim())
+      .filter((s) => /^[A-Za-z_]\w*$/.test(s));
+    for (const name of names) out.push({ mod, name });
+  }
+  return out;
+}
+
+function definedNames(source) {
+  const names = new Set();
+  const re =
+    /^(?:def|class)\s+([A-Za-z_]\w*)|^([A-Za-z_]\w*)\s*=/gm;
+  let m;
+  while ((m = re.exec(source))) names.add(m[1] || m[2]);
+  return names;
+}
+
+function privateConstNames(source) {
+  const names = new Set();
+  const re = /^(_[A-Za-z_]\w*)\s*=\s*const\s*\(/gm;
+  let m;
+  while ((m = re.exec(source))) names.add(m[1]);
+  return names;
+}
+
+test("cross-module firmware imports resolve (no missing / private-const symbols)", () => {
+  const sources = Object.fromEntries(
+    MODULE_FILES.map((name) => [name.replace(/\.py$/, ""), readFw(name)]),
+  );
+  const missing = [];
+  const privateConsts = [];
+  for (const [importer, src] of Object.entries(sources)) {
+    for (const { mod, name } of parseFromImports(src)) {
+      if (!(mod in sources)) continue;
+      const defs = definedNames(sources[mod]);
+      const doomed = privateConstNames(sources[mod]);
+      if (doomed.has(name)) {
+        privateConsts.push(`${importer} <- ${mod}.${name} (private const)`);
+      } else if (!defs.has(name) && name !== "uhashlib") {
+        // uhashlib may be assigned via try/except ImportError in pybot_ble.
+        missing.push(`${importer} <- ${mod}.${name}`);
+      }
+    }
+  }
+  // uhashlib is a try/except bind; treat as defined if assigned anywhere.
+  assert.deepEqual(privateConsts, [], `importable private const: ${privateConsts.join("; ")}`);
+  assert.deepEqual(missing, [], `missing symbols: ${missing.join("; ")}`);
+});
+
+test("exported size constants are public (not _NAME = const)", () => {
+  const core = readFw("pybot_ble.py");
+  const run = readFw("pybot_run.py");
+  assert.match(core, /^MAX_RUN_B64\s*=\s*const\s*\(/m);
+  assert.match(core, /^OUT_CHUNK\s*=\s*const\s*\(/m);
+  assert.doesNotMatch(core, /^_MAX_RUN_B64\s*=\s*const\s*\(/m);
+  assert.doesNotMatch(core, /^_OUT_CHUNK\s*=\s*const\s*\(/m);
+  assert.match(run, /MAX_RUN_B64/);
+  assert.match(run, /OUT_CHUNK/);
 });
 
 test("main.py is a tiny stub that imports pybot_ble", () => {
