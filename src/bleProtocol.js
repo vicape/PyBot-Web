@@ -22,7 +22,7 @@ export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web (
 // decidir si ofrecer una actualizacion OTA por BLE. NO duplicar esta constante:
 // pybotBleRuntime.js la reexporta; los tests y la UI la importan de aca.
 // ===========================================================================
-export const PYBOT_RUNTIME_VERSION = "3.1.0";
+export const PYBOT_RUNTIME_VERSION = "3.2.0";
 // Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
 // verificado (size+hash), control de app (APP:*) y autostart con safe boot.
 // El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
@@ -34,7 +34,13 @@ export const PYBOT_RUNTIME_VERSION = "3.1.0";
 // rollback. Se sube el protocolo a 3.1 porque agrega comandos nuevos versionados
 // (aditivos, no rompen 3.0) y el runtime a 3.1.0. La capability "runtime-update"
 // permite a la web decidir por capabilities (no por numero de version).
+// 3.2.0 (runtime; protocolo sigue 3.1): layout modular + lazy-load para reducir
+// RAM al boot/advertising. OTA envia pack multi-archivo PYBOTRT1. Placas < 3.2.0
+// deben reinstalar una vez por USB (boot.py viejo no entiende el pack).
 export const PYBOT_PROTOCOL_VERSION = "3.1";
+
+/** Primera version de runtime con boot/OTA multi-archivo (pack PYBOTRT1). */
+export const PYBOT_MODULAR_RUNTIME_MIN = "3.2.0";
 export const PYBOT_RUNTIME_NAME = "PyBot BLE Runtime";
 export const PYBOT_BOARD = "ESP32";
 
@@ -242,15 +248,20 @@ export function runtimeUpdateStatus(info, published = PYBOT_RUNTIME_VERSION) {
   // ESTRICTAMENTE menor que la publicada.
   const updateAvailable =
     installed != null && compareRuntimeVersions(installed, latest) < 0;
+  // Pack multi-archivo exige boot/apply 3.2+ en la placa. 3.1.x con capability
+  // OTA NO debe recibir el pack (el boot viejo lo escribiria como main.py).
+  const otaLayoutReady =
+    installed != null &&
+    compareRuntimeVersions(installed, PYBOT_MODULAR_RUNTIME_MIN) >= 0;
+  const canUpdateOta = updateAvailable && supportsOta && otaLayoutReady;
   return {
     installed,
     latest,
     updateAvailable,
     supportsOta,
-    // Se puede actualizar por BLE si hay novedad Y la placa declara el canal OTA.
-    canUpdateOta: updateAvailable && supportsOta,
-    // Hay novedad pero la placa (p.ej. 3.0.x) no expone OTA: requiere USB una vez.
-    needsUsb: updateAvailable && !supportsOta,
+    canUpdateOta,
+    // Novedad sin canal OTA, o salto a layout modular desde < 3.2.0.
+    needsUsb: updateAvailable && (!supportsOta || !otaLayoutReady),
   };
 }
 

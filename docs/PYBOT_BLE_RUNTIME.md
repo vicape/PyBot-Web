@@ -35,6 +35,13 @@ nuevos; no altera EDA6, USB/Firmata, Pyodide ni el mecanismo de ejecución exist
 > dejar `boot.py` + `main.py`); a partir de ahí las futuras se hacen por **BLE**. El programa del
 > alumno (`pybot_app.py`/`pybot_app.json`) y el autostart se **conservan** intactos. Ver
 > **5-quater. Protocolo 3.1 — OTA Runtime Update**.
+>
+> **Runtime 3.2.0 (protocolo 3.1, shrink de RAM al boot):** el monolito `main.py` se parte en
+> módulos con **lazy-load** (`pybot_ble` + stub `main.py` al boot; RUN/DEPLOY/UPDATE solo al
+> usarse). `boot.py` queda mínimo y delega el apply en `pybot_boot_update.py`. El OTA envía un
+> pack multi-archivo `PYBOTRT1`. El salto **3.1.x → 3.2.0 requiere una reinstalación USB**
+> (el boot antiguo no entiende el pack); a partir de 3.2.0 el OTA multi-archivo vuelve a
+> funcionar. Objetivo: que la ESP32 vuelva a `gap_advertise()` sin `MemoryError`.
 
 ## 1. Arquitectura y enfoque elegido
 
@@ -59,7 +66,13 @@ y queda **fuera de este MVP**.
 
 | Archivo | Rol |
 | --- | --- |
-| `firmware/pybot-ble-runtime/main.py` | Runtime MicroPython (se instala como `main.py`). |
+| `firmware/pybot-ble-runtime/main.py` | Stub de arranque (`import pybot_ble`). |
+| `firmware/pybot-ble-runtime/pybot_ble.py` | Núcleo BLE (advertising / PING / INFO / dispatch). |
+| `firmware/pybot-ble-runtime/pybot_run.py` | RUN/STOP (lazy). |
+| `firmware/pybot-ble-runtime/pybot_deploy.py` | DEPLOY/APP (lazy). |
+| `firmware/pybot-ble-runtime/pybot_update.py` | UPDATE OTA (lazy). |
+| `firmware/pybot-ble-runtime/pybot_boot_update.py` | Apply/rollback OTA (legacy + pack). |
+| `firmware/pybot-ble-runtime/boot.py` | Boot mínimo (solo si hay `pybot_update.json`). |
 | `firmware/pybot-ble-runtime/README.md` | Doc breve del runtime. |
 | `src/bleProtocol.js` | Protocolo puro: UUIDs, comandos, Device ID, **framing RUN + base64** (testeable). |
 | `src/bluetoothTransport.js` | Capa aislada de Web Bluetooth (connect/disconnect/send/**sendChunked**/onData…). |
@@ -73,7 +86,10 @@ y queda **fuera de este MVP**.
 
 | Archivo en la placa | Origen (única fuente) | Rol |
 | --- | --- | --- |
-| `main.py` | `firmware/pybot-ble-runtime/main.py` | Runtime BLE (arranca solo al boot). |
+| `boot.py` | `firmware/pybot-ble-runtime/boot.py` | Boot mínimo OTA. |
+| `main.py` | `firmware/pybot-ble-runtime/main.py` | Stub que importa el núcleo. |
+| `pybot_ble.py` | `firmware/pybot-ble-runtime/pybot_ble.py` | Núcleo BLE al boot. |
+| `pybot_run.py` / `pybot_deploy.py` / `pybot_update.py` / `pybot_boot_update.py` | mismos paths en `firmware/pybot-ble-runtime/` | Módulos lazy / OTA apply. |
 | `pybot_mpy.py` | `MPY_PRELUDE` (`src/micropythonEsp32Session.js`) | Preludio GPIO directo: `pin/servo/motor/wait`. |
 | `EDA6.py` | `src/assets/EDA6.py` (con el perfil elegido) | Librería EDA6: `salidaDigital/servomotor/…`. |
 

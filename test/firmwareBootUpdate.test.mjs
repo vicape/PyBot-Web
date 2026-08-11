@@ -6,9 +6,9 @@ import { sha256HexUtf8 } from "../src/bleProtocol.js";
 /**
  * MODELO FIEL del boot/update manager del firmware para validar en Node lo que NO
  * se puede probar con una ESP32 real:
- *   - boot.py `_boot_apply_update` (apply transaccional + rollback, re-entrante).
- *   - main.py `RuntimeUpdateReceiver.apply` (escribe pybot_update.json pending).
- *   - main.py `_confirm_update_if_pending` (confirmación de arranque).
+ *   - pybot_boot_update.apply (apply transaccional + rollback, re-entrante).
+ *   - RuntimeUpdateReceiver.apply (escribe pybot_update.json pending).
+ *   - `_confirm_update_if_pending` (confirmación de arranque).
  *
  * Este modelo REPLICA la lógica del .py paso por paso (no un mock que evada lo que
  * se valida). Un filesystem en memoria con inyección de fallos de rename permite
@@ -22,6 +22,16 @@ const BAK = "pybot_runtime.bak";
 const STATE = "pybot_update.json";
 const APP = "pybot_app.py";
 const APP_META = "pybot_app.json";
+const PACK_MAGIC = "PYBOTRT1\n";
+const RUNTIME_FILES = [
+  "main.py",
+  "pybot_ble.py",
+  "pybot_run.py",
+  "pybot_deploy.py",
+  "pybot_update.py",
+  "pybot_boot_update.py",
+];
+const RTBAK = ".rtbak";
 
 function byteLen(s) {
   return new TextEncoder().encode(String(s ?? "")).length;
@@ -85,7 +95,89 @@ function _newValid(fs, size, hash, hasHashlib) {
   return true;
 }
 
-function _doApply(fs, st, size, hash, hasHashlib) {
+function _isPack(fs) {
+  if (!fs.exists(NEW)) return false;
+  return String(fs.get(NEW) ?? "").startsWith(PACK_MAGIC);
+}
+
+function _parsePack(fs) {
+  const raw = String(fs.get(NEW) ?? "");
+  if (!raw.startsWith(PACK_MAGIC)) return null;
+  let rest = raw.slice(PACK_MAGIC.length);
+  const files = [];
+  while (rest.length) {
+    const nli = rest.indexOf("\n");
+    if (nli < 0) return null;
+    const name = rest.slice(0, nli);
+    rest = rest.slice(nli + 1);
+    const sli = rest.indexOf("\n");
+    if (sli < 0) return null;
+    const sz = parseInt(rest.slice(0, sli), 10);
+    rest = rest.slice(sli + 1);
+    if (!Number.isFinite(sz) || sz < 0 || rest.length < sz) return null;
+    if (!RUNTIME_FILES.includes(name)) return null;
+    files.push([name, rest.slice(0, sz)]);
+    rest = rest.slice(sz);
+  }
+  return files.length ? files : null;
+}
+
+function _backupRuntime(fs, names) {
+  for (const name of names) {
+    const bak = name + RTBAK;
+    fs.remove(bak);
+    if (fs.exists(name) && !fs.rename(name, bak)) return false;
+  }
+  return true;
+}
+
+function _restoreRuntime(fs) {
+  for (const name of RUNTIME_FILES) {
+    const bak = name + RTBAK;
+    if (fs.exists(bak)) {
+      fs.remove(name);
+      fs.rename(bak, name);
+    }
+  }
+}
+
+function _clearRtbaks(fs) {
+  for (const name of RUNTIME_FILES) fs.remove(name + RTBAK);
+}
+
+function _applyPack(fs, st, size, hash, hasHashlib) {
+  if (!_newValid(fs, size, hash, hasHashlib)) {
+    if (fs.exists(MAIN)) {
+      fs.remove(NEW);
+      fs.remove(STATE);
+    } else {
+      _restoreRuntime(fs);
+      if (fs.exists(BAK) && !fs.exists(MAIN)) fs.rename(BAK, MAIN);
+      fs.remove(STATE);
+    }
+    return;
+  }
+  const files = _parsePack(fs);
+  if (!files) {
+    fs.remove(NEW);
+    fs.remove(STATE);
+    return;
+  }
+  const names = files.map(([n]) => n);
+  if (!_backupRuntime(fs, names)) {
+    _restoreRuntime(fs);
+    fs.remove(NEW);
+    fs.remove(STATE);
+    return;
+  }
+  for (const [name, data] of files) fs.files.set(name, data);
+  st.state = "applied";
+  st.pack = 1;
+  fs.writeJson(STATE, st);
+  fs.remove(NEW);
+}
+
+function _doApplyLegacy(fs, st, size, hash, hasHashlib) {
   // Re-entrada: main.py YA es el nuevo runtime -> no re-respaldar.
   if (hash && fs.exists(MAIN) && _shaFile(fs, MAIN, hasHashlib) === hash) {
     fs.remove(NEW);
@@ -122,7 +214,19 @@ function _doApply(fs, st, size, hash, hasHashlib) {
   fs.remove(NEW);
 }
 
+function _doApply(fs, st, size, hash, hasHashlib) {
+  if (fs.exists(NEW) && _isPack(fs)) _applyPack(fs, st, size, hash, hasHashlib);
+  else _doApplyLegacy(fs, st, size, hash, hasHashlib);
+}
+
 function _doRollback(fs, st) {
+  if (st.pack) {
+    _restoreRuntime(fs);
+    _clearRtbaks(fs);
+    fs.remove(NEW);
+    fs.remove(STATE);
+    return;
+  }
   if (fs.exists(BAK)) {
     fs.remove(MAIN);
     if (fs.rename(BAK, MAIN)) {
@@ -149,13 +253,22 @@ function boot(fs, { hasHashlib = true } = {}) {
   else if (state === "applied") _doRollback(fs, st);
 }
 
-/** Mirror de main.py `_confirm_update_if_pending` (tras BLE+GATT operacionales). */
+/** Mirror de `_confirm_update_if_pending` (tras BLE+GATT operacionales). */
 function confirmBoot(fs) {
   const st = fs.readJson(STATE);
   if (st && st.state === "applied") {
     fs.remove(BAK);
+    _clearRtbaks(fs);
     fs.remove(STATE);
   }
+}
+
+function buildPack(files) {
+  let out = PACK_MAGIC;
+  for (const [name, data] of files) {
+    out += name + "\n" + byteLen(data) + "\n" + data;
+  }
+  return out;
 }
 
 /** Mirror de RuntimeUpdateReceiver.apply(): escribe el estado pending y "resetea". */
@@ -345,4 +458,62 @@ test("student app + metadata survive a corrupt/aborted OTA untouched", () => {
   assert.equal(fs.get(MAIN), OLD);
   assert.equal(fs.get(APP), APP_CODE);
   assert.deepEqual(fs.readJson(APP_META), APP_METADATA);
+});
+
+// ---------------------------------------------------------------------------
+// Pack multi-archivo (runtime 3.2+)
+// ---------------------------------------------------------------------------
+
+test("successful OTA pack: installs modules, confirms, preserves student app", () => {
+  const pack = buildPack([
+    ["main.py", "import pybot_ble\npybot_ble.main()\n"],
+    ["pybot_ble.py", "PYBOT_RUNTIME_VERSION='3.2.1'\n"],
+    ["pybot_run.py", "# run\n"],
+    ["pybot_deploy.py", "# deploy\n"],
+    ["pybot_update.py", "# update\n"],
+    ["pybot_boot_update.py", "# boot update\n"],
+  ]);
+  const fs = boardWithApp({
+    "pybot_ble.py": "OLD_CORE\n",
+    "pybot_run.py": "OLD_RUN\n",
+  });
+  fs.files.set(NEW, pack);
+  webApply(fs, { from: "3.2.0", to: "3.2.1", size: byteLen(pack), hash: sha256HexUtf8(pack) });
+  boot(fs);
+  assert.equal(fs.get(MAIN), "import pybot_ble\npybot_ble.main()\n");
+  assert.equal(fs.get("pybot_ble.py"), "PYBOT_RUNTIME_VERSION='3.2.1'\n");
+  assert.equal(fs.get("pybot_run.py"), "# run\n");
+  assert.equal(fs.readJson(STATE).pack, 1);
+  assert.equal(fs.exists(MAIN + RTBAK), true);
+  confirmBoot(fs);
+  assert.equal(fs.exists(STATE), false);
+  assert.equal(fs.exists(MAIN + RTBAK), false);
+  assert.equal(fs.get(APP), APP_CODE);
+});
+
+test("pack OTA without confirm rolls back modules from .rtbak", () => {
+  const full = buildPack([
+    ["main.py", "NEW_MAIN\n"],
+    ["pybot_ble.py", "NEW_CORE\n"],
+    ["pybot_run.py", "NEW_RUN\n"],
+    ["pybot_deploy.py", "NEW_DEP\n"],
+    ["pybot_update.py", "NEW_UPD\n"],
+    ["pybot_boot_update.py", "NEW_BU\n"],
+  ]);
+  const fs = new Fs({
+    [MAIN]: "OLD_MAIN\n",
+    "pybot_ble.py": "OLD_CORE\n",
+    "pybot_run.py": "OLD_RUN\n",
+    [NEW]: full,
+  });
+  webApply(fs, { from: "3.2.0", to: "3.2.1", size: byteLen(full), hash: sha256HexUtf8(full) });
+  boot(fs);
+  assert.equal(fs.get(MAIN), "NEW_MAIN\n");
+  assert.equal(fs.readJson(STATE).state, "applied");
+  // Sin confirm: siguiente boot hace rollback pack.
+  boot(fs);
+  assert.equal(fs.get(MAIN), "OLD_MAIN\n");
+  assert.equal(fs.get("pybot_ble.py"), "OLD_CORE\n");
+  assert.equal(fs.get("pybot_run.py"), "OLD_RUN\n");
+  assert.equal(fs.exists(STATE), false);
 });

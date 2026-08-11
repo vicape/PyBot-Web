@@ -4,8 +4,8 @@
  * Encapsulado y de SOLO lectura: no borra archivos ni reinicia la placa. Se
  * ejecuta sobre la sesión serial MicroPython ya conectada (mismo raw REPL que
  * usa installFile) para confirmar la hipótesis de que la placa se queda sin
- * memoria al preparar/compilar el runtime (main.py) o al activar BLE, y por eso
- * deja de advertisar tras un reset.
+ * memoria al preparar/compilar el núcleo BLE (pybot_ble.py / main.py) o al
+ * activar BLE, y por eso deja de advertisar tras un reset.
  *
  * Este módulo es puro (sin dependencias del navegador/serial): expone el script
  * MicroPython y un parser testeable de su salida.
@@ -15,6 +15,7 @@
  * Script MicroPython corto y robusto que imprime líneas parseables:
  *   MEMFREE <bytes>
  *   MAINSIZE <bytes|NA>
+ *   CORESIZE <bytes|NA>   (pybot_ble.py si existe; si no, main.py)
  *   COMPILE OK | MEMORYERROR | ERR <repr>
  *   BLE OK | MEMORYERROR | ERR <repr>
  *   DIAG_DONE
@@ -31,10 +32,17 @@ export const MEMORY_DIAGNOSTIC_SCRIPT = [
   "    print('MAINSIZE', os.stat('main.py')[6])",
   "except Exception:",
   "    print('MAINSIZE', 'NA')",
+  "try:",
+  "    import os",
+  "    print('CORESIZE', os.stat('pybot_ble.py')[6])",
+  "    _core = 'pybot_ble.py'",
+  "except Exception:",
+  "    print('CORESIZE', 'NA')",
+  "    _core = 'main.py'",
   "gc.collect()",
   "try:",
-  "    _src = open('main.py').read()",
-  "    compile(_src, 'main.py', 'exec')",
+  "    _src = open(_core).read()",
+  "    compile(_src, _core, 'exec')",
   "    print('COMPILE', 'OK')",
   "except MemoryError:",
   "    print('COMPILE', 'MEMORYERROR')",
@@ -78,6 +86,7 @@ function parseIntOrNull(token) {
  * @returns {{
  *   memFree: number|null,
  *   mainSize: number|null,
+ *   coreSize: number|null,
  *   compile: 'OK'|'MEMORYERROR'|'ERR'|null,
  *   compileError: string|null,
  *   ble: 'OK'|'MEMORYERROR'|'ERR'|null,
@@ -91,6 +100,7 @@ export function parseMemoryDiagnostic(text) {
   const result = {
     memFree: null,
     mainSize: null,
+    coreSize: null,
     compile: null,
     compileError: null,
     ble: null,
@@ -116,6 +126,8 @@ export function parseMemoryDiagnostic(text) {
       result.memFree = parseIntOrNull(rest);
     } else if (tag === "MAINSIZE") {
       result.mainSize = rest === "NA" ? null : parseIntOrNull(rest);
+    } else if (tag === "CORESIZE") {
+      result.coreSize = rest === "NA" ? null : parseIntOrNull(rest);
     } else if (tag === "COMPILE") {
       if (rest.startsWith("OK")) {
         result.compile = "OK";
@@ -140,7 +152,7 @@ export function parseMemoryDiagnostic(text) {
 
   if (result.compile === "MEMORYERROR" || result.ble === "MEMORYERROR") {
     result.conclusion = "memory";
-  } else if (result.compile === "OK" && (result.ble === "OK" || result.ble === null)) {
+  } else if (result.done && result.compile === "OK" && (result.ble === "OK" || !result.bleTested)) {
     result.conclusion = "ok";
   } else {
     result.conclusion = "unknown";

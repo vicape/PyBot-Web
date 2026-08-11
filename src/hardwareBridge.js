@@ -44,9 +44,9 @@ import {
 import { compileToBytecode } from "./arduino/pybotArduinoCompiler.js";
 import { downloadProgramToArduino } from "./arduinoVmSession.js";
 import {
-  getBleRuntimeSource,
-  getBleBootSource,
   getBleRuntimeVersion,
+  getBleRuntimeInstallFiles,
+  buildBleRuntimePackText,
   BLE_RUNTIME_FILENAME,
   BLE_BOOT_FILENAME,
 } from "./pybotBleRuntime.js";
@@ -612,7 +612,9 @@ export async function bleUpdateRuntime(hooks = {}) {
   //    firmware además rechaza con UPDATE:ERROR:BUSY si algo sigue en ejecución.
   await stopBleExecutionBeforeDeploy();
 
-  const source = getBleRuntimeSource();
+  // Pack multi-archivo (PYBOTRT1): boot.py 3.2+ lo descomprime en los módulos.
+  // Placas < 3.2.0 deben actualizar por USB (runtimeUpdateStatus.needsUsb).
+  const source = buildBleRuntimePackText();
   const version = getBleRuntimeVersion();
 
   // 2-3) Transferir + verificar + aplicar. Al aplicar, la placa RESETEA (BLE cae).
@@ -887,37 +889,50 @@ export async function installBleRuntime(hooks = {}) {
   await _mpSession.installFile(PYBOT_MPY_FILENAME, MPY_PRELUDE);
   await _mpSession.installFile(EDA6_FILENAME, getEda6LibrarySource(getEda6Profile()));
 
-  // 2) boot.py: el update/rollback manager estable. MicroPython lo ejecuta ANTES
-  //    de main.py y HABILITA las futuras actualizaciones OTA por Bluetooth (esta
-  //    es la última instalación por USB necesaria para el OTA). NO borra
-  //    pybot_app.py/pybot_app.json si existen (son del alumno, archivos distintos).
-  onProgress?.({ phase: "installing-boot" });
-  await _mpSession.installFile(BLE_BOOT_FILENAME, getBleBootSource());
+  // 2) Runtime modular 3.2+: boot.py mínimo + main.py stub + pybot_ble (núcleo) +
+  //    módulos lazy (run/deploy/update/boot_update). NO borra pybot_app.* del alumno.
+  const files = getBleRuntimeInstallFiles();
+  const totalBytes = files.reduce((n, f) => n + String(f.source ?? "").length, 0);
+  let doneBytes = 0;
+  onProgress?.({ phase: "installing", done: 0, total: totalBytes, pct: 0 });
 
-  // 3) Runtime BLE como main.py (arranca solo al boot).
-  const source = getBleRuntimeSource();
-  onProgress?.({ phase: "installing", done: 0, total: 100, pct: 0 });
-  await _mpSession.installFile(BLE_RUNTIME_FILENAME, source, {
-    onProgress: (info) => onProgress?.({ phase: "installing", ...info }),
-  });
-
-  onProgress?.({ phase: "verifying" });
-  const bootExists = await _mpSession.fileExists(BLE_BOOT_FILENAME);
-  const bootSize = bootExists ? await _mpSession.getFileSize(BLE_BOOT_FILENAME) : -1;
-  if (!bootExists || bootSize < 8) {
-    throw new Error("BLE_INSTALL_VERIFY_FAIL");
+  for (const file of files) {
+    const phase =
+      file.name === BLE_BOOT_FILENAME
+        ? "installing-boot"
+        : file.name === BLE_RUNTIME_FILENAME
+          ? "installing"
+          : "installing-modules";
+    onProgress?.({ phase, done: doneBytes, total: totalBytes, pct: totalBytes ? Math.floor((100 * doneBytes) / totalBytes) : 0 });
+    await _mpSession.installFile(file.name, file.source, {
+      onProgress: (info) => {
+        const localDone = info?.done ?? 0;
+        const overall = doneBytes + localDone;
+        onProgress?.({
+          phase,
+          done: overall,
+          total: totalBytes,
+          pct: totalBytes ? Math.min(100, Math.floor((100 * overall) / totalBytes)) : 0,
+        });
+      },
+    });
+    doneBytes += String(file.source ?? "").length;
   }
-  const exists = await _mpSession.fileExists(BLE_RUNTIME_FILENAME);
-  const size = exists ? await _mpSession.getFileSize(BLE_RUNTIME_FILENAME) : -1;
-  if (!exists || size < 8) {
-    throw new Error("BLE_INSTALL_VERIFY_FAIL");
+
+  onProgress?.({ phase: "verifying", done: totalBytes, total: totalBytes, pct: 100 });
+  for (const file of files) {
+    const exists = await _mpSession.fileExists(file.name);
+    const size = exists ? await _mpSession.getFileSize(file.name) : -1;
+    if (!exists || size < 8) {
+      throw new Error("BLE_INSTALL_VERIFY_FAIL");
+    }
   }
 
   onProgress?.({ phase: "resetting" });
   await _mpSession.softReset();
   await clearMpSessionAfterReset();
-  onProgress?.({ phase: "done", size });
-  return { size };
+  onProgress?.({ phase: "done", size: totalBytes });
+  return { size: totalBytes };
 }
 
 /**

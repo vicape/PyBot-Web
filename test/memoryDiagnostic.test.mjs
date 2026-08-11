@@ -9,6 +9,7 @@ import {
 test("script imprime las líneas parseables esperadas", () => {
   assert.match(MEMORY_DIAGNOSTIC_SCRIPT, /print\('MEMFREE', gc\.mem_free\(\)\)/);
   assert.match(MEMORY_DIAGNOSTIC_SCRIPT, /print\('MAINSIZE'/);
+  assert.match(MEMORY_DIAGNOSTIC_SCRIPT, /print\('CORESIZE'/);
   assert.match(MEMORY_DIAGNOSTIC_SCRIPT, /print\('COMPILE', 'OK'\)/);
   assert.match(MEMORY_DIAGNOSTIC_SCRIPT, /print\('COMPILE', 'MEMORYERROR'\)/);
   assert.match(MEMORY_DIAGNOSTIC_SCRIPT, /print\('BLE', 'OK'\)/);
@@ -20,14 +21,16 @@ test("script imprime las líneas parseables esperadas", () => {
 test("todo OK → conclusión 'ok'", () => {
   const out = [
     "MEMFREE 58000",
-    "MAINSIZE 37000",
+    "MAINSIZE 36",
+    "CORESIZE 18000",
     "COMPILE OK",
     "BLE OK",
     "DIAG_DONE",
   ].join("\n");
   const r = parseMemoryDiagnostic(out);
   assert.equal(r.memFree, 58000);
-  assert.equal(r.mainSize, 37000);
+  assert.equal(r.mainSize, 36);
+  assert.equal(r.coreSize, 18000);
   assert.equal(r.compile, "OK");
   assert.equal(r.ble, "OK");
   assert.equal(r.bleTested, true);
