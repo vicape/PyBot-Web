@@ -50,6 +50,10 @@ import {
   BLE_RUNTIME_FILENAME,
   BLE_BOOT_FILENAME,
 } from "./pybotBleRuntime.js";
+import {
+  MEMORY_DIAGNOSTIC_SCRIPT,
+  parseMemoryDiagnostic,
+} from "./memoryDiagnostic.js";
 import { BluetoothTransport } from "./bluetoothTransport.js";
 import { BleRunSession } from "./bleRunSession.js";
 import {
@@ -914,6 +918,38 @@ export async function installBleRuntime(hooks = {}) {
   await clearMpSessionAfterReset();
   onProgress?.({ phase: "done", size });
   return { size };
+}
+
+/**
+ * Diagnóstico de memoria por USB (SOLO lectura) sobre la sesión serial ya
+ * conectada. Reutiliza el raw REPL (execRaw): interrumpe cualquier main.py
+ * colgado, ejecuta un script MicroPython corto (MEMFREE/MAINSIZE/COMPILE/BLE)
+ * y devuelve un objeto estructurado. NO borra archivos ni reinicia la placa.
+ *
+ * Sirve para confirmar si la ESP32 se queda sin memoria al preparar/compilar el
+ * runtime (main.py) o al activar BLE, lo que explicaría que no advertise tras un
+ * reset (no aparece en el chooser de Web Bluetooth).
+ *
+ * @returns {Promise<ReturnType<typeof parseMemoryDiagnostic> & { raw: string }>}
+ */
+export async function runMemoryDiagnostic() {
+  if (!_mpSession) throw new Error("not_connected");
+  if (_mode !== "esp32-micropython" && _mode !== "esp32-eda6") {
+    throw new Error("not_esp32");
+  }
+  // Interrumpe main.py u otro programa colgado antes de entrar a raw REPL.
+  try {
+    await _mpSession.interruptAndRecoverRepl();
+  } catch {
+    /* ignore */
+  }
+  // execRaw entra a raw REPL (Ctrl-C Ctrl-C + Ctrl-A), ejecuta y sale con Ctrl-B.
+  const { stdout, stderr } = await _mpSession.execRaw(MEMORY_DIAGNOSTIC_SCRIPT, {
+    timeout: 25000,
+  });
+  const text = String(stdout ?? "") + "\n" + String(stderr ?? "");
+  const parsed = parseMemoryDiagnostic(text);
+  return { ...parsed, raw: text };
 }
 
 /** Detiene main.py en la placa y deja el REPL listo (sin desconectar). */

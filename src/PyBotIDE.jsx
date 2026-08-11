@@ -36,6 +36,7 @@ import {
   recoverEsp32Repl,
   downloadToArduino,
   installBleRuntime,
+  runMemoryDiagnostic,
   bleDeployProgram,
   bleRunSavedApp,
   bleGetAppInfo,
@@ -150,6 +151,7 @@ export default function PyBotIDE() {
   const [downloadingArduino, setDownloadingArduino] = useState(false);
   const [bleModalOpen, setBleModalOpen] = useState(false);
   const [bleInstalling, setBleInstalling] = useState(false);
+  const [memDiagnosing, setMemDiagnosing] = useState(false);
   const [bleConnected, setBleConnected] = useState(false);
   const [bleDeploying, setBleDeploying] = useState(false);
   const [bleAppStatus, setBleAppStatus] = useState(null);
@@ -861,6 +863,58 @@ export default function PyBotIDE() {
       setBleInstalling(false);
     }
   }, [connected, boardType, bleInstalling, appendConsole]);
+
+  const onRunMemoryDiagnostic = useCallback(async () => {
+    if (!connected) {
+      appendConsole(t("needConnect") + "\n", "err");
+      return;
+    }
+    if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") {
+      return;
+    }
+    if (memDiagnosing) return;
+    setMemDiagnosing(true);
+    appendConsole(t("memDiagStart") + "\n", "info");
+    try {
+      const r = await runMemoryDiagnostic();
+      const fmt = (n) => (typeof n === "number" ? n.toLocaleString("es-AR") : "?");
+      const compileTxt =
+        r.compile === "OK"
+          ? "OK"
+          : r.compile === "MEMORYERROR"
+            ? "MemoryError"
+            : r.compile === "ERR"
+              ? t("memDiagError") + (r.compileError ? " (" + r.compileError + ")" : "")
+              : "?";
+      const bleTxt =
+        r.ble === "OK"
+          ? "OK"
+          : r.ble === "MEMORYERROR"
+            ? "MemoryError"
+            : r.ble === "ERR"
+              ? t("memDiagError") + (r.bleError ? " (" + r.bleError + ")" : "")
+              : t("memDiagNotTested");
+      appendConsole(
+        t("memDiagResult")
+          .replace("{mem}", fmt(r.memFree))
+          .replace("{main}", r.mainSize == null ? t("memDiagNA") : fmt(r.mainSize))
+          .replace("{compile}", compileTxt)
+          .replace("{ble}", bleTxt) + "\n",
+        "info",
+      );
+      const conclusionKey =
+        r.conclusion === "memory"
+          ? "memDiagConclusionMemory"
+          : r.conclusion === "ok"
+            ? "memDiagConclusionOk"
+            : "memDiagConclusionUnknown";
+      appendConsole(t(conclusionKey) + "\n", r.conclusion === "memory" ? "err" : "info");
+    } catch (e) {
+      appendConsole(formatPythonError(e?.message) + "\n", "err");
+    } finally {
+      setMemDiagnosing(false);
+    }
+  }, [connected, boardType, memDiagnosing, appendConsole]);
 
   const onRecoverRepl = useCallback(async () => {
     if (!connected) {
@@ -1626,6 +1680,18 @@ export default function PyBotIDE() {
                             {t("bleInstallBtn")}
                           </button>
                           <div className="toolbar-menu-hint">{t("bleInstallMenuHint")}</div>
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
+                            onClick={() => {
+                              onRunMemoryDiagnostic();
+                              setBoardMenuOpen(false);
+                            }}
+                            disabled={memDiagnosing}
+                          >
+                            {t("memDiagBtn")}
+                          </button>
+                          <div className="toolbar-menu-hint">{t("memDiagMenuHint")}</div>
                           {boardType === "esp32-eda6" ? (
                             <>
                               <button

@@ -243,6 +243,21 @@ const STRINGS = {
     bleInstallOk: "PyBot Bluetooth instalado correctamente. ({size} bytes)",
     bleInstallReady: "El ESP32 ya puede utilizarse mediante Bluetooth.",
     bleInstallUnplug: "Podés desconectar el cable de datos.",
+    memDiagBtn: "Diagnóstico de memoria (USB)",
+    memDiagMenuHint:
+      "Revisa por USB si la ESP32 se queda sin memoria al preparar el runtime o activar Bluetooth. Solo lectura: no borra nada ni reinicia.",
+    memDiagStart: "Ejecutando diagnóstico de memoria por USB (solo lectura)…",
+    memDiagResult:
+      "RAM libre: {mem} bytes · main.py: {main} bytes · Compilación del runtime: {compile} · BLE activa: {ble}",
+    memDiagNA: "no existe",
+    memDiagError: "Error",
+    memDiagNotTested: "no probado",
+    memDiagConclusionMemory:
+      "Confirmado: la placa se queda sin memoria al preparar el runtime (por eso no aparece por Bluetooth).",
+    memDiagConclusionOk:
+      "La memoria no parece ser el problema; el runtime compila y BLE activa correctamente.",
+    memDiagConclusionUnknown:
+      "Diagnóstico incompleto: no se pudo determinar si es un problema de memoria. Revisá la conexión USB e intentá de nuevo.",
     bleConnectMenuBtn: "Conectar por Bluetooth (BLE)",
     bleConnectMenuHint:
       "Conectá una ESP32 con PyBot Bluetooth ya instalado, sin cables.",
@@ -699,6 +714,21 @@ Creado por VIC.`,
     bleInstallOk: "PyBot Bluetooth installed successfully. ({size} bytes)",
     bleInstallReady: "The ESP32 can now be used over Bluetooth.",
     bleInstallUnplug: "You can unplug the data cable.",
+    memDiagBtn: "Memory diagnostic (USB)",
+    memDiagMenuHint:
+      "Checks over USB whether the ESP32 runs out of memory while preparing the runtime or activating Bluetooth. Read-only: it does not delete anything or restart.",
+    memDiagStart: "Running memory diagnostic over USB (read-only)…",
+    memDiagResult:
+      "Free RAM: {mem} bytes · main.py: {main} bytes · Runtime compilation: {compile} · BLE activation: {ble}",
+    memDiagNA: "not found",
+    memDiagError: "Error",
+    memDiagNotTested: "not tested",
+    memDiagConclusionMemory:
+      "Confirmed: the board runs out of memory while preparing the runtime (that is why it does not show up over Bluetooth).",
+    memDiagConclusionOk:
+      "Memory does not seem to be the problem; the runtime compiles and BLE activates correctly.",
+    memDiagConclusionUnknown:
+      "Incomplete diagnostic: could not determine whether it is a memory problem. Check the USB connection and try again.",
     bleConnectMenuBtn: "Connect over Bluetooth (BLE)",
     bleConnectMenuHint:
       "Connect an ESP32 that already has PyBot Bluetooth installed, wirelessly.",
