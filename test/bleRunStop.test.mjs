@@ -215,3 +215,89 @@ test("unexpected disconnect while running (no stop requested) resolves as discon
   assert.equal(outcome, "disconnected");
   assert.equal(session.isRunning(), false);
 });
+
+/**
+ * Regresion del sintoma Run→Stop→Run:
+ * RUN:STOPPED llega mientras stop() aun esta en await sendChunked(STOP); el
+ * finally del primer run corre antes de que stop() continue. Sin el fix, stop()
+ * armaba un escalate huerfano → STOP:FORCE en el segundo Run (reset GATT).
+ */
+test("stop → second run: cooperative STOPPED then done without FORCE/disconnect", async () => {
+  const listeners = new Set();
+  const stateListeners = new Set();
+  const st = { connected: true, sent: [], forced: false };
+  const emitSync = (text) => listeners.forEach((cb) => cb(text));
+
+  const tr = {
+    isConnected: () => st.connected,
+    onData(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    onStateChange(cb) {
+      stateListeners.add(cb);
+      return () => stateListeners.delete(cb);
+    },
+    async sendChunked(text) {
+      const line = String(text).replace(/\n+$/, "");
+      st.sent.push(line);
+      if (line.startsWith(RUN.BEGIN + ":")) {
+        emitSync(RUN.READY);
+      } else if (line.startsWith(RUN.CHUNK + ":")) {
+        /* ignore */
+      } else if (line === RUN.END) {
+        emitSync(RUN.STARTED);
+        // Ambos runs son LOOP: quedan activos hasta STOP cooperativo.
+      } else if (line === RUN.STOP) {
+        // Carrera: STOPPED sincrono + yield para que finally corra antes del resume.
+        emitSync(RUN.STOPPED);
+        await new Promise((r) => setTimeout(r, 20));
+      } else if (line === RUN.STOP_FORCE) {
+        st.forced = true;
+        st.connected = false;
+        stateListeners.forEach((cb) => cb("disconnected"));
+      }
+    },
+  };
+
+  const session = new BleRunSession(tr);
+  const run1 = session.runProgram("while True: pass  # LOOP\n", {});
+  await new Promise((r) => setTimeout(r, 20));
+  await session.stop();
+  assert.equal((await run1).outcome, "stopped");
+  assert.equal(session.isRunning(), false);
+
+  // Segundo run debe seguir activo cuando venceria el escalate huerfano (~3.5s).
+  const run2P = session.runProgram("while True: wait(1)  # LOOP\n", {});
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(session.isRunning(), true);
+  // Si el bug sigue: aqui llega STOP:FORCE y cae GATT.
+  await new Promise((r) => setTimeout(r, 3800));
+  assert.equal(st.connected, true, "GATT debe seguir arriba durante el segundo run");
+  assert.equal(st.forced, false, "STOP:FORCE huerfano no debe dispararse");
+  assert.ok(!st.sent.includes(RUN.STOP_FORCE));
+
+  await session.stop();
+  const second = await run2P;
+  assert.equal(second.outcome, "stopped");
+  assert.equal(st.connected, true);
+});
+
+test("disconnect during READY handshake rejects BLE_RUN_DISCONNECTED (not NO_READY)", async () => {
+  const mock = makeMock();
+  const original = mock.sendChunked.bind(mock);
+  mock.sendChunked = async (text) => {
+    const line = String(text).replace(/\n+$/, "");
+    if (line.startsWith(RUN.BEGIN + ":")) {
+      mock._state.sent.push(line);
+      mock._disconnect();
+      return;
+    }
+    return original(text);
+  };
+  const session = new BleRunSession(mock);
+  await assert.rejects(
+    () => session.runProgram("print(1)\n", {}),
+    /BLE_RUN_DISCONNECTED/,
+  );
+});

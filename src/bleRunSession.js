@@ -14,6 +14,9 @@
  *     resuelven la promesa; no quedan listeners/timers huerfanos (limpieza en finally).
  *   - NO hay timeout para la duracion legitima del programa del alumno; si hay
  *     timeouts para el handshake (READY) y para el ACK de STOP (escalado).
+ *   - El escalado a FORCE esta atado a una generacion de run (`_runGen`): si STOPPED
+ *     llega mientras `await sendChunked(STOP)` aun no termino, NO debe armarse un
+ *     timer huerfano que dispare FORCE en el *siguiente* Run (reset + disconnect).
  *
  * Encapsulado: depende solo de un "transporte" con la interfaz
  *   { isConnected(), onData(cb), sendChunked(text), onStateChange?(cb) }
@@ -51,6 +54,8 @@ export class BleRunSession {
     this._forceSent = false;
     this._stopRequested = false;
     this._escalateTimer = null;
+    /** Generacion del run actual; el escalate de FORCE solo aplica a la misma. */
+    this._runGen = 0;
   }
 
   isConnected() {
@@ -63,6 +68,13 @@ export class BleRunSession {
 
   isRunning() {
     return this._running;
+  }
+
+  _clearEscalateTimer() {
+    if (this._escalateTimer) {
+      clearTimeout(this._escalateTimer);
+      this._escalateTimer = null;
+    }
   }
 
   /**
@@ -93,6 +105,10 @@ export class BleRunSession {
       throw new Error("BLE_PROGRAM_TOO_LONG");
     }
 
+    // Cancelar cualquier escalate huerfano de un stop previo (best-effort / carrera).
+    this._clearEscalateTimer();
+    this._runGen += 1;
+    const runGen = this._runGen;
     this._running = true;
     this._stopSent = false;
     this._forceSent = false;
@@ -114,6 +130,15 @@ export class BleRunSession {
     const settle = (outcome) => {
       if (settledOutcome != null) return;
       settledOutcome = outcome;
+      // Cortar escalate en cuanto hay estado terminal (antes del finally), para
+      // que un stop() aun en await sendChunked(STOP) no rearma FORCE.
+      this._clearEscalateTimer();
+      // Desbloquear el await de READY (p.ej. disconnect durante handshake).
+      if (readyTimer) {
+        clearTimeout(readyTimer);
+        readyTimer = null;
+      }
+      resolveReady(false);
       resolveDone(outcome);
     };
 
@@ -219,6 +244,13 @@ export class BleRunSession {
         // RUN:ERROR / ERR antes de READY: devolver outcome error (ya en onErr).
         return { outcome: "error" };
       }
+      // Desconexion durante el handshake: no confundir con runtime viejo (NO_READY).
+      if (settledOutcome === "disconnected" || settledOutcome === "stopped") {
+        if (settledOutcome === "disconnected" && !started) {
+          throw new Error("BLE_RUN_DISCONNECTED");
+        }
+        return { outcome: settledOutcome };
+      }
       if (!okReady || !ready) throw new Error("BLE_RUN_NO_READY");
 
       startStopPoller();
@@ -239,13 +271,14 @@ export class BleRunSession {
     } finally {
       if (readyTimer) clearTimeout(readyTimer);
       if (stopPoller) clearInterval(stopPoller);
-      if (this._escalateTimer) {
-        clearTimeout(this._escalateTimer);
-        this._escalateTimer = null;
+      // Solo limpiar el timer si sigue perteneciendo a ESTE run (evita borrar el
+      // escalate de un run posterior si hubiera solapamiento patologico).
+      if (this._runGen === runGen) {
+        this._clearEscalateTimer();
+        this._running = false;
       }
       if (offData) offData();
       if (offState) offState();
-      this._running = false;
     }
   }
 
@@ -262,15 +295,20 @@ export class BleRunSession {
     }
     if (this._stopSent) return;
     this._stopSent = true;
+    // Capturar generacion ANTES del await: si el run termina (STOPPED) mientras
+    // enviamos STOP, no debemos armar escalate para un run futuro.
+    const genAtStop = this._runGen;
     try {
       await this._tr.sendChunked(RUN.STOP);
     } catch {
       /* ignore */
     }
+    // El programa ya confirmo (u otro settle) mientras enviabamos STOP.
+    if (!this._running || this._runGen !== genAtStop) return;
     // Escalado: si el programa no cede (bucle sin puntos de espera), forzar.
-    if (this._escalateTimer) clearTimeout(this._escalateTimer);
+    this._clearEscalateTimer();
     this._escalateTimer = setTimeout(() => {
-      if (this._running && !this._forceSent) {
+      if (this._running && !this._forceSent && this._runGen === genAtStop) {
         this.forceStop().catch(() => {});
       }
     }, STOP_ESCALATE_MS);
