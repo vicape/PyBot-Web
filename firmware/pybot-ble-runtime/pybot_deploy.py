@@ -303,8 +303,17 @@ def handle_app(send, manager, cmd):
         if manager.start_app():
             send("APP:OK:START")
     elif cmd == "APP:STOP":
-        if manager.running and manager._persistent:
+        # Cualquier exec en curso (RUN temporal o app): pedir stop y ACK diferido
+        # en _finish. Evita APP:OK:STOP falso mientras el programa sigue vivo.
+        if manager.running:
             manager.request_app_stop("stop")
+        elif manager.pending:
+            manager.pending = False
+            try:
+                manager.reset_idle()
+            except Exception:
+                pass
+            send("APP:OK:STOP")
         else:
             send("APP:OK:STOP")
     elif cmd == "APP:DELETE":

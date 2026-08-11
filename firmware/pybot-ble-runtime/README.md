@@ -18,13 +18,15 @@ runtime ya **no** es un `main.py` monolítico:
 | `pybot_update.py` | UPDATE:* (OTA) | Lazy |
 | `pybot_boot_update.py` | Apply/rollback OTA (legacy + pack `PYBOTRT1`) | Solo si hay update pendiente |
 
-**Versión:** runtime **3.2.4**, protocolo **3.1** (comandos iguales; no rompe clientes 3.1).
+**Versión:** runtime **3.2.5**, protocolo **3.1** (comandos iguales; no rompe clientes 3.1).
 Precarga `pybot_run` fuera del IRQ BLE y reporta `RUN:ERROR:LOAD:...` si falla el import.
 En **3.2.3+** los comandos no urgentes (`RUN:*`, PING/INFO, …) se encolan en el IRQ y se
 procesan en el hilo principal (`poll_commands`), para que `RUN:READY` no use
 `gatts_notify`+`sleep` dentro del IRQ (rompe el segundo Run tras Stop).
 En **3.2.4** `STOP:FORCE` agenda reset por Timer (aunque `exec()` bloquee el main),
 `APP:STOP`/`APP:DELETE` son urgentes en IRQ, y `safe_boot` es sticky hasta `APP:START`.
+En **3.2.5** `APP:STOP` aplica a cualquier `exec` (RUN temporal o app), Timer FORCE
+prueba ids `-1`/`0`/`1`, y la web Stop BLE no exige `running` local.
 Recuperación USB (web): «Borrar programa BLE de la placa» elimina `pybot_app.*` sin tocar el runtime.
 Constantes compartidas entre módulos usan nombres exportables (`MAX_RUN_B64`, etc.):
 en MicroPython `_NAME = const(...)` no existe para `from … import`.
@@ -40,7 +42,7 @@ Archivos del alumno (NO se borran al actualizar el runtime): `pybot_app.py`,
 1. Conectar la ESP32 por USB en PyBot Web (modo ESP32 MicroPython o EDA6).
 2. Pulsar **Instalar PyBot Bluetooth**.
 3. Esperar verificación + reset.
-4. Abrir el panel Bluetooth: debe aparecer `PYBOT-XXXXXX` y `INFO.firmware == 3.2.4`.
+4. Abrir el panel Bluetooth: debe aparecer `PYBOT-XXXXXX` y `INFO.firmware == 3.2.5`.
 5. Si hay un programa zombie del alumno: **Borrar programa BLE de la placa (USB)**
    (Instalar runtime solo NO borra `pybot_app.*`).
 

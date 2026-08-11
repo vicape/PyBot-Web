@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Mirror minimo de ProgramManager (pybot_run.py 3.2.4) para el ciclo
+ * Mirror minimo de ProgramManager (pybot_run.py 3.2.5) para el ciclo
  * Run → Stop → Run: should_stop exige running, y begin() resetea idle.
  */
 
@@ -72,9 +72,9 @@ class ProgramManagerMirror {
   }
 }
 
-test("firmware 3.2.4 queues non-urgent RX and polls on main loop", () => {
+test("firmware 3.2.5 queues non-urgent RX and polls on main loop", () => {
   const ble = fs.readFileSync(BLE_PY, "utf8");
-  assert.match(ble, /PYBOT_RUNTIME_VERSION = "3\.2\.4"/);
+  assert.match(ble, /PYBOT_RUNTIME_VERSION = "3\.2\.5"/);
   assert.match(ble, /def poll_commands/);
   assert.match(ble, /def on_urgent/);
   assert.match(ble, /self\._cmd_q/);

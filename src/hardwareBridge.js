@@ -77,7 +77,17 @@ import {
   runtimeSupportsDeploy,
   runtimeSupportsUpdate,
   runtimeUpdateStatus,
+  runtimeStopReliable,
+  compareRuntimeVersions,
+  PYBOT_STOP_RELIABLE_MIN,
 } from "./bleProtocol.js";
+
+const BLE_STOP_WAIT_MS = 3500;
+const BLE_FORCE_WAIT_MS = 2500;
+
+function sleepMs(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
 let _mpSession = null;     // ESP32 MicroPython / EDA6 (ejecución en placa por SERIAL)
@@ -685,12 +695,64 @@ export async function bleUpdateRuntime(hooks = {}) {
 }
 
 /**
+ * Escucha confirmación de stop BLE (RUN:STOPPED / APP:OK:STOP) o desconexión.
+ * El caller debe registrar esto ANTES de enviar los comandos (evita perder ACK).
+ * @returns {{ done: () => boolean, stop: () => void }}
+ */
+function armBleStopAck() {
+  const tr = _bleTransport;
+  let settled = !tr || !tr.isConnected();
+  const mark = () => {
+    settled = true;
+  };
+  let offData = null;
+  let offState = null;
+  if (tr) {
+    offData = tr.onData((msg) => {
+      const t = String(msg ?? "");
+      if (
+        t.includes("RUN:STOPPED") ||
+        t.includes("APP:OK:STOP") ||
+        t.includes("APP:OK:DELETE") ||
+        t.includes("RUN:DONE")
+      ) {
+        mark();
+      }
+    });
+    if (typeof tr.onStateChange === "function") {
+      offState = tr.onStateChange((state) => {
+        if (state === "disconnected" || state === "idle") mark();
+      });
+    }
+  }
+  return {
+    done: () => settled || !_bleTransport || !_bleTransport.isConnected(),
+    stop: () => {
+      if (offData) offData();
+      if (offState) offState();
+    },
+  };
+}
+
+async function waitArmedBleStopAck(armed, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  try {
+    while (!armed.done() && Date.now() < deadline) {
+      await sleepMs(50);
+    }
+    return armed.done();
+  } finally {
+    armed.stop();
+  }
+}
+
+/**
  * Operación UNIFICADA de STOP del programa en la placa (P0-5 / P1-4). Una sola
  * abstracción para todos los transportes, con el ESP32 como fuente de verdad:
  *   1) SERIAL (_mpSession) → Ctrl-C existente (prioridad serial intacta).
  *   2) BLE, RUN temporal (sesión web) → STOP cooperativo con escalado a FORCE.
- *   3) BLE, app persistente → APP:STOP (no depende de APP:INFO: con exec
- *      bloqueante INFO puede no responder) y, si no cede, STOP + STOP:FORCE.
+ *   3) BLE sin sesión RUN local (app persistente / autostart / unknown) →
+ *      APP:STOP + STOP, y si no cede, STOP:FORCE. No depende de APP:INFO.
  * @returns {Promise<{transport:string, kind?:string}>}
  */
 export async function stopBoardExecution() {
@@ -703,37 +765,59 @@ export async function stopBoardExecution() {
     return { transport: "serial" };
   }
   if (_bleTransport && _bleTransport.isConnected()) {
-    // RUN temporal gestionado por la sesión web (BleRunSession sabe escalar a FORCE).
+    // RUN temporal gestionado por la sesión web (BleRunSession escala a FORCE).
     if (_bleRun && _bleRun.isRunning && _bleRun.isRunning()) {
       try {
-        await _bleRun.stop();
+        await _bleRun.stop({ wait: true });
       } catch {
         /* ignore */
       }
       return { transport: "ble", kind: "run" };
     }
-    // App persistente / autostart: pedir APP:STOP siempre (si no hay app
-    // corriendo, el firmware responde APP:OK:STOP al instante). No depender de
-    // APP:INFO: con el main bloqueado en exec() INFO no se drena.
+    // App persistente / autostart / programa en placa sin `running` local en la UI.
+    const armed = armBleStopAck();
     try {
-      await appStop(_bleTransport);
-      return { transport: "ble", kind: "app" };
+      await _bleTransport.send(APP.STOP);
     } catch {
-      // Timeout / no cooperativo → STOP + FORCE (Timer en firmware 3.2.4+).
-      try {
-        await _bleTransport.send(RUN.STOP);
-      } catch {
-        /* ignore */
-      }
-      try {
-        await _bleTransport.send(RUN.STOP_FORCE);
-      } catch {
-        /* ignore */
-      }
-      return { transport: "ble", kind: "app-force" };
+      /* ignore */
     }
+    try {
+      await _bleTransport.send(RUN.STOP);
+    } catch {
+      /* ignore */
+    }
+    if (await waitArmedBleStopAck(armed, BLE_STOP_WAIT_MS)) {
+      return { transport: "ble", kind: "app" };
+    }
+    // No cooperativo → FORCE (Timer en firmware 3.2.4+).
+    const armedForce = armBleStopAck();
+    try {
+      await _bleTransport.send(RUN.STOP_FORCE);
+    } catch {
+      /* ignore */
+    }
+    await waitArmedBleStopAck(armedForce, BLE_FORCE_WAIT_MS);
+    return { transport: "ble", kind: "app-force" };
   }
   return { transport: "none" };
+}
+
+/**
+ * INFO del runtime BLE + si el Stop es fiable (>= 3.2.4). Para avisos de aula.
+ * @returns {Promise<{ info: object|null, stopReliable: boolean, installed: string|null }>}
+ */
+export async function bleRuntimeStopStatus() {
+  const info = await getBleInfo();
+  const installed = info && info.firmware != null ? String(info.firmware) : null;
+  return {
+    info,
+    stopReliable: runtimeStopReliable(info),
+    installed,
+    minReliable: PYBOT_STOP_RELIABLE_MIN,
+    outdated:
+      installed != null &&
+      compareRuntimeVersions(installed, PYBOT_STOP_RELIABLE_MIN) < 0,
+  };
 }
 
 /** @deprecated Alias histórico de {@link stopBoardExecution} (misma semántica unificada). */

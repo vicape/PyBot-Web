@@ -43,6 +43,7 @@ import {
   bleGetAppInfo,
   bleDeleteApp,
   bleSetAutostart,
+  bleRuntimeStopStatus,
 } from "./hardwareBridge.js";
 import {
   filterExamplesForBoard,
@@ -1131,6 +1132,19 @@ export default function PyBotIDE() {
         );
         appendConsole(t("bleRunHint") + "\n", "info");
         refreshBleAppStatus();
+        // Aviso aula: runtime < 3.2.4 no recupera bucles con STOP:FORCE.
+        bleRuntimeStopStatus()
+          .then((st) => {
+            if (st?.outdated) {
+              appendConsole(
+                t("bleStopRuntimeOld")
+                  .replace("{installed}", st.installed ?? "?")
+                  .replace("{min}", st.minReliable ?? "3.2.4") + "\n",
+                "err",
+              );
+            }
+          })
+          .catch(() => {});
       } else {
         appendConsole(t("bleRunDisconnected") + "\n", "info");
         setBleAppStatus(null);
@@ -1152,14 +1166,21 @@ export default function PyBotIDE() {
     // Programa en la placa (serial o BLE): NO marcar detenido antes de la
     // confirmación real (P0-2). Mostramos "Deteniendo…" y dejamos que el run en
     // curso resuelva su outcome (RUN:STOPPED / desconexión) y limpie los flags.
+    // Importante: con BLE, Stop DEBE intentar aunque `running` local sea false
+    // (app autostart / programa bajado sin sesión web activa).
     const onBoard =
       (boardType === "esp32-micropython" || boardType === "esp32-eda6") &&
       (hardwareIsConnected() || bleConnected);
-    if (onBoard && (running || stopping)) {
+    const bleAppRunning = !!(bleAppStatus && bleAppStatus.running);
+    if (onBoard && (running || stopping || bleConnected || bleAppRunning)) {
+      const expectRunCleanup = running;
       setStopping(true);
       appendConsole("\n" + t("stoppingMsg") + "\n", "info");
-      // Operación unificada de STOP (serial Ctrl-C / BLE RUN o APP + escalado FORCE).
-      stopBoardExecution().catch(() => {});
+      stopBoardExecution()
+        .catch(() => {})
+        .finally(() => {
+          if (!expectRunCleanup) setStopping(false);
+        });
       return;
     }
     // Pyodide o sin programa en placa: el run local resuelve por signalStop.
@@ -1169,7 +1190,7 @@ export default function PyBotIDE() {
     } else {
       appendConsole("\n[Stop solicitado]\n", "info");
     }
-  }, [appendConsole, boardType, bleConnected, running, stopping]);
+  }, [appendConsole, boardType, bleConnected, bleAppStatus, running, stopping]);
 
   const onOpenLocal = useCallback(() => {
     fileInputRef.current?.click();

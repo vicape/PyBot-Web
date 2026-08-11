@@ -298,6 +298,8 @@ const STRINGS = {
       "Se perdió el Bluetooth durante la ejecución. El programa temporal se detuvo.",
     bleFirmwareOutdated:
       "Runtime viejo: esta placa no puede ejecutar programas por Bluetooth. Actualizala con “Instalar PyBot Bluetooth” por USB.",
+    bleStopRuntimeOld:
+      "Runtime {installed}: el Stop por Bluetooth no es fiable (hace falta {min}+). Actualizá por OTA en el panel Bluetooth o con “Instalar PyBot Bluetooth” por USB.",
     boardProgramStopped: "Programa detenido.",
     stoppingMsg: "Deteniendo…",
     statusStopping: "Deteniendo",
@@ -776,6 +778,8 @@ Creado por VIC.`,
       "Bluetooth was lost while running. The temporary program was stopped.",
     bleFirmwareOutdated:
       "Old runtime: this board cannot run programs over Bluetooth. Update it with “Install PyBot Bluetooth” over USB.",
+    bleStopRuntimeOld:
+      "Runtime {installed}: Bluetooth Stop is unreliable (need {min}+). Update via OTA in the Bluetooth panel or “Install PyBot Bluetooth” over USB.",
     boardProgramStopped: "Program stopped.",
     stoppingMsg: "Stopping…",
     statusStopping: "Stopping",
@@ -1044,14 +1048,14 @@ export function formatPythonError(message) {
   }
   if (/BLE_RUN_NO_READY/i.test(m)) {
     return pick(
-      "La placa no confirmó el inicio por Bluetooth (sin RUN:READY). Si el runtime es anterior a 3.2.4, actualizalo por OTA o “Instalar PyBot Bluetooth” por USB; si no, reconectá y probá de nuevo.",
-      "The board did not confirm start over Bluetooth (no RUN:READY). If the runtime is older than 3.2.4, update via OTA or “Install PyBot Bluetooth” over USB; otherwise reconnect and try again.",
+      "La placa no confirmó el inicio por Bluetooth (sin RUN:READY). Si el runtime es anterior a 3.2.5, actualizalo por OTA o “Instalar PyBot Bluetooth” por USB; si no, reconectá y probá de nuevo.",
+      "The board did not confirm start over Bluetooth (no RUN:READY). If the runtime is older than 3.2.5, update via OTA or “Install PyBot Bluetooth” over USB; otherwise reconnect and try again.",
     );
   }
   if (/BLE_RUN_INTERNAL/i.test(m)) {
     return pick(
-      "La placa falló al preparar la ejecución por Bluetooth. Reinstalá “Instalar PyBot Bluetooth” por USB (runtime 3.2.4+) y volvé a conectar.",
-      "The board failed while preparing Bluetooth execution. Reinstall “Install PyBot Bluetooth” over USB (runtime 3.2.4+) and reconnect.",
+      "La placa falló al preparar la ejecución por Bluetooth. Reinstalá “Instalar PyBot Bluetooth” por USB (runtime 3.2.5+) y volvé a conectar.",
+      "The board failed while preparing Bluetooth execution. Reinstall “Install PyBot Bluetooth” over USB (runtime 3.2.5+) and reconnect.",
     );
   }
   if (/BLE_CLEAR_APP_FAILED/i.test(m)) {

@@ -316,38 +316,51 @@ export class BleRunSession {
   /**
    * Envia STOP al runtime para abortar el programa del alumno (STOP cooperativo).
    * Si no hay confirmacion dentro de STOP_ESCALATE_MS, escala a STOP:FORCE.
-   * @param {{ force?: boolean }} [opts]
+   * @param {{ force?: boolean, wait?: boolean }} [opts]
+   *   `wait:true` espera a que el run deje de estar activo (STOPPED/FORCE/DONE).
    */
   async stop(opts = {}) {
     if (!this.isConnected()) return;
     this._stopRequested = true;
     if (opts.force) {
-      return this.forceStop();
+      await this.forceStop();
+      if (opts.wait) await this._waitUntilIdle(STOP_ESCALATE_MS + 2500);
+      return;
     }
-    if (this._stopSent) return;
-    this._stopSent = true;
-    // Capturar generacion ANTES del await: si el run termina (STOPPED) mientras
-    // enviamos STOP, no debemos armar escalate para un run futuro.
-    const genAtStop = this._runGen;
-    try {
-      await this._tr.sendChunked(RUN.STOP);
-    } catch {
-      /* ignore */
-    }
-    // El programa ya confirmo (u otro settle) mientras enviabamos STOP.
-    if (!this._running || this._terminal || this._runGen !== genAtStop) return;
-    // Escalado: si el programa no cede (bucle sin puntos de espera), forzar.
-    this._clearEscalateTimer();
-    this._escalateTimer = setTimeout(() => {
-      if (
-        this._running &&
-        !this._terminal &&
-        !this._forceSent &&
-        this._runGen === genAtStop
-      ) {
-        this.forceStop().catch(() => {});
+    if (!this._stopSent) {
+      this._stopSent = true;
+      // Capturar generacion ANTES del await: si el run termina (STOPPED) mientras
+      // enviamos STOP, no debemos armar escalate para un run futuro.
+      const genAtStop = this._runGen;
+      try {
+        await this._tr.sendChunked(RUN.STOP);
+      } catch {
+        /* ignore */
       }
-    }, STOP_ESCALATE_MS);
+      // El programa ya confirmo (u otro settle) mientras enviabamos STOP.
+      if (this._running && !this._terminal && this._runGen === genAtStop) {
+        // Escalado: si el programa no cede (bucle sin puntos de espera), forzar.
+        this._clearEscalateTimer();
+        this._escalateTimer = setTimeout(() => {
+          if (
+            this._running &&
+            !this._terminal &&
+            !this._forceSent &&
+            this._runGen === genAtStop
+          ) {
+            this.forceStop().catch(() => {});
+          }
+        }, STOP_ESCALATE_MS);
+      }
+    }
+    if (opts.wait) await this._waitUntilIdle(STOP_ESCALATE_MS + 2500);
+  }
+
+  async _waitUntilIdle(timeoutMs) {
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    while (this._running && Date.now() < deadline) {
+      await sleep(50);
+    }
   }
 
   /** Fuerza la detencion: STOP:FORCE (reset + safe boot en la placa). */

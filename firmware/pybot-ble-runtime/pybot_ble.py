@@ -13,7 +13,7 @@ try:
 except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
-PYBOT_RUNTIME_VERSION = "3.2.4"
+PYBOT_RUNTIME_VERSION = "3.2.5"
 PYBOT_PROTOCOL_VERSION = "3.1"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
@@ -577,22 +577,25 @@ def main():
         if ctx.get("force_timer_armed"):
             return
         ctx["force_timer_armed"] = True
-        try:
-            t = machine.Timer(-1)
 
-            def _cb(_t):
+        def _cb(_t):
+            try:
+                _force_reset()
+            except Exception:
                 try:
-                    _force_reset()
+                    machine.reset()
                 except Exception:
-                    try:
-                        machine.reset()
-                    except Exception:
-                        pass
+                    pass
 
-            t.init(period=40, mode=machine.Timer.ONE_SHOT, callback=_cb)
-        except Exception:
-            # Sin Timer: el main loop (si no esta en exec) todavia puede resetear.
-            pass
+        # Soft timer (-1) primero; hardware 0/1 como fallback en ports viejos.
+        for timer_id in (-1, 0, 1):
+            try:
+                t = machine.Timer(timer_id)
+                t.init(period=40, mode=machine.Timer.ONE_SHOT, callback=_cb)
+                return
+            except Exception:
+                pass
+        # Sin Timer: el main loop (si no esta en exec) todavia puede resetear.
 
     def on_urgent(text):
         """Solo flags / agenda Timer en IRQ: NUNCA notify/sleep/reset directo."""
@@ -614,9 +617,10 @@ def main():
             return True
         # APP:STOP/DELETE deben marcar flags YA: si van a la cola RX y el main
         # esta bloqueado en exec(), nunca se procesan → placa zombie (regresion 3.2.3).
+        # 3.2.5: cualquier programa en exec (RUN temporal o app), no solo persistent.
         if upper == "APP:STOP":
             m = ctx["manager"]
-            if m and m.running and m._persistent:
+            if m and m.running:
                 m.request_app_stop("stop")
                 return True
             return False

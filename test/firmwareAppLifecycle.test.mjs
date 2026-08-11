@@ -183,7 +183,8 @@ class Board {
   }
   handleApp(cmd) {
     if (cmd === "APP:STOP") {
-      if (this.running && this.persistent) {
+      // 3.2.5: cualquier exec (no solo persistent) → ACK diferido.
+      if (this.running) {
         this.appAck = "stop"; // diferido: sin respuesta inmediata
         return null;
       }

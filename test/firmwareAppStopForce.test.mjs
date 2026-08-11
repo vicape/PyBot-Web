@@ -5,9 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Regresión 3.2.3 → 3.2.4: con app persistente en exec(), el main loop no drena
+ * Regresión 3.2.3 → 3.2.5: con app/RUN en exec(), el main loop no drena
  * la cola RX. STOP:FORCE debe agendarse por Timer; APP:STOP/DELETE deben ser
  * urgentes (flags en IRQ); safe_boot sticky; FORCE con ack=delete borra.
+ * 3.2.5: APP:STOP para cualquier exec; Timer fallback -1/0/1.
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -37,11 +38,12 @@ const ble = () => fs.readFileSync(BLE_PY, "utf8");
 const run = () => fs.readFileSync(RUN_PY, "utf8");
 const deploy = () => fs.readFileSync(DEPLOY_PY, "utf8");
 
-test("runtime 3.2.4 declares version and schedules FORCE via Timer", () => {
+test("runtime 3.2.5 declares version and schedules FORCE via Timer", () => {
   const src = ble();
-  assert.match(src, /PYBOT_RUNTIME_VERSION = "3\.2\.4"/);
+  assert.match(src, /PYBOT_RUNTIME_VERSION = "3\.2\.5"/);
   assert.match(src, /def _schedule_force_reset/);
-  assert.match(src, /machine\.Timer\(-1\)/);
+  assert.match(src, /for timer_id in \(-1, 0, 1\):/);
+  assert.match(src, /machine\.Timer\(timer_id\)/);
   assert.match(src, /force_timer_armed/);
   // FORCE ya no depende solo del flag que el main lee tras exec().
   assert.match(src, /_schedule_force_reset\(\)/);
@@ -53,6 +55,10 @@ test("APP:STOP and APP:DELETE are handled as urgent when app is running", () => 
   assert.match(src, /if upper == "APP:DELETE":/);
   assert.match(src, /request_app_stop\("stop"\)/);
   assert.match(src, /request_app_stop\("delete"\)/);
+  // 3.2.5: APP:STOP urgente si hay cualquier exec (no exige _persistent).
+  const urgent = src.slice(src.indexOf("def on_urgent"), src.indexOf("def on_command"));
+  assert.match(urgent, /if m and m\.running:/);
+  assert.ok(!/m\.running and m\._persistent/.test(urgent.split("APP:STOP")[1]?.split("APP:DELETE")[0] ?? ""));
 });
 
 test("FORCE disables autostart and deletes when APP:DELETE ack is pending", () => {
@@ -89,7 +95,7 @@ test("deploy still clears safe_boot on successful install", () => {
 test("mirror: APP:STOP flag works while main is blocked in exec", () => {
   const mgr = {
     running: true,
-    _persistent: true,
+    _persistent: false, // RUN temporal también debe aceptar APP:STOP (3.2.5)
     _stop: false,
     _app_ack: null,
     request_app_stop(action) {
@@ -110,7 +116,7 @@ test("mirror: APP:STOP flag works while main is blocked in exec", () => {
   function on_urgent(upper) {
     if (upper === "APP:STOP") {
       const m = ctx.manager;
-      if (m && m.running && m._persistent) {
+      if (m && m.running) {
         m.request_app_stop("stop");
         return true;
       }

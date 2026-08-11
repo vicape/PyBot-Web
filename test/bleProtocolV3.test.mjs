@@ -33,7 +33,7 @@ import {
 } from "../src/bleProtocol.js";
 
 test("version and protocol bumped to 3.2 / 3.1 (modular runtime + OTA)", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.4");
+  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.5");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.1");
 });
 

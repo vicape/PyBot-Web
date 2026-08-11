@@ -54,11 +54,11 @@ function buildPackBytes(modules) {
   return out;
 }
 
-test("runtime modules declare 3.2.4 / protocol 3.1", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.4");
+test("runtime modules declare 3.2.5 / protocol 3.1", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.5");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.1");
   const core = readFw("pybot_ble.py");
-  assert.match(core, /PYBOT_RUNTIME_VERSION = "3\.2\.4"/);
+  assert.match(core, /PYBOT_RUNTIME_VERSION = "3\.2\.5"/);
   assert.match(core, /PYBOT_PROTOCOL_VERSION = "3\.1"/);
   // 3.2.3+: RUN:BEGIN/READY fuera del IRQ (cola + poll en main loop).
   assert.match(core, /poll_commands/);

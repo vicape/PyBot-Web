@@ -54,6 +54,11 @@ nuevos; no altera EDA6, USB/Firmata, Pyodide ni el mecanismo de ejecución exist
 > urgentes (flags en IRQ); tras FORCE, `safe_boot` es sticky y se apaga autostart.
 > Recuperación USB: «Borrar programa BLE de la placa (USB)» (no alcanza solo reinstalar
 > el runtime: ese flujo **preserva** `pybot_app.*`). Actualización desde 3.2.x: **OTA o USB**.
+>
+> **Runtime 3.2.5:** `APP:STOP` urgente/ACK diferido para **cualquier** programa en
+> `exec` (no solo app persistente); Timer FORCE con fallback `0`/`1`; la UI Stop por
+> BLE intenta siempre (aunque no haya `running` local — p.ej. autostart). Placas
+> **&lt; 3.2.4** reciben aviso “actualizá runtime para Stop fiable”.
 
 ## 1. Arquitectura y enfoque elegido
 

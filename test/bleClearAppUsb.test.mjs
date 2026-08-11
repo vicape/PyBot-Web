@@ -28,7 +28,7 @@ test("stopBoardExecution prefers APP:STOP then FORCE without requiring APP:INFO"
   const src = fs.readFileSync(BRIDGE, "utf8");
   const fn = src.slice(src.indexOf("export async function stopBoardExecution"));
   const body = fn.slice(0, fn.indexOf("\nexport "));
-  assert.match(body, /appStop/);
+  assert.match(body, /APP\.STOP/);
   assert.match(body, /STOP_FORCE/);
   // Regresión: no bloquear el Stop en APP:INFO (puede no responder con exec activo).
   assert.ok(!body.includes("appInfo("));

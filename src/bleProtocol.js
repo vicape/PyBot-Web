@@ -22,7 +22,7 @@ export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web (
 // decidir si ofrecer una actualizacion OTA por BLE. NO duplicar esta constante:
 // pybotBleRuntime.js la reexporta; los tests y la UI la importan de aca.
 // ===========================================================================
-export const PYBOT_RUNTIME_VERSION = "3.2.4";
+export const PYBOT_RUNTIME_VERSION = "3.2.5";
 // Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
 // verificado (size+hash), control de app (APP:*) y autostart con safe boot.
 // El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
@@ -44,10 +44,15 @@ export const PYBOT_RUNTIME_VERSION = "3.2.4";
 // 3.2.4 (runtime; protocolo sigue 3.1): STOP:FORCE agenda reset por Timer aunque
 // exec() bloquee el main loop; APP:STOP/DELETE urgentes en IRQ; safe_boot sticky
 // hasta APP:START (anti-zombie tras deploy+autostart).
+// 3.2.5 (runtime; protocolo sigue 3.1): APP:STOP urgente/ACK diferido para CUALQUIER
+// exec (no solo app persistente); Timer FORCE con fallback 0/1; UI Stop BLE sin
+// exigir running local.
 export const PYBOT_PROTOCOL_VERSION = "3.1";
 
 /** Primera version de runtime con boot/OTA multi-archivo (pack PYBOTRT1). */
 export const PYBOT_MODULAR_RUNTIME_MIN = "3.2.0";
+/** Primera version donde STOP:FORCE recupera bucles no cooperativos (Timer). */
+export const PYBOT_STOP_RELIABLE_MIN = "3.2.4";
 export const PYBOT_RUNTIME_NAME = "PyBot BLE Runtime";
 export const PYBOT_BOARD = "ESP32";
 
@@ -270,6 +275,16 @@ export function runtimeUpdateStatus(info, published = PYBOT_RUNTIME_VERSION) {
     // Novedad sin canal OTA, o salto a layout modular desde < 3.2.0.
     needsUsb: updateAvailable && (!supportsOta || !otaLayoutReady),
   };
+}
+
+/**
+ * True si el runtime instalado tiene STOP:FORCE usable (Timer, >= 3.2.4).
+ * Si INFO es desconocido, no bloqueamos (asumimos ok / dejar que el Stop pruebe).
+ * @param {null | { firmware?: string }} info
+ */
+export function runtimeStopReliable(info) {
+  if (!info || typeof info !== "object" || info.firmware == null) return true;
+  return compareRuntimeVersions(String(info.firmware), PYBOT_STOP_RELIABLE_MIN) >= 0;
 }
 
 /**
