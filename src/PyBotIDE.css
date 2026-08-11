@@ -2198,6 +2198,81 @@
   }
 }
 
+/* --- OTA runtime BLE (progreso encapsulado en el panel) --- */
+.ble-update {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ble-update__versions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.ble-update__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.ble-update__progress-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.ble-update__progress-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ble-update__bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.ble-update__bar-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--accent, #007acc);
+  transition: width 0.2s ease-out;
+}
+
+.ble-update__bar-fill--done {
+  background: #3d9a6a;
+}
+
+.ble-update__msg {
+  font-size: 13px;
+}
+
+.ble-update__available,
+.ble-update__uptodate {
+  font-size: 13px;
+}
+
+.ide-root[data-theme="light"] .ble-update__progress {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.ide-root[data-theme="light"] .ble-update__bar {
+  background: rgba(0, 0, 0, 0.08);
+}
+
 /* --- Panel de diagnóstico BLE (encapsulado, aditivo) --- */
 .ble-diag {
   margin-top: 14px;

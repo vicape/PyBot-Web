@@ -603,6 +603,9 @@ export async function bleUpdateRuntime(hooks = {}) {
   if (!_bleUpdate || !_bleUpdate.isConnected()) throw new Error("BLE_NOT_CONNECTED");
   const onProgress = hooks.onProgress ?? (() => {});
 
+  // Progreso visible de inmediato (0%) antes de INFO / stop / transferencia.
+  onProgress({ phase: "start", pct: 0, sent: 0, total: 0 });
+
   // 0) Confirmar (por capability) que la placa expone el canal OTA. Una placa
   //    3.0.x sin "runtime-update" requiere una última actualización por USB.
   const status = await bleRuntimeUpdateInfo();

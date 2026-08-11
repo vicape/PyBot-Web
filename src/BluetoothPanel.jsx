@@ -14,6 +14,10 @@ import {
   bleRunTransport,
   bleUpdateRuntime,
 } from "./hardwareBridge.js";
+import {
+  formatBleUpdateProgressText,
+  normalizeUpdatePct,
+} from "./bleUpdateProgress.js";
 
 /**
  * Panel de conexion + diagnostico BLE (encapsulado). No toca USB / Web Serial.
@@ -151,25 +155,23 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
     }
   }, []);
 
-  const updatePhaseText = useCallback((phase, pct) => {
-    switch (phase) {
-      case "begin":
-      case "start":
-        return t("bleUpdateStart");
-      case "transfer":
-        return t("bleUpdateTransfer").replace("{pct}", String(pct ?? 0));
-      case "verified":
-        return t("bleUpdateVerifying");
-      case "applying":
-        return t("bleUpdateApplying");
-      case "reconnecting":
-        return t("bleUpdateReconnecting");
-      case "verifying-version":
-        return t("bleUpdateRestarting");
-      default:
-        return t("bleUpdating");
-    }
-  }, []);
+  const updateLabels = useCallback(
+    () => ({
+      transfer: t("bleUpdateTransfer"),
+      verifying: t("bleUpdateVerifying"),
+      applying: t("bleUpdateApplying"),
+      reconnecting: t("bleUpdateReconnecting"),
+      restarting: t("bleUpdateRestarting"),
+      finished: t("bleUpdateFinished"),
+      updating: t("bleUpdating"),
+    }),
+    [],
+  );
+
+  const updatePhaseText = useCallback(
+    (phase, pct) => formatBleUpdateProgressText(phase, pct, updateLabels()),
+    [updateLabels],
+  );
 
   const handleUpdate = useCallback(async () => {
     if (updating) return;
@@ -179,11 +181,31 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
     setUpdatePhase("start");
     setUpdatePct(0);
     appendLog(t("bleUpdateStart"), "info");
+    appendLog(formatBleUpdateProgressText("start", 0, updateLabels()), "info");
+    let lastLoggedPct = -1;
+    let finishedOk = false;
     try {
       const res = await bleUpdateRuntime({
         onProgress: (p) => {
-          setUpdatePhase(p.phase);
-          if (typeof p.pct === "number") setUpdatePct(p.pct);
+          const phase = p.phase;
+          const pct = normalizeUpdatePct(p.pct);
+          setUpdatePhase(phase);
+          setUpdatePct(pct);
+          if (phase === "begin" || phase === "start") {
+            if (lastLoggedPct < 0) {
+              lastLoggedPct = 0;
+            }
+          } else if (phase === "transfer" && pct !== lastLoggedPct) {
+            lastLoggedPct = pct;
+            appendLog(formatBleUpdateProgressText("transfer", pct, updateLabels()), "info");
+          } else if (
+            phase === "verified" ||
+            phase === "applying" ||
+            phase === "reconnecting" ||
+            phase === "verifying-version"
+          ) {
+            appendLog(formatBleUpdateProgressText(phase, pct, updateLabels()), "info");
+          }
         },
       });
       if (res.reconnected) {
@@ -192,7 +214,11 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
         notifyConnection(true, deviceName);
       }
       if (res.verified) {
+        finishedOk = true;
+        setUpdatePhase("done");
+        setUpdatePct(100);
         setUpdateMsg(t("bleUpdateOk"));
+        appendLog(t("bleUpdateFinished"), "ok");
         appendLog(t("bleUpdateOk"), "ok");
         await refreshInfo();
       } else if (res.reconnected) {
@@ -205,18 +231,20 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
       }
     } catch (e) {
       const code = e?.message ?? "";
+      let failMsg;
       if (code === "BLE_UPDATE_UNSUPPORTED") {
-        setUpdateMsg(t("bleUpdateUnsupported"));
+        failMsg = t("bleUpdateUnsupported");
       } else {
         const short = code.replace(/^BLE_UPDATE_ERROR:/, "").replace(/^BLE_UPDATE_/, "");
-        setUpdateMsg(t("bleUpdateFail").replace("{code}", short || "ERROR"));
+        failMsg = t("bleUpdateFail").replace("{code}", short || "ERROR");
       }
-      appendLog(updateMsg ?? t("bleUpdateFail").replace("{code}", code || "ERROR"), "err");
+      setUpdateMsg(failMsg);
+      appendLog(failMsg, "err");
     } finally {
       setUpdating(false);
-      setUpdatePhase(null);
+      if (!finishedOk) setUpdatePhase(null);
     }
-  }, [updating, appendLog, notifyConnection, deviceName, refreshInfo, updateMsg]);
+  }, [updating, appendLog, notifyConnection, deviceName, refreshInfo, updateLabels]);
 
   if (!open) return null;
 
@@ -290,9 +318,34 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
               </span>
             </div>
 
-            {updating ? (
+            {updating || updatePhase === "done" ? (
               <div className="ble-update__progress" aria-live="polite">
-                {updatePhaseText(updatePhase, updatePct)}
+                <div className="ble-update__progress-row">
+                  <span className="ble-update__progress-label">
+                    {updatePhase === "done"
+                      ? t("bleUpdateFinished")
+                      : updatePhaseText(updatePhase, updatePct)}
+                  </span>
+                  <span className="ble-update__progress-pct">
+                    {normalizeUpdatePct(updatePct)}%
+                  </span>
+                </div>
+                <div
+                  className="ble-update__bar"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={normalizeUpdatePct(updatePct)}
+                  aria-label={updatePhaseText(updatePhase, updatePct)}
+                >
+                  <div
+                    className={
+                      "ble-update__bar-fill" +
+                      (updatePhase === "done" ? " ble-update__bar-fill--done" : "")
+                    }
+                    style={{ width: `${normalizeUpdatePct(updatePct)}%` }}
+                  />
+                </div>
               </div>
             ) : updateStatus?.needsUsb ? (
               <div className="connect-modal-error" role="alert">
