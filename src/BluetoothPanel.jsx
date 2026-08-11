@@ -80,7 +80,9 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
       notifyConnection(true, name);
       appendLog(t("bleLogConnected").replace("{name}", name ?? "PYBOT"), "ok");
       try {
-        const resp = await tr.sendAndWait(COMMANDS.INFO, 4000);
+        const resp = await tr.sendAndWait(COMMANDS.INFO, 4000, {
+          match: (msg) => String(msg ?? "").trim().startsWith("{"),
+        });
         const parsed = parseInfoResponse(resp);
         if (parsed) {
           tr.setDeviceInfo(parsed);
@@ -123,7 +125,14 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
       setBusy(true);
       appendLog((label ?? command) + " ->", "send");
       try {
-        const resp = await tr.sendAndWait(command, 4000);
+        const resp = await tr.sendAndWait(command, 4000, {
+          match: (msg) => {
+            const t = String(msg ?? "").trim();
+            if (command === COMMANDS.INFO) return t.startsWith("{");
+            if (command === COMMANDS.PING) return /PONG/i.test(t);
+            return true;
+          },
+        });
         appendLog("<- " + resp, "recv");
         const parsed = parseInfoResponse(resp);
         if (parsed) {
@@ -144,7 +153,9 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
     const tr = bleRunTransport();
     if (!tr || !tr.isConnected()) return;
     try {
-      const resp = await tr.sendAndWait(COMMANDS.INFO, 4000);
+      const resp = await tr.sendAndWait(COMMANDS.INFO, 4000, {
+        match: (msg) => String(msg ?? "").trim().startsWith("{"),
+      });
       const parsed = parseInfoResponse(resp);
       if (parsed) {
         tr.setDeviceInfo(parsed);

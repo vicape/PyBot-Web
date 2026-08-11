@@ -301,3 +301,72 @@ test("disconnect during READY handshake rejects BLE_RUN_DISCONNECTED (not NO_REA
     /BLE_RUN_DISCONNECTED/,
   );
 });
+
+/**
+ * Regresion: primer RUN:BEGIN sin READY (manager no idle / IRQ ocupado), el
+ * segundo BEGIN del reintento obtiene READY y el run completa. Sin reintento
+ * fallaria con BLE_RUN_NO_READY tras Stop→Run.
+ */
+test("READY retry: second BEGIN succeeds after first silent BEGIN", async () => {
+  const listeners = new Set();
+  const stateListeners = new Set();
+  const st = { connected: true, begins: 0, sent: [] };
+  const emitSync = (text) => listeners.forEach((cb) => cb(text));
+
+  const tr = {
+    isConnected: () => st.connected,
+    onData(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    onStateChange(cb) {
+      stateListeners.add(cb);
+      return () => stateListeners.delete(cb);
+    },
+    async sendChunked(text) {
+      const line = String(text).replace(/\n+$/, "");
+      st.sent.push(line);
+      if (line.startsWith(RUN.BEGIN + ":")) {
+        st.begins += 1;
+        // Primer BEGIN: silencio (simula placa no lista). Segundo: READY.
+        if (st.begins >= 2) emitSync(RUN.READY);
+      } else if (line.startsWith(RUN.CHUNK + ":")) {
+        /* ignore */
+      } else if (line === RUN.END) {
+        emitSync(RUN.STARTED);
+        emitSync(RUN.DONE);
+      }
+    },
+  };
+
+  const session = new BleRunSession(tr);
+  // Acortar la espera del primer READY: el mock no responde; usamos el timeout
+  // real seria 6s. Para el test, parcheamos enviando READY solo al 2.do BEGIN
+  // y reducimos tiempo… el READY_TIMEOUT es 6s: aceptamos ~6.3s de test.
+  const { outcome } = await session.runProgram("print(1)\n", {});
+  assert.equal(outcome, "done");
+  assert.ok(st.begins >= 2, "debe reintentar RUN:BEGIN");
+  assert.equal(st.connected, true);
+});
+
+test("RUN:ERROR:BUSY during handshake rejects BLE_RUN_ERROR:BUSY (not NO_READY)", async () => {
+  const listeners = new Set();
+  const tr = {
+    isConnected: () => true,
+    onData(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    async sendChunked(text) {
+      const line = String(text).replace(/\n+$/, "");
+      if (line.startsWith(RUN.BEGIN + ":")) {
+        queueMicrotask(() => listeners.forEach((cb) => cb(RUN.ERROR + ":BUSY")));
+      }
+    },
+  };
+  const session = new BleRunSession(tr);
+  await assert.rejects(
+    () => session.runProgram("print(1)\n", {}),
+    /BLE_RUN_ERROR:BUSY/,
+  );
+});

@@ -437,7 +437,9 @@ async function ensureBleRuntimeSupportsRun() {
   let info = _bleTransport.getDeviceInfo?.().info ?? null;
   if (!info) {
     try {
-      const raw = await _bleTransport.sendAndWait(COMMANDS.INFO, 3000);
+      const raw = await _bleTransport.sendAndWait(COMMANDS.INFO, 3000, {
+        match: (msg) => String(msg ?? "").trim().startsWith("{"),
+      });
       info = parseInfoResponse(raw);
       if (info) _bleTransport.setDeviceInfo?.(info);
     } catch {
@@ -458,7 +460,9 @@ async function getBleInfo() {
   let info = _bleTransport.getDeviceInfo?.().info ?? null;
   if (!info) {
     try {
-      const raw = await _bleTransport.sendAndWait(COMMANDS.INFO, 3000);
+      const raw = await _bleTransport.sendAndWait(COMMANDS.INFO, 3000, {
+        match: (msg) => String(msg ?? "").trim().startsWith("{"),
+      });
       info = parseInfoResponse(raw);
       if (info) _bleTransport.setDeviceInfo?.(info);
     } catch {

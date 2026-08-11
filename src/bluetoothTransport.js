@@ -219,17 +219,23 @@ export class BluetoothTransport {
   }
 
   /**
-   * Envia un comando y espera la primera respuesta (con timeout).
+   * Envia un comando y espera una respuesta (con timeout).
    * @param {string} command
    * @param {number} [timeoutMs]
+   * @param {{ match?: (msg:string) => boolean }} [opts]
+   *   Si `match` se define, ignora frames que no cumplan (evita que un
+   *   RUN:READY/OUT robado por un INFO concurrente tumbe el handshake).
    * @returns {Promise<string>}
    */
-  sendAndWait(command, timeoutMs = 4000) {
+  sendAndWait(command, timeoutMs = 4000, opts = {}) {
+    const match = typeof opts.match === "function" ? opts.match : null;
     return new Promise((resolve, reject) => {
       let done = false;
       const off = this.onData((msg) => {
         if (done) return;
+        if (match && !match(String(msg ?? ""))) return;
         done = true;
+        clearTimeout(timer);
         off();
         resolve(msg);
       });

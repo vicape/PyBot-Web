@@ -18,8 +18,11 @@ runtime ya **no** es un `main.py` monolítico:
 | `pybot_update.py` | UPDATE:* (OTA) | Lazy |
 | `pybot_boot_update.py` | Apply/rollback OTA (legacy + pack `PYBOTRT1`) | Solo si hay update pendiente |
 
-**Versión:** runtime **3.2.2**, protocolo **3.1** (comandos iguales; no rompe clientes 3.1).
+**Versión:** runtime **3.2.3**, protocolo **3.1** (comandos iguales; no rompe clientes 3.1).
 Precarga `pybot_run` fuera del IRQ BLE y reporta `RUN:ERROR:LOAD:...` si falla el import.
+En **3.2.3** los comandos no urgentes (`RUN:*`, PING/INFO, …) se encolan en el IRQ y se
+procesan en el hilo principal (`poll_commands`), para que `RUN:READY` no use
+`gatts_notify`+`sleep` dentro del IRQ (rompe el segundo Run tras Stop).
 Constantes compartidas entre módulos usan nombres exportables (`MAX_RUN_B64`, etc.):
 en MicroPython `_NAME = const(...)` no existe para `from … import`.
 

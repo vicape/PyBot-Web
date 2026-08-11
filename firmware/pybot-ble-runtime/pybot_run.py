@@ -68,20 +68,34 @@ class ProgramManager:
         self._pending_code = None
         self._app_ack = None
 
+    def reset_idle(self):
+        """Deja el manager listo para otro RUN:BEGIN tras STOP/DONE/ERROR."""
+        self._chunks = []
+        self._b64_len = 0
+        self._collecting = False
+        self.pending = False
+        self._pending_code = None
+        self._stop = False
+        self._force = False
+        self._app_ack = None
+        # running/persistent los limpia el caller segun el desenlace.
+
     def begin(self, mode, profile):
         if self.running:
             self._send("RUN:ERROR:BUSY")
             return
-        self._chunks = []
-        self._b64_len = 0
+        # Segundo Run tras Stop: asegurar estado idle aunque el stop haya
+        # dejado _stop/_collecting/pending sucios.
+        self.reset_idle()
         self._mode = "eda6" if mode == "eda6" else "mpy"
         self._profile = "ESP32" if profile == "ESP32" else "WEMOS"
         self._collecting = True
-        self._stop = False
-        self._force = False
-        self.pending = False
         self._persistent = False
-        self._pending_code = None
+        try:
+            import gc
+            gc.collect()
+        except Exception:
+            pass
         self._send("RUN:READY")
 
     def chunk(self, b64):
@@ -151,7 +165,10 @@ class ProgramManager:
         self._force = True
 
     def should_stop(self):
-        return self._stop
+        # Exige running: si el monkeypatch de time.sleep_ms quedara activo tras
+        # un Stop, un sleep del main loop NO debe levantar _PyBotStop (mataria
+        # el runtime y el siguiente RUN:BEGIN nunca emitiria READY).
+        return self._stop and self.running
 
     def _emit_frames(self, tag, text):
         try:
@@ -238,6 +255,7 @@ class ProgramManager:
         self._pending_code = None
         if code is None:
             self.running = False
+            self.reset_idle()
             return
 
         self._send("RUN:STARTED")
@@ -248,7 +266,9 @@ class ProgramManager:
         if not self._load_prelude(ns):
             self.running = False
             self._force = False
+            self._stop = False
             self._finish(persistent, "error", "prelude")
+            self.reset_idle()
             return
 
         orig_sleep = time.sleep
@@ -336,7 +356,11 @@ class ProgramManager:
             self._cleanup(ns)
             self.running = False
             self._force = False
+            # Limpiar _stop ANTES de notify: send() usa sleep_ms; si el patch
+            # de sleep siguiera activo, should_stop ya no dispara.
+            self._stop = False
             self._finish(persistent, outcome, err_text)
+            self.reset_idle()
 
     def _finish(self, persistent, outcome, err_text):
         if outcome == "stopped":

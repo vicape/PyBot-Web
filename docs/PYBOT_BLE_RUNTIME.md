@@ -42,6 +42,12 @@ nuevos; no altera EDA6, USB/Firmata, Pyodide ni el mecanismo de ejecución exist
 > pack multi-archivo `PYBOTRT1`. El salto **3.1.x → 3.2.0 requiere una reinstalación USB**
 > (el boot antiguo no entiende el pack); a partir de 3.2.0 el OTA multi-archivo vuelve a
 > funcionar. Objetivo: que la ESP32 vuelva a `gap_advertise()` sin `MemoryError`.
+>
+> **Runtime 3.2.3:** los comandos no urgentes (`RUN:*`, PING/INFO, …) se encolan en el IRQ
+> GATT y se procesan en el hilo principal (`poll_commands`). Así `RUN:READY` ya no hace
+> `gatts_notify`+`sleep` dentro del IRQ (que tras un Run→Stop dejaba el segundo Run sin
+> READY y caía el BLE). `STOP`/`STOP:FORCE` siguen siendo urgentes (solo flags en IRQ).
+> Actualización desde 3.2.x: **OTA o USB**.
 
 ## 1. Arquitectura y enfoque elegido
 

@@ -36,6 +36,8 @@ import {
 } from "./bleProtocol.js";
 
 const READY_TIMEOUT_MS = 6000;
+/** Un reintento de RUN:BEGIN si el primero no obtiene READY (placa ocupada en cleanup). */
+const READY_RETRY_MS = 250;
 const CHUNK_DELAY_MS = 12;
 const STOP_POLL_MS = 150;
 // Si tras pedir STOP no llega confirmacion, escalar a STOP:FORCE (reset + safe boot).
@@ -56,6 +58,8 @@ export class BleRunSession {
     this._escalateTimer = null;
     /** Generacion del run actual; el escalate de FORCE solo aplica a la misma. */
     this._runGen = 0;
+    /** True cuando el run actual ya tuvo desenlace terminal (no armar FORCE). */
+    this._terminal = false;
   }
 
   isConnected() {
@@ -110,6 +114,7 @@ export class BleRunSession {
     this._runGen += 1;
     const runGen = this._runGen;
     this._running = true;
+    this._terminal = false;
     this._stopSent = false;
     this._forceSent = false;
     this._stopRequested = false;
@@ -121,15 +126,20 @@ export class BleRunSession {
     let resolveReady;
     let resolveDone;
     let readyTimer = null;
+    const armReadyTimer = () => {
+      if (readyTimer) clearTimeout(readyTimer);
+      readyTimer = setTimeout(() => resolveReady(false), READY_TIMEOUT_MS);
+    };
     const readyPromise = new Promise((res) => {
       resolveReady = res;
-      readyTimer = setTimeout(() => res(false), READY_TIMEOUT_MS);
+      armReadyTimer();
     });
     const donePromise = new Promise((res) => (resolveDone = res));
 
     const settle = (outcome) => {
       if (settledOutcome != null) return;
       settledOutcome = outcome;
+      this._terminal = true;
       // Cortar escalate en cuanto hay estado terminal (antes del finally), para
       // que un stop() aun en await sendChunked(STOP) no rearma FORCE.
       this._clearEscalateTimer();
@@ -238,10 +248,27 @@ export class BleRunSession {
     };
 
     try {
-      await this._tr.sendChunked(buildRunBegin(mode, profile));
-      const okReady = await readyPromise;
+      const beginFrame = buildRunBegin(mode, profile);
+      await this._tr.sendChunked(beginFrame);
+      let okReady = await readyPromise;
+      // Reintento unico: tras Stop el manager puede tardar un tick en quedar idle
+      // (cola RX en firmware 3.2.3). No confundir con runtime viejo.
+      if (!okReady && !ready && !handshakeErr && settledOutcome == null && this.isConnected()) {
+        await sleep(READY_RETRY_MS);
+        if (settledOutcome == null && this.isConnected() && !ready) {
+          const retryPromise = new Promise((res) => {
+            resolveReady = res;
+            armReadyTimer();
+          });
+          await this._tr.sendChunked(beginFrame);
+          okReady = await retryPromise;
+        }
+      }
       if (handshakeErr || settledOutcome === "error") {
         // RUN:ERROR / ERR antes de READY: devolver outcome error (ya en onErr).
+        if (handshakeErr && /BUSY/i.test(handshakeErr)) {
+          throw new Error("BLE_RUN_ERROR:BUSY");
+        }
         return { outcome: "error" };
       }
       // Desconexion durante el handshake: no confundir con runtime viejo (NO_READY).
@@ -251,7 +278,11 @@ export class BleRunSession {
         }
         return { outcome: settledOutcome };
       }
-      if (!okReady || !ready) throw new Error("BLE_RUN_NO_READY");
+      // `ready` es la fuente de verdad (puede llegar justo tras el timeout).
+      if (!ready) {
+        if (!this.isConnected()) throw new Error("BLE_RUN_DISCONNECTED");
+        throw new Error("BLE_RUN_NO_READY");
+      }
 
       startStopPoller();
 
@@ -304,11 +335,16 @@ export class BleRunSession {
       /* ignore */
     }
     // El programa ya confirmo (u otro settle) mientras enviabamos STOP.
-    if (!this._running || this._runGen !== genAtStop) return;
+    if (!this._running || this._terminal || this._runGen !== genAtStop) return;
     // Escalado: si el programa no cede (bucle sin puntos de espera), forzar.
     this._clearEscalateTimer();
     this._escalateTimer = setTimeout(() => {
-      if (this._running && !this._forceSent && this._runGen === genAtStop) {
+      if (
+        this._running &&
+        !this._terminal &&
+        !this._forceSent &&
+        this._runGen === genAtStop
+      ) {
         this.forceStop().catch(() => {});
       }
     }, STOP_ESCALATE_MS);

@@ -1024,16 +1024,22 @@ export function formatPythonError(message) {
       "The board has an old version of the PyBot BLE Runtime that cannot run programs over Bluetooth. Connect it over USB and use “Install PyBot Bluetooth” to update it, then reconnect over Bluetooth.",
     );
   }
+  if (/BLE_RUN_ERROR:BUSY/i.test(m)) {
+    return pick(
+      "La placa sigue ocupada con el programa anterior. Esperá un momento o pulsá Stop y volvé a intentar.",
+      "The board is still busy with the previous program. Wait a moment or press Stop and try again.",
+    );
+  }
   if (/BLE_RUN_NO_READY/i.test(m)) {
     return pick(
-      "La placa no respondió por Bluetooth. Puede tener un runtime viejo sin soporte de ejecución: reinstalá “Instalar PyBot Bluetooth” por USB. Si no, reconectá y probá de nuevo.",
-      "The board did not respond over Bluetooth. It may have an old runtime without run support: reinstall via “Install PyBot Bluetooth” over USB. Otherwise, reconnect and try again.",
+      "La placa no confirmó el inicio por Bluetooth (sin RUN:READY). Si el runtime es anterior a 3.2.3, actualizalo por OTA o “Instalar PyBot Bluetooth” por USB; si no, reconectá y probá de nuevo.",
+      "The board did not confirm start over Bluetooth (no RUN:READY). If the runtime is older than 3.2.3, update via OTA or “Install PyBot Bluetooth” over USB; otherwise reconnect and try again.",
     );
   }
   if (/BLE_RUN_INTERNAL/i.test(m)) {
     return pick(
-      "La placa falló al preparar la ejecución por Bluetooth. Reinstalá “Instalar PyBot Bluetooth” por USB (runtime 3.2.2+) y volvé a conectar.",
-      "The board failed while preparing Bluetooth execution. Reinstall “Install PyBot Bluetooth” over USB (runtime 3.2.2+) and reconnect.",
+      "La placa falló al preparar la ejecución por Bluetooth. Reinstalá “Instalar PyBot Bluetooth” por USB (runtime 3.2.3+) y volvé a conectar.",
+      "The board failed while preparing Bluetooth execution. Reinstall “Install PyBot Bluetooth” over USB (runtime 3.2.3+) and reconnect.",
     );
   }
   if (/BLE_RUN_ERROR:LOAD/i.test(m)) {

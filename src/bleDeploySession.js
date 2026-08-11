@@ -193,13 +193,20 @@ export class BleDeploySession {
  */
 export async function appInfo(transport, timeoutMs = APP_TIMEOUT_MS) {
   if (!transport || !transport.isConnected()) throw new Error("BLE_NOT_CONNECTED");
-  const raw = await transport.sendAndWait(APP.INFO, timeoutMs);
+  const raw = await transport.sendAndWait(APP.INFO, timeoutMs, {
+    match: (msg) => String(msg ?? "").includes("APP:INFO"),
+  });
   return parseAppInfo(raw);
 }
 
 async function _appCommand(transport, command, timeoutMs = APP_TIMEOUT_MS) {
   if (!transport || !transport.isConnected()) throw new Error("BLE_NOT_CONNECTED");
-  const raw = await transport.sendAndWait(command, timeoutMs);
+  const raw = await transport.sendAndWait(command, timeoutMs, {
+    match: (msg) => {
+      const t = String(msg ?? "");
+      return t.includes("APP:OK") || t.includes("APP:ERROR") || t.includes("APP:INFO");
+    },
+  });
   const f = parseAppFrame(raw);
   if (f.type === "error") throw new Error("BLE_APP_ERROR:" + f.code);
   return f;

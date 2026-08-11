@@ -13,7 +13,7 @@ try:
 except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
-PYBOT_RUNTIME_VERSION = "3.2.2"
+PYBOT_RUNTIME_VERSION = "3.2.3"
 PYBOT_PROTOCOL_VERSION = "3.1"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
@@ -294,13 +294,18 @@ class CommandProcessor:
 
 class BluetoothTransport:
 
-    def __init__(self, name, on_command, on_disconnect=None):
+    def __init__(self, name, on_command, on_disconnect=None, on_urgent=None):
         self._name = name
         self._on_command = on_command
         self._on_disconnect = on_disconnect
+        # on_urgent(text) -> True si se consumio en IRQ (solo flags; SIN notify/sleep).
+        self._on_urgent = on_urgent
         self.state = STATE_BOOT
         self._conn_handle = None
         self._rx_buf = bytearray()
+        # Cola de lineas para el hilo principal. Evita gatts_notify+sleep dentro del
+        # IRQ GATTS_WRITE (tras un Run puede tumbar el stack BLE y el 2.do READY).
+        self._cmd_q = []
 
         self._ble = bluetooth.BLE()
         self._ble.active(True)
@@ -380,14 +385,31 @@ class BluetoothTransport:
         try:
             text = bytes(raw_bytes).decode("utf-8")
         except Exception:
-            self.send("ERR,BAD_ENCODING")
+            # Encolar respuesta de error para enviarla fuera del IRQ.
+            self._cmd_q.append("\x00ERR,BAD_ENCODING")
             return
+        # STOP debe marcar el flag YA (el main puede estar bloqueado en exec).
+        # Todo lo demas (RUN:BEGIN/READY, PING, INFO, ...) va al hilo principal.
         try:
-            response = self._on_command(text)
+            if self._on_urgent and self._on_urgent(text):
+                return
         except Exception:
-            response = "ERR,INTERNAL"
-        if response:
-            self.send(response)
+            pass
+        self._cmd_q.append(text)
+
+    def poll_commands(self):
+        """Procesa la cola RX en el hilo principal (notify+sleep seguros)."""
+        while self._cmd_q:
+            text = self._cmd_q.pop(0)
+            if text == "\x00ERR,BAD_ENCODING":
+                self.send("ERR,BAD_ENCODING")
+                continue
+            try:
+                response = self._on_command(text)
+            except Exception:
+                response = "ERR,INTERNAL"
+            if response:
+                self.send(response)
 
     def send(self, message):
         if self._conn_handle is None:
@@ -531,6 +553,25 @@ def main():
             pass
         machine.reset()
 
+    def on_urgent(text):
+        """Solo flags en IRQ: NUNCA notify/sleep/reset aqui."""
+        try:
+            upper = text.strip().upper()
+        except Exception:
+            return False
+        if upper == "STOP":
+            m = ctx["manager"]
+            if m:
+                m.request_stop()
+            return True
+        if upper == "STOP:FORCE":
+            m = ctx["manager"]
+            if m and m.running:
+                m.request_force_stop()
+                ctx["force_reset"] = True
+            return True
+        return False
+
     def on_command(text):
         try:
             t = text.strip()
@@ -539,6 +580,7 @@ def main():
         if not t:
             return None
         upper = t.upper()
+        # STOP/FORCE ya se consumen en on_urgent; defensa si llegan a la cola.
         if upper == "STOP":
             m = ctx["manager"]
             if m:
@@ -548,7 +590,7 @@ def main():
             m = ctx["manager"]
             if m and m.running:
                 m.request_force_stop()
-                _force_reset()
+                ctx["force_reset"] = True
             return None
         if t.startswith("RUN:"):
             # Nunca silenciar fallos de lazy-import: el web espera RUN:READY.
@@ -594,6 +636,7 @@ def main():
         return processor.process(t)
 
     recovery = {"timer": None}
+    ctx["force_reset"] = False
 
     def _arm_disconnect_recovery():
         try:
@@ -607,7 +650,7 @@ def main():
                 reconnected = tr is not None and tr.state == STATE_CONNECTED
                 m = ctx["manager"]
                 if m and m.running and not m._persistent and not reconnected:
-                    _force_reset()
+                    ctx["force_reset"] = True
 
             t.init(period=1800, mode=machine.Timer.ONE_SHOT, callback=_cb)
         except Exception:
@@ -625,7 +668,7 @@ def main():
             m.request_stop()
             _arm_disconnect_recovery()
 
-    transport = BluetoothTransport(dev_name, on_command, on_disconnect)
+    transport = BluetoothTransport(dev_name, on_command, on_disconnect, on_urgent)
     holder["transport"] = transport
     _confirm_update_if_pending()
 
@@ -664,15 +707,29 @@ def main():
         pass
 
     while True:
-        m = ctx["manager"]
-        if m and m.pending and not m.running:
-            try:
-                m.run_pending()
-            except Exception:
-                m.running = False
-                m.pending = False
+        try:
+            if ctx.get("force_reset"):
+                ctx["force_reset"] = False
+                _force_reset()
+            transport.poll_commands()
+            m = ctx["manager"]
+            if m and m.pending and not m.running:
                 try:
-                    _send("RUN:DONE")
+                    m.run_pending()
                 except Exception:
-                    pass
-        time.sleep_ms(50)
+                    m.running = False
+                    m.pending = False
+                    try:
+                        m.reset_idle()
+                    except Exception:
+                        pass
+                    try:
+                        _send("RUN:DONE")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        try:
+            time.sleep_ms(20)
+        except Exception:
+            pass
