@@ -38,9 +38,9 @@ const ble = () => fs.readFileSync(BLE_PY, "utf8");
 const run = () => fs.readFileSync(RUN_PY, "utf8");
 const deploy = () => fs.readFileSync(DEPLOY_PY, "utf8");
 
-test("runtime 3.2.6 declares version and schedules FORCE via Timer", () => {
+test("runtime 3.2.7 declares version and schedules FORCE via Timer", () => {
   const src = ble();
-  assert.match(src, /PYBOT_RUNTIME_VERSION = "3\.2\.6"/);
+  assert.match(src, /PYBOT_RUNTIME_VERSION = "3\.2\.7"/);
   assert.match(src, /def _schedule_force_reset/);
   assert.match(src, /def _cancel_force_reset/);
   assert.match(src, /for timer_id in \(-1, 0, 1\):/);
@@ -51,6 +51,9 @@ test("runtime 3.2.6 declares version and schedules FORCE via Timer", () => {
   assert.match(src, /_schedule_force_reset\(\)/);
   // Referencia al Timer para poder cancelarlo tras STOP cooperativo / RUN:BEGIN.
   assert.match(src, /t\.deinit\(\)/);
+  // 3.2.7: no resetear si running=False (FORCE tardio tras STOPPED).
+  assert.match(src, /if not m or not m\.running:/);
+  assert.match(src, /if m and m\.running:\s*\n\s*_schedule_force_reset\(\)/m);
 });
 
 test("APP:STOP and APP:DELETE are handled as urgent when app is running", () => {
@@ -129,8 +132,11 @@ test("mirror: APP:STOP flag works while main is blocked in exec", () => {
     if (upper === "STOP:FORCE") {
       const m = ctx.manager;
       if (m) m.request_force_stop();
-      ctx.force_reset = true;
-      scheduled.push("timer-reset");
+      // 3.2.7: solo agendar reset si sigue en exec.
+      if (m && m.running) {
+        ctx.force_reset = true;
+        scheduled.push("timer-reset");
+      }
       return true;
     }
     return false;
@@ -146,6 +152,14 @@ test("mirror: APP:STOP flag works while main is blocked in exec", () => {
   assert.equal(on_urgent("STOP:FORCE"), true);
   assert.deepEqual(scheduled, ["timer-reset"]);
   assert.equal(ctx.force_reset, true);
+
+  // Tras STOPPED (running=False): FORCE tardio NO debe resetear.
+  mgr.running = false;
+  scheduled.length = 0;
+  ctx.force_reset = false;
+  assert.equal(on_urgent("STOP:FORCE"), true);
+  assert.deepEqual(scheduled, []);
+  assert.equal(ctx.force_reset, false);
 });
 
 test("mirror: FORCE with delete ack removes app before reset", () => {

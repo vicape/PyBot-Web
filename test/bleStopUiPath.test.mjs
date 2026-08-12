@@ -14,11 +14,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IDE = path.join(__dirname, "..", "src", "PyBotIDE.jsx");
 const BRIDGE = path.join(__dirname, "..", "src", "hardwareBridge.js");
 
-test("runtime 3.2.6 / stop-reliable min is 3.2.4", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.6");
+test("runtime 3.2.7 / stop-reliable min is 3.2.4", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.7");
   assert.equal(PYBOT_STOP_RELIABLE_MIN, "3.2.4");
   assert.equal(runtimeStopReliable({ firmware: "3.2.4" }), true);
-  assert.equal(runtimeStopReliable({ firmware: "3.2.6" }), true);
+  assert.equal(runtimeStopReliable({ firmware: "3.2.7" }), true);
   assert.equal(runtimeStopReliable({ firmware: "3.2.3" }), false);
   assert.ok(compareRuntimeVersions("3.2.3", PYBOT_STOP_RELIABLE_MIN) < 0);
 });
@@ -40,7 +40,7 @@ test("UI onStop attempts BLE stop without requiring local running", () => {
 test("stopBoardExecution arms ACK before APP:STOP and escalates FORCE", () => {
   const src = fs.readFileSync(BRIDGE, "utf8");
   const start = src.indexOf("export async function stopBoardExecution");
-  const body = src.slice(start, start + 3500);
+  const body = src.slice(start, start + 4500);
   assert.match(body, /armBleStopAck/);
   assert.match(body, /APP\.STOP/);
   assert.match(body, /STOP_FORCE/);
@@ -51,4 +51,15 @@ test("stopBoardExecution arms ACK before APP:STOP and escalates FORCE", () => {
   assert.match(body, /_bleRunPrepGen/);
   assert.match(body, /app-superseded|app-idle/);
   assert.match(body, /_bleStopInFlight/);
+  // 3.2.7: tras stop cooperativo, NUNCA path APP+FORCE (gracia / disarm).
+  assert.match(body, /app-recent-coop|recentlyCoopStopped|noteBleCoopStopped/);
+  assert.match(body, /disarmForceEscalate/);
+  assert.match(src, /STOP:FORCE enviado/);
+  assert.match(src, /setBleForceLog/);
+});
+
+test("UI wires FORCE log to console", () => {
+  const ide = fs.readFileSync(IDE, "utf8");
+  assert.match(ide, /setBleForceLog/);
+  assert.match(ide, /STOP:FORCE|setBleForceLog/);
 });

@@ -43,14 +43,35 @@ const STOP_POLL_MS = 150;
 // Si tras pedir STOP no llega confirmacion, escalar a STOP:FORCE (reset + safe boot).
 export const STOP_ESCALATE_MS = 3500;
 
+/** Callback opcional: (msg:string) => void — log visible de STOP:FORCE en la UI. */
+let _forceLog = null;
+
+/** Registra logger para mensajes "STOP:FORCE enviado (razón: …)". */
+export function setBleForceStopLog(fn) {
+  _forceLog = typeof fn === "function" ? fn : null;
+}
+
+function logForceSent(reason) {
+  const msg = "STOP:FORCE enviado (razón: " + String(reason ?? "desconocida") + ")";
+  try {
+    _forceLog?.(msg);
+  } catch {
+    /* ignore */
+  }
+}
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
 export class BleRunSession {
-  /** @param {{ isConnected:Function, onData:Function, sendChunked:Function, onStateChange?:Function }} transport */
-  constructor(transport) {
+  /**
+   * @param {{ isConnected:Function, onData:Function, sendChunked:Function, onStateChange?:Function }} transport
+   * @param {{ onCoopStopped?: Function }} [opts]
+   */
+  constructor(transport, opts = {}) {
     this._tr = transport;
+    this._onCoopStopped = typeof opts.onCoopStopped === "function" ? opts.onCoopStopped : null;
     this._running = false;
     this._stopSent = false;
     this._forceSent = false;
@@ -65,6 +86,8 @@ export class BleRunSession {
     this._escalateEpoch = 0;
     /** True cuando el run actual ya tuvo desenlace terminal (no armar FORCE). */
     this._terminal = false;
+    /** Generacion que ya confirmo RUN:STOPPED — NUNCA FORCE para esa gen. */
+    this._stoppedGen = 0;
   }
 
   /** Generacion de run (para que el bridge aborte FORCE si ya arranco otro Run). */
@@ -95,7 +118,15 @@ export class BleRunSession {
   }
 
   _armEscalateForce(genAtStop) {
-    if (!this._running || this._terminal || this._runGen !== genAtStop) return;
+    // Tras STOPPED de esta gen, o si el run ya termino: NUNCA armar FORCE.
+    if (
+      !this._running ||
+      this._terminal ||
+      this._runGen !== genAtStop ||
+      this._stoppedGen === genAtStop
+    ) {
+      return;
+    }
     this._clearEscalateTimer();
     const epoch = this._escalateEpoch;
     this._escalateTimer = setTimeout(() => {
@@ -104,12 +135,25 @@ export class BleRunSession {
         !this._running ||
         this._terminal ||
         this._forceSent ||
-        this._runGen !== genAtStop
+        this._runGen !== genAtStop ||
+        this._stoppedGen === genAtStop
       ) {
         return;
       }
-      this.forceStop().catch(() => {});
+      this.forceStop("escalate-sin-STOPPED").catch(() => {});
     }, STOP_ESCALATE_MS);
+  }
+
+  /**
+   * Tras un STOP cooperativo confirmado: invalida cualquier escalate FORCE
+   * pendiente de este run (cinturón ante carreras con await sendChunked).
+   */
+  disarmForceEscalate() {
+    this._clearEscalateTimer();
+    if (!this._running) {
+      this._terminal = true;
+      this._stoppedGen = this._runGen;
+    }
   }
 
   /**
@@ -231,6 +275,8 @@ export class BleRunSession {
           }
           break;
         case "stopped":
+          // Marcar ANTES de settle: stop() puede rearmar escalate al salir del await.
+          this._stoppedGen = runGen;
           if (onStopped) {
             try {
               onStopped();
@@ -239,6 +285,11 @@ export class BleRunSession {
             }
           }
           settle("stopped");
+          try {
+            this._onCoopStopped?.();
+          } catch {
+            /* ignore */
+          }
           break;
         case "done":
           settle(this._stopRequested ? "stopped" : "done");
@@ -371,7 +422,11 @@ export class BleRunSession {
       // El programa ya confirmo (u otro settle) mientras enviabamos STOP.
       this._armEscalateForce(genAtStop);
     }
-    if (opts.wait) await this._waitUntilIdle(STOP_ESCALATE_MS + 2500);
+    if (opts.wait) {
+      await this._waitUntilIdle(STOP_ESCALATE_MS + 2500);
+      // Cinturón: tras wait, si ya no corre, NUNCA dejar escalate armado.
+      if (!this._running) this.disarmForceEscalate();
+    }
   }
 
   async _waitUntilIdle(timeoutMs) {
@@ -381,15 +436,21 @@ export class BleRunSession {
     }
   }
 
-  /** Fuerza la detencion: STOP:FORCE (reset + safe boot en la placa). */
-  async forceStop() {
+  /**
+   * Fuerza la detencion: STOP:FORCE (reset + safe boot en la placa).
+   * @param {string} [reason] motivo visible en consola si hay logger registrado
+   */
+  async forceStop(reason = "forceStop") {
     if (!this.isConnected()) return;
     // Nunca resetear la placa si el run ya termino (STOPPED/DONE) o no hay run:
     // un FORCE huerfano tumba GATT y rompe el siguiente Run.
-    if (!this._running || this._terminal) return;
+    if (!this._running || this._terminal || this._stoppedGen === this._runGen) {
+      return;
+    }
     this._stopRequested = true;
     if (this._forceSent) return;
     this._forceSent = true;
+    logForceSent(reason);
     try {
       await this._tr.sendChunked(RUN.STOP_FORCE);
     } catch {

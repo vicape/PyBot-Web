@@ -26,6 +26,7 @@ import {
   hardwareMode,
   runOnBoard,
   stopBoardExecution,
+  setBleForceLog,
   getBoardType,
   getEda6Profile,
   installEda6Library,
@@ -446,6 +447,12 @@ export default function PyBotIDE() {
       return start > 0 ? next.slice(start) : next;
     });
   }, []);
+
+  // Diagnóstico aula: si se envía STOP:FORCE, visible en consola (razón).
+  useEffect(() => {
+    setBleForceLog((msg) => appendConsole(String(msg) + "\n", "err"));
+    return () => setBleForceLog(null);
+  }, [appendConsole]);
 
   const clearConsole = useCallback(() => setConsoleLines([]), []);
 

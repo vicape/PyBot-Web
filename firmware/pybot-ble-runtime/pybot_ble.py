@@ -13,7 +13,7 @@ try:
 except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
-PYBOT_RUNTIME_VERSION = "3.2.6"
+PYBOT_RUNTIME_VERSION = "3.2.7"
 PYBOT_PROTOCOL_VERSION = "3.1"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
@@ -592,8 +592,11 @@ def main():
                 pass
 
     def _schedule_force_reset():
-        """Agenda reset fuera del IRQ. Critico: exec() bloquea el main loop, asi
-        que un flag force_reset solo NO alcanza — hay que usar Timer."""
+        """Agenda reset fuera del IRQ (exec bloquea el main). 3.2.7: solo si running."""
+        m = ctx.get("manager")
+        if not m or not m.running:
+            ctx["force_reset"] = False
+            return
         ctx["force_reset"] = True
         if ctx.get("force_timer_armed"):
             return
@@ -602,6 +605,10 @@ def main():
         def _cb(_t):
             ctx["force_timer"] = None
             ctx["force_timer_armed"] = False
+            m2 = ctx.get("manager")
+            if not m2 or not m2.running:
+                ctx["force_reset"] = False
+                return
             try:
                 _force_reset()
             except Exception:
@@ -610,7 +617,6 @@ def main():
                 except Exception:
                     pass
 
-        # Soft timer (-1) primero; hardware 0/1 como fallback en ports viejos.
         for timer_id in (-1, 0, 1):
             try:
                 t = machine.Timer(timer_id)
@@ -619,7 +625,6 @@ def main():
                 return
             except Exception:
                 pass
-        # Sin Timer: el main loop (si no esta en exec) todavia puede resetear.
 
     def on_urgent(text):
         """Solo flags / agenda Timer en IRQ: NUNCA notify/sleep/reset directo."""
@@ -636,8 +641,9 @@ def main():
             m = ctx["manager"]
             if m:
                 m.request_force_stop()
-            # Siempre agendar: recuperacion real aunque exec() tenga el main ocupado.
-            _schedule_force_reset()
+            # 3.2.7: no reset si ya STOPPED (running=False).
+            if m and m.running:
+                _schedule_force_reset()
             return True
         # APP:STOP/DELETE deben marcar flags YA: si van a la cola RX y el main
         # esta bloqueado en exec(), nunca se procesan → placa zombie (regresion 3.2.3).
@@ -674,13 +680,21 @@ def main():
             m = ctx["manager"]
             if m:
                 m.request_force_stop()
-            _schedule_force_reset()
+            if m and m.running:
+                _schedule_force_reset()
             return None
         if t.startswith("RUN:"):
             # Nuevo RUN del usuario: anular FORCE huerfano (Stop previo) para no
             # resetear la placa a mitad del handshake / chunks del 2º Run.
             if t.startswith("RUN:BEGIN:"):
                 _cancel_force_reset()
+                m = ctx.get("manager")
+                if m:
+                    try:
+                        m._stop = False
+                        m._force = False
+                    except Exception:
+                        pass
             # Nunca silenciar fallos de lazy-import: el web espera RUN:READY.
             try:
                 _load_run().handle_run(_ensure_manager(), t)
@@ -802,8 +816,12 @@ def main():
     while True:
         try:
             if ctx.get("force_reset"):
-                ctx["force_reset"] = False
-                _force_reset()
+                m = ctx.get("manager")
+                if m and m.running:
+                    ctx["force_reset"] = False
+                    _force_reset()
+                else:
+                    ctx["force_reset"] = False  # huerfano post-STOPPED
             transport.poll_commands()
             m = ctx["manager"]
             if m and m.pending and not m.running:

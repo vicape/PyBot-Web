@@ -86,9 +86,10 @@ class ProgramManager:
         if self.running:
             self._send("RUN:ERROR:BUSY")
             return
-        # Segundo Run tras Stop: asegurar estado idle aunque el stop haya
-        # dejado _stop/_collecting/pending sucios.
+        # Segundo Run tras Stop: idle limpio (_stop/_force incluidos).
         self.reset_idle()
+        self._stop = False
+        self._force = False
         self._mode = "eda6" if mode == "eda6" else "mpy"
         self._profile = "ESP32" if profile == "ESP32" else "WEMOS"
         self._collecting = True

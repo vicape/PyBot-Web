@@ -371,6 +371,36 @@ test("forceStop is a no-op after cooperative terminal (no orphan FORCE)", async 
   assert.equal(mock._state.connected, true);
 });
 
+test("disarmForceEscalate after STOPPED blocks late forceStop", async () => {
+  const mock = makeMock();
+  const session = new BleRunSession(mock);
+  const runP = session.runProgram("while True:\n    wait(1)  # LOOP\n", {});
+  await new Promise((r) => setTimeout(r, 20));
+  await session.stop({ wait: true });
+  await runP;
+  session.disarmForceEscalate();
+  await session.forceStop("should-not-send");
+  assert.ok(!mock._state.sent.includes(RUN.STOP_FORCE));
+  assert.equal(mock._state.connected, true);
+});
+
+test("forceStop logs visible reason via setBleForceStopLog", async () => {
+  const { setBleForceStopLog } = await import("../src/bleRunSession.js");
+  const logs = [];
+  setBleForceStopLog((m) => logs.push(m));
+  try {
+    const mock = makeMock();
+    const session = new BleRunSession(mock);
+    const runP = session.runProgram("while True:\n    pass  # TIGHT\n", {});
+    await new Promise((r) => setTimeout(r, 20));
+    await session.forceStop("test-razon");
+    await runP;
+    assert.ok(logs.some((m) => /STOP:FORCE enviado \(razón: test-razon\)/.test(m)));
+  } finally {
+    setBleForceStopLog(null);
+  }
+});
+
 test("disconnect during READY handshake rejects BLE_RUN_DISCONNECTED (not NO_READY)", async () => {
   const mock = makeMock();
   const original = mock.sendChunked.bind(mock);

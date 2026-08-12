@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Mirror minimo de ProgramManager (pybot_run.py 3.2.6) para el ciclo
+ * Mirror minimo de ProgramManager (pybot_run.py 3.2.7) para el ciclo
  * Run → Stop → Run: should_stop exige running, y begin() resetea idle.
  */
 
@@ -72,9 +72,9 @@ class ProgramManagerMirror {
   }
 }
 
-test("firmware 3.2.6 queues non-urgent RX and polls on main loop", () => {
+test("firmware 3.2.7 queues non-urgent RX and polls on main loop", () => {
   const ble = fs.readFileSync(BLE_PY, "utf8");
-  assert.match(ble, /PYBOT_RUNTIME_VERSION = "3\.2\.6"/);
+  assert.match(ble, /PYBOT_RUNTIME_VERSION = "3\.2\.7"/);
   assert.match(ble, /def poll_commands/);
   assert.match(ble, /def on_urgent/);
   assert.match(ble, /self\._cmd_q/);
@@ -136,6 +136,7 @@ test("cooperative stop + RUN:BEGIN cancel pending FORCE timer (model)", () => {
     force_timer_armed: false,
     force_timer: null,
     resetCount: 0,
+    manager: { running: true },
   };
   const cancel = () => {
     ctx.force_reset = false;
@@ -146,28 +147,49 @@ test("cooperative stop + RUN:BEGIN cancel pending FORCE timer (model)", () => {
     }
   };
   const schedule = () => {
+    // 3.2.7: no agendar si no hay exec.
+    if (!ctx.manager || !ctx.manager.running) {
+      ctx.force_reset = false;
+      return;
+    }
     ctx.force_reset = true;
     if (ctx.force_timer_armed) return;
     ctx.force_timer_armed = true;
     const t = { cancelled: false };
     ctx.force_timer = t;
-    // Simula Timer ONE_SHOT: si no se cancela, "resetea".
+    // Simula Timer ONE_SHOT: si no se cancela / running=False, no resetea.
     setTimeout(() => {
-      if (!t.cancelled) ctx.resetCount += 1;
+      if (t.cancelled) return;
+      if (!ctx.manager || !ctx.manager.running) {
+        ctx.force_reset = false;
+        return;
+      }
+      ctx.resetCount += 1;
     }, 5);
   };
 
   // FORCE huerfano tras Stop cooperativo:
   schedule();
   cancel(); // equivalente a _on_cooperative_stop en RUN:STOPPED
+  ctx.manager.running = false;
   // Nuevo RUN:BEGIN tambien cancela (idempotente):
   cancel();
+  // FORCE tardio con running=False: no agenda.
+  schedule();
   return new Promise((resolve) => {
     setTimeout(() => {
-      assert.equal(ctx.resetCount, 0, "FORCE cancelado no debe resetear");
+      assert.equal(ctx.resetCount, 0, "FORCE cancelado / idle no debe resetear");
       assert.equal(ctx.force_reset, false);
       assert.equal(ctx.force_timer_armed, false);
       resolve();
     }, 30);
   });
+});
+
+test("FORCE while running=False does not schedule reset (3.2.7)", () => {
+  const bleSrc = fs.readFileSync(BLE_PY, "utf8");
+  assert.match(bleSrc, /PYBOT_RUNTIME_VERSION = "3\.2\.7"/);
+  // Callback del Timer y _schedule_force_reset exigen running.
+  assert.match(bleSrc, /if not m2 or not m2\.running:/);
+  assert.match(bleSrc, /huerfano post-STOPPED/);
 });

@@ -55,7 +55,7 @@ import {
   parseMemoryDiagnostic,
 } from "./memoryDiagnostic.js";
 import { BluetoothTransport } from "./bluetoothTransport.js";
-import { BleRunSession } from "./bleRunSession.js";
+import { BleRunSession, setBleForceStopLog } from "./bleRunSession.js";
 import {
   BleDeploySession,
   runSavedApp,
@@ -84,6 +84,8 @@ import {
 
 const BLE_STOP_WAIT_MS = 3500;
 const BLE_FORCE_WAIT_MS = 2500;
+/** Tras RUN:STOPPED cooperativo, no mandar STOP:FORCE por path APP (ACK perdido). */
+const BLE_COOP_STOP_GRACE_MS = 20000;
 
 function sleepMs(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -107,6 +109,36 @@ let _bleStopInFlight = null;
  * stopBoardExecution la usa para NO mandar STOP:FORCE si ya arranco otro Run.
  */
 let _bleRunPrepGen = 0;
+/** Epoch ms del ultimo RUN:STOPPED cooperativo (temp run o ACK). */
+let _bleLastCoopStoppedAt = 0;
+/** Logger UI para STOP:FORCE (appendConsole). */
+let _bleForceUiLog = null;
+
+/** Registra logger visible: "STOP:FORCE enviado (razón: …)". */
+export function setBleForceLog(fn) {
+  _bleForceUiLog = typeof fn === "function" ? fn : null;
+  setBleForceStopLog(_bleForceUiLog);
+}
+
+function noteBleCoopStopped() {
+  _bleLastCoopStoppedAt = Date.now();
+}
+
+function recentlyCoopStopped() {
+  return (
+    _bleLastCoopStoppedAt > 0 &&
+    Date.now() - _bleLastCoopStoppedAt < BLE_COOP_STOP_GRACE_MS
+  );
+}
+
+function logBleForce(reason) {
+  const msg = "STOP:FORCE enviado (razón: " + String(reason ?? "desconocida") + ")";
+  try {
+    _bleForceUiLog?.(msg);
+  } catch {
+    /* ignore */
+  }
+}
 
 /** Nombre del archivo del preludio MPY (pin/servo/motor/wait) instalado en la placa. */
 export const PYBOT_MPY_FILENAME = "pybot_mpy.py";
@@ -581,6 +613,7 @@ export async function bleDeleteApp() {
       /* ignore */
     }
     try {
+      logBleForce("app-delete-fallback");
       await _bleTransport.send(RUN.STOP_FORCE);
     } catch {
       /* ignore */
@@ -726,6 +759,9 @@ function armBleStopAck() {
         t.includes("APP:OK:DELETE") ||
         t.includes("RUN:DONE")
       ) {
+        if (t.includes("RUN:STOPPED") || t.includes("APP:OK:STOP")) {
+          noteBleCoopStopped();
+        }
         mark();
       }
     });
@@ -791,14 +827,27 @@ export async function stopBoardExecution() {
       releaseStopLock = resolve;
     });
     try {
-      // RUN temporal gestionado por la sesión web (BleRunSession escala a FORCE).
+      // RUN temporal gestionado por la sesión web (BleRunSession escala a FORCE
+      // SOLO si isRunning y no llega STOPPED).
       if (_bleRun && _bleRun.isRunning && _bleRun.isRunning()) {
         try {
           await _bleRun.stop({ wait: true });
         } catch {
           /* ignore */
         }
+        try {
+          _bleRun.disarmForceEscalate?.();
+        } catch {
+          /* ignore */
+        }
+        noteBleCoopStopped();
+        // Regla de oro: tras stop cooperativo de run temporal, NUNCA caer al
+        // path APP:STOP+FORCE (perderia el ACK ya emitido → reset GATT).
         return { transport: "ble", kind: "run" };
+      }
+      // Stop idle justo despues de un RUN:STOPPED: no reenviar APP/FORCE.
+      if (recentlyCoopStopped()) {
+        return { transport: "ble", kind: "app-recent-coop" };
       }
       // App persistente / autostart / programa en placa sin `running` local en la UI.
       const prepGenAtStop = _bleRunPrepGen;
@@ -814,13 +863,15 @@ export async function stopBoardExecution() {
         /* ignore */
       }
       if (await waitArmedBleStopAck(armed, BLE_STOP_WAIT_MS)) {
+        noteBleCoopStopped();
         return { transport: "ble", kind: "app" };
       }
       // Un nuevo Run BLE arranco mientras esperabamos ACK: NUNCA FORCE
       // (mataria el GATT del programa que el alumno acaba de lanzar).
       if (
         prepGenAtStop !== _bleRunPrepGen ||
-        (_bleRun && _bleRun.isRunning && _bleRun.isRunning())
+        (_bleRun && _bleRun.isRunning && _bleRun.isRunning()) ||
+        recentlyCoopStopped()
       ) {
         return { transport: "ble", kind: "app-superseded" };
       }
@@ -836,11 +887,14 @@ export async function stopBoardExecution() {
       }
       if (
         prepGenAtStop !== _bleRunPrepGen ||
-        (_bleRun && _bleRun.isRunning && _bleRun.isRunning())
+        (_bleRun && _bleRun.isRunning && _bleRun.isRunning()) ||
+        recentlyCoopStopped()
       ) {
         return { transport: "ble", kind: "app-superseded" };
       }
-      // No cooperativo → FORCE (Timer en firmware 3.2.4+).
+      // No cooperativo → FORCE (Timer en firmware 3.2.4+). Solo si NUNCA hubo
+      // STOPPED reciente para este ciclo (regla de oro 3.2.7).
+      logBleForce("app-stop-sin-ACK");
       const armedForce = armBleStopAck();
       try {
         await _bleTransport.send(RUN.STOP_FORCE);
@@ -924,7 +978,9 @@ export async function bleRunConnect() {
   const tr = new BluetoothTransport();
   const info = await tr.connect();
   _bleTransport = tr;
-  _bleRun = new BleRunSession(tr);
+  _bleRun = new BleRunSession(tr, {
+    onCoopStopped: () => noteBleCoopStopped(),
+  });
   _bleDeploy = new BleDeploySession(tr);
   _bleUpdate = new BleRuntimeUpdateSession(tr);
   return info;
