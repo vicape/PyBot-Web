@@ -632,17 +632,31 @@ export class MicroPythonSession {
     return { ok, mainSize: Number.isNaN(mainSize) ? -1 : mainSize, detail };
   }
 
-  /** Reinicio por señal DTR/RTS (más fiable en ESP32 que machine.reset por serial). */
+  /**
+   * Reinicio hardware ESP32 vía EN/RTS (Web Serial setSignals).
+   * DevKit típica: RTS→EN (reset), DTR→GPIO0 (BOOT). Pulsar RTS con DTR
+   * inactivo reinicia en modo run; NUNCA afirmar DTR al liberar EN (download).
+   */
   async hardwareReset() {
     const port = this.port;
     if (!port || typeof port.setSignals !== "function") return false;
-    try {
+    const release = async () => {
       await port.setSignals({ dataTerminalReady: false, requestToSend: false });
-      await sleep(120);
-      await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+    };
+    try {
+      // Hold EN low (reset), GPIO0 high (run mode, not bootloader).
+      await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+      await sleep(100);
+      // Release EN; keep DTR inactive so the chip boots into MicroPython.
+      await release();
       await sleep(1600);
       return true;
     } catch {
+      try {
+        await release();
+      } catch {
+        /* ignore */
+      }
       return false;
     }
   }
@@ -668,24 +682,27 @@ export class MicroPythonSession {
   /**
    * Reinicia la placa para que MicroPython ejecute main.py al arrancar.
    * Tras el reset la sesión serial deja de ser usable.
+   * No declara éxito si no se ejecutó ningún mecanismo de reset.
    */
   async softReset() {
     await this.syncFilesystem();
-    const hw = await this.hardwareReset();
-    if (hw) {
+    if (await this.hardwareReset()) {
       this._running = false;
       return;
     }
+    let resetSent = false;
     try {
       await this._enterRawRepl();
       this._buf = "";
       await this._write("import machine\nmachine.reset()\n");
       await this._write(CTRL_D);
+      resetSent = true;
       await sleep(600);
     } catch {
-      /* la placa ya se reinició o el puerto se cerró */
+      /* la placa ya se reinició o el puerto se cerró tras enviar el reset */
     }
     this._running = false;
+    if (!resetSent) throw new Error("RESET_FAIL");
   }
 
   /** Interrumpe el programa en ejecución (Ctrl-C). */
