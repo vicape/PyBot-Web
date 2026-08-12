@@ -13,7 +13,7 @@ try:
 except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
-PYBOT_RUNTIME_VERSION = "3.2.5"
+PYBOT_RUNTIME_VERSION = "3.2.6"
 PYBOT_PROTOCOL_VERSION = "3.1"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
@@ -513,7 +513,15 @@ def main():
 
     def _ensure_manager():
         if ctx["manager"] is None:
-            ctx["manager"] = _load_run().ProgramManager(_send)
+            m = _load_run().ProgramManager(_send)
+            # Callback via ctx: _cancel_force_reset se define mas abajo en main().
+            def _coop_stop():
+                fn = ctx.get("cancel_force")
+                if fn:
+                    fn()
+
+            m._on_cooperative_stop = _coop_stop
+            ctx["manager"] = m
         return ctx["manager"]
 
     def _ensure_deploy():
@@ -570,6 +578,19 @@ def main():
             pass
         machine.reset()
 
+    def _cancel_force_reset():
+        """Cancela un FORCE pendiente. Critico tras STOP cooperativo / nuevo RUN:
+        un Timer huerfano haria machine.reset() y tumbaria el GATT en el 2º Run."""
+        ctx["force_reset"] = False
+        ctx["force_timer_armed"] = False
+        t = ctx.get("force_timer")
+        ctx["force_timer"] = None
+        if t is not None:
+            try:
+                t.deinit()
+            except Exception:
+                pass
+
     def _schedule_force_reset():
         """Agenda reset fuera del IRQ. Critico: exec() bloquea el main loop, asi
         que un flag force_reset solo NO alcanza — hay que usar Timer."""
@@ -579,6 +600,8 @@ def main():
         ctx["force_timer_armed"] = True
 
         def _cb(_t):
+            ctx["force_timer"] = None
+            ctx["force_timer_armed"] = False
             try:
                 _force_reset()
             except Exception:
@@ -592,6 +615,7 @@ def main():
             try:
                 t = machine.Timer(timer_id)
                 t.init(period=40, mode=machine.Timer.ONE_SHOT, callback=_cb)
+                ctx["force_timer"] = t
                 return
             except Exception:
                 pass
@@ -653,6 +677,10 @@ def main():
             _schedule_force_reset()
             return None
         if t.startswith("RUN:"):
+            # Nuevo RUN del usuario: anular FORCE huerfano (Stop previo) para no
+            # resetear la placa a mitad del handshake / chunks del 2º Run.
+            if t.startswith("RUN:BEGIN:"):
+                _cancel_force_reset()
             # Nunca silenciar fallos de lazy-import: el web espera RUN:READY.
             try:
                 _load_run().handle_run(_ensure_manager(), t)
@@ -698,6 +726,8 @@ def main():
     recovery = {"timer": None}
     ctx["force_reset"] = False
     ctx["force_timer_armed"] = False
+    ctx["force_timer"] = None
+    ctx["cancel_force"] = _cancel_force_reset
 
     def _arm_disconnect_recovery():
         try:

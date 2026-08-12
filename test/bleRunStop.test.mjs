@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { BleRunSession } from "../src/bleRunSession.js";
+import { BleRunSession, STOP_ESCALATE_MS } from "../src/bleRunSession.js";
 import {
   RUN,
   parseRunBegin,
@@ -281,6 +281,94 @@ test("stop → second run: cooperative STOPPED then done without FORCE/disconnec
   const second = await run2P;
   assert.equal(second.outcome, "stopped");
   assert.equal(st.connected, true);
+});
+
+/**
+ * Carrera real: tras RUN:STOPPED, esperar > STOP_ESCALATE_MS y verificar que
+ * NO hay STOP:FORCE ni disconnect. Luego RUN#2 tambien sobrevive > escalate.
+ * Finalmente 20 ciclos Run→Stop sin tumbar GATT.
+ */
+test("Run-Stop-Run: no orphan FORCE after STOPPED; 20 cycles keep connection", async () => {
+  const listeners = new Set();
+  const stateListeners = new Set();
+  const st = { connected: true, sent: [], forced: 0, gen: 0 };
+  const emitSync = (text) => listeners.forEach((cb) => cb(text));
+
+  const tr = {
+    isConnected: () => st.connected,
+    onData(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    onStateChange(cb) {
+      stateListeners.add(cb);
+      return () => stateListeners.delete(cb);
+    },
+    async sendChunked(text) {
+      const line = String(text).replace(/\n+$/, "");
+      st.sent.push(line);
+      if (line.startsWith(RUN.BEGIN + ":")) {
+        emitSync(RUN.READY);
+      } else if (line.startsWith(RUN.CHUNK + ":")) {
+        /* ignore */
+      } else if (line === RUN.END) {
+        emitSync(RUN.STARTED);
+      } else if (line === RUN.STOP) {
+        emitSync(RUN.STOPPED);
+        await new Promise((r) => setTimeout(r, 5));
+      } else if (line === RUN.STOP_FORCE) {
+        st.forced += 1;
+        st.connected = false;
+        stateListeners.forEach((cb) => cb("disconnected"));
+      }
+    },
+  };
+
+  const session = new BleRunSession(tr);
+
+  // RUN1 → STOP → STOPPED → esperar > escalate → sin FORCE
+  const run1 = session.runProgram("while True: wait(1)  # LOOP\n", {});
+  await new Promise((r) => setTimeout(r, 15));
+  await session.stop();
+  assert.equal((await run1).outcome, "stopped");
+  await new Promise((r) => setTimeout(r, STOP_ESCALATE_MS + 400));
+  assert.equal(st.forced, 0, "tras STOPPED no debe haber STOP:FORCE");
+  assert.equal(st.connected, true);
+
+  // RUN2 → esperar > escalate → conexion viva, ningun timer de RUN1
+  const run2 = session.runProgram("while True: wait(1)  # LOOP\n", {});
+  await new Promise((r) => setTimeout(r, 15));
+  assert.equal(session.isRunning(), true);
+  await new Promise((r) => setTimeout(r, STOP_ESCALATE_MS + 400));
+  assert.equal(st.connected, true, "RUN2 debe seguir con GATT vivo");
+  assert.equal(st.forced, 0, "timer RUN1 no debe forzar durante RUN2");
+  await session.stop();
+  assert.equal((await run2).outcome, "stopped");
+
+  // 20 ciclos Run→Stop
+  for (let i = 0; i < 20; i++) {
+    const rp = session.runProgram("while True: wait(0.2)  # LOOP\n", {});
+    await new Promise((r) => setTimeout(r, 10));
+    await session.stop();
+    const { outcome } = await rp;
+    assert.equal(outcome, "stopped", `ciclo ${i + 1}`);
+    assert.equal(st.connected, true, `GATT vivo tras ciclo ${i + 1}`);
+  }
+  assert.equal(st.forced, 0, "20 ciclos sin ningun STOP:FORCE");
+});
+
+test("forceStop is a no-op after cooperative terminal (no orphan FORCE)", async () => {
+  const mock = makeMock();
+  const session = new BleRunSession(mock);
+  const runP = session.runProgram("while True:\n    wait(1)  # LOOP\n", {});
+  await new Promise((r) => setTimeout(r, 20));
+  await session.stop();
+  await runP;
+  assert.equal(session.isRunning(), false);
+  await session.forceStop();
+  assert.equal(mock._state.forced, undefined);
+  assert.ok(!mock._state.sent.includes(RUN.STOP_FORCE));
+  assert.equal(mock._state.connected, true);
 });
 
 test("disconnect during READY handshake rejects BLE_RUN_DISCONNECTED (not NO_READY)", async () => {

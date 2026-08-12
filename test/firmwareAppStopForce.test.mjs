@@ -38,15 +38,19 @@ const ble = () => fs.readFileSync(BLE_PY, "utf8");
 const run = () => fs.readFileSync(RUN_PY, "utf8");
 const deploy = () => fs.readFileSync(DEPLOY_PY, "utf8");
 
-test("runtime 3.2.5 declares version and schedules FORCE via Timer", () => {
+test("runtime 3.2.6 declares version and schedules FORCE via Timer", () => {
   const src = ble();
-  assert.match(src, /PYBOT_RUNTIME_VERSION = "3\.2\.5"/);
+  assert.match(src, /PYBOT_RUNTIME_VERSION = "3\.2\.6"/);
   assert.match(src, /def _schedule_force_reset/);
+  assert.match(src, /def _cancel_force_reset/);
   assert.match(src, /for timer_id in \(-1, 0, 1\):/);
   assert.match(src, /machine\.Timer\(timer_id\)/);
   assert.match(src, /force_timer_armed/);
+  assert.match(src, /force_timer/);
   // FORCE ya no depende solo del flag que el main lee tras exec().
   assert.match(src, /_schedule_force_reset\(\)/);
+  // Referencia al Timer para poder cancelarlo tras STOP cooperativo / RUN:BEGIN.
+  assert.match(src, /t\.deinit\(\)/);
 });
 
 test("APP:STOP and APP:DELETE are handled as urgent when app is running", () => {

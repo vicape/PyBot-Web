@@ -27,8 +27,8 @@ import {
 // Versión / capability (fuente de verdad única)
 // ---------------------------------------------------------------------------
 
-test("runtime 3.2.5 / protocol 3.1 declare runtime-update capability", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.5");
+test("runtime 3.2.6 / protocol 3.1 declare runtime-update capability", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.6");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.1");
   assert.ok(PYBOT_CAPABILITIES.includes("runtime-update"));
 });
@@ -97,7 +97,7 @@ test("runtimeUpdateStatus: 3.1.x -> 3.2+ modular layout requires USB (not pack O
 test("runtimeUpdateStatus: newer published version on 3.2+ board -> OTA available", () => {
   const s = runtimeUpdateStatus(
     { firmware: "3.2.0", capabilities: ["runtime-update"] },
-    "3.2.5",
+    "3.2.6",
   );
   assert.equal(s.updateAvailable, true);
   assert.equal(s.supportsOta, true);

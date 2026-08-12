@@ -67,6 +67,8 @@ class ProgramManager:
         self._force = False
         self._pending_code = None
         self._app_ack = None
+        # pybot_ble.main asigna cancelacion del Timer FORCE tras STOP cooperativo.
+        self._on_cooperative_stop = None
 
     def reset_idle(self):
         """Deja el manager listo para otro RUN:BEGIN tras STOP/DONE/ERROR."""
@@ -372,6 +374,14 @@ class ProgramManager:
 
     def _finish(self, persistent, outcome, err_text):
         if outcome == "stopped":
+            # Cancelar Timer FORCE huerfano ANTES de notificar: si el web mando
+            # STOP:FORCE tarde, no debemos resetear tras un Stop cooperativo OK.
+            cb = self._on_cooperative_stop
+            if cb:
+                try:
+                    cb()
+                except Exception:
+                    pass
             self._send("RUN:STOPPED")
         else:
             self._send("RUN:DONE")

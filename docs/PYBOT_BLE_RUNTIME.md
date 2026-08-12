@@ -59,6 +59,10 @@ nuevos; no altera EDA6, USB/Firmata, Pyodide ni el mecanismo de ejecución exist
 > `exec` (no solo app persistente); Timer FORCE con fallback `0`/`1`; la UI Stop por
 > BLE intenta siempre (aunque no haya `running` local — p.ej. autostart). Placas
 > **&lt; 3.2.4** reciben aviso “actualizá runtime para Stop fiable”.
+>
+> **Runtime 3.2.6 (Run→Stop→Run):** cancela Timer FORCE huerfano en `RUN:BEGIN` y tras
+> STOP cooperativo; la web no escala a `STOP:FORCE` si ya arrancó el siguiente Run o
+> la placa responde PING. Actualización: **OTA o USB** (web sola no alcanza).
 
 ## 1. Arquitectura y enfoque elegido
 

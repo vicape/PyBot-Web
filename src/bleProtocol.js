@@ -22,7 +22,7 @@ export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web (
 // decidir si ofrecer una actualizacion OTA por BLE. NO duplicar esta constante:
 // pybotBleRuntime.js la reexporta; los tests y la UI la importan de aca.
 // ===========================================================================
-export const PYBOT_RUNTIME_VERSION = "3.2.5";
+export const PYBOT_RUNTIME_VERSION = "3.2.6";
 // Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
 // verificado (size+hash), control de app (APP:*) y autostart con safe boot.
 // El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
@@ -47,6 +47,8 @@ export const PYBOT_RUNTIME_VERSION = "3.2.5";
 // 3.2.5 (runtime; protocolo sigue 3.1): APP:STOP urgente/ACK diferido para CUALQUIER
 // exec (no solo app persistente); Timer FORCE con fallback 0/1; UI Stop BLE sin
 // exigir running local.
+// 3.2.6 (runtime; protocolo sigue 3.1): cancela Timer FORCE huerfano en RUN:BEGIN /
+// STOP cooperativo; web no escala FORCE si ya arranco el siguiente Run.
 export const PYBOT_PROTOCOL_VERSION = "3.1";
 
 /** Primera version de runtime con boot/OTA multi-archivo (pack PYBOTRT1). */

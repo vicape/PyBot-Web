@@ -14,11 +14,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IDE = path.join(__dirname, "..", "src", "PyBotIDE.jsx");
 const BRIDGE = path.join(__dirname, "..", "src", "hardwareBridge.js");
 
-test("runtime 3.2.5 / stop-reliable min is 3.2.4", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.5");
+test("runtime 3.2.6 / stop-reliable min is 3.2.4", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.6");
   assert.equal(PYBOT_STOP_RELIABLE_MIN, "3.2.4");
   assert.equal(runtimeStopReliable({ firmware: "3.2.4" }), true);
-  assert.equal(runtimeStopReliable({ firmware: "3.2.5" }), true);
+  assert.equal(runtimeStopReliable({ firmware: "3.2.6" }), true);
   assert.equal(runtimeStopReliable({ firmware: "3.2.3" }), false);
   assert.ok(compareRuntimeVersions("3.2.3", PYBOT_STOP_RELIABLE_MIN) < 0);
 });
@@ -40,11 +40,15 @@ test("UI onStop attempts BLE stop without requiring local running", () => {
 test("stopBoardExecution arms ACK before APP:STOP and escalates FORCE", () => {
   const src = fs.readFileSync(BRIDGE, "utf8");
   const start = src.indexOf("export async function stopBoardExecution");
-  const body = src.slice(start, start + 2200);
+  const body = src.slice(start, start + 3500);
   assert.match(body, /armBleStopAck/);
   assert.match(body, /APP\.STOP/);
   assert.match(body, /STOP_FORCE/);
   assert.match(body, /stop\(\{\s*wait:\s*true\s*\}\)/);
   // No depender de appStop/sendAndWait solo (puede false-ack); path unificado.
   assert.match(body, /waitArmedBleStopAck/);
+  // Regresión Run→Stop→Run: no FORCE si arranco otro Run o la placa responde PING.
+  assert.match(body, /_bleRunPrepGen/);
+  assert.match(body, /app-superseded|app-idle/);
+  assert.match(body, /_bleStopInFlight/);
 });

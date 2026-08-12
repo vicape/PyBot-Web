@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Mirror minimo de ProgramManager (pybot_run.py 3.2.5) para el ciclo
+ * Mirror minimo de ProgramManager (pybot_run.py 3.2.6) para el ciclo
  * Run → Stop → Run: should_stop exige running, y begin() resetea idle.
  */
 
@@ -72,16 +72,19 @@ class ProgramManagerMirror {
   }
 }
 
-test("firmware 3.2.5 queues non-urgent RX and polls on main loop", () => {
+test("firmware 3.2.6 queues non-urgent RX and polls on main loop", () => {
   const ble = fs.readFileSync(BLE_PY, "utf8");
-  assert.match(ble, /PYBOT_RUNTIME_VERSION = "3\.2\.5"/);
+  assert.match(ble, /PYBOT_RUNTIME_VERSION = "3\.2\.6"/);
   assert.match(ble, /def poll_commands/);
   assert.match(ble, /def on_urgent/);
   assert.match(ble, /self\._cmd_q/);
   // STOP sigue siendo urgente (flag en IRQ); FORCE agenda Timer (no reset en IRQ).
   assert.match(ble, /def _schedule_force_reset/);
+  assert.match(ble, /def _cancel_force_reset/);
   assert.match(ble, /ctx\["force_reset"\] = True/);
   assert.match(ble, /transport\.poll_commands\(\)/);
+  // RUN:BEGIN cancela FORCE huerfano (defensa ante Stop→Run).
+  assert.match(ble, /RUN:BEGIN:[\s\S]*_cancel_force_reset/);
 });
 
 test("should_stop is false after stop even if _stop was left true (leaked patch guard)", () => {
@@ -115,4 +118,56 @@ test("pybot_run.py documents should_stop requiring running", () => {
   const src = fs.readFileSync(RUN_PY, "utf8");
   assert.match(src, /return self\._stop and self\.running/);
   assert.match(src, /def reset_idle/);
+  assert.match(src, /_on_cooperative_stop/);
+});
+
+/**
+ * Modelo firmware: STOP cooperativo cancela FORCE pendiente; un nuevo RUN:BEGIN
+ * tambien cancela. Sin esto, un Timer FORCE huerfano hace machine.reset() en RUN#2.
+ */
+test("cooperative stop + RUN:BEGIN cancel pending FORCE timer (model)", () => {
+  const ble = fs.readFileSync(BLE_PY, "utf8");
+  const run = fs.readFileSync(RUN_PY, "utf8");
+  assert.match(ble, /def _cancel_force_reset/);
+  assert.match(run, /_on_cooperative_stop/);
+
+  const ctx = {
+    force_reset: false,
+    force_timer_armed: false,
+    force_timer: null,
+    resetCount: 0,
+  };
+  const cancel = () => {
+    ctx.force_reset = false;
+    ctx.force_timer_armed = false;
+    if (ctx.force_timer) {
+      ctx.force_timer.cancelled = true;
+      ctx.force_timer = null;
+    }
+  };
+  const schedule = () => {
+    ctx.force_reset = true;
+    if (ctx.force_timer_armed) return;
+    ctx.force_timer_armed = true;
+    const t = { cancelled: false };
+    ctx.force_timer = t;
+    // Simula Timer ONE_SHOT: si no se cancela, "resetea".
+    setTimeout(() => {
+      if (!t.cancelled) ctx.resetCount += 1;
+    }, 5);
+  };
+
+  // FORCE huerfano tras Stop cooperativo:
+  schedule();
+  cancel(); // equivalente a _on_cooperative_stop en RUN:STOPPED
+  // Nuevo RUN:BEGIN tambien cancela (idempotente):
+  cancel();
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      assert.equal(ctx.resetCount, 0, "FORCE cancelado no debe resetear");
+      assert.equal(ctx.force_reset, false);
+      assert.equal(ctx.force_timer_armed, false);
+      resolve();
+    }, 30);
+  });
 });

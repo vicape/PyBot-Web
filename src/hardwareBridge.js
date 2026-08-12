@@ -100,6 +100,13 @@ let _bleTransport = null;  // BluetoothTransport (Web Bluetooth)
 let _bleRun = null;        // BleRunSession (RUN temporal, protocolo 3.0)
 let _bleDeploy = null;     // BleDeploySession (DEPLOY persistente, protocolo 3.0)
 let _bleUpdate = null;     // BleRuntimeUpdateSession (OTA del runtime, protocolo 3.1)
+/** Serializa stopBoardExecution (Stop doble / carrera con Run). */
+let _bleStopInFlight = null;
+/**
+ * Generacion monotona: sube al iniciar un Run BLE (antes del handshake INFO).
+ * stopBoardExecution la usa para NO mandar STOP:FORCE si ya arranco otro Run.
+ */
+let _bleRunPrepGen = 0;
 
 /** Nombre del archivo del preludio MPY (pin/servo/motor/wait) instalado en la placa. */
 export const PYBOT_MPY_FILENAME = "pybot_mpy.py";
@@ -426,6 +433,9 @@ async function runOnBoardBle(code, cb = {}) {
   const boardType = getBoardType();
   const mode = boardType === "esp32-eda6" ? "eda6" : "mpy";
   const profile = getEda6Profile();
+  // Marcar "Run en curso" ANTES del INFO: un stopBoardExecution que espera ACK
+  // no debe escalar a STOP:FORCE mientras arranca el siguiente programa.
+  _bleRunPrepGen += 1;
   // Diagnostico: la placa DEBE tener el runtime nuevo (protocolo RUN 2.0). Con el
   // MVP viejo (FW 1.x) los frames RUN:* se ignoran y el Run muere por timeout;
   // detectarlo aca da un error claro y guia a reinstalar por USB.
@@ -765,39 +775,84 @@ export async function stopBoardExecution() {
     return { transport: "serial" };
   }
   if (_bleTransport && _bleTransport.isConnected()) {
-    // RUN temporal gestionado por la sesión web (BleRunSession escala a FORCE).
-    if (_bleRun && _bleRun.isRunning && _bleRun.isRunning()) {
+    // Coalescer Stop concurrentes (doble click / Stop idle tras TEMP RUN).
+    // Sin esto, el 2º Stop toma el path APP, pierde el ACK ya emitido y escala
+    // a STOP:FORCE durante el siguiente Run → GATT disconnect.
+    if (_bleStopInFlight) {
       try {
-        await _bleRun.stop({ wait: true });
+        await _bleStopInFlight;
       } catch {
         /* ignore */
       }
-      return { transport: "ble", kind: "run" };
+      return { transport: "ble", kind: "coalesced" };
     }
-    // App persistente / autostart / programa en placa sin `running` local en la UI.
-    const armed = armBleStopAck();
+    let releaseStopLock = () => {};
+    _bleStopInFlight = new Promise((resolve) => {
+      releaseStopLock = resolve;
+    });
     try {
-      await _bleTransport.send(APP.STOP);
-    } catch {
-      /* ignore */
+      // RUN temporal gestionado por la sesión web (BleRunSession escala a FORCE).
+      if (_bleRun && _bleRun.isRunning && _bleRun.isRunning()) {
+        try {
+          await _bleRun.stop({ wait: true });
+        } catch {
+          /* ignore */
+        }
+        return { transport: "ble", kind: "run" };
+      }
+      // App persistente / autostart / programa en placa sin `running` local en la UI.
+      const prepGenAtStop = _bleRunPrepGen;
+      const armed = armBleStopAck();
+      try {
+        await _bleTransport.send(APP.STOP);
+      } catch {
+        /* ignore */
+      }
+      try {
+        await _bleTransport.send(RUN.STOP);
+      } catch {
+        /* ignore */
+      }
+      if (await waitArmedBleStopAck(armed, BLE_STOP_WAIT_MS)) {
+        return { transport: "ble", kind: "app" };
+      }
+      // Un nuevo Run BLE arranco mientras esperabamos ACK: NUNCA FORCE
+      // (mataria el GATT del programa que el alumno acaba de lanzar).
+      if (
+        prepGenAtStop !== _bleRunPrepGen ||
+        (_bleRun && _bleRun.isRunning && _bleRun.isRunning())
+      ) {
+        return { transport: "ble", kind: "app-superseded" };
+      }
+      // ACK perdido pero la placa responde PING → esta idle, no bloqueada en
+      // exec. FORCE resetearia GATT y romperia Run→Stop→Run.
+      try {
+        await _bleTransport.sendAndWait("PING", 600, {
+          match: (m) => /PONG/i.test(String(m ?? "")),
+        });
+        return { transport: "ble", kind: "app-idle" };
+      } catch {
+        /* sin PONG: exec bloqueado o enlace caido → FORCE */
+      }
+      if (
+        prepGenAtStop !== _bleRunPrepGen ||
+        (_bleRun && _bleRun.isRunning && _bleRun.isRunning())
+      ) {
+        return { transport: "ble", kind: "app-superseded" };
+      }
+      // No cooperativo → FORCE (Timer en firmware 3.2.4+).
+      const armedForce = armBleStopAck();
+      try {
+        await _bleTransport.send(RUN.STOP_FORCE);
+      } catch {
+        /* ignore */
+      }
+      await waitArmedBleStopAck(armedForce, BLE_FORCE_WAIT_MS);
+      return { transport: "ble", kind: "app-force" };
+    } finally {
+      releaseStopLock();
+      _bleStopInFlight = null;
     }
-    try {
-      await _bleTransport.send(RUN.STOP);
-    } catch {
-      /* ignore */
-    }
-    if (await waitArmedBleStopAck(armed, BLE_STOP_WAIT_MS)) {
-      return { transport: "ble", kind: "app" };
-    }
-    // No cooperativo → FORCE (Timer en firmware 3.2.4+).
-    const armedForce = armBleStopAck();
-    try {
-      await _bleTransport.send(RUN.STOP_FORCE);
-    } catch {
-      /* ignore */
-    }
-    await waitArmedBleStopAck(armedForce, BLE_FORCE_WAIT_MS);
-    return { transport: "ble", kind: "app-force" };
   }
   return { transport: "none" };
 }

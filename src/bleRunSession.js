@@ -41,7 +41,7 @@ const READY_RETRY_MS = 250;
 const CHUNK_DELAY_MS = 12;
 const STOP_POLL_MS = 150;
 // Si tras pedir STOP no llega confirmacion, escalar a STOP:FORCE (reset + safe boot).
-const STOP_ESCALATE_MS = 3500;
+export const STOP_ESCALATE_MS = 3500;
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -58,8 +58,18 @@ export class BleRunSession {
     this._escalateTimer = null;
     /** Generacion del run actual; el escalate de FORCE solo aplica a la misma. */
     this._runGen = 0;
+    /**
+     * Epoch del escalate: sube en cada settle/clear/nuevo run. El callback de
+     * FORCE debe ver el mismo epoch con el que se armo (defensa extra a _runGen).
+     */
+    this._escalateEpoch = 0;
     /** True cuando el run actual ya tuvo desenlace terminal (no armar FORCE). */
     this._terminal = false;
+  }
+
+  /** Generacion de run (para que el bridge aborte FORCE si ya arranco otro Run). */
+  getRunGen() {
+    return this._runGen;
   }
 
   isConnected() {
@@ -79,6 +89,27 @@ export class BleRunSession {
       clearTimeout(this._escalateTimer);
       this._escalateTimer = null;
     }
+    // Invalidar cualquier callback ya encolado (clearTimeout no cancela el que
+    // esta ejecutandose; el epoch lo vuelve no-op).
+    this._escalateEpoch += 1;
+  }
+
+  _armEscalateForce(genAtStop) {
+    if (!this._running || this._terminal || this._runGen !== genAtStop) return;
+    this._clearEscalateTimer();
+    const epoch = this._escalateEpoch;
+    this._escalateTimer = setTimeout(() => {
+      if (
+        this._escalateEpoch !== epoch ||
+        !this._running ||
+        this._terminal ||
+        this._forceSent ||
+        this._runGen !== genAtStop
+      ) {
+        return;
+      }
+      this.forceStop().catch(() => {});
+    }, STOP_ESCALATE_MS);
   }
 
   /**
@@ -338,20 +369,7 @@ export class BleRunSession {
         /* ignore */
       }
       // El programa ya confirmo (u otro settle) mientras enviabamos STOP.
-      if (this._running && !this._terminal && this._runGen === genAtStop) {
-        // Escalado: si el programa no cede (bucle sin puntos de espera), forzar.
-        this._clearEscalateTimer();
-        this._escalateTimer = setTimeout(() => {
-          if (
-            this._running &&
-            !this._terminal &&
-            !this._forceSent &&
-            this._runGen === genAtStop
-          ) {
-            this.forceStop().catch(() => {});
-          }
-        }, STOP_ESCALATE_MS);
-      }
+      this._armEscalateForce(genAtStop);
     }
     if (opts.wait) await this._waitUntilIdle(STOP_ESCALATE_MS + 2500);
   }
@@ -366,6 +384,9 @@ export class BleRunSession {
   /** Fuerza la detencion: STOP:FORCE (reset + safe boot en la placa). */
   async forceStop() {
     if (!this.isConnected()) return;
+    // Nunca resetear la placa si el run ya termino (STOPPED/DONE) o no hay run:
+    // un FORCE huerfano tumba GATT y rompe el siguiente Run.
+    if (!this._running || this._terminal) return;
     this._stopRequested = true;
     if (this._forceSent) return;
     this._forceSent = true;
