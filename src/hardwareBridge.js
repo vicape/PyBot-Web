@@ -87,6 +87,18 @@ import {
 import { isNativeBleEnabled } from "./micropython/featureFlags.js";
 import { BleReplTransport } from "./micropython/bleReplTransport.js";
 import { STOP_LEVEL } from "./micropython/stopLifecycle.js";
+import { runEsp32Provisioning } from "./esp32/provisionEsp32.js";
+import { inspectPybotOnSession } from "./esp32/boardProbe.js";
+import { expectedProvisionFiles } from "./esp32/pybotInstallManifest.js";
+import { loadOfficialFirmware } from "./esp32/firmwareLoader.js";
+import {
+  connectBootloader,
+  eraseFlash,
+  writeFirmware,
+  resetAndRelease,
+  ensurePortClosed,
+} from "./esp32/esp32Flasher.js";
+import { BOARD_STATE, PROVISION_ERROR } from "./esp32/provisioningPhases.js";
 
 const BLE_STOP_WAIT_MS = 3500;
 const BLE_FORCE_WAIT_MS = 2500;
@@ -314,7 +326,7 @@ export async function hardwareConnect(hooks = {}) {
       _mpSession = session;
       _mode = "esp32-eda6";
       _baudRate = baudRate;
-      return { baudRate, mode: _mode };
+      return { baudRate, mode: _mode, ...(await pybotStateSnapshot()) };
     } catch (e) {
       try {
         await port.close();
@@ -332,7 +344,7 @@ export async function hardwareConnect(hooks = {}) {
       _mpSession = session;
       _mode = "esp32-micropython";
       _baudRate = baudRate;
-      return { baudRate, mode: _mode };
+      return { baudRate, mode: _mode, ...(await pybotStateSnapshot()) };
     } catch (e) {
       try {
         await port.close();
@@ -430,6 +442,152 @@ export async function hardwareDisconnect() {
   _mode = null;
   _baudRate = null;
 }
+
+function provisionMode() {
+  return getBoardType() === "esp32-eda6" ? "esp32-eda6" : "esp32-micropython";
+}
+
+async function pybotStateSnapshot() {
+  if (!_mpSession) return {};
+  try {
+    const inspection = await inspectPybotOnSession(_mpSession);
+    return {
+      pybotState: inspection.boardState,
+      pybotFiles: inspection.files,
+      pybotRuntime: inspection.runtimeVersion,
+    };
+  } catch {
+    return {};
+  }
+}
+
+async function requestSerialPort() {
+  if (!("serial" in navigator)) {
+    throw new Error("PYBOT_USB:MISSING_BROWSER");
+  }
+  if (typeof globalThis.isSecureContext === "boolean" && !globalThis.isSecureContext) {
+    throw new Error("PYBOT_USB:HTTPS");
+  }
+  try {
+    return await navigator.serial.requestPort();
+  } catch (e) {
+    const name = e?.name ?? "";
+    if (name === "NotFoundError") {
+      const err = new Error(PROVISION_ERROR.PORT_CANCELLED);
+      err.code = PROVISION_ERROR.PORT_CANCELLED;
+      err.name = "NotFoundError";
+      throw err;
+    }
+    if (name === "SecurityError") {
+      const err = new Error(PROVISION_ERROR.PORT_PERMISSION);
+      err.code = PROVISION_ERROR.PORT_PERMISSION;
+      err.name = "SecurityError";
+      throw err;
+    }
+    throw e;
+  }
+}
+
+/**
+ * Flujo Preparar ESP32 (Chrome/Edge + Web Serial).
+ * Capa A: ROM bootloader + firmware oficial MicroPython.
+ * Capa B: raw REPL + installBleRuntime (mismos archivos que USB BLE).
+ *
+ * @param {{
+ *   onPhase?: Function,
+ *   onLog?: Function,
+ *   signal?: { aborted?: boolean },
+ *   forceReinstall?: boolean,
+ *   confirmFlash?: () => Promise<boolean>,
+ *   confirmInstall?: () => Promise<boolean>,
+ *   confirmUpdate?: () => Promise<boolean>,
+ *   confirmReinstall?: () => Promise<boolean>,
+ * }} [hooks]
+ */
+export async function prepareEsp32(hooks = {}) {
+  await hardwareDisconnect();
+  const mode = provisionMode();
+
+  const adapters = {
+    requestPort: requestSerialPort,
+    async probeBoard(port) {
+      try {
+        const { session, baudRate } = await connectMicroPythonEsp32Session(port, {
+          recoverRepl: true,
+          mode,
+        });
+        _mpSession = session;
+        _mode = mode;
+        _baudRate = baudRate;
+        const inspection = await inspectPybotOnSession(session);
+        return { ...inspection, session };
+      } catch (e) {
+        const msg = e?.message ?? String(e);
+        if (msg === "BUSY") {
+          const err = new Error(PROVISION_ERROR.BUSY);
+          err.code = PROVISION_ERROR.BUSY;
+          throw err;
+        }
+        return { boardState: BOARD_STATE.VIRGIN, session: null };
+      }
+    },
+    connectBootloader: (port) =>
+      connectBootloader(port, { onLog: hooks.onLog }),
+    eraseFlash,
+    writeFirmware,
+    resetAndRelease,
+    loadFirmware: () => loadOfficialFirmware(),
+    async connectRepl(port, opts = {}) {
+      if (opts.afterFlash) await sleepMs(2200);
+      if (opts.afterInstall) await sleepMs(1200);
+      const { session, baudRate } = await connectMicroPythonEsp32Session(port, {
+        recoverRepl: true,
+        mode,
+      });
+      _mpSession = session;
+      _mode = mode;
+      _baudRate = baudRate;
+      return { session, baudRate };
+    },
+    async installPybot(opts) {
+      return installBleRuntime(opts);
+    },
+    async verifyPybotFiles() {
+      if (!_mpSession) return { ok: false, missing: expectedProvisionFiles() };
+      const missing = [];
+      for (const name of expectedProvisionFiles()) {
+        try {
+          const exists = await _mpSession.fileExists(name);
+          const size = exists ? await _mpSession.getFileSize(name) : -1;
+          if (!exists || size < 8) missing.push(name);
+        } catch {
+          missing.push(name);
+        }
+      }
+      return { ok: missing.length === 0, missing };
+    },
+    async closePort(port, session) {
+      if (session) {
+        try {
+          await session.close();
+        } catch {
+          /* ignore */
+        }
+      }
+      if (_mpSession && (session == null || _mpSession === session)) {
+        _mpSession = null;
+        _mode = null;
+        _baudRate = null;
+      }
+      await ensurePortClosed(port);
+    },
+    sleep: sleepMs,
+  };
+
+  return runEsp32Provisioning(adapters, hooks);
+}
+
+export { BOARD_STATE, PROVISION_ERROR };
 
 /**
  * Ejecuta el programa del alumno EN la placa (ESP32 MicroPython / EDA6).

@@ -31,6 +31,9 @@ export default function ConnectUsbModal({
   onClose,
   onConnect,
   onToggleHelp,
+  onPrepareEsp32,
+  showPrepareEsp32 = false,
+  highlightPrepare = false,
 }) {
   const [knownPorts, setKnownPorts] = useState(0);
 
@@ -129,9 +132,23 @@ export default function ConnectUsbModal({
         ) : null}
 
         <div className="connect-modal-actions">
+          {showPrepareEsp32 && highlightPrepare ? (
+            <button
+              type="button"
+              className="connect-btn connect-btn--primary"
+              onClick={onPrepareEsp32}
+              disabled={connecting}
+            >
+              {t("prepareEsp32Btn")}
+            </button>
+          ) : null}
           <button
             type="button"
-            className="connect-btn connect-btn--primary"
+            className={
+              showPrepareEsp32 && highlightPrepare
+                ? "connect-btn connect-btn--ghost"
+                : "connect-btn connect-btn--primary"
+            }
             onClick={onConnect}
             disabled={!canConnect}
           >
@@ -141,6 +158,16 @@ export default function ConnectUsbModal({
                 ? t("connectModalConnecting")
                 : t("connect")}
           </button>
+          {showPrepareEsp32 && !highlightPrepare ? (
+            <button
+              type="button"
+              className="connect-btn connect-btn--ghost"
+              onClick={onPrepareEsp32}
+              disabled={connecting}
+            >
+              {t("prepareEsp32Btn")}
+            </button>
+          ) : null}
           <button type="button" className="connect-btn connect-btn--ghost" onClick={onToggleHelp}>
             {showHelp ? t("connectHideHelp") : t("connectShowHelp")}
           </button>

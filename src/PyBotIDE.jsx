@@ -37,6 +37,7 @@ import {
   recoverEsp32Repl,
   downloadToArduino,
   installBleRuntime,
+  prepareEsp32,
   clearPersistentAppUsb,
   runMemoryDiagnostic,
   bleDeployProgram,
@@ -55,8 +56,10 @@ import { checkPythonSyntax } from "./pythonSyntaxDiagnostics.js";
 import { hasCanvasCode } from "./canvasCodeDetect.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
+import PrepareEsp32Modal from "./PrepareEsp32Modal.jsx";
 import BluetoothPanel from "./BluetoothPanel.jsx";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
+import { PHASE, BOARD_STATE, canCloseModal } from "./esp32/provisioningPhases.js";
 import {
   IconExplorer,
   IconPlay,
@@ -110,6 +113,21 @@ export default function PyBotIDE() {
   const [connectModalError, setConnectModalError] = useState(null);
   const [connectModalShowHelp, setConnectModalShowHelp] = useState(false);
   const [connectModalPreparing, setConnectModalPreparing] = useState(false);
+  const [connectHighlightPrepare, setConnectHighlightPrepare] = useState(false);
+  const [pybotBoardState, setPybotBoardState] = useState(null);
+  const [prepareModalOpen, setPrepareModalOpen] = useState(false);
+  const [preparePhase, setPreparePhase] = useState(PHASE.IDLE);
+  const [preparePct, setPreparePct] = useState(null);
+  const [prepareBytesWritten, setPrepareBytesWritten] = useState(null);
+  const [prepareBytesTotal, setPrepareBytesTotal] = useState(null);
+  const [prepareBoardState, setPrepareBoardState] = useState(null);
+  const [prepareChipName, setPrepareChipName] = useState(null);
+  const [prepareError, setPrepareError] = useState(null);
+  const [prepareLog, setPrepareLog] = useState([]);
+  const [prepareShowLog, setPrepareShowLog] = useState(false);
+  const [preparingEsp32, setPreparingEsp32] = useState(false);
+  const prepareConfirmRef = useRef(null);
+  const prepareAbortRef = useRef({ aborted: false });
   const [connectAssistant, setConnectAssistant] = useState(() => isConnectAssistantEnabled());
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -520,7 +538,7 @@ export default function PyBotIDE() {
     if (connecting) return { ok: false, skipped: true };
     setConnecting(true);
     try {
-      const { baudRate, mode } = await hardwareConnect({
+      const result = await hardwareConnect({
         onArduinoPrepare: (info) => {
           if (info.phase === "start") {
             setConnectModalPreparing(true);
@@ -533,7 +551,9 @@ export default function PyBotIDE() {
           }
         },
       });
+      const { mode, pybotState } = result;
       setConnected(true);
+      setPybotBoardState(pybotState ?? null);
       if (mode === "esp32-eda6") {
         appendConsole(
           (eda6Profile === "ESP32" ? t("eda6ConnectedEsp32") : t("eda6ConnectedWemos")) + "\n",
@@ -547,6 +567,13 @@ export default function PyBotIDE() {
         appendConsole(t("esp32ReconnectWarn") + "\n", "info");
       } else {
         appendConsole(`${t("arduinoConnected")}\n`, "info");
+      }
+      if (pybotState === BOARD_STATE.MPY_ONLY) {
+        appendConsole(t("mpyStateMpyOnly") + "\n", "info");
+      } else if (pybotState === BOARD_STATE.OLD_PYBOT) {
+        appendConsole(t("mpyStateOldPybot") + "\n", "info");
+      } else if (pybotState === BOARD_STATE.READY) {
+        appendConsole(t("mpyStateReady") + "\n", "info");
       }
       return { ok: true };
     } catch (e) {
@@ -572,6 +599,7 @@ export default function PyBotIDE() {
     setConnectModalPhase("ready");
     setConnectModalError(null);
     setConnectModalShowHelp(false);
+    setConnectHighlightPrepare(false);
     setConnectModalOpen(true);
   }, [connecting, pythonOnly, appendConsole, performHardwareConnect]);
 
@@ -583,14 +611,88 @@ export default function PyBotIDE() {
       setConnectModalPhase("ready");
       setConnectModalError(null);
       setConnectModalShowHelp(false);
+      setConnectHighlightPrepare(false);
     } else if (!result.skipped) {
       setConnectModalPhase("failed");
       setConnectModalError(result.display ?? formatHardwareError(result.message));
       setConnectModalShowHelp(true);
+      setConnectHighlightPrepare(String(result.message ?? "").includes("NEEDS_PREP"));
     } else {
       setConnectModalPhase("ready");
     }
   }, [performHardwareConnect]);
+
+  const waitPrepareConfirm = useCallback(
+    () =>
+      new Promise((resolve) => {
+        prepareConfirmRef.current = resolve;
+      }),
+    [],
+  );
+
+  const runPrepareEsp32 = useCallback(
+    async ({ forceReinstall = false } = {}) => {
+      if (preparingEsp32) return;
+      prepareAbortRef.current = { aborted: false };
+      setPreparingEsp32(true);
+      setPrepareError(null);
+      setPreparePct(null);
+      setPrepareLog([]);
+      setPrepareChipName(null);
+      try {
+        const result = await prepareEsp32({
+          forceReinstall,
+          signal: prepareAbortRef.current,
+          onLog: (line) => {
+            setPrepareLog((prev) => [...prev.slice(-80), String(line)]);
+          },
+          onPhase: (ev) => {
+            setPreparePhase(ev.phase);
+            if (ev.boardState) setPrepareBoardState(ev.boardState);
+            if (ev.chipName) setPrepareChipName(ev.chipName);
+            if (typeof ev.pct === "number") setPreparePct(ev.pct);
+            if (ev.bytesWritten != null) setPrepareBytesWritten(ev.bytesWritten);
+            if (ev.bytesTotal != null) setPrepareBytesTotal(ev.bytesTotal);
+            if (ev.error) setPrepareError(ev.error);
+          },
+          confirmFlash: waitPrepareConfirm,
+          confirmInstall: waitPrepareConfirm,
+          confirmUpdate: waitPrepareConfirm,
+          confirmReinstall: waitPrepareConfirm,
+        });
+        if (result.ok && result.phase === PHASE.READY) {
+          setConnected(hardwareIsConnected());
+          setPybotBoardState(BOARD_STATE.READY);
+          appendConsole(t("prepareEsp32Ready") + "\n", "info");
+        } else if (result.alreadyPrepared) {
+          appendConsole(t("prepareEsp32Already") + "\n", "info");
+        } else if (result.error && result.error !== "PORT_CANCELLED" && result.error !== "CANCELLED") {
+          appendConsole((t(`provErr_${result.error}`) || t("provErr_UNKNOWN")) + "\n", "err");
+        }
+      } catch (e) {
+        appendConsole(formatHardwareError(e?.message) + "\n", "err");
+        setPreparePhase(PHASE.ERROR);
+        setPrepareError("UNKNOWN");
+      } finally {
+        setPreparingEsp32(false);
+      }
+    },
+    [preparingEsp32, appendConsole, waitPrepareConfirm],
+  );
+
+  const openPrepareEsp32 = useCallback(() => {
+    if (pythonOnly) {
+      appendConsole(t("needHardwareMode") + "\n", "info");
+      setPythonOnly(false);
+    }
+    setConnectModalOpen(false);
+    setPrepareModalOpen(true);
+    setPreparePhase(PHASE.IDLE);
+    setPrepareError(null);
+    setPrepareBoardState(null);
+    setPrepareLog([]);
+    void runPrepareEsp32({ forceReinstall: false });
+  }, [pythonOnly, appendConsole, runPrepareEsp32]);
 
   const onConnect = openConnectFlow;
 
@@ -634,6 +736,7 @@ export default function PyBotIDE() {
   const onDisconnect = useCallback(async () => {
     await hardwareDisconnect();
     setConnected(false);
+    setPybotBoardState(null);
     appendConsole(t("logDisconnected") + "\n", "info");
   }, [appendConsole]);
 
@@ -1670,6 +1773,23 @@ export default function PyBotIDE() {
                         </div>
                       ) : null}
                       {(boardType === "esp32-eda6" || boardType === "esp32-micropython") &&
+                      !connected ? (
+                        <div className="toolbar-menu-subgroup">
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--highlight"
+                            onClick={() => {
+                              openPrepareEsp32();
+                              setBoardMenuOpen(false);
+                            }}
+                            disabled={preparingEsp32 || connecting}
+                          >
+                            {t("prepareEsp32Btn")}
+                          </button>
+                          <div className="toolbar-menu-hint">{t("prepareEsp32MenuHint")}</div>
+                        </div>
+                      ) : null}
+                      {(boardType === "esp32-eda6" || boardType === "esp32-micropython") &&
                       connected ? (
                         <div className="toolbar-menu-subgroup">
                           <span className="toolbar-menu-mode__label">{t("menuBoardToolsLabel")}</span>
@@ -1723,7 +1843,11 @@ export default function PyBotIDE() {
                             }}
                             disabled={bleInstalling}
                           >
-                            {t("bleInstallBtn")}
+                            {pybotBoardState === BOARD_STATE.OLD_PYBOT
+                              ? t("pybotUpdateBtn")
+                              : pybotBoardState === BOARD_STATE.MPY_ONLY
+                                ? t("pybotInstallBtn")
+                                : t("bleInstallBtn")}
                           </button>
                           <div className="toolbar-menu-hint">{t("bleInstallMenuHint")}</div>
                           <button
@@ -2117,6 +2241,51 @@ export default function PyBotIDE() {
         }}
         onConnect={onConnectFromModal}
         onToggleHelp={() => setConnectModalShowHelp((v) => !v)}
+        onPrepareEsp32={openPrepareEsp32}
+        showPrepareEsp32={boardType === "esp32-micropython" || boardType === "esp32-eda6"}
+        highlightPrepare={connectHighlightPrepare}
+      />
+
+      <PrepareEsp32Modal
+        open={prepareModalOpen}
+        phase={preparePhase}
+        pct={preparePct}
+        bytesWritten={prepareBytesWritten}
+        bytesTotal={prepareBytesTotal}
+        boardState={prepareBoardState}
+        chipName={prepareChipName}
+        error={prepareError}
+        logLines={prepareLog}
+        showLog={prepareShowLog}
+        running={preparingEsp32}
+        onToggleLog={() => setPrepareShowLog((v) => !v)}
+        onClose={() => {
+          if (!canCloseModal(preparePhase)) return;
+          prepareAbortRef.current.aborted = true;
+          if (prepareConfirmRef.current) {
+            prepareConfirmRef.current(false);
+            prepareConfirmRef.current = null;
+          }
+          setPrepareModalOpen(false);
+        }}
+        onConfirm={() => {
+          if (prepareConfirmRef.current) {
+            prepareConfirmRef.current(true);
+            prepareConfirmRef.current = null;
+          }
+        }}
+        onCancelConfirm={() => {
+          if (prepareConfirmRef.current) {
+            prepareConfirmRef.current(false);
+            prepareConfirmRef.current = null;
+          }
+        }}
+        onRetry={() => {
+          void runPrepareEsp32({ forceReinstall: false });
+        }}
+        onReinstall={() => {
+          void runPrepareEsp32({ forceReinstall: true });
+        }}
       />
 
       <BluetoothPanel
