@@ -21,7 +21,7 @@ Proyecto **aparte** del PyBot de escritorio; no lo modifica.
 En el menú de la barra hay un selector **Placa** (cerca del modo Hardware/Solo Python):
 
 - **Arduino Uno/Nano compatible** (por defecto) → usa **StandardFirmata**, igual que siempre. El código corre en Pyodide y manda comandos por Firmata. No cambia nada del flujo anterior.
-- **ESP32 MicroPython - GPIO directo** → el programa corre **nativamente en la placa** con MicroPython (no en Pyodide). API PyBot: `pin`, `servo`, `motor`, `wait` por número de GPIO.
+- **ESP32 MicroPython - GPIO directo** → el programa corre **nativamente en la placa** con MicroPython (no en Pyodide). API PyBot: `pin`, `servo`, `motor`, `wait` por número de GPIO. También `wifi_conectar` / `web_get` / `web_post` (en la placa, no en el navegador).
 - **ESP32 EDA6 / WEMOS** → compatible con programas **Thonny/EDA6** (`from EDA6 import *`, `servomotor`, `salidaDigital`, etc.). Perfil **WEMOS** por defecto (puertos 1–4). Permite grabar `EDA6.py` + `main.py` en la placa.
 
 Elegí la placa **antes** de conectar el USB. Para cambiarla, desconectá primero. La opción queda guardada en `localStorage` (`pybot_board_type`).
@@ -56,15 +56,14 @@ Con la placa **Arduino Uno/Nano** seleccionada, el menú ofrece **"Bajar a Ardui
 
 Con una ESP32 preparada (menú **Placa → Herramientas → "Instalar PyBot Bluetooth"** por USB, que
 graba `boot.py` + `main.py` + `pybot_mpy.py` + `EDA6.py`), se puede trabajar **sin cables** por
-Bluetooth (**Chrome/Edge de escritorio**). Runtime **3.1.0** / protocolo **3.1** (framing 3.0
-compatible).
+Bluetooth (**Chrome/Edge de escritorio**). Runtime **4.0.0** / protocolo **3.2**
+(ADMIN 3.1 compatible; stream REPL nativo). Ver `docs/MICROPYTHON_ARCHITECTURE.md`.
 
 Dos formas de correr el programa del alumno:
 
-- **EJECUTAR (temporal):** conectá por Bluetooth y usá **Ejecutar**. El programa corre en la
-  placa **mientras estás conectado** y la salida (`print`, errores) llega a la terminal. **Detener**
-  es confiable: STOP cooperativo con confirmación y, si un bucle no cede, escala a un reinicio
-  seguro (*safe boot*) sin desenchufar. Deja el hardware seguro (motores/PWM/salidas apagados).
+- **EJECUTAR (temporal):** conectá por Bluetooth y usá **Ejecutar**. El programa corre en
+  MicroPython (raw REPL). **Detener** envía Ctrl+C (`KeyboardInterrupt`); BLE permanece
+  conectado. Validación física: `docs/MICROPYTHON_PHYSICAL_TEST_PLAN.md`.
 - **BAJAR (persistente/autónomo):** menú **Placa → "Bajar a ESP32 (Bluetooth)"**. Transferencia
   **verificada** (tamaño + hash SHA-256), reemplazo **transaccional** de `pybot_app.py` + metadata
   (con backup/rollback: nunca queda a medias), **autostart** activado y **ejecución inmediata**.
