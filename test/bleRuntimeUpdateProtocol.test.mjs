@@ -27,9 +27,9 @@ import {
 // Versión / capability (fuente de verdad única)
 // ---------------------------------------------------------------------------
 
-test("runtime 3.2.7 / protocol 3.1 declare runtime-update capability", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "3.2.7");
-  assert.equal(PYBOT_PROTOCOL_VERSION, "3.1");
+test("runtime 4.0.0 / protocol 3.2 declare runtime-update capability", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.0");
+  assert.equal(PYBOT_PROTOCOL_VERSION, "3.2");
   assert.ok(PYBOT_CAPABILITIES.includes("runtime-update"));
 });
 
@@ -206,5 +206,5 @@ test("parseUpdateInfo tolerates garbage", () => {
 });
 
 test("MAX_RUNTIME_UPDATE_SIZE is generous but bounded", () => {
-  assert.equal(MAX_RUNTIME_UPDATE_SIZE, 65536);
+  assert.equal(MAX_RUNTIME_UPDATE_SIZE, 131072);
 });

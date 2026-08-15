@@ -12,8 +12,10 @@
 
 // UUIDs (deben coincidir con firmware/pybot-ble-runtime/main.py).
 export const SERVICE_UUID = "8fbc0001-4d5a-4b8c-9a1f-123456789001";
-export const RX_UUID = "8fbc0002-4d5a-4b8c-9a1f-123456789002"; // Web -> ESP32 (WRITE)
-export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web (NOTIFY)
+export const RX_UUID = "8fbc0002-4d5a-4b8c-9a1f-123456789002"; // Web -> ESP32 ADMIN (WRITE)
+export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web ADMIN (NOTIFY)
+export const REPL_RX_UUID = "8fbc0004-4d5a-4b8c-9a1f-123456789004"; // Web -> ESP32 REPL bytes
+export const REPL_TX_UUID = "8fbc0005-4d5a-4b8c-9a1f-123456789005"; // ESP32 -> Web REPL bytes
 
 // ===========================================================================
 // FUENTE DE VERDAD UNICA de la version del runtime publicada por esta version de
@@ -22,7 +24,7 @@ export const TX_UUID = "8fbc0003-4d5a-4b8c-9a1f-123456789003"; // ESP32 -> Web (
 // decidir si ofrecer una actualizacion OTA por BLE. NO duplicar esta constante:
 // pybotBleRuntime.js la reexporta; los tests y la UI la importan de aca.
 // ===========================================================================
-export const PYBOT_RUNTIME_VERSION = "3.2.7";
+export const PYBOT_RUNTIME_VERSION = "4.0.0";
 // Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
 // verificado (size+hash), control de app (APP:*) y autostart con safe boot.
 // El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
@@ -52,7 +54,11 @@ export const PYBOT_RUNTIME_VERSION = "3.2.7";
 // 3.2.7 (runtime; protocolo sigue 3.1): tras RUN:STOPPED, NINGUN path agenda
 // machine.reset (FORCE ignorado si running=False; Timer callback aborta; web no
 // manda FORCE por path APP tras stop cooperativo reciente).
-export const PYBOT_PROTOCOL_VERSION = "3.1";
+// 4.0.0 (runtime; protocolo 3.2): BLE REPL nativo (dupterm) + Wi-Fi/HTTP en placa.
+// Características REPL_RX/REPL_TX; capability "native-repl". ADMIN (PING/INFO/OTA)
+// permanece en RX/TX existentes. ProgramManager queda como LEGACY (pybot_legacy.on
+// / MICROPYTHON_NATIVE_BLE=false).
+export const PYBOT_PROTOCOL_VERSION = "3.2";
 
 /** Primera version de runtime con boot/OTA multi-archivo (pack PYBOTRT1). */
 export const PYBOT_MODULAR_RUNTIME_MIN = "3.2.0";
@@ -69,6 +75,7 @@ export const PYBOT_CAPABILITIES = Object.freeze([
   "app-control",
   "autostart",
   "runtime-update",
+  "native-repl",
 ]);
 
 export const MAX_COMMAND_LENGTH = 64;
@@ -213,6 +220,17 @@ export function runtimeSupportsDeploy(info) {
  */
 export function runtimeSupportsUpdate(info) {
   return parseCapabilities(info).includes("runtime-update");
+}
+
+/**
+ * True si el runtime declara el stream REPL nativo (capability "native-repl").
+ * Conservador: sin INFO no bloqueamos (el web prueba el characteristic).
+ * @param {null | { capabilities?: string[] }} info
+ */
+export function runtimeSupportsNativeRepl(info) {
+  const caps = parseCapabilities(info);
+  if (caps.length === 0) return true;
+  return caps.includes("native-repl");
 }
 
 /**
@@ -784,7 +802,7 @@ export function parseAppInfo(raw) {
 
 /** Tamano maximo del runtime a actualizar por BLE (bytes de fuente UTF-8).
  *  Holgado para el runtime actual (~45 KB) sin agotar el filesystem tipico. */
-export const MAX_RUNTIME_UPDATE_SIZE = 65536;
+export const MAX_RUNTIME_UPDATE_SIZE = 131072;
 
 /** Bytes de fuente por chunk UPDATE antes de base64 (ACK por bloque, como DEPLOY). */
 export const UPDATE_SOURCE_CHUNK = 192;

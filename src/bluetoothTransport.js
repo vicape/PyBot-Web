@@ -16,6 +16,8 @@ import {
   SERVICE_UUID,
   RX_UUID,
   TX_UUID,
+  REPL_RX_UUID,
+  REPL_TX_UUID,
   MSG_DELIMITER,
   splitMessages,
 } from "./bleProtocol.js";
@@ -47,15 +49,19 @@ export class BluetoothTransport {
     this._device = null;
     this._server = null;
     this._service = null;
-    this._rxChar = null; // WRITE (Web -> ESP32)
-    this._txChar = null; // NOTIFY (ESP32 -> Web)
+    this._rxChar = null; // WRITE (Web -> ESP32 ADMIN)
+    this._txChar = null; // NOTIFY (ESP32 -> Web ADMIN)
+    this._replRxChar = null; // WRITE (Web -> ESP32 REPL)
+    this._replTxChar = null; // NOTIFY (ESP32 -> Web REPL)
     this._state = BLE_STATE.IDLE;
     this._rxBuffer = "";
     this._dataCallbacks = new Set();
+    this._replCallbacks = new Set();
     this._stateCallbacks = new Set();
     this._deviceInfo = null;
 
     this._onTxValueChanged = this._onTxValueChanged.bind(this);
+    this._onReplTxValueChanged = this._onReplTxValueChanged.bind(this);
     this._onDisconnected = this._onDisconnected.bind(this);
   }
 
@@ -68,7 +74,17 @@ export class BluetoothTransport {
     return this._state === BLE_STATE.CONNECTED && !!this._server?.connected;
   }
 
-  /** Registra callback para mensajes de texto completos recibidos. @returns {() => void} */
+  /** Bytes crudos del canal REPL (sin framing ADMIN). @returns {() => void} */
+  onReplData(cb) {
+    if (typeof cb === "function") this._replCallbacks.add(cb);
+    return () => this._replCallbacks.delete(cb);
+  }
+
+  /** @returns {boolean} true si el GATT expone REPL_RX/REPL_TX. */
+  hasRepl() {
+    return !!this._replRxChar && !!this._replTxChar;
+  }
+  /** Registra callback para mensajes ADMIN (líneas). @returns {() => void} */
   onData(cb) {
     if (typeof cb === "function") this._dataCallbacks.add(cb);
     return () => this._dataCallbacks.delete(cb);
@@ -124,6 +140,7 @@ export class BluetoothTransport {
         "characteristicvaluechanged",
         this._onTxValueChanged,
       );
+      await this._bindReplCharacteristics();
       this._rxBuffer = "";
       this._setState(BLE_STATE.CONNECTED);
       return { deviceName: this._device?.name ?? null };
@@ -131,6 +148,68 @@ export class BluetoothTransport {
       await this._cleanup();
       this._setState(BLE_STATE.DISCONNECTED);
       throw new Error("BLE_CONNECT_FAIL");
+    }
+  }
+
+  async _bindReplCharacteristics() {
+    this._replRxChar = null;
+    this._replTxChar = null;
+    if (!this._service) return;
+    try {
+      this._replRxChar = await this._service.getCharacteristic(REPL_RX_UUID);
+      this._replTxChar = await this._service.getCharacteristic(REPL_TX_UUID);
+      await this._replTxChar.startNotifications();
+      this._replTxChar.addEventListener(
+        "characteristicvaluechanged",
+        this._onReplTxValueChanged,
+      );
+    } catch {
+      this._replRxChar = null;
+      this._replTxChar = null;
+    }
+  }
+
+  _onReplTxValueChanged(event) {
+    const value = event?.target?.value;
+    if (!value) return;
+    const bytes = new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
+    this._replCallbacks.forEach((cb) => {
+      try {
+        cb(bytes);
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  /**
+   * Escribe bytes crudos en REPL_RX (sin delimitador ADMIN).
+   * @param {Uint8Array|string} data
+   * @param {number} [chunkBytes]
+   * @param {number} [paceMs]
+   */
+  async writeRepl(data, chunkBytes = 20, paceMs = 4) {
+    if (!this.isConnected() || !this._replRxChar) {
+      throw new Error("BLE_REPL_NOT_CONNECTED");
+    }
+    const bytes =
+      typeof data === "string" ? this._enc.encode(data) : data instanceof Uint8Array
+        ? data
+        : new Uint8Array(data);
+    const size = chunkBytes > 0 ? chunkBytes : 20;
+    const hasNoResponse = typeof this._replRxChar.writeValueWithoutResponse === "function";
+    let first = true;
+    for (let i = 0; i < bytes.length; i += size) {
+      const piece = bytes.slice(i, i + size);
+      if (hasNoResponse) {
+        if (!first && paceMs > 0) {
+          await new Promise((r) => setTimeout(r, paceMs));
+        }
+        await this._replRxChar.writeValueWithoutResponse(piece);
+      } else {
+        await this._replRxChar.writeValue(piece);
+      }
+      first = false;
     }
   }
 
@@ -294,6 +373,7 @@ export class BluetoothTransport {
           "characteristicvaluechanged",
           this._onTxValueChanged,
         );
+        await this._bindReplCharacteristics();
         this._rxBuffer = "";
         // El INFO cacheado corresponde al runtime ANTERIOR: se releera tras
         // reconectar para verificar la nueva version.
@@ -330,11 +410,30 @@ export class BluetoothTransport {
     this._service = null;
     this._rxChar = null;
     this._txChar = null;
+    this._replRxChar = null;
+    this._replTxChar = null;
     this._rxBuffer = "";
     this._setState(BLE_STATE.DISCONNECTED);
   }
 
   async _cleanup() {
+    if (this._replTxChar) {
+      try {
+        this._replTxChar.removeEventListener(
+          "characteristicvaluechanged",
+          this._onReplTxValueChanged,
+        );
+      } catch {
+        /* ignore */
+      }
+      try {
+        await this._replTxChar.stopNotifications();
+      } catch {
+        /* ignore */
+      }
+    }
+    this._replTxChar = null;
+    this._replRxChar = null;
     if (this._txChar) {
       try {
         this._txChar.removeEventListener(

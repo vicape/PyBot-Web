@@ -5,6 +5,8 @@ import {
   SERVICE_UUID,
   RX_UUID,
   TX_UUID,
+  REPL_RX_UUID,
+  REPL_TX_UUID,
   COMMANDS,
   MAX_COMMAND_LENGTH,
   deviceIdFromMac,
@@ -23,6 +25,8 @@ test("UUIDs are the agreed PyBot service UUIDs", () => {
   assert.equal(SERVICE_UUID, "8fbc0001-4d5a-4b8c-9a1f-123456789001");
   assert.equal(RX_UUID, "8fbc0002-4d5a-4b8c-9a1f-123456789002");
   assert.equal(TX_UUID, "8fbc0003-4d5a-4b8c-9a1f-123456789003");
+  assert.equal(REPL_RX_UUID, "8fbc0004-4d5a-4b8c-9a1f-123456789004");
+  assert.equal(REPL_TX_UUID, "8fbc0005-4d5a-4b8c-9a1f-123456789005");
 });
 
 test("deviceIdFromMac returns last 6 hex uppercase", () => {
