@@ -1,0 +1,20 @@
+{
+  "family": "ESP32",
+  "chipName": "ESP32",
+  "board": "ESP32_GENERIC",
+  "version": "1.27.0",
+  "date": "20251209",
+  "filename": "ESP32_GENERIC-20251209-v1.27.0.bin",
+  "url": "/firmware/micropython/ESP32_GENERIC-20251209-v1.27.0.bin",
+  "origin": "https://micropython.org/download/ESP32_GENERIC/",
+  "originFile": "https://micropython.org/resources/firmware/ESP32_GENERIC-20251209-v1.27.0.bin",
+  "license": "MIT",
+  "licenseUrl": "https://github.com/micropython/micropython/blob/v1.27.0/LICENSE",
+  "sha256": "aa4be80ec695911ba0f13f7558e559ce540f90efbf40c23b853ca49162136b9f",
+  "size": 1759456,
+  "flashOffset": 4096,
+  "flashSize": "4MB",
+  "flashMode": "dio",
+  "flashFreq": "40m",
+  "features": ["BLE", "WLAN", "HTTPS/TLS", "os.dupterm"]
+}
