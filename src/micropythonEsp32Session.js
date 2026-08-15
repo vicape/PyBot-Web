@@ -1,32 +1,26 @@
 /**
- * Sesión MicroPython para ESP32 sobre Web Serial.
+ * Sesión MicroPython para ESP32 (USB serial o BLE REPL).
  *
- * Enfoque PRINCIPAL de ESP32 en PyBot: el programa del alumno corre NATIVAMENTE
- * en la placa usando MicroPython (no en Pyodide). PyBot habla con el REPL / raw
- * REPL de MicroPython:
- *   - detecta MicroPython,
- *   - inyecta un prelude que define pin/servo/motor/wait con la misma API,
- *   - envía el programa completo y lo ejecuta en la placa,
- *   - captura stdout/stderr y los muestra en la terminal del IDE.
- *
- * No reescribe firmataSession.js (Arduino) ni depende del firmware JSON
- * experimental (esp32Session.js).
- *
- * Direccionamiento: número de GPIO directo (NO A0–A5). Si el alumno usa "A0",
- * el prelude levanta ESP32_GPIO_ONLY y el IDE muestra un mensaje educativo.
- *
- * Lectura analógica: la ADC del ESP32 (0–4095) se escala a 0–1023 para mantener
- * compatibilidad pedagógica con Arduino.
+ * El programa del alumno corre NATIVAMENTE en la placa. USB y BLE son
+ * transportes hacia el mismo REPL / raw REPL. No reescribe Firmata/Arduino.
  */
+
+import { SerialByteTransport } from "./micropython/serialByteTransport.js";
+import {
+  CTRL_A,
+  CTRL_B,
+  CTRL_C,
+  CTRL_D,
+  RAW_PASTE_HELLO,
+} from "./micropython/constants.js";
+import {
+  STOP_LEVEL,
+  isNormalStopLevel,
+  timeoutForStopLevel,
+} from "./micropython/stopLifecycle.js";
 
 const DEFAULT_BAUD = 115200;
 const BOOT_DELAY_MS = 1200;
-
-// Códigos de control del REPL de MicroPython.
-const CTRL_A = "\x01"; // entrar a raw REPL
-const CTRL_B = "\x02"; // volver a REPL normal
-const CTRL_C = "\x03"; // interrumpir (KeyboardInterrupt)
-const CTRL_D = "\x04"; // ejecutar en raw REPL / fin de bloque
 
 /**
  * Prelude MicroPython: define la API del alumno (misma que PyBot escritorio).
@@ -207,6 +201,14 @@ def motor(pin, speed=0):
     if s > 100:
         s = 100
     _servo_pulse(gpio, 90 + s * 90 // 100)
+
+try:
+    from pybot_net import (
+        wifi_conectar, wifi_desconectar, wifi_conectado, wifi_ip,
+        wifi_estado, wifi_signal, web_get, web_post,
+    )
+except ImportError:
+    pass
 `;
 
 function sleep(ms) {
@@ -214,33 +216,44 @@ function sleep(ms) {
 }
 
 export class MicroPythonSession {
-  constructor(port, writer, reader, baudRate) {
-    this.port = port;
-    this.writer = writer;
-    this.reader = reader;
-    this.baudRate = baudRate;
+  /**
+   * @param {object} transportOrPort  ByteTransport o SerialPort (compat tests)
+   * @param {object} [writer]
+   * @param {object} [reader]
+   * @param {number} [baudRate]
+   */
+  constructor(transportOrPort, writer, reader, baudRate) {
+    if (writer && typeof writer.write === "function" && reader) {
+      this.transport = new SerialByteTransport(
+        transportOrPort,
+        writer,
+        reader,
+        baudRate,
+      );
+      this.port = transportOrPort;
+    } else {
+      this.transport = transportOrPort;
+      this.port = transportOrPort.port ?? null;
+    }
+    this.writer = this.transport.writer ?? writer ?? null;
+    this.reader = this.transport.reader ?? reader ?? null;
+    this.baudRate = baudRate ?? this.transport.baudRate ?? DEFAULT_BAUD;
     this._enc = new TextEncoder();
     this._dec = new TextDecoder();
     this._buf = "";
     this._waiters = new Set();
     this._running = true;
     this._abortRun = false;
-    this._readPromise = this._readLoop();
-  }
-
-  async _readLoop() {
-    try {
-      for (;;) {
-        const { done, value } = await this.reader.read();
-        if (done || !this._running) break;
-        if (value && value.length) {
-          this._buf += this._dec.decode(value, { stream: true });
-          this._notify();
-        }
-      }
-    } catch {
-      /* cancel() o cierre */
-    }
+    this._useRawPaste = true;
+    this._offData = this.transport.onData((chunk) => {
+      if (!this._running) return;
+      const text =
+        typeof chunk === "string"
+          ? chunk
+          : this._dec.decode(chunk, { stream: true });
+      this._buf += text;
+      this._notify();
+    });
   }
 
   _notify() {
@@ -263,12 +276,7 @@ export class MicroPythonSession {
   }
 
   async _write(s) {
-    const bytes = this._enc.encode(s);
-    const CH = 128;
-    for (let i = 0; i < bytes.length; i += CH) {
-      await this.writer.write(bytes.slice(i, i + CH));
-      if (bytes.length > CH) await sleep(5);
-    }
+    await this.transport.write(s);
   }
 
   _waitForContains(str, timeoutMs) {
@@ -404,9 +412,14 @@ export class MicroPythonSession {
 
     await this._enterRawRepl();
     this._buf = "";
-    await this._write(program);
-    await sleep(program.length > 5000 ? 200 : 80);
-    await this._write(CTRL_D);
+    const pasted = this._useRawPaste ? await this._tryRawPaste(program) : false;
+    if (!pasted) {
+      await this._enterRawRepl();
+      this._buf = "";
+      await this._write(program);
+      await sleep(program.length > 5000 ? 200 : 80);
+      await this._write(CTRL_D);
+    }
 
     try {
       await this._waitForRawReplOk(okTimeout);
@@ -450,6 +463,56 @@ export class MicroPythonSession {
       await this._write(CTRL_B);
     } catch {
       /* ignore */
+    }
+  }
+
+  /**
+   * Raw-paste (MicroPython 1.17+). Fallback a raw REPL clásico si no hay soporte.
+   * @param {string} program
+   * @returns {Promise<boolean>}
+   */
+  async _tryRawPaste(program) {
+    this._buf = "";
+    try {
+      await this._write(RAW_PASTE_HELLO);
+      await this._waitData(250);
+      const head = this._buf;
+      if (!head.startsWith("R") || head.charCodeAt(1) !== 1) {
+        this._useRawPaste = false;
+        this._buf = "";
+        return false;
+      }
+      const winLo = head.charCodeAt(2) ?? 0;
+      const winHi = head.charCodeAt(3) ?? 0;
+      let window = winLo | (winHi << 8);
+      if (!window) window = 256;
+      this._buf = this._buf.slice(4);
+      const bytes = this._enc.encode(program);
+      let off = 0;
+      while (off < bytes.length) {
+        const n = Math.min(window, bytes.length - off);
+        await this.transport.write(bytes.subarray(off, off + n));
+        off += n;
+        if (off < bytes.length) {
+          const deadline = Date.now() + 3000;
+          while (!this._buf.includes("\x01") && Date.now() < deadline) {
+            await this._waitData(40);
+          }
+          const idx = this._buf.indexOf("\x01");
+          if (idx >= 0) this._buf = this._buf.slice(idx + 1);
+        }
+      }
+      await this._write(CTRL_D);
+      const deadline = Date.now() + 3000;
+      while (!this._buf.includes(CTRL_D) && Date.now() < deadline) {
+        await this._waitData(40);
+      }
+      const d = this._buf.indexOf(CTRL_D);
+      if (d >= 0) this._buf = this._buf.slice(d + 1);
+      return true;
+    } catch {
+      this._useRawPaste = false;
+      return false;
     }
   }
 
@@ -705,13 +768,30 @@ export class MicroPythonSession {
     if (!resetSent) throw new Error("RESET_FAIL");
   }
 
-  /** Interrumpe el programa en ejecución (Ctrl-C). */
-  async interrupt() {
+  /**
+   * Interrumpe el programa en ejecución (Ctrl-C). Stop normal = nivel 1.
+   * Niveles 4–5 (reset) NO se invocan desde el botón Stop.
+   * @param {{ level?: number }} [opts]
+   */
+  async interrupt(opts = {}) {
+    const level = opts.level ?? STOP_LEVEL.CTRL_C;
     this._abortRun = true;
     try {
-      await this._write(CTRL_C);
+      if (level >= STOP_LEVEL.CTRL_C_REPEAT) {
+        await this._write("\r" + CTRL_C + CTRL_C);
+      } else {
+        await this._write(CTRL_C);
+      }
     } catch {
       /* ignore */
+    }
+    if (level >= STOP_LEVEL.REPL_RECOVER && isNormalStopLevel(level)) {
+      await sleep(timeoutForStopLevel(level));
+      try {
+        await this._write(CTRL_B);
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -722,30 +802,20 @@ export class MicroPythonSession {
     } catch {
       /* ignore */
     }
-    try {
-      await this.reader.cancel();
-    } catch {
-      /* ignore */
+    if (this._offData) {
+      try {
+        this._offData();
+      } catch {
+        /* ignore */
+      }
+      this._offData = null;
     }
-    try {
-      await this._readPromise;
-    } catch {
-      /* ignore */
-    }
-    try {
-      this.reader.releaseLock();
-    } catch {
-      /* ignore */
-    }
-    try {
-      this.writer.releaseLock();
-    } catch {
-      /* ignore */
-    }
-    try {
-      await this.port.close();
-    } catch {
-      /* ignore */
+    if (this.transport && typeof this.transport.close === "function") {
+      try {
+        await this.transport.close();
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
@@ -776,7 +846,8 @@ export async function connectMicroPythonEsp32Session(port, options = {}) {
 
   const writer = port.writable.getWriter();
   const reader = port.readable.getReader();
-  const session = new MicroPythonSession(port, writer, reader, baudRate);
+  const transport = new SerialByteTransport(port, writer, reader, baudRate);
+  const session = new MicroPythonSession(transport, baudRate);
 
   await sleep(BOOT_DELAY_MS);
 
@@ -796,4 +867,34 @@ export async function connectMicroPythonEsp32Session(port, options = {}) {
   }
 
   return { session, baudRate, mode };
+}
+
+/**
+ * Adjunta una MicroPythonSession a un transporte ya conectado (p.ej. BLE REPL).
+ * @param {{ write: Function, onData: Function, close?: Function, isOpen?: Function }} transport
+ * @param {{ recoverRepl?: boolean, baudRate?: number, detect?: boolean }} [options]
+ */
+export async function connectMicroPythonFromTransport(transport, options = {}) {
+  const baudRate = options.baudRate ?? DEFAULT_BAUD;
+  const session = new MicroPythonSession(transport, baudRate);
+  if (options.detect !== false) {
+    let ok = false;
+    try {
+      ok = await session.detect();
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      try {
+        await session.close();
+      } catch {
+        /* ignore */
+      }
+      throw new Error("NEEDS_PREP");
+    }
+  }
+  if (options.recoverRepl) {
+    await session.interruptAndRecoverRepl();
+  }
+  return { session, baudRate, mode: options.mode ?? "esp32-micropython" };
 }
