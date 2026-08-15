@@ -15,6 +15,9 @@ import bleRunRaw from "../firmware/pybot-ble-runtime/pybot_run.py?raw";
 import bleDeployRaw from "../firmware/pybot-ble-runtime/pybot_deploy.py?raw";
 import bleUpdateRaw from "../firmware/pybot-ble-runtime/pybot_update.py?raw";
 import bleBootUpdateRaw from "../firmware/pybot-ble-runtime/pybot_boot_update.py?raw";
+import bleReplRaw from "../firmware/pybot-ble-runtime/pybot_repl.py?raw";
+import bleNetRaw from "../firmware/pybot-ble-runtime/pybot_net.py?raw";
+import bleMpyRaw from "../firmware/pybot-ble-runtime/pybot_mpy.py?raw";
 import { PYBOT_RUNTIME_VERSION, PYBOT_PROTOCOL_VERSION, sha256Hex } from "./bleProtocol.js";
 
 /** Se instala como main.py (stub que importa el núcleo). */
@@ -40,6 +43,9 @@ export const BLE_RUNTIME_MODULE_FILES = Object.freeze([
   "pybot_deploy.py",
   "pybot_update.py",
   "pybot_boot_update.py",
+  "pybot_repl.py",
+  "pybot_net.py",
+  "pybot_mpy.py",
 ]);
 
 /** Archivos que MicroPython carga en el camino crítico de advertising. */
@@ -53,6 +59,14 @@ export { PYBOT_RUNTIME_VERSION, PYBOT_PROTOCOL_VERSION };
  */
 export function getBleRuntimeVersion() {
   return PYBOT_RUNTIME_VERSION;
+}
+
+export function getPybotNetSource() {
+  return bleNetRaw;
+}
+
+export function getPybotMpyBoardSource() {
+  return bleMpyRaw;
 }
 
 /** Texto del stub main.py. */
@@ -78,6 +92,9 @@ export function getBleRuntimeModules() {
     { name: "pybot_deploy.py", source: bleDeployRaw },
     { name: "pybot_update.py", source: bleUpdateRaw },
     { name: "pybot_boot_update.py", source: bleBootUpdateRaw },
+    { name: "pybot_repl.py", source: bleReplRaw },
+    { name: "pybot_net.py", source: bleNetRaw },
+    { name: "pybot_mpy.py", source: bleMpyRaw },
   ];
 }
 

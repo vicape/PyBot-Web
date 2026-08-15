@@ -24,6 +24,7 @@ import { flashStandardFirmata } from "./arduinoFirmataFlash.js";
 import { connectEsp32Session } from "./esp32Session.js";
 import {
   connectMicroPythonEsp32Session,
+  connectMicroPythonFromTransport,
   MPY_PRELUDE,
 } from "./micropythonEsp32Session.js";
 import {
@@ -47,6 +48,7 @@ import {
   getBleRuntimeVersion,
   getBleRuntimeInstallFiles,
   buildBleRuntimePackText,
+  getPybotNetSource,
   BLE_RUNTIME_FILENAME,
   BLE_BOOT_FILENAME,
 } from "./pybotBleRuntime.js";
@@ -79,8 +81,12 @@ import {
   runtimeUpdateStatus,
   runtimeStopReliable,
   compareRuntimeVersions,
+  runtimeSupportsNativeRepl,
   PYBOT_STOP_RELIABLE_MIN,
 } from "./bleProtocol.js";
+import { isNativeBleEnabled } from "./micropython/featureFlags.js";
+import { BleReplTransport } from "./micropython/bleReplTransport.js";
+import { STOP_LEVEL } from "./micropython/stopLifecycle.js";
 
 const BLE_STOP_WAIT_MS = 3500;
 const BLE_FORCE_WAIT_MS = 2500;
@@ -99,7 +105,8 @@ let _baudRate = null;
 // Transporte de EJECUCION por BLE (independiente del serial). Cuando hay una
 // ESP32 conectada por Bluetooth, el Run se ejecuta por aca en vez de por serial.
 let _bleTransport = null;  // BluetoothTransport (Web Bluetooth)
-let _bleRun = null;        // BleRunSession (RUN temporal, protocolo 3.0)
+let _bleRun = null;        // LEGACY BleRunSession (RUN temporal, protocolo 3.x)
+let _bleMpSession = null;  // MicroPythonSession sobre BLE REPL (camino nativo 4.0)
 let _bleDeploy = null;     // BleDeploySession (DEPLOY persistente, protocolo 3.0)
 let _bleUpdate = null;     // BleRuntimeUpdateSession (OTA del runtime, protocolo 3.1)
 /** Serializa stopBoardExecution (Stop doble / carrera con Run). */
@@ -430,9 +437,7 @@ export async function hardwareDisconnect() {
  * @param {{onOut?:Function,onErr?:Function,shouldStop?:Function}} cb
  */
 export async function runOnBoard(code, cb = {}) {
-  // Adaptador de transporte: si hay una sesion SERIAL activa, se usa el camino
-  // serial EXACTAMENTE como hasta hoy. Si no, y hay una ESP32 por BLE, se ejecuta
-  // por Bluetooth. El serial tiene prioridad para no alterar su comportamiento.
+  // Serial USB tiene prioridad absoluta sobre BLE.
   if (_mpSession) {
     // Detener main.py o un while True previo antes de subir el nuevo programa.
     try {
@@ -450,6 +455,23 @@ export async function runOnBoard(code, cb = {}) {
       return _mpSession.runProgram(userCode, { ...cb, prelude });
     }
     return _mpSession.runProgram(code, cb);
+  }
+  if (isNativeBleEnabled() && _bleMpSession) {
+    try {
+      await _bleMpSession.interruptAndRecoverRepl();
+    } catch {
+      /* ignore */
+    }
+    if (getBoardType() === "esp32-eda6") {
+      const profile = getEda6Profile();
+      const body = prepareUserCodeForExec(code);
+      const probe =
+        'print("EDA6", PLACA_ACTUAL, "salida 1 -> GPIO", _pins()["digital_outputs"][0])\n';
+      const userCode = probe + "detenerTodo()\n" + wrapEda6UserCodeForRun(body);
+      const prelude = buildEda6RunPrelude(code, profile);
+      return _bleMpSession.runProgram(userCode, { ...cb, prelude });
+    }
+    return _bleMpSession.runProgram(code, cb);
   }
   if (_bleRun && _bleRun.isConnected()) {
     return runOnBoardBle(code, cb);
@@ -527,6 +549,7 @@ async function getBleInfo() {
 
 /** @returns {boolean} true si hay una ESP32 por BLE lista para EJECUTAR (RUN). */
 export function bleRunReady() {
+  if (isNativeBleEnabled() && _bleMpSession) return true;
   return !!_bleRun && _bleRun.isConnected();
 }
 
@@ -703,6 +726,23 @@ export async function bleUpdateRuntime(hooks = {}) {
   try {
     await _bleTransport.reconnect(UPDATE_RECONNECT_TIMEOUT_MS);
     reconnected = true;
+    if (isNativeBleEnabled() && _bleTransport.hasRepl()) {
+      try {
+        if (_bleMpSession) await _bleMpSession.close();
+      } catch {
+        /* ignore */
+      }
+      try {
+        const bleTr = new BleReplTransport(_bleTransport);
+        const { session } = await connectMicroPythonFromTransport(bleTr, {
+          detect: true,
+          recoverRepl: true,
+        });
+        _bleMpSession = session;
+      } catch {
+        _bleMpSession = null;
+      }
+    }
   } catch {
     reconnected = false;
   }
@@ -804,11 +844,19 @@ async function waitArmedBleStopAck(armed, timeoutMs) {
 export async function stopBoardExecution() {
   if (_mpSession) {
     try {
-      await _mpSession.interrupt();
+      await _mpSession.interrupt({ level: STOP_LEVEL.CTRL_C });
     } catch {
       /* ignore */
     }
     return { transport: "serial" };
+  }
+  if (isNativeBleEnabled() && _bleMpSession) {
+    try {
+      await _bleMpSession.interrupt({ level: STOP_LEVEL.CTRL_C });
+    } catch {
+      /* ignore */
+    }
+    return { transport: "ble-native" };
   }
   if (_bleTransport && _bleTransport.isConnected()) {
     // Coalescer Stop concurrentes (doble click / Stop idle tras TEMP RUN).
@@ -983,12 +1031,25 @@ export async function bleRunConnect() {
   });
   _bleDeploy = new BleDeploySession(tr);
   _bleUpdate = new BleRuntimeUpdateSession(tr);
+  _bleMpSession = null;
+  if (isNativeBleEnabled() && tr.hasRepl() && runtimeSupportsNativeRepl(tr.getDeviceInfo?.().info)) {
+    try {
+      const bleTr = new BleReplTransport(tr);
+      const { session } = await connectMicroPythonFromTransport(bleTr, {
+        detect: true,
+        recoverRepl: true,
+      });
+      _bleMpSession = session;
+    } catch {
+      _bleMpSession = null;
+    }
+  }
   return info;
 }
 
 /** @returns {boolean} true si hay una ESP32 conectada por BLE para ejecucion. */
 export function bleRunIsConnected() {
-  return !!_bleRun && _bleRun.isConnected();
+  return (!!_bleRun && _bleRun.isConnected()) || (!!_bleMpSession && !!_bleTransport && _bleTransport.isConnected());
 }
 
 /** Devuelve el BluetoothTransport activo (para diagnostico PING/INFO/LED) o null. */
@@ -998,6 +1059,14 @@ export function bleRunTransport() {
 
 /** Desconecta la ESP32 BLE de ejecucion (no afecta el serial). */
 export async function bleRunDisconnect() {
+  if (_bleMpSession) {
+    try {
+      await _bleMpSession.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  _bleMpSession = null;
   if (_bleTransport) {
     try {
       await _bleTransport.disconnect();
@@ -1007,6 +1076,7 @@ export async function bleRunDisconnect() {
   }
   _bleTransport = null;
   _bleRun = null;
+  _bleMpSession = null;
   _bleDeploy = null;
   _bleUpdate = null;
 }
@@ -1058,6 +1128,11 @@ export async function flashProgramToBoard(code, profile = getEda6Profile()) {
   if (!_mpSession) throw new Error("not_connected");
   await _mpSession.interruptAndRecoverRepl();
   await installEda6Library(profile);
+  try {
+    await _mpSession.installFile("pybot_net.py", getPybotNetSource());
+  } catch {
+    /* ignore */
+  }
   const mainPy = prepareMainPyForFlash(code);
   await _mpSession.installFile(MAIN_PY_FILENAME, mainPy);
   return flashAndReset(true);
@@ -1068,6 +1143,11 @@ export async function flashGpioProgramToBoard(code) {
   if (!_mpSession) throw new Error("not_connected");
   await _mpSession.interruptAndRecoverRepl();
   await _mpSession.installFile(PYBOT_HW_FILENAME, getPybotHwLibrarySource());
+  try {
+    await _mpSession.installFile("pybot_net.py", getPybotNetSource());
+  } catch {
+    /* ignore */
+  }
   await _mpSession.installFile(MAIN_PY_FILENAME, prepareMainPyForGpioFlash(code));
   return flashAndReset(false);
 }
@@ -1096,6 +1176,11 @@ export async function installBleRuntime(hooks = {}) {
   onProgress?.({ phase: "installing-libs" });
   await _mpSession.installFile(PYBOT_MPY_FILENAME, MPY_PRELUDE);
   await _mpSession.installFile(EDA6_FILENAME, getEda6LibrarySource(getEda6Profile()));
+  try {
+    await _mpSession.installFile("pybot_net.py", getPybotNetSource());
+  } catch {
+    /* best-effort: el pack OTA también incluye pybot_net.py */
+  }
 
   // 2) Runtime modular 3.2+: boot.py mínimo + main.py stub + pybot_ble (núcleo) +
   //    módulos lazy (run/deploy/update/boot_update). NO borra pybot_app.* del alumno
