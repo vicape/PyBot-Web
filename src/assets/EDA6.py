@@ -355,3 +355,18 @@ def parpadeoLCD(estado):
     _lcd_require()
     _lcd.blink = bool(estado)
     _lcd._apply_display()
+
+
+try:
+    from pybot_net import (
+        wifi_conectar,
+        wifi_desconectar,
+        wifi_conectado,
+        wifi_ip,
+        wifi_estado,
+        wifi_signal,
+        web_get,
+        web_post,
+    )
+except ImportError:
+    pass

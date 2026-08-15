@@ -35,7 +35,15 @@ export const EDA6_PUBLIC_FUNCS = [
   "asciiLCD",
   "luzLCD",
   "cursorLCD",
-  "parpadeoLCD",
+    "parpadeoLCD",
+    "wifi_conectar",
+    "wifi_desconectar",
+    "wifi_conectado",
+    "wifi_ip",
+    "wifi_estado",
+    "wifi_signal",
+    "web_get",
+    "web_post",
 ];
 
 const EDA6_IMPORT_RE = /^\s*from\s+EDA6\s+import\s+.+\s*$/gm;
@@ -118,8 +126,8 @@ export function filterExamplesForBoard(examples, boardType) {
   ]);
 
   return examples.filter((ex) => {
-    if (ex.boards?.includes("esp32-eda6")) {
-      return boardType === "esp32-eda6";
+    if (Array.isArray(ex.boards) && ex.boards.length > 0) {
+      return ex.boards.includes(boardType);
     }
     if (boardType === "esp32-eda6") {
       if (arduinoHw.has(ex.id) || esp32Gpio.has(ex.id)) return false;
