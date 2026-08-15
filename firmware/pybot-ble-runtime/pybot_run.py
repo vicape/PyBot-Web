@@ -1,3 +1,6 @@
+# LEGACY / TEMPORARY MIGRATION FALLBACK: ProgramManager + exec + monkeypatch sleep.
+# El camino NATIVO (runtime 4.0) usa os.dupterm + raw REPL + KeyboardInterrupt.
+# Este modulo permanece para placas/web con MICROPYTHON_NATIVE_BLE=false.
 import sys
 import time
 import ubinascii

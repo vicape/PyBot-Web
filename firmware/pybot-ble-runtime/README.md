@@ -12,13 +12,16 @@ runtime ya **no** es un `main.py` monolítico:
 | --- | --- | --- |
 | `boot.py` | Chequeo mínimo de OTA (`pybot_update.json`) | Sí (~200 B) |
 | `main.py` | Stub: `import pybot_ble; pybot_ble.main()` | Sí |
-| `pybot_ble.py` | Núcleo: advertising, GATT, PING/INFO/LED, dispatch | Sí |
-| `pybot_run.py` | RUN / STOP / ProgramManager | Lazy (primer RUN/APP:START) |
+| `pybot_ble.py` | Núcleo: advertising, GATT, ADMIN + REPL | Sí |
+| `pybot_repl.py` | BLE UART + `os.dupterm` (REPL nativo) | Tras advertising |
+| `pybot_net.py` | Wi-Fi + HTTP GET/POST | Import del alumno / EDA6 |
+| `pybot_mpy.py` | `pin` / `servo` / `motor` / `wait` + red | Import |
+| `pybot_run.py` | LEGACY RUN / STOP / ProgramManager | Lazy (flag legacy) |
 | `pybot_deploy.py` | DEPLOY / APP:* | Lazy |
 | `pybot_update.py` | UPDATE:* (OTA) | Lazy |
 | `pybot_boot_update.py` | Apply/rollback OTA (legacy + pack `PYBOTRT1`) | Solo si hay update pendiente |
 
-**Versión:** runtime **3.2.7**, protocolo **3.1** (comandos iguales; no rompe clientes 3.1).
+**Versión:** runtime **4.0.0**, protocolo **3.2** (ADMIN 3.1 compatible + REPL_RX/REPL_TX).
 Precarga `pybot_run` fuera del IRQ BLE y reporta `RUN:ERROR:LOAD:...` si falla el import.
 En **3.2.3+** los comandos no urgentes (`RUN:*`, PING/INFO, …) se encolan en el IRQ y se
 procesan en el hilo principal (`poll_commands`), para que `RUN:READY` no use
@@ -45,7 +48,7 @@ Archivos del alumno (NO se borran al actualizar el runtime): `pybot_app.py`,
 1. Conectar la ESP32 por USB en PyBot Web (modo ESP32 MicroPython o EDA6).
 2. Pulsar **Instalar PyBot Bluetooth**.
 3. Esperar verificación + reset.
-4. Abrir el panel Bluetooth: debe aparecer `PYBOT-XXXXXX` y `INFO.firmware == 3.2.7`.
+4. Abrir el panel Bluetooth: debe aparecer `PYBOT-XXXXXX` y `INFO.firmware == 4.0.0`.
 5. Si hay un programa zombie del alumno: **Borrar programa BLE de la placa (USB)**
    (Instalar runtime solo NO borra `pybot_app.*`).
 

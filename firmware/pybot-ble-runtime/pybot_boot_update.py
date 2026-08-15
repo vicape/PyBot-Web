@@ -13,6 +13,9 @@ _RUNTIME_FILES = (
     "pybot_deploy.py",
     "pybot_update.py",
     "pybot_boot_update.py",
+    "pybot_repl.py",
+    "pybot_net.py",
+    "pybot_mpy.py",
 )
 _RTBAK = ".rtbak"
 

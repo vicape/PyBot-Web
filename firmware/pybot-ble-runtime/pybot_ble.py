@@ -13,11 +13,19 @@ try:
 except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
-PYBOT_RUNTIME_VERSION = "3.2.7"
-PYBOT_PROTOCOL_VERSION = "3.1"
+PYBOT_RUNTIME_VERSION = "4.0.0"
+PYBOT_PROTOCOL_VERSION = "3.2"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
-PYBOT_CAPABILITIES = ("run", "stop", "deploy", "app-control", "autostart", "runtime-update")
+PYBOT_CAPABILITIES = (
+    "run",
+    "stop",
+    "deploy",
+    "app-control",
+    "autostart",
+    "runtime-update",
+    "native-repl",
+)
 
 BUILTIN_LED_PIN = 2
 
@@ -32,7 +40,7 @@ MAX_RUN_B64 = const(12000)  # ~8 KB de fuente para RUN temporal (base64 ~1.34x)
 MAX_RUN_PROGRAM_SIZE = const(8192)
 MAX_DEPLOY_PROGRAM_SIZE = const(16384)
 
-MAX_RUNTIME_UPDATE_SIZE = const(65536)
+MAX_RUNTIME_UPDATE_SIZE = const(131072)
 
 _RUNTIME_NEW = "pybot_runtime.new"
 _RUNTIME_BAK = "pybot_runtime.bak"
@@ -44,6 +52,9 @@ _RUNTIME_FILES = (
     "pybot_deploy.py",
     "pybot_update.py",
     "pybot_boot_update.py",
+    "pybot_repl.py",
+    "pybot_net.py",
+    "pybot_mpy.py",
 )
 _RTBAK_SUFFIX = ".rtbak"
 
@@ -72,10 +83,14 @@ _FLAG_NOTIFY = const(0x0010)
 _SERVICE_UUID = bluetooth.UUID("8fbc0001-4d5a-4b8c-9a1f-123456789001")
 _RX_UUID = bluetooth.UUID("8fbc0002-4d5a-4b8c-9a1f-123456789002")
 _TX_UUID = bluetooth.UUID("8fbc0003-4d5a-4b8c-9a1f-123456789003")
+_REPL_RX_UUID = bluetooth.UUID("8fbc0004-4d5a-4b8c-9a1f-123456789004")
+_REPL_TX_UUID = bluetooth.UUID("8fbc0005-4d5a-4b8c-9a1f-123456789005")
 
 _RX_CHAR = (_RX_UUID, _FLAG_WRITE | _FLAG_WRITE_NO_RESPONSE)
 _TX_CHAR = (_TX_UUID, _FLAG_NOTIFY | _FLAG_READ)
-_PYBOT_SERVICE = (_SERVICE_UUID, (_TX_CHAR, _RX_CHAR))
+_REPL_RX_CHAR = (_REPL_RX_UUID, _FLAG_WRITE | _FLAG_WRITE_NO_RESPONSE)
+_REPL_TX_CHAR = (_REPL_TX_UUID, _FLAG_NOTIFY | _FLAG_READ)
+_PYBOT_SERVICE = (_SERVICE_UUID, (_TX_CHAR, _RX_CHAR, _REPL_TX_CHAR, _REPL_RX_CHAR))
 
 STATE_BOOT = "BOOT"
 STATE_WAITING = "WAITING"
@@ -310,9 +325,15 @@ class BluetoothTransport:
         self._ble = bluetooth.BLE()
         self._ble.active(True)
         self._ble.irq(self._irq)
-        ((self._tx_handle, self._rx_handle),) = self._ble.gatts_register_services(
-            (_PYBOT_SERVICE,)
-        )
+        (
+            (
+                self._tx_handle,
+                self._rx_handle,
+                self._repl_tx_handle,
+                self._repl_rx_handle,
+            ),
+        ) = self._ble.gatts_register_services((_PYBOT_SERVICE,))
+        self._repl_mod = None
         self._payload = _advertising_payload(services=[_SERVICE_UUID])
         self._resp_payload = _advertising_payload(name=self._name.encode())
         self._advertise()
@@ -350,6 +371,8 @@ class BluetoothTransport:
                 conn_handle, value_handle = data
                 if value_handle == self._rx_handle:
                     self._handle_rx()
+                elif value_handle == self._repl_rx_handle:
+                    self._handle_repl_rx()
         except Exception:
             pass
 
@@ -396,6 +419,44 @@ class BluetoothTransport:
         except Exception:
             pass
         self._cmd_q.append(text)
+
+    def _handle_repl_rx(self):
+        """IRQ: bytes REPL crudos. Sin decode/JSON/FS/sleep."""
+        try:
+            chunk = self._ble.gatts_read(self._repl_rx_handle)
+        except Exception:
+            return
+        if not chunk:
+            return
+        mod = self._repl_mod
+        if mod is not None:
+            try:
+                mod.irq_put(chunk)
+            except Exception:
+                pass
+
+    def attach_repl(self):
+        try:
+            import pybot_repl
+        except Exception:
+            return False
+        self._repl_mod = pybot_repl
+        try:
+            pybot_repl.attach(
+                self._ble, self._repl_tx_handle, lambda: self._conn_handle
+            )
+            return True
+        except Exception:
+            return False
+
+    def inject_ctrl_c(self):
+        mod = self._repl_mod
+        if mod is None:
+            return
+        try:
+            mod.inject_ctrl_c()
+        except Exception:
+            pass
 
     def poll_commands(self):
         """Procesa la cola RX en el hilo principal (notify+sleep seguros)."""
@@ -497,6 +558,44 @@ def _maybe_autostart(manager):
     if not _file_exists(_APP_FILE):
         return
     manager.start_app()
+
+def _exec_student_app():
+    """Autostart nativo: exec del archivo del alumno. Stop = KeyboardInterrupt."""
+    ns = {"__name__": "__main__"}
+    try:
+        mod_eda6 = __import__(_EDA6_LIB)
+        for k in dir(mod_eda6):
+            if not k.startswith("_"):
+                ns[k] = getattr(mod_eda6, k)
+    except Exception:
+        pass
+    try:
+        mod_mpy = __import__(_MPY_LIB)
+        for k in dir(mod_mpy):
+            if not k.startswith("_"):
+                ns[k] = getattr(mod_mpy, k)
+    except Exception:
+        pass
+    try:
+        import pybot_net
+        for k in (
+            "wifi_conectar",
+            "wifi_desconectar",
+            "wifi_conectado",
+            "wifi_ip",
+            "wifi_estado",
+            "wifi_signal",
+            "web_get",
+            "web_post",
+        ):
+            if hasattr(pybot_net, k):
+                ns[k] = getattr(pybot_net, k)
+    except Exception:
+        pass
+    with open(_APP_FILE) as f:
+        code = f.read()
+    exec(code, ns)
+
 
 def main():
     dev_id = device_id()
@@ -636,6 +735,12 @@ def main():
             m = ctx["manager"]
             if m:
                 m.request_stop()
+            tr = holder.get("transport")
+            if tr:
+                try:
+                    tr.inject_ctrl_c()
+                except Exception:
+                    pass
             return True
         if upper == "STOP:FORCE":
             m = ctx["manager"]
@@ -777,6 +882,11 @@ def main():
     holder["transport"] = transport
     _confirm_update_if_pending()
 
+    try:
+        transport.attach_repl()
+    except Exception:
+        pass
+
     # Precargar pybot_run en el hilo principal DESPUÉS de advertising.
     # El import lazy dentro del IRQ GATTS_WRITE (stack/heap limitados) puede
     # fallar o colgarse: PING/INFO siguen OK pero RUN:BEGIN nunca emite READY.
@@ -799,34 +909,33 @@ def main():
     except Exception:
         pass
 
-    try:
-        st = _load_state()
-        # safe_boot STICKY: no autostart y NO se limpia aqui. Solo APP:START /
-        # DEPLOY nuevo / clear USB lo quitan. Evita que un power-cycle reviva
-        # el programa problematico tras STOP:FORCE.
-        if st.get("safe_boot"):
-            pass
-        elif int(st.get("fail_count", 0)) < _MAX_AUTOSTART_FAILS:
-            meta = _load_app_meta()
-            if meta and meta.get("autostart") and _file_exists(_APP_FILE):
-                _maybe_autostart(_ensure_manager())
-    except Exception:
-        pass
+    sched = {"armed": False}
 
-    while True:
+    def _tick(_arg=None):
+        sched["armed"] = False
         try:
             if ctx.get("force_reset"):
                 m = ctx.get("manager")
                 if m and m.running:
                     ctx["force_reset"] = False
                     _force_reset()
-                else:
-                    ctx["force_reset"] = False  # huerfano post-STOPPED
+                    return
+                ctx["force_reset"] = False  # huerfano post-STOPPED
             transport.poll_commands()
             m = ctx["manager"]
             if m and m.pending and not m.running:
                 try:
                     m.run_pending()
+                except KeyboardInterrupt:
+                    try:
+                        m.running = False
+                        m.reset_idle()
+                    except Exception:
+                        pass
+                    try:
+                        _send("RUN:STOPPED")
+                    except Exception:
+                        pass
                 except Exception:
                     m.running = False
                     m.pending = False
@@ -838,6 +947,64 @@ def main():
                         _send("RUN:DONE")
                     except Exception:
                         pass
+        except KeyboardInterrupt:
+            pass
+        except Exception:
+            pass
+
+    def _arm_tick():
+        if sched["armed"]:
+            return
+        try:
+            import micropython
+            micropython.schedule(_tick, 0)
+            sched["armed"] = True
+        except Exception:
+            pass
+
+    _orig_dispatch = transport._dispatch
+
+    def _dispatch_and_arm(raw_bytes):
+        _orig_dispatch(raw_bytes)
+        sched["armed"] = False
+        _arm_tick()
+
+    transport._dispatch = _dispatch_and_arm
+
+    native = True
+    try:
+        os.stat("pybot_legacy.on")
+        native = False
+    except OSError:
+        native = True
+
+    try:
+        st = _load_state()
+        if st.get("safe_boot"):
+            pass
+        elif int(st.get("fail_count", 0)) < _MAX_AUTOSTART_FAILS:
+            meta = _load_app_meta()
+            if meta and meta.get("autostart") and _file_exists(_APP_FILE):
+                if native:
+                    try:
+                        _exec_student_app()
+                    except KeyboardInterrupt:
+                        pass
+                    except Exception:
+                        pass
+                else:
+                    _maybe_autostart(_ensure_manager())
+    except Exception:
+        pass
+
+    if native:
+        # REPL nativo (USB + BLE dupterm). Admin via micropython.schedule.
+        return
+
+    # LEGACY: bucle ProgramManager (pybot_legacy.on). TEMPORARY MIGRATION FALLBACK.
+    while True:
+        try:
+            _tick()
         except Exception:
             pass
         try:
