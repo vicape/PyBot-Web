@@ -78,3 +78,9 @@ Firmware: archivo `pybot_legacy.on` fuerza el bucle LEGACY.
 ## OTA
 
 Sin cambios de framing UPDATE 3.1. El pack `PYBOTRT1` ahora incluye `pybot_repl.py`, `pybot_net.py`, `pybot_mpy.py`. Placas ≥ 3.2.0 pueden actualizar por OTA a 4.0.0.
+
+## Preparar ESP32 (placa virgen)
+
+Flujo de navegador (Chrome/Edge + Web Serial): `docs/ESP32_PROVISIONING.md`.
+Capa A = ROM bootloader + `esptool-js` + firmware oficial MicroPython.
+Capa B = raw REPL + `installBleRuntime`. **PENDIENTE FÍSICO**.

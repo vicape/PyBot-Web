@@ -40,7 +40,7 @@ Elegí la placa **antes** de conectar el USB. Para cambiarla, desconectá primer
 - **Pines por número de GPIO directo** (no se usa A0–A5): `pin("out", 2, 1)`, `pin("in", 4)`, `pin("pwm", 18, 128)`, `servo(18, 90)`, `motor(18, 50)`.
 - **Lectura analógica**: en pines ADC (GPIO 32–39) `pin("in", 34)` devuelve el valor **escalado a 0–1023** (compatibilidad pedagógica con Arduino). Si usás `"A0"` en ESP32, PyBot muestra un aviso para que uses el número de GPIO.
 - **El ESP32 trabaja a 3.3V**: no conectes señales de 5V a sus pines.
-- **Requisito**: la placa debe tener **MicroPython** instalado. Si no responde como MicroPython, PyBot avisa: *"Esta ESP32 necesita ser preparada para PyBot con MicroPython."* (Próximamente: botón **Preparar ESP32** con `esptool-js`.)
+- **Requisito**: la placa debe tener **MicroPython** instalado. Si no responde como MicroPython, PyBot ofrece **Preparar ESP32** (Chrome/Edge + Web Serial, `esptool-js`, firmware oficial en `public/firmware/micropython/`). Detalle: `docs/ESP32_PROVISIONING.md`.
 
 ### Bajar a Arduino (correr sin la PC)
 

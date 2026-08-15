@@ -66,3 +66,19 @@ Leyenda: **SOFTWARE VERIFIED** = cubierto por tests Node. **PENDIENTE FÍSICO** 
 
 - [ ] `gc.mem_free` tras boot + advertising + dupterm.
 - [ ] Diagnóstico USB existente (`runMemoryDiagnostic`) sigue vivo.
+
+## Preparar ESP32 — placa virgen (P1–P10)
+
+Nada de esto está ejecutado en el cambio de software. Marcar al validar en hardware.
+Leyenda: **SOFTWARE VERIFIED** en tests Node. **PENDIENTE FÍSICO** = requiere placa.
+
+- [ ] **P1** ESP32 clásica virgen: Chrome/Edge, **Preparar ESP32**, diálogo de puerto explícito (no se elige un puerto en silencio).
+- [ ] **P2** Confirmación destructiva visible; Cancel no borra flash.
+- [ ] **P3** DTR/RTS entra al bootloader; si falla, instrucciones BOOT y Reintentar funciona.
+- [ ] **P4** Chip ID ESP32 clásico; una placa S3/C3 muestra “variant not yet supported” y **no** se flashea la imagen GENERIC.
+- [ ] **P5** SHA-256 de la imagen coincide; erase + write con progreso real (bytes).
+- [ ] **P6** Tras el reset, MicroPython bootea y el REPL responde (no se declara lista solo por `writeFlash`).
+- [ ] **P7** Se instalan los archivos PyBot (BLE nativo + EDA6 + net); la verificación de archivos pasa; “ESP32 lista”.
+- [ ] **P8** Placa ya preparada: no hay erase automático; Cancel / Reinstall pide confirmación.
+- [ ] **P9** MicroPython sin PyBot: **Instalar PyBot** sin reflash. PyBot viejo: **Actualizar PyBot** sin reflash.
+- [ ] **P10** Tras lista: BLE nativo (`PYBOT-XXXXXX`, REPL) y Wi-Fi/`web_get` en un programa de prueba. El programa del editor no se copió durante el provisioning.
