@@ -124,7 +124,7 @@ test("critical phases block modal close during erase/flash/verify", () => {
 
 test("classifyBoard: virgin / mpy only / old / ready", () => {
   assert.equal(classifyBoard({ hasMicroPython: false }), BOARD_STATE.VIRGIN);
-  assert.equal(classifyBoard({ hasMicroPython: true, files: [] }), BOARD_STATE.MPY_ONLY);
+  assert.equal(classifyBoard({ hasMicroPython: true, files: [] }), BOARD_STATE.MICROPYTHON_ONLY);
   assert.equal(
     classifyBoard({
       hasMicroPython: true,
@@ -234,7 +234,7 @@ for (const pct of [10, 50, 95]) {
   });
 }
 
-test("REPL timeout after flash is not READY", async () => {
+test("REPL timeout after flash is RESET_REQUIRED, not a reflash", async () => {
   let replCalls = 0;
   const { adapters } = createAdapters({
     async connectRepl() {
@@ -244,9 +244,37 @@ test("REPL timeout after flash is not READY", async () => {
   });
   const result = await runEsp32Provisioning(adapters, { autoConfirm: true });
   assert.equal(result.ok, false);
-  assert.equal(result.error, PROVISION_ERROR.REPL_TIMEOUT);
-  assert.notEqual(result.phase, PHASE.READY);
+  assert.equal(result.error, PROVISION_ERROR.RESET_REQUIRED);
+  assert.equal(result.flashed, true);
+  assert.equal(result.phase, PHASE.RESET_REQUIRED);
   assert.ok(replCalls >= 1);
+});
+
+test("retry after RESET_REQUIRED with skipFlash does not erase again", async () => {
+  const { adapters, calls } = createAdapters({
+    async probeBoard() {
+      return { boardState: BOARD_STATE.REPL_UNAVAILABLE, session: null };
+    },
+  });
+  const result = await runEsp32Provisioning(adapters, {
+    autoConfirm: true,
+    skipFlash: true,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, PROVISION_ERROR.RESET_REQUIRED);
+  assert.equal(calls.eraseFlash, 0);
+  assert.equal(calls.writeFirmware, 0);
+});
+
+test("probe REPL_UNAVAILABLE is not classified as VIRGIN", async () => {
+  const { adapters, calls } = createAdapters({
+    async probeBoard() {
+      return { boardState: BOARD_STATE.REPL_UNAVAILABLE, session: null };
+    },
+  });
+  const result = await runEsp32Provisioning(adapters, { autoConfirm: true });
+  assert.notEqual(result.boardState, BOARD_STATE.VIRGIN);
+  assert.equal(calls.writeFirmware, 1);
 });
 
 test("install files failure is not READY", async () => {
@@ -314,7 +342,7 @@ test("reinstall of a prepared board flashes after confirmation", async () => {
 test("MicroPython without PyBot installs files and does not reflash", async () => {
   const { adapters, calls } = createAdapters({
     async probeBoard() {
-      return { boardState: BOARD_STATE.MPY_ONLY, session: { id: "mpy" }, files: [] };
+      return { boardState: BOARD_STATE.MICROPYTHON_ONLY, session: { id: "mpy" }, files: [] };
     },
   });
   const result = await runEsp32Provisioning(adapters, { autoConfirm: true });

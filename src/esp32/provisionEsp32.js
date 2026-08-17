@@ -142,11 +142,28 @@ export async function runEsp32Provisioning(adapters, options = {}) {
       if (code === "BUSY" || code === PROVISION_ERROR.BUSY) {
         throw provisionError(PROVISION_ERROR.BUSY);
       }
-      probe = { boardState: BOARD_STATE.VIRGIN };
+      throw e;
     }
-    boardState = probe?.boardState ?? BOARD_STATE.VIRGIN;
+    boardState = probe?.boardState ?? BOARD_STATE.UNKNOWN;
     session = probe?.session ?? null;
     emit(PHASE.PROBING, { boardState, files: probe?.files, runtimeVersion: probe?.runtimeVersion });
+
+    if (boardState === BOARD_STATE.PORT_BUSY) {
+      throw provisionError(PROVISION_ERROR.BUSY);
+    }
+    if (boardState === BOARD_STATE.UNKNOWN) {
+      emit(PHASE.ERROR, { error: PROVISION_ERROR.UNKNOWN, boardState });
+      await cleanup();
+      return {
+        ok: false,
+        alreadyPrepared: false,
+        flashed: false,
+        installed: false,
+        boardState,
+        phase: PHASE.ERROR,
+        error: PROVISION_ERROR.UNKNOWN,
+      };
+    }
 
     if (boardState === BOARD_STATE.READY && !options.forceReinstall) {
       emit(PHASE.ALREADY_PREPARED);
@@ -162,8 +179,30 @@ export async function runEsp32Provisioning(adapters, options = {}) {
       };
     }
 
+    const skipFlash = options.skipFlash === true || options.resumeFromRepl === true;
+    if (
+      (boardState === BOARD_STATE.RESET_REQUIRED ||
+        boardState === BOARD_STATE.REPL_UNAVAILABLE) &&
+      skipFlash
+    ) {
+      emit(PHASE.RESET_REQUIRED, { boardState: BOARD_STATE.RESET_REQUIRED });
+      log("[PROVISION] MicroPython was written; press EN/RESET and retry REPL (no reflash)");
+      await cleanup();
+      return {
+        ok: false,
+        alreadyPrepared: false,
+        flashed: false,
+        installed: false,
+        boardState: BOARD_STATE.RESET_REQUIRED,
+        phase: PHASE.RESET_REQUIRED,
+        error: PROVISION_ERROR.RESET_REQUIRED,
+      };
+    }
+
     const needsFlash =
-      boardState === BOARD_STATE.VIRGIN || options.forceReinstall === true;
+      boardState === BOARD_STATE.VIRGIN ||
+      boardState === BOARD_STATE.REPL_UNAVAILABLE ||
+      options.forceReinstall === true;
 
     if (needsFlash) {
       const confirmPhase = options.forceReinstall ? PHASE.CONFIRM_REINSTALL : PHASE.CONFIRM_FLASH;
@@ -233,6 +272,7 @@ export async function runEsp32Provisioning(adapters, options = {}) {
       emit(PHASE.VERIFYING_FLASH);
       log("[PROVISION] flash write finished; not READY until REPL + files");
       flashed = true;
+      emit(PHASE.FLASH_WRITTEN);
 
       emit(PHASE.RESETTING);
       await adapters.resetAndRelease(bootloaderCtx);
@@ -245,11 +285,29 @@ export async function runEsp32Provisioning(adapters, options = {}) {
         const connected = await adapters.connectRepl(port, { afterFlash: true });
         session = connected.session;
       } catch (e) {
-        throw provisionError(PROVISION_ERROR.REPL_TIMEOUT, { cause: e });
+        boardState = BOARD_STATE.RESET_REQUIRED;
+        emit(PHASE.RESET_REQUIRED, { boardState, error: PROVISION_ERROR.RESET_REQUIRED });
+        log("[PROVISION] MicroPython written; press EN/RESET and retry (no reflash)");
+        try {
+          await cleanup();
+        } catch {
+          /* cleanup */
+        }
+        return {
+          ok: false,
+          alreadyPrepared: false,
+          flashed: true,
+          installed: false,
+          boardState,
+          chipName,
+          phase: PHASE.RESET_REQUIRED,
+          error: PROVISION_ERROR.RESET_REQUIRED,
+          cause: e?.message,
+        };
       }
     } else {
-      const confirmPhase =
-        boardState === BOARD_STATE.OLD_PYBOT ? PHASE.CONFIRM_UPDATE : PHASE.CONFIRM_INSTALL;
+      const isOld = boardState === BOARD_STATE.OLD_PYBOT;
+      const confirmPhase = isOld ? PHASE.CONFIRM_UPDATE : PHASE.CONFIRM_INSTALL;
       emit(confirmPhase);
       const okConfirm =
         boardState === BOARD_STATE.OLD_PYBOT
@@ -332,6 +390,8 @@ export async function runEsp32Provisioning(adapters, options = {}) {
       emit(PHASE.UNSUPPORTED_VARIANT, { error: code, chipName: e?.chipName || chipName });
     } else if (code === PROVISION_ERROR.CANCELLED) {
       emit(PHASE.CANCELLED, { error: code });
+    } else if (code === PROVISION_ERROR.RESET_REQUIRED) {
+      emit(PHASE.RESET_REQUIRED, { error: code, boardState: BOARD_STATE.RESET_REQUIRED });
     } else if (phase !== PHASE.NEED_BOOT_BUTTON) {
       emit(PHASE.ERROR, { error: code, missing: e?.missing });
     } else {
@@ -350,7 +410,12 @@ export async function runEsp32Provisioning(adapters, options = {}) {
       installed,
       boardState,
       chipName,
-      phase: code === PROVISION_ERROR.VARIANT_UNSUPPORTED ? PHASE.UNSUPPORTED_VARIANT : phase,
+      phase:
+        code === PROVISION_ERROR.VARIANT_UNSUPPORTED
+          ? PHASE.UNSUPPORTED_VARIANT
+          : code === PROVISION_ERROR.RESET_REQUIRED
+            ? PHASE.RESET_REQUIRED
+            : phase,
       error: code,
       missing: e?.missing,
     };

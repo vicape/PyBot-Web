@@ -638,7 +638,7 @@ export default function PyBotIDE() {
   );
 
   const runPrepareEsp32 = useCallback(
-    async ({ forceReinstall = false } = {}) => {
+    async ({ forceReinstall = false, skipFlash = false, resumeFromRepl = false } = {}) => {
       if (preparingEsp32) return;
       prepareAbortRef.current = { aborted: false };
       setPreparingEsp32(true);
@@ -649,6 +649,8 @@ export default function PyBotIDE() {
       try {
         const result = await prepareEsp32({
           forceReinstall,
+          skipFlash,
+          resumeFromRepl,
           signal: prepareAbortRef.current,
           onLog: (line) => {
             setPrepareLog((prev) => [...prev.slice(-80), String(line)]);
@@ -2292,7 +2294,12 @@ export default function PyBotIDE() {
           }
         }}
         onRetry={() => {
-          void runPrepareEsp32({ forceReinstall: false });
+          const fromReset = preparePhase === PHASE.RESET_REQUIRED;
+          void runPrepareEsp32({
+            forceReinstall: false,
+            skipFlash: fromReset,
+            resumeFromRepl: fromReset,
+          });
         }}
         onReinstall={() => {
           void runPrepareEsp32({ forceReinstall: true });

@@ -89,6 +89,16 @@ export default function PrepareEsp32Modal({
           </div>
         ) : null}
 
+        {phase === PHASE.RESET_REQUIRED ? (
+          <div className="connect-help" role="alert">
+            <h4 className="connect-help__title">{t("prepareEsp32ResetHelp")}</h4>
+            <ol className="connect-help__steps">
+              <li>{t("prepareEsp32ResetHelp1")}</li>
+              <li>{t("prepareEsp32ResetHelp2")}</li>
+            </ol>
+          </div>
+        ) : null}
+
         {phase === PHASE.ERROR && error ? (
           <div className="connect-modal-error" role="alert">
             {t(`provErr_${error}`) !== `provErr_${error}` ? t(`provErr_${error}`) : t("provErr_UNKNOWN")}
@@ -139,7 +149,10 @@ export default function PrepareEsp32Modal({
             </button>
           ) : null}
 
-          {(phase === PHASE.ERROR || phase === PHASE.NEED_BOOT_BUTTON || phase === PHASE.UNSUPPORTED_VARIANT) &&
+          {(phase === PHASE.ERROR ||
+            phase === PHASE.NEED_BOOT_BUTTON ||
+            phase === PHASE.UNSUPPORTED_VARIANT ||
+            phase === PHASE.RESET_REQUIRED) &&
           !running ? (
             <button type="button" className="connect-btn connect-btn--primary" onClick={onRetry} disabled={running}>
               {t("prepareEsp32Retry")}

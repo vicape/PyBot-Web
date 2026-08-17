@@ -22,7 +22,7 @@ import {
 export function classifyBoard(info) {
   if (!info?.hasMicroPython) return BOARD_STATE.VIRGIN;
   const files = Array.isArray(info.files) ? info.files : [];
-  if (!files.includes(PYBOT_MARKER_FILE)) return BOARD_STATE.MPY_ONLY;
+  if (!files.includes(PYBOT_MARKER_FILE)) return BOARD_STATE.MICROPYTHON_ONLY;
   const published = info.publishedVersion ?? PYBOT_RUNTIME_VERSION;
   const installed = info.runtimeVersion ?? null;
   if (!installed) return BOARD_STATE.OLD_PYBOT;
@@ -77,7 +77,13 @@ export async function inspectPybotOnSession(session, options = {}) {
 
 export function recommendedAction(boardState) {
   if (boardState === BOARD_STATE.VIRGIN) return "prepare";
-  if (boardState === BOARD_STATE.MPY_ONLY) return "install";
+  if (boardState === BOARD_STATE.MICROPYTHON_ONLY || boardState === BOARD_STATE.MPY_ONLY) {
+    return "install";
+  }
   if (boardState === BOARD_STATE.OLD_PYBOT) return "update";
+  if (boardState === BOARD_STATE.RESET_REQUIRED) return "reset";
+  if (boardState === BOARD_STATE.REPL_UNAVAILABLE) return "retry-repl";
+  if (boardState === BOARD_STATE.PORT_BUSY) return "port-busy";
+  if (boardState === BOARD_STATE.UNKNOWN) return "unknown";
   return "connect";
 }

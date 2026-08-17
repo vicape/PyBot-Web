@@ -509,6 +509,11 @@ Creado por VIC.`,
     prepareEsp32BootHelp1:
       "Mantené el botón BOOT (IO0) de la ESP32, pulsá RESET, soltá RESET y después soltá BOOT.",
     prepareEsp32BootHelp2: "Dejá el cable USB conectado y pulsá Reintentar.",
+    prepareEsp32ResetHelp: "MicroPython se instaló correctamente",
+    prepareEsp32ResetHelp1:
+      "Pulsá EN/RESET en la ESP32 (sobre todo con adaptadores CH340) y esperá un segundo.",
+    prepareEsp32ResetHelp2:
+      "Dejá el USB conectado y pulsá Reintentar. No se vuelve a grabar el firmware.",
     prepareEsp32Unsupported:
       "Esta placa es {chip}. PyBot todavía no puede grabar MicroPython en esa familia (solo ESP32 clásico / WROOM). No se flasheó ninguna imagen incorrecta.",
     prepareEsp32ShowLog: "Ver log técnico",
@@ -518,8 +523,13 @@ Creado por VIC.`,
     prepareEsp32Foot: "Hace falta Chrome o Edge, HTTPS o localhost, y un cable USB de datos.",
     prepareState_VIRGIN: "Virgen (sin MicroPython)",
     prepareState_MPY_ONLY: "MicroPython sin PyBot",
+    prepareState_MICROPYTHON_ONLY: "MicroPython sin PyBot",
     prepareState_OLD_PYBOT: "PyBot desactualizado",
     prepareState_READY: "PyBot al día",
+    prepareState_REPL_UNAVAILABLE: "MicroPython no responde en el REPL",
+    prepareState_PORT_BUSY: "Puerto USB ocupado",
+    prepareState_RESET_REQUIRED: "Hace falta pulsar EN/RESET",
+    prepareState_UNKNOWN: "Estado desconocido",
     preparePhase_IDLE: "Listo para empezar.",
     preparePhase_SELECTING_PORT: "Elegí el puerto USB de la ESP32 en el diálogo del navegador…",
     preparePhase_PROBING: "Reconociendo qué hay en la placa…",
@@ -537,8 +547,10 @@ Creado por VIC.`,
     preparePhase_ERASING: "Borrando la flash…",
     preparePhase_FLASHING: "Grabando MicroPython…",
     preparePhase_VERIFYING_FLASH: "Comprobando lo grabado en flash…",
+    preparePhase_FLASH_WRITTEN: "MicroPython quedó grabado en la flash.",
     preparePhase_RESETTING: "Reiniciando la placa…",
     preparePhase_WAITING_REPL: "Esperando el REPL de MicroPython…",
+    preparePhase_RESET_REQUIRED: "Pulsá EN/RESET y reintentá (sin reflash).",
     preparePhase_INSTALLING_PYBOT: "Instalando PyBot en la placa…",
     preparePhase_VERIFYING_FILES: "Verificando los archivos de PyBot…",
     preparePhase_RESETTING_PYBOT: "Reiniciando tras instalar PyBot…",
@@ -565,6 +577,10 @@ Creado por VIC.`,
     provErr_RESET_FAIL: "No se pudo reiniciar la placa después de grabar.",
     provErr_REPL_TIMEOUT:
       "MicroPython no respondió en el REPL. Reconectá el USB y reintentá. No se declara lista.",
+    provErr_RESET_REQUIRED:
+      "MicroPython se instaló correctamente. Pulsá EN/RESET y reintentá. No se vuelve a grabar.",
+    provErr_REPL_UNAVAILABLE:
+      "No se pudo hablar con el REPL de MicroPython. Pulsá EN/RESET o revisá el cable. No se asume placa vacía.",
     provErr_INSTALL_FAIL: "No se pudieron instalar los archivos de PyBot. Reintentá.",
     provErr_VERIFY_FILES_FAIL: "Faltan archivos de PyBot en la placa. Reintentá la instalación.",
     provErr_CANCELLED: "Preparación cancelada.",
@@ -1080,6 +1096,11 @@ Built by VIC.`,
     prepareEsp32BootHelp1:
       "Hold the ESP32 BOOT (IO0) button, press RESET, release RESET, then release BOOT.",
     prepareEsp32BootHelp2: "Leave the USB cable connected and click Retry.",
+    prepareEsp32ResetHelp: "MicroPython was installed successfully",
+    prepareEsp32ResetHelp1:
+      "Press EN/RESET on the ESP32 (especially with CH340 adapters) and wait a second.",
+    prepareEsp32ResetHelp2:
+      "Leave USB connected and click Retry. The firmware will not be flashed again.",
     prepareEsp32Unsupported:
       "This board is {chip}. PyBot cannot flash MicroPython on that family yet (classic ESP32 / WROOM only). No incorrect image was written.",
     prepareEsp32ShowLog: "Show technical log",
@@ -1089,8 +1110,13 @@ Built by VIC.`,
     prepareEsp32Foot: "You need Chrome or Edge, HTTPS or localhost, and a USB data cable.",
     prepareState_VIRGIN: "Blank (no MicroPython)",
     prepareState_MPY_ONLY: "MicroPython without PyBot",
+    prepareState_MICROPYTHON_ONLY: "MicroPython without PyBot",
     prepareState_OLD_PYBOT: "Outdated PyBot",
     prepareState_READY: "PyBot up to date",
+    prepareState_REPL_UNAVAILABLE: "MicroPython REPL not responding",
+    prepareState_PORT_BUSY: "USB port busy",
+    prepareState_RESET_REQUIRED: "Press EN/RESET to continue",
+    prepareState_UNKNOWN: "Unknown board state",
     preparePhase_IDLE: "Ready to start.",
     preparePhase_SELECTING_PORT: "Pick the ESP32 USB port in the browser dialog…",
     preparePhase_PROBING: "Checking what is on the board…",
@@ -1108,8 +1134,10 @@ Built by VIC.`,
     preparePhase_ERASING: "Erasing flash…",
     preparePhase_FLASHING: "Writing MicroPython…",
     preparePhase_VERIFYING_FLASH: "Checking the data written to flash…",
+    preparePhase_FLASH_WRITTEN: "MicroPython was written to flash.",
     preparePhase_RESETTING: "Resetting the board…",
     preparePhase_WAITING_REPL: "Waiting for the MicroPython REPL…",
+    preparePhase_RESET_REQUIRED: "Press EN/RESET and retry (no reflash).",
     preparePhase_INSTALLING_PYBOT: "Installing PyBot on the board…",
     preparePhase_VERIFYING_FILES: "Verifying PyBot files…",
     preparePhase_RESETTING_PYBOT: "Resetting after installing PyBot…",
@@ -1136,6 +1164,10 @@ Built by VIC.`,
     provErr_RESET_FAIL: "Could not reset the board after flashing.",
     provErr_REPL_TIMEOUT:
       "MicroPython did not answer on the REPL. Replug USB and retry. The board is not marked ready.",
+    provErr_RESET_REQUIRED:
+      "MicroPython was installed successfully. Press EN/RESET and retry. It will not be re-flashed.",
+    provErr_REPL_UNAVAILABLE:
+      "Could not talk to the MicroPython REPL. Press EN/RESET or check the cable. The flash is not assumed empty.",
     provErr_INSTALL_FAIL: "Could not install PyBot files. Retry.",
     provErr_VERIFY_FILES_FAIL: "PyBot files are missing on the board. Retry the install.",
     provErr_CANCELLED: "Preparation cancelled.",
@@ -1208,12 +1240,34 @@ export function formatPythonError(message) {
     "The program could not run. Check the last part of your code and try again.",
   );
 
+  const withCode = (es, en, code) => pick(es, en) + " (" + code + ")";
+
   const firstDefinedName = m.match(/name ['"]([^'"]+)['"] is not defined/i)?.[1];
 
-  if (/BLE_NATIVE_REPL_FAIL|BLE_REPL_HANDSHAKE_FAIL|BLE_REPL_CHARS_MISSING|BLE_REPL_NOTIFY_FAIL|BLE_REPL_UNVERIFIED/i.test(m)) {
-    return pick(
-      "El REPL nativo Bluetooth no inició. No se usa el runtime legado. Revisá el diagnóstico BLE (runtime, protocol, native-repl, REPL_RX/TX, dupterm, handshake).",
-      "The native Bluetooth REPL did not start. The legacy runtime is not used. Check BLE diagnostics (runtime, protocol, native-repl, REPL_RX/TX, dupterm, handshake).",
+  const protoCodes = [
+    "BLE_REPL_CHARS_MISSING",
+    "BLE_REPL_NOTIFY_FAIL",
+    "BLE_REPL_HANDSHAKE_FAIL",
+    "BLE_REPL_UNVERIFIED",
+    "BLE_NATIVE_REPL_FAIL",
+    "RAW_REPL_ENTER_TIMEOUT",
+    "RAW_REPL_EXEC_ACK_BAD",
+    "RAW_PASTE_HEADER_TIMEOUT",
+    "RAW_PASTE_HEADER_BAD",
+    "RAW_PASTE_WINDOW_TIMEOUT",
+    "RAW_PASTE_ABORTED",
+    "RAW_PASTE_EOF_TIMEOUT",
+    "RAW_REPL_STDOUT_TIMEOUT",
+    "RAW_REPL_STDERR_TIMEOUT",
+    "BLE_REPL_RX_OVERFLOW",
+    "BLE_REPL_TX_FAIL",
+  ];
+  const protoHit = protoCodes.find((c) => m.includes(c));
+  if (protoHit) {
+    return withCode(
+      "El REPL nativo no completó el protocolo de MicroPython. No se usa el runtime legado.",
+      "The native REPL did not complete the MicroPython protocol. The legacy runtime is not used.",
+      protoHit,
     );
   }
   if (/BLE_PROGRAM_TOO_LONG/i.test(m)) {
