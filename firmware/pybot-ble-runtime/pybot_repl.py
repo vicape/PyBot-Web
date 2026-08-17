@@ -1,6 +1,10 @@
 # BLE UART stream + os.dupterm: el REPL de MicroPython usa BLE como transporte.
 # IRQ: solo copia bytes al ring y llama dupterm_notify. Sin FS/import/sleep/JSON/print.
 #
+# TX: write() encola en FIFO acotado y retorna al instante; gatts_notify ocurre en
+# _drain_tx (micropython.schedule), fuera de write(), para no activar KeyboardInterrupt
+# ni desactivar dupterm por excepciones durante sleep/reintentos.
+#
 # Contrato dupterm (docs + extmod/os_dupterm.c): readinto() vacio debe ser None
 # (EAGAIN). 0 es EOF y desactiva el stream ("dupterm: EOF received, deactivating").
 #
@@ -24,12 +28,19 @@ _POLL_RD = const(1)
 _POLL_WR = const(4)
 _TX_CHUNK = const(20)
 _RING = const(512)
+_TX_RING = const(2048)
 _TX_RETRY_MAX = const(200)
 
 _rx = bytearray(_RING)
 _rx_h = 0
 _rx_t = 0
 _rx_n = 0
+_tx = bytearray(_TX_RING)
+_tx_h = 0
+_tx_t = 0
+_tx_n = 0
+_tx_overflow = 0
+_tx_scheduled = False
 _ble = None
 _tx_handle = 0
 _get_conn = None
@@ -49,6 +60,8 @@ def stats():
         "rx_bytes": _rx_bytes,
         "tx_bytes": _tx_bytes,
         "rx_overflow": _rx_overflow,
+        "tx_overflow": _tx_overflow,
+        "tx_pending": _tx_n,
         "notify_fail": _notify_fail,
         "notify_retries": _notify_retries,
         "dupterm_notify_count": _dupterm_notify_count,
@@ -81,6 +94,104 @@ def _ring_get_into(buf):
         _rx_n -= 1
         i += 1
     return n
+
+
+def _tx_peek_into(buf):
+    n = len(buf)
+    if n > _tx_n:
+        n = _tx_n
+    pos = _tx_h
+    i = 0
+    while i < n:
+        buf[i] = _tx[pos]
+        pos = (pos + 1) % _TX_RING
+        i += 1
+    return n
+
+
+def _tx_consume(n):
+    global _tx_h, _tx_n
+    if n > _tx_n:
+        n = _tx_n
+    _tx_h = (_tx_h + n) % _TX_RING
+    _tx_n -= n
+
+
+def _tx_put(data):
+    global _tx_t, _tx_n, _tx_overflow
+    need = len(data)
+    if need > _TX_RING or _tx_n + need > _TX_RING:
+        _tx_overflow += 1
+        raise OSError("BLE TX queue full")
+    for c in data:
+        _tx[_tx_t] = c
+        _tx_t = (_tx_t + 1) % _TX_RING
+        _tx_n += 1
+
+
+def _tx_clear():
+    global _tx_h, _tx_t, _tx_n, _tx_scheduled
+    _tx_h = 0
+    _tx_t = 0
+    _tx_n = 0
+    _tx_scheduled = False
+
+
+def _schedule_drain():
+    global _tx_scheduled
+    if _tx_scheduled or _tx_n <= 0:
+        return
+    if micropython is None:
+        _drain_tx(None)
+        return
+    _tx_scheduled = True
+    try:
+        micropython.schedule(_drain_tx, 0)
+    except Exception:
+        _tx_scheduled = False
+
+
+def _drain_tx(_arg):
+    global _tx_scheduled, _tx_bytes, _notify_fail, _notify_retries
+    _tx_scheduled = False
+    if _ble is None or _get_conn is None:
+        return
+    while _tx_n > 0:
+        conn = _get_conn()
+        if conn is None:
+            _notify_fail += 1
+            _tx_clear()
+            return
+        n = _TX_CHUNK if _tx_n > _TX_CHUNK else _tx_n
+        chunk = bytearray(n)
+        _tx_peek_into(chunk)
+        retries = 0
+        while True:
+            try:
+                _ble.gatts_notify(conn, _tx_handle, chunk)
+                _tx_consume(n)
+                _tx_bytes += n
+                break
+            except Exception:
+                conn = _get_conn()
+                if conn is None:
+                    _notify_fail += 1
+                    _tx_clear()
+                    return
+                retries += 1
+                if retries > _TX_RETRY_MAX:
+                    _notify_retries += 1
+                    _schedule_drain()
+                    return
+                _notify_retries += 1
+                try:
+                    import time
+
+                    time.sleep_ms(2)
+                except ImportError:
+                    pass
+    if (_tx_n > 0:
+        _schedule_drain()
 
 
 def irq_put(data):
@@ -120,44 +231,18 @@ class BleReplStream(io.IOBase):
         return _ring_get_into(buf)
 
     def write(self, buf):
-        global _tx_bytes, _notify_fail, _notify_retries
         if buf is None:
             return 0
         if _ble is None or _get_conn is None:
             return 0
-        conn = _get_conn()
-        if conn is None:
+        if _get_conn() is None:
             return 0
         data = buf if isinstance(buf, (bytes, bytearray)) else bytes(buf)
         n = len(data)
         if n == 0:
             return 0
-        i = 0
-        while i < n:
-            piece = data[i : i + _TX_CHUNK]
-            retries = 0
-            while True:
-                try:
-                    _ble.gatts_notify(conn, _tx_handle, piece)
-                    break
-                except Exception:
-                    conn = _get_conn()
-                    if conn is None:
-                        _notify_fail += 1
-                        raise OSError("BLE TX disconnected")
-                    retries += 1
-                    if retries > _TX_RETRY_MAX:
-                        _notify_fail += 1
-                        raise OSError("BLE TX failed")
-                    _notify_retries += 1
-                    try:
-                        import time
-
-                        time.sleep_ms(2)
-                    except ImportError:
-                        pass
-            i += len(piece)
-            _tx_bytes += len(piece)
+        _tx_put(data)
+        _schedule_drain()
         return n
 
     def ioctl(self, op, arg):
@@ -175,6 +260,7 @@ def attach(ble, tx_handle, get_conn):
     _ble = ble
     _tx_handle = tx_handle
     _get_conn = get_conn
+    _tx_clear()
     if _stream is None:
         _stream = BleReplStream()
     if os is None or not hasattr(os, "dupterm"):
@@ -196,6 +282,7 @@ def attach(ble, tx_handle, get_conn):
 
 def detach():
     global _slot
+    _tx_clear()
     if os is None:
         _slot = None
         return

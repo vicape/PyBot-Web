@@ -55,9 +55,10 @@ test("pybot_repl IRQ path has no filesystem/import/sleep/json", () => {
   assert.doesNotMatch(irq, /import /);
 });
 
-/** Replica del ring/readinto/write de pybot_repl.BleReplStream (contrato dupterm). */
+/** Replica del ring/readinto + FIFO TX async de pybot_repl.BleReplStream. */
 function makeReplStream(opts = {}) {
   const RING = 512;
+  const TX_RING = opts.txRing ?? 2048;
   const TX_CHUNK = 20;
   const TX_RETRY_MAX = opts.txRetryMax ?? 200;
   const rx = new Uint8Array(RING);
@@ -65,12 +66,15 @@ function makeReplStream(opts = {}) {
   let t = 0;
   let n = 0;
   let overflow = 0;
+  let txOverflow = 0;
   let notifyFail = 0;
   let notifyRetries = 0;
   let ble = opts.ble ?? {};
   let conn = opts.conn !== undefined ? opts.conn : 1;
   const getConn = opts.getConn ?? (() => conn);
   const sent = [];
+  const txQueue = [];
+  let notifyFn = () => {};
 
   function ringPut(data) {
     for (const c of data) {
@@ -92,6 +96,54 @@ function makeReplStream(opts = {}) {
     }
     return take;
   }
+  function txPut(data) {
+    if (data.length > TX_RING || txQueue.length + data.length > TX_RING) {
+      txOverflow += 1;
+      throw new Error("BLE TX queue full");
+    }
+    for (const b of data) txQueue.push(b);
+  }
+  function drain() {
+    if (ble == null || getConn() == null) {
+      if (txQueue.length > 0) notifyFail += 1;
+      txQueue.length = 0;
+      return;
+    }
+    while (txQueue.length > 0) {
+      if (getConn() == null) {
+        notifyFail += 1;
+        txQueue.length = 0;
+        return;
+      }
+      const pieceLen = Math.min(TX_CHUNK, txQueue.length);
+      const piece = txQueue.slice(0, pieceLen);
+      let retries = 0;
+      while (true) {
+        try {
+          notifyFn(new Uint8Array(piece));
+          sent.push(...piece);
+          txQueue.splice(0, pieceLen);
+          break;
+        } catch {
+          if (getConn() == null) {
+            notifyFail += 1;
+            txQueue.length = 0;
+            return;
+          }
+          retries += 1;
+          if (retries > TX_RETRY_MAX) {
+            notifyRetries += 1;
+            return;
+          }
+          notifyRetries += 1;
+        }
+      }
+    }
+  }
+  function scheduleDrain() {
+    if (txQueue.length === 0) return;
+    drain();
+  }
   return {
     irqPut(data) {
       ringPut(data);
@@ -101,32 +153,14 @@ function makeReplStream(opts = {}) {
       return ringGetInto(buf);
     },
     write(data, notify) {
-      if (getConn() == null || ble == null) return 0;
-      let i = 0;
-      while (i < data.length) {
-        const piece = data.subarray(i, i + TX_CHUNK);
-        let retries = 0;
-        while (true) {
-          try {
-            notify(piece);
-            break;
-          } catch (e) {
-            if (getConn() == null) {
-              notifyFail += 1;
-              throw new Error("BLE TX disconnected");
-            }
-            retries += 1;
-            if (retries > TX_RETRY_MAX) {
-              notifyFail += 1;
-              throw new Error("BLE TX failed");
-            }
-            notifyRetries += 1;
-          }
-        }
-        sent.push(...piece);
-        i += piece.length;
-      }
+      notifyFn = notify ?? (() => {});
+      if (ble == null || getConn() == null) return 0;
+      txPut(data);
+      scheduleDrain();
       return data.length;
+    },
+    flushDrain() {
+      drain();
     },
     setConn(value) {
       conn = value;
@@ -135,12 +169,13 @@ function makeReplStream(opts = {}) {
       ble = value;
     },
     stats() {
-      return { overflow, notifyFail, notifyRetries };
+      return { overflow, txOverflow, notifyFail, notifyRetries, txPending: txQueue.length };
     },
     sentBytes: () => [...sent],
     clearSent() {
       sent.length = 0;
     },
+    txPending: () => txQueue.length,
   };
 }
 
@@ -172,10 +207,36 @@ test("S: RX overflow is counted, not silenced", () => {
   assert.ok(s.stats().overflow > 0);
 });
 
-test("T: pybot_repl TX has no _TX_BURST partial-write limit", () => {
+test("T: write() buffers only; no sleep or gatts_notify in write()", () => {
   const src = readFw("pybot_repl.py");
-  assert.doesNotMatch(src, /_TX_BURST/);
-  assert.match(src, /return n\s*$/m);
+  const writeFn = src.slice(src.indexOf("def write"), src.indexOf("def ioctl"));
+  assert.doesNotMatch(writeFn, /sleep/);
+  assert.doesNotMatch(writeFn, /gatts_notify/);
+  assert.match(writeFn, /_tx_put\(/);
+  assert.match(writeFn, /_schedule_drain\(/);
+  assert.match(src, /def _drain_tx\(/);
+  assert.match(src, /gatts_notify/);
+});
+
+test("T: TX FIFO is bounded with explicit overflow handling", () => {
+  const src = readFw("pybot_repl.py");
+  assert.match(src, /_TX_RING = const\(2048\)/);
+  assert.match(src, /BLE TX queue full/);
+  assert.match(src, /_tx_overflow \+= 1/);
+  const s = makeReplStream({ txRing: 64, txRetryMax: 0 });
+  const ok = new Uint8Array(32);
+  ok.fill(0x41);
+  let hold = true;
+  s.write(ok, () => {
+    if (hold) throw new Error("hold drain");
+  });
+  assert.equal(s.txPending(), 32);
+  const big = new Uint8Array(40);
+  big.fill(0x42);
+  assert.throws(() => s.write(big, () => {}), /BLE TX queue full/);
+  assert.ok(s.stats().txOverflow > 0);
+  hold = false;
+  s.flushDrain();
 });
 
 test("T: 45-byte TX sends all bytes in order and returns 45", () => {
@@ -192,6 +253,7 @@ test("T: 45-byte TX sends all bytes in order and returns 45", () => {
   assert.equal(chunks[1].length, 20);
   assert.equal(chunks[2].length, 5);
   assert.deepEqual(s.sentBytes(), [...payload]);
+  assert.equal(s.txPending(), 0);
 });
 
 test("T: >160-byte TX sends full payload (no burst cap)", () => {
@@ -204,6 +266,16 @@ test("T: >160-byte TX sends full payload (no burst cap)", () => {
   const ret = s.write(payload, () => {});
   assert.equal(ret, 400);
   assert.deepEqual(s.sentBytes(), [...payload]);
+});
+
+test("T: >1000-byte TX completes in order via async drain", () => {
+  const s = makeReplStream();
+  const payload = new Uint8Array(1200);
+  for (let i = 0; i < payload.length; i++) payload[i] = 0x30 + (i % 10);
+  const ret = s.write(payload, () => {});
+  assert.equal(ret, payload.length);
+  assert.deepEqual(s.sentBytes(), [...payload]);
+  assert.equal(s.txPending(), 0);
 });
 
 test("T: transient gatts_notify fail then recover sends all bytes", () => {
@@ -224,20 +296,25 @@ test("T: transient gatts_notify fail then recover sends all bytes", () => {
   assert.deepEqual(s.sentBytes(), [...payload]);
 });
 
-test("T: permanent notify fail raises, no partial or false success", () => {
-  const src = readFw("pybot_repl.py");
-  assert.match(src, /raise OSError\("BLE TX failed"\)/);
+test("T: drain retries on persistent backpressure without losing queued bytes", () => {
   const s = makeReplStream({ txRetryMax: 2 });
   const payload = new Uint8Array(45);
   payload.fill(0x41);
-  assert.throws(
-    () =>
-      s.write(payload, () => {
-        throw new Error("notify dead");
-      }),
-    /BLE TX failed/,
-  );
-  assert.equal(s.stats().notifyFail, 1);
+  let fail = true;
+  let calls = 0;
+  s.write(payload, () => {
+    calls += 1;
+    if (fail) throw new Error("notify dead");
+  });
+  assert.equal(calls, 3);
+  assert.equal(s.stats().notifyRetries, 3);
+  assert.equal(s.stats().notifyFail, 0);
+  assert.equal(s.sentBytes().length, 0);
+  assert.equal(s.txPending(), 45);
+  fail = false;
+  s.flushDrain();
+  assert.deepEqual(s.sentBytes(), [...payload]);
+  assert.equal(s.txPending(), 0);
 });
 
 test("T: no connection returns 0, not false success", () => {
@@ -246,22 +323,27 @@ test("T: no connection returns 0, not false success", () => {
   const s = makeReplStream({ conn: null });
   const payload = new Uint8Array(10);
   assert.equal(s.write(payload, () => {}), 0);
-  const s2 = makeReplStream();
-  assert.throws(
-    () =>
-      s2.write(payload, () => {
-        s2.setConn(null);
-        throw new Error("notify fail");
-      }),
-    /BLE TX disconnected/,
-  );
+  assert.equal(s.sentBytes().length, 0);
+  const s2 = makeReplStream({ txRetryMax: 0 });
+  const queued = new Uint8Array(45);
+  queued.fill(0x41);
+  let hold = true;
+  s2.write(queued, () => {
+    if (hold) throw new Error("hold drain");
+  });
+  assert.equal(s2.txPending(), 45);
+  s2.setConn(null);
+  s2.flushDrain();
+  assert.equal(s2.stats().notifyFail, 1);
+  assert.equal(s2.txPending(), 0);
+  assert.equal(s2.sentBytes().length, 0);
 });
 
 test("T: raw REPL byte sequence preserves order including both Ctrl+D", () => {
   const s = makeReplStream();
   const tb = new TextEncoder().encode("Traceback...KeyboardInterrupt...");
   const seq = new Uint8Array(1 + 1 + tb.length + 1);
-  seq[0] = 0x6f; // 'o' stdout
+  seq[0] = 0x6f;
   seq[1] = 0x04;
   seq.set(tb, 2);
   seq[seq.length - 1] = 0x04;
@@ -300,6 +382,18 @@ test("T: ABCD 100x100 payload completes without truncation", () => {
   assert.equal(payload[payload.length - 1], "D".charCodeAt(0));
 });
 
+test("T: multiple consecutive prints drain fully without cross-talk", () => {
+  const s = makeReplStream();
+  const a = new TextEncoder().encode("line1\n");
+  const b = new TextEncoder().encode("line2\n");
+  const c = new TextEncoder().encode("line3\n");
+  assert.equal(s.write(a, () => {}), a.length);
+  assert.equal(s.write(b, () => {}), b.length);
+  assert.equal(s.write(c, () => {}), c.length);
+  assert.deepEqual(s.sentBytes(), [...a, ...b, ...c]);
+  assert.equal(s.txPending(), 0);
+});
+
 test("native main returns to REPL; legacy loop is opt-in", () => {
   const ble = readFw("pybot_ble.py");
   assert.match(ble, /pybot_legacy\.on/);
@@ -315,6 +409,7 @@ test("pybot_repl.attach reports real dupterm success or raises", () => {
   assert.match(attach, /dupterm\(_stream, 0\)/);
   assert.doesNotMatch(attach, /dupterm\(_stream, 1\)/);
   assert.match(attach, /raise /);
+  assert.match(attach, /_tx_clear\(\)/);
 });
 
 test("STOP injects Ctrl+C into the REPL stream", () => {
@@ -328,6 +423,8 @@ test("STOP injects Ctrl+C into the REPL stream", () => {
 test("native firmware does not monkeypatch time.sleep", () => {
   const repl = readFw("pybot_repl.py");
   assert.doesNotMatch(repl, /time\.sleep\s*=/);
+  const writeFn = repl.slice(repl.indexOf("def write"), repl.indexOf("def ioctl"));
+  assert.doesNotMatch(writeFn, /sleep/);
   const ble = readFw("pybot_ble.py");
   assert.doesNotMatch(ble, /time\.sleep\s*=/);
   const net = readFw("pybot_net.py");
