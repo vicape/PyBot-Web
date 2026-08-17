@@ -24,7 +24,7 @@ _POLL_RD = const(1)
 _POLL_WR = const(4)
 _TX_CHUNK = const(20)
 _RING = const(512)
-_TX_BURST = const(8)
+_TX_RETRY_MAX = const(200)
 
 _rx = bytearray(_RING)
 _rx_h = 0
@@ -40,6 +40,7 @@ _rx_bytes = 0
 _tx_bytes = 0
 _rx_overflow = 0
 _notify_fail = 0
+_notify_retries = 0
 _dupterm_notify_count = 0
 
 
@@ -49,6 +50,7 @@ def stats():
         "tx_bytes": _tx_bytes,
         "rx_overflow": _rx_overflow,
         "notify_fail": _notify_fail,
+        "notify_retries": _notify_retries,
         "dupterm_notify_count": _dupterm_notify_count,
         "rx_pending": _rx_n,
         "slot": _slot,
@@ -118,31 +120,47 @@ class BleReplStream(io.IOBase):
         return _ring_get_into(buf)
 
     def write(self, buf):
-        global _tx_bytes, _notify_fail
-        if _ble is None or _get_conn is None:
-            return 0 if buf is None else len(buf)
-        conn = _get_conn()
-        if conn is None:
-            return 0 if buf is None else len(buf)
+        global _tx_bytes, _notify_fail, _notify_retries
         if buf is None:
             return 0
+        if _ble is None or _get_conn is None:
+            return 0
+        conn = _get_conn()
+        if conn is None:
+            return 0
         data = buf if isinstance(buf, (bytes, bytearray)) else bytes(buf)
-        i = 0
         n = len(data)
-        # Si hay RX pendiente (Ctrl+C), ceder pronto para que el VM lea el IRQ.
-        burst = 1 if _rx_n > 0 else _TX_BURST
-        chunks = 0
-        while i < n and chunks < burst:
+        if n == 0:
+            return 0
+        i = 0
+        while i < n:
+            if _rx_n > 0 and _rx[_rx_h] == 0x03:
+                raise KeyboardInterrupt
             piece = data[i : i + _TX_CHUNK]
-            try:
-                _ble.gatts_notify(conn, _tx_handle, piece)
-            except Exception:
-                _notify_fail += 1
-                break
+            retries = 0
+            while True:
+                try:
+                    _ble.gatts_notify(conn, _tx_handle, piece)
+                    break
+                except Exception:
+                    conn = _get_conn()
+                    if conn is None:
+                        _notify_fail += 1
+                        raise OSError("BLE TX disconnected")
+                    retries += 1
+                    if retries > _TX_RETRY_MAX:
+                        _notify_fail += 1
+                        raise OSError("BLE TX failed")
+                    _notify_retries += 1
+                    try:
+                        import time
+
+                        time.sleep_ms(2)
+                    except ImportError:
+                        pass
             i += len(piece)
             _tx_bytes += len(piece)
-            chunks += 1
-        return i
+        return n
 
     def ioctl(self, op, arg):
         if op == _IOCTL_POLL:

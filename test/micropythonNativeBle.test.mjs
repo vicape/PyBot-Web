@@ -56,15 +56,22 @@ test("pybot_repl IRQ path has no filesystem/import/sleep/json", () => {
 });
 
 /** Replica del ring/readinto/write de pybot_repl.BleReplStream (contrato dupterm). */
-function makeReplStream() {
+function makeReplStream(opts = {}) {
   const RING = 512;
   const TX_CHUNK = 20;
+  const TX_RETRY_MAX = opts.txRetryMax ?? 200;
   const rx = new Uint8Array(RING);
   let h = 0;
   let t = 0;
   let n = 0;
   let overflow = 0;
   let notifyFail = 0;
+  let notifyRetries = 0;
+  let ble = opts.ble ?? {};
+  let conn = opts.conn !== undefined ? opts.conn : 1;
+  const getConn = opts.getConn ?? (() => conn);
+  const sent = [];
+
   function ringPut(data) {
     for (const c of data) {
       if (n >= RING) {
@@ -94,21 +101,46 @@ function makeReplStream() {
       return ringGetInto(buf);
     },
     write(data, notify) {
+      if (getConn() == null || ble == null) return 0;
       let i = 0;
       while (i < data.length) {
+        if (n > 0 && rx[h] === 0x03) throw new Error("KeyboardInterrupt");
         const piece = data.subarray(i, i + TX_CHUNK);
-        try {
-          notify(piece);
-        } catch {
-          notifyFail += 1;
-          break;
+        let retries = 0;
+        while (true) {
+          try {
+            notify(piece);
+            break;
+          } catch (e) {
+            if (getConn() == null) {
+              notifyFail += 1;
+              throw new Error("BLE TX disconnected");
+            }
+            retries += 1;
+            if (retries > TX_RETRY_MAX) {
+              notifyFail += 1;
+              throw new Error("BLE TX failed");
+            }
+            notifyRetries += 1;
+          }
         }
+        sent.push(...piece);
         i += piece.length;
       }
-      return i;
+      return data.length;
+    },
+    setConn(value) {
+      conn = value;
+    },
+    setBle(value) {
+      ble = value;
     },
     stats() {
-      return { overflow, notifyFail };
+      return { overflow, notifyFail, notifyRetries };
+    },
+    sentBytes: () => [...sent],
+    clearSent() {
+      sent.length = 0;
     },
   };
 }
@@ -141,19 +173,115 @@ test("S: RX overflow is counted, not silenced", () => {
   assert.ok(s.stats().overflow > 0);
 });
 
-test("T: TX notify failure increments and returns bytes actually sent", () => {
+test("T: pybot_repl TX has no _TX_BURST partial-write limit", () => {
   const src = readFw("pybot_repl.py");
-  assert.match(src, /_notify_fail \+= 1/);
+  assert.doesNotMatch(src, /_TX_BURST/);
+  assert.match(src, /return n\s*$/m);
+});
+
+test("T: 45-byte TX sends all bytes in order and returns 45", () => {
+  const s = makeReplStream();
+  const payload = new Uint8Array(45);
+  payload.fill(0x41);
+  const chunks = [];
+  const ret = s.write(payload, (piece) => {
+    chunks.push([...piece]);
+  });
+  assert.equal(ret, 45);
+  assert.equal(chunks.length, 3);
+  assert.equal(chunks[0].length, 20);
+  assert.equal(chunks[1].length, 20);
+  assert.equal(chunks[2].length, 5);
+  assert.deepEqual(s.sentBytes(), [...payload]);
+});
+
+test("T: >160-byte TX sends full payload (no burst cap)", () => {
+  const s = makeReplStream();
+  const payload = new Uint8Array(400);
+  for (let i = 0; i < 100; i++) payload[i] = 0x41;
+  for (let i = 100; i < 200; i++) payload[i] = 0x42;
+  for (let i = 200; i < 300; i++) payload[i] = 0x43;
+  for (let i = 300; i < 400; i++) payload[i] = 0x44;
+  const ret = s.write(payload, () => {});
+  assert.equal(ret, 400);
+  assert.deepEqual(s.sentBytes(), [...payload]);
+});
+
+test("T: transient gatts_notify fail then recover sends all bytes", () => {
+  const src = readFw("pybot_repl.py");
+  assert.match(src, /_notify_retries \+= 1/);
   const s = makeReplStream();
   const payload = new Uint8Array(45);
   payload.fill(0x41);
   let calls = 0;
-  const sent = s.write(payload, () => {
+  const ret = s.write(payload, () => {
     calls += 1;
-    if (calls === 2) throw new Error("notify fail");
+    if (calls === 2) throw new Error("notify saturated");
   });
-  assert.equal(sent, 20);
+  assert.equal(ret, 45);
+  assert.equal(calls, 4);
+  assert.equal(s.stats().notifyRetries, 1);
+  assert.equal(s.stats().notifyFail, 0);
+  assert.deepEqual(s.sentBytes(), [...payload]);
+});
+
+test("T: permanent notify fail raises, no partial or false success", () => {
+  const src = readFw("pybot_repl.py");
+  assert.match(src, /raise OSError\("BLE TX failed"\)/);
+  const s = makeReplStream({ txRetryMax: 2 });
+  const payload = new Uint8Array(45);
+  payload.fill(0x41);
+  assert.throws(
+    () =>
+      s.write(payload, () => {
+        throw new Error("notify dead");
+      }),
+    /BLE TX failed/,
+  );
   assert.equal(s.stats().notifyFail, 1);
+});
+
+test("T: no connection returns 0, not false success", () => {
+  const src = readFw("pybot_repl.py");
+  assert.match(src, /if _ble is None or _get_conn is None:\s*\n\s*return 0/);
+  const s = makeReplStream({ conn: null });
+  const payload = new Uint8Array(10);
+  assert.equal(s.write(payload, () => {}), 0);
+  const s2 = makeReplStream();
+  assert.throws(
+    () =>
+      s2.write(payload, () => {
+        s2.setConn(null);
+        throw new Error("notify fail");
+      }),
+    /BLE TX disconnected/,
+  );
+});
+
+test("T: raw REPL byte sequence preserves order including both Ctrl+D", () => {
+  const s = makeReplStream();
+  const tb = new TextEncoder().encode("Traceback...KeyboardInterrupt...");
+  const seq = new Uint8Array(1 + 1 + tb.length + 1);
+  seq[0] = 0x6f; // 'o' stdout
+  seq[1] = 0x04;
+  seq.set(tb, 2);
+  seq[seq.length - 1] = 0x04;
+  const sent = [];
+  const ret = s.write(seq, (piece) => {
+    sent.push(...piece);
+  });
+  assert.equal(ret, seq.length);
+  assert.deepEqual(sent, [...seq]);
+});
+
+test("T: ABCD 100x100 payload completes without truncation", () => {
+  const s = makeReplStream();
+  const text = "A".repeat(100) + "B".repeat(100) + "C".repeat(100) + "D".repeat(100);
+  const payload = new TextEncoder().encode(text);
+  const ret = s.write(payload, () => {});
+  assert.equal(ret, payload.length);
+  assert.deepEqual(s.sentBytes(), [...payload]);
+  assert.equal(payload[payload.length - 1], "D".charCodeAt(0));
 });
 
 test("native main returns to REPL; legacy loop is opt-in", () => {
