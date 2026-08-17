@@ -32,14 +32,15 @@ test("Pyodide runner is independent of the MicroPython BLE refactor", () => {
 });
 
 test("native path does not introduce AST checkpoints or sleep monkeypatch in web session", () => {
-  const session = read("src/micropythonEsp32Session.js");
+  const session = read("src/micropython/micropythonSession.js");
+  const proto = read("src/micropython/replProtocol.js");
   assert.doesNotMatch(session, /time\.sleep\s*=/);
   assert.doesNotMatch(session, /acorn|recast|shift-parser/);
-  assert.match(session, /CTRL_C|\\\\x03|\\x03/);
+  assert.match(proto, /BYTE_CTRL_C|0x03/);
 });
 
 test("filesystem helpers stay on MicroPythonSession (USB and BLE share them)", () => {
-  const session = read("src/micropythonEsp32Session.js");
+  const session = read("src/micropython/micropythonSession.js");
   for (const m of ["installFile", "fileExists", "removeFile", "getFileSize", "syncFilesystem"]) {
     assert.match(session, new RegExp("async " + m + "\\("));
   }

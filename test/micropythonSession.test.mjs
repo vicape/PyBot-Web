@@ -1,101 +1,42 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MicroPythonSession } from "../src/micropythonEsp32Session.js";
-import { CTRL_A, CTRL_B, CTRL_C, CTRL_D } from "../src/micropython/constants.js";
+import { BYTE_CTRL_C } from "../src/micropython/constants.js";
+import { FakeMicroPythonTransport } from "./helpers/fakeMicroPython.mjs";
 
-class FakeReplTransport {
-  constructor() {
-    this.port = null;
-    this.baudRate = 115200;
-    this._cbs = new Set();
-    this._enc = new TextEncoder();
-    this._dec = new TextDecoder();
-    this.writes = [];
-    this._busy = false;
-    this._raw = false;
-    this.open = true;
-  }
-
-  isOpen() {
-    return this.open;
-  }
-
-  onData(cb) {
-    this._cbs.add(cb);
-    return () => this._cbs.delete(cb);
-  }
-
-  emit(text) {
-    const bytes = this._enc.encode(text);
-    this._cbs.forEach((cb) => cb(bytes));
-  }
-
-  async write(data) {
-    const s = typeof data === "string" ? data : this._dec.decode(data);
-    this.writes.push(s);
-    if (s.includes("\x05A\x01")) {
-      this.emit("R\x00");
-      return;
-    }
-    if (s.includes(CTRL_C) && this._busy) {
-      this._busy = false;
-      this.emit(CTRL_D + "Traceback (most recent call last):\nKeyboardInterrupt\n" + CTRL_D);
-      return;
-    }
-    if (s.includes(CTRL_A)) {
-      this._raw = true;
-      this.emit("raw REPL; CTRL-B to exit\r\n>");
-      return;
-    }
-    if (s.includes(CTRL_B)) {
-      this._raw = false;
-      this.emit("\r\n>>> ");
-      return;
-    }
-    if (this._raw && s.includes(CTRL_D)) {
-      const body = (this._lastProgram || "") + s.replaceAll(CTRL_D, "");
-      this._lastProgram = "";
-      if (/while\s+True\s*:/.test(body) && /\bpass\b/.test(body)) {
-        this._busy = true;
-        this.emit("OK\n");
-        return;
-      }
-      this.emit("OK\n");
-      const m = body.match(/print\((['"])(.*?)\1\)/);
-      if (m) this.emit(m[2] + "\n");
-      else if (body.includes("PYBOT_FILE_EXISTS") || body.includes("os.stat")) {
-        this.emit("PYBOT_FILE_EXISTS\n");
-      } else if (body.includes("PYBOT_INSTALL_OK")) {
-        this.emit("PYBOT_INSTALL_OK\n");
-      } else if (body.includes("PYBOT_SYNC_OK")) {
-        this.emit("PYBOT_SYNC_OK\n");
-      } else {
-        this.emit("ok\n");
-      }
-      this.emit(CTRL_D + CTRL_D);
-      return;
-    }
-    if (this._raw && s.length > 2 && !s.includes(CTRL_A) && !s.includes(CTRL_C)) {
-      this._lastProgram = (this._lastProgram || "") + s;
-    }
-  }
-
-  async close() {
-    this.open = false;
-  }
+function sessionOf(opts) {
+  return new MicroPythonSession(new FakeMicroPythonTransport(opts), 115200);
 }
 
-function sessionOf() {
-  return new MicroPythonSession(new FakeReplTransport(), 115200);
+function countCtrlC(writes) {
+  let n = 0;
+  for (const w of writes) {
+    for (const b of w) if (b === BYTE_CTRL_C) n += 1;
+  }
+  return n;
 }
 
-test("detect() finds a MicroPython raw REPL", async () => {
+test("detect() finds a MicroPython raw REPL banner", async () => {
   const s = sessionOf();
   assert.equal(await s.detect(), true);
   await s.close();
 });
 
-test("runProgram streams stdout and returns after OK / EOT", async () => {
+test("B: print HOLA in the same OK chunk", async () => {
+  const s = sessionOf({ sameChunk: true });
+  await s.detect();
+  let out = "";
+  await s.runProgram('print("HOLA")', {
+    prelude: "",
+    onOut: (c) => {
+      out += c;
+    },
+  });
+  assert.match(out, /HOLA/);
+  await s.close();
+});
+
+test("runProgram streams stdout after exact OK bytes", async () => {
   const s = sessionOf();
   await s.detect();
   let out = "";
@@ -109,8 +50,9 @@ test("runProgram streams stdout and returns after OK / EOT", async () => {
   await s.close();
 });
 
-test("Stop sends Ctrl+C and surfaces KeyboardInterrupt as [Detenido]", async () => {
-  const s = sessionOf();
+test("M: while True pass → Stop → un Ctrl+C durante exec → interrupted", async () => {
+  const board = new FakeMicroPythonTransport();
+  const s = new MicroPythonSession(board, 115200);
   await s.detect();
   let out = "";
   const p = s.runProgram("while True:\n    pass\n", {
@@ -119,44 +61,101 @@ test("Stop sends Ctrl+C and surfaces KeyboardInterrupt as [Detenido]", async () 
       out += c;
     },
   });
-  await new Promise((r) => setTimeout(r, 30));
+  await new Promise((r) => setTimeout(r, 20));
+  const before = board.ctrlCDuringExec;
   await s.interrupt();
-  await p;
+  const result = await p;
+  assert.equal(board.ctrlCDuringExec, before + 1);
+  assert.equal(result.interrupted, true);
   assert.match(out, /Detenido/);
   await s.close();
 });
 
-async function runStopCycles(n) {
+test("N: CPU-bound loop Stop is interrupted, not an error", async () => {
   const s = sessionOf();
   await s.detect();
-  for (let i = 0; i < n; i++) {
+  let err = "";
+  const p = s.runProgram("i = 0\nwhile True:\n    i += 1\n", {
+    prelude: "",
+    onErr: (c) => {
+      err += c;
+    },
+    onOut: () => {},
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  await s.interrupt();
+  const result = await p;
+  assert.equal(result.interrupted, true);
+  assert.equal(err.includes("Traceback"), false);
+  await s.close();
+});
+
+test("O: print loop Stop without STOP:FORCE", async () => {
+  const board = new FakeMicroPythonTransport();
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  const p = s.runProgram("i = 0\nwhile True:\n    print(i)\n    i += 1\n", {
+    prelude: "",
+    onOut: () => {},
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  await s.interrupt();
+  await p;
+  assert.equal(board.forceStopSeen, false);
+  await s.close();
+});
+
+test("P: Run → Stop → Run", async () => {
+  const s = sessionOf();
+  await s.detect();
+  const p1 = s.runProgram("while True:\n    pass\n", { prelude: "", onOut: () => {} });
+  await new Promise((r) => setTimeout(r, 15));
+  await s.interrupt();
+  await p1;
+  let out2 = "";
+  await s.runProgram('print("second")\n', {
+    prelude: "",
+    onOut: (c) => {
+      out2 += c;
+    },
+  });
+  assert.match(out2, /second/);
+  await s.close();
+});
+
+test("Q: 20 real while True pass Run/Stop cycles", { timeout: 30000 }, async () => {
+  const board = new FakeMicroPythonTransport();
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  for (let i = 0; i < 20; i++) {
     let out = "";
-    const p = s.runProgram('print("c")\n', {
+    const p = s.runProgram("while True:\n    pass\n", {
       prelude: "",
       onOut: (c) => {
         out += c;
       },
     });
-    await p;
-    assert.match(out, /c|ok/);
+    await new Promise((r) => setTimeout(r, 10));
+    await s.interrupt();
+    const result = await p;
+    assert.equal(result.interrupted, true, "cycle " + i);
+    assert.match(out, /Detenido/, "cycle " + i);
   }
   await s.close();
-}
-
-test("Run/Stop 20 cycles on fake REPL", { timeout: 30000 }, async () => {
-  await runStopCycles(20);
-});
-
-test("Run/Stop 50 cycles on fake REPL", { timeout: 60000 }, async () => {
-  await runStopCycles(50);
-});
-
-test("Run/Stop 100 cycles on fake REPL", { timeout: 120000 }, async () => {
-  await runStopCycles(100);
 });
 
 test("fileExists uses raw REPL markers", async () => {
   const s = sessionOf();
   assert.equal(await s.fileExists("main.py"), true);
+  await s.close();
+});
+
+test("wrap includes _pybot_cleanup in the program sent to the board", async () => {
+  const board = new FakeMicroPythonTransport();
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  await s.runProgram('print("x")', { prelude: "", onOut: () => {} });
+  const sent = board.writes.map((w) => new TextDecoder().decode(w)).join("");
+  assert.match(sent, /_pybot_cleanup/);
   await s.close();
 });

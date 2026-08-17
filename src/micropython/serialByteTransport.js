@@ -3,14 +3,7 @@
  * No conoce GPIO, EDA6, Wi-Fi ni el programa del alumno.
  */
 
-import {
-  SERIAL_WRITE_CHUNK,
-  SERIAL_WRITE_PACE_MS,
-} from "./constants.js";
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+import { SERIAL_WRITE_CHUNK } from "./constants.js";
 
 export class SerialByteTransport {
   /**
@@ -25,9 +18,9 @@ export class SerialByteTransport {
     this.reader = reader;
     this.baudRate = baudRate;
     this._enc = new TextEncoder();
-    this._dec = new TextDecoder();
     this._cbs = new Set();
     this._running = true;
+    this._writeTail = Promise.resolve();
     this._readPromise = this._readLoop();
   }
 
@@ -42,15 +35,25 @@ export class SerialByteTransport {
   }
 
   async write(data) {
+    const run = this._writeTail.then(() => this._writeNow(data));
+    this._writeTail = run.then(
+      () => {},
+      () => {},
+    );
+    return run;
+  }
+
+  async _writeNow(data) {
     if (!this._running || !this.writer) throw new Error("closed");
     const bytes =
-      typeof data === "string" ? this._enc.encode(data) : data instanceof Uint8Array
-        ? data
-        : new Uint8Array(data);
+      typeof data === "string"
+        ? this._enc.encode(data)
+        : data instanceof Uint8Array
+          ? data
+          : new Uint8Array(data);
     const CH = SERIAL_WRITE_CHUNK;
     for (let i = 0; i < bytes.length; i += CH) {
       await this.writer.write(bytes.slice(i, i + CH));
-      if (bytes.length > CH) await sleep(SERIAL_WRITE_PACE_MS);
     }
   }
 
@@ -65,7 +68,7 @@ export class SerialByteTransport {
             try {
               cb(chunk);
             } catch {
-              /* ignore */
+              /* listener errors must not stop the read loop */
             }
           });
         }
