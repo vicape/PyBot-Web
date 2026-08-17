@@ -1,10 +1,9 @@
 /**
  * Fuente del PyBot BLE Runtime (MicroPython) para instalar en la placa.
  *
- * Runtime 3.2.x: layout modular. Al boot solo se cargan `boot.py` (mínimo) +
+ * Runtime 4.0.0: layout modular. Al boot solo se cargan `boot.py` (mínimo) +
  * `main.py` (stub) + `pybot_ble.py` (núcleo BLE/PING/INFO). RUN/DEPLOY/APP/UPDATE
- * viven en módulos aparte con import perezoso; desde 3.2.1+ `pybot_run` se precarga
- * tras advertising (fuera del IRQ). El OTA envía un pack multi-archivo
+ * viven en módulos aparte con import perezoso. El OTA envía un pack multi-archivo
  * (`PYBOTRT1`) que `pybot_boot_update.apply()` instala de forma transaccional.
  */
 
@@ -24,7 +23,7 @@ import { PYBOT_RUNTIME_VERSION, PYBOT_PROTOCOL_VERSION, sha256Hex } from "./bleP
 export const BLE_RUNTIME_FILENAME = "main.py";
 
 /**
- * Se instala como boot.py: MicroPython lo ejecuta ANTES de main.py. En 3.2+ es
+ * Se instala como boot.py: MicroPython lo ejecuta ANTES de main.py. En 4.0.0 es
  * un chequeo mínimo; el apply/rollback vive en pybot_boot_update.py (lazy).
  */
 export const BLE_BOOT_FILENAME = "boot.py";

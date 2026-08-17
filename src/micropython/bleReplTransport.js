@@ -1,13 +1,11 @@
 /**
- * Transporte BLE REPL: bytes crudos hacia las características REPL_RX / REPL_TX.
- * No mezcla framing administrativo (PING/INFO/OTA) con el stream REPL.
+ * Transporte BLE REPL: ByteTransport (write / onData / close / isOpen).
+ * No interpreta raw REPL. Cola de escritura: un solo write a la vez sobre REPL_RX.
  */
 
 import { REPL_RX_UUID, REPL_TX_UUID } from "../bleProtocol.js";
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+import { BLE_REPL_CHUNK } from "./constants.js";
+import { protocolError, PROTOCOL_ERROR } from "./errors.js";
 
 export class BleReplTransport {
   /**
@@ -20,13 +18,15 @@ export class BleReplTransport {
     this._cbs = new Set();
     this._off = null;
     this._enc = new TextEncoder();
+    this._writeTail = Promise.resolve();
     if (typeof bluetooth.onReplData === "function") {
       this._off = bluetooth.onReplData((bytes) => {
+        const chunk = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
         this._cbs.forEach((cb) => {
           try {
-            cb(bytes);
+            cb(chunk);
           } catch {
-            /* ignore */
+            /* listener errors must not break notify dispatch */
           }
         });
       });
@@ -48,16 +48,32 @@ export class BleReplTransport {
   }
 
   async write(data) {
-    if (!this.isOpen()) throw new Error("BLE_REPL_NOT_CONNECTED");
-    const bytes =
-      typeof data === "string" ? this._enc.encode(data) : data instanceof Uint8Array
-        ? data
-        : new Uint8Array(data);
-    if (typeof this._bt.writeRepl === "function") {
-      await this._bt.writeRepl(bytes);
-      return;
+    const run = this._writeTail.then(() => this._writeNow(data));
+    this._writeTail = run.then(
+      () => {},
+      () => {},
+    );
+    return run;
+  }
+
+  async _writeNow(data) {
+    if (!this.isOpen()) {
+      throw protocolError(PROTOCOL_ERROR.BLE_REPL_NOT_CONNECTED);
     }
-    throw new Error("BLE_REPL_UNSUPPORTED");
+    const bytes =
+      typeof data === "string"
+        ? this._enc.encode(data)
+        : data instanceof Uint8Array
+          ? data
+          : new Uint8Array(data);
+    if (typeof this._bt.writeRepl !== "function") {
+      throw protocolError(PROTOCOL_ERROR.BLE_REPL_TX_FAIL, { detail: "unsupported" });
+    }
+    try {
+      await this._bt.writeRepl(bytes, BLE_REPL_CHUNK);
+    } catch (e) {
+      throw protocolError(PROTOCOL_ERROR.BLE_REPL_TX_FAIL, { cause: e });
+    }
   }
 
   async close() {
@@ -65,7 +81,7 @@ export class BleReplTransport {
       try {
         this._off();
       } catch {
-        /* ignore */
+        /* unsubscribe best-effort */
       }
       this._off = null;
     }

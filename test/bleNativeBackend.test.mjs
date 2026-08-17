@@ -5,12 +5,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MicroPythonSession } from "../src/micropythonEsp32Session.js";
 import { BleReplTransport } from "../src/micropython/bleReplTransport.js";
-import { CTRL_A, CTRL_B, CTRL_C, CTRL_D } from "../src/micropython/constants.js";
+import { BYTE_CTRL_C } from "../src/micropython/constants.js";
 import {
   BLE_BACKEND,
   planBleExecutionBackend,
   formatBleBackendDiagnosis,
 } from "../src/micropython/bleBackend.js";
+import {
+  FakeMicroPythonTransport,
+  bluetoothFromTransport,
+} from "./helpers/fakeMicroPython.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC = join(__dirname, "..", "src");
@@ -20,125 +24,16 @@ function readSrc(name) {
 }
 
 /**
- * Placa REPL falsa: USB y BLE son el mismo raw REPL.
- * Cualquier `while True` queda busy hasta Ctrl+C → KeyboardInterrupt.
+ * Placa REPL falsa: USB y BLE son el mismo raw REPL byte-oriented.
  */
-class FakeReplBoard {
-  constructor() {
-    this._cbs = new Set();
-    this._enc = new TextEncoder();
-    this._dec = new TextDecoder();
-    this.writes = [];
-    this._busy = false;
-    this._raw = false;
-    this._lastProgram = "";
-    this.open = true;
-    this.forceStopSeen = false;
-  }
-
-  isOpen() {
-    return this.open;
-  }
-
-  onData(cb) {
-    this._cbs.add(cb);
-    return () => this._cbs.delete(cb);
-  }
-
-  emit(text) {
-    const bytes = this._enc.encode(text);
-    this._cbs.forEach((cb) => cb(bytes));
-  }
-
-  _isInfinite(body) {
-    return /while\s+True\s*:/.test(body) || /for\s+\w+\s+in\s+range\s*\(\s*10\s*\*\*\s*9/.test(body);
-  }
-
-  async write(data) {
-    const s = typeof data === "string" ? data : this._dec.decode(data);
-    this.writes.push(s);
-    if (s.includes("STOP:FORCE")) this.forceStopSeen = true;
-    if (s.includes("\x05A\x01")) {
-      this.emit("R\x00");
-      return;
-    }
-    if (s.includes(CTRL_C) && this._busy) {
-      this._busy = false;
-      this.emit(CTRL_D + "Traceback (most recent call last):\nKeyboardInterrupt\n" + CTRL_D);
-      return;
-    }
-    if (s.includes(CTRL_A)) {
-      this._raw = true;
-      this.emit("raw REPL; CTRL-B to exit\r\n>");
-      return;
-    }
-    if (s.includes(CTRL_B)) {
-      this._raw = false;
-      this.emit("\r\n>>> ");
-      return;
-    }
-    if (this._raw && s.includes(CTRL_D)) {
-      const body = (this._lastProgram || "") + s.replaceAll(CTRL_D, "");
-      this._lastProgram = "";
-      if (this._isInfinite(body)) {
-        this._busy = true;
-        this.emit("OK\n");
-        if (/print\s*\(/.test(body)) {
-          this.emit("1\n");
-        }
-        return;
-      }
-      this.emit("OK\n");
-      const m = body.match(/print\((['"])(.*?)\1\)/);
-      if (m) this.emit(m[2] + "\n");
-      else this.emit("ok\n");
-      this.emit(CTRL_D + CTRL_D);
-      return;
-    }
-    if (this._raw && s.length > 2 && !s.includes(CTRL_A) && !s.includes(CTRL_C)) {
-      this._lastProgram = (this._lastProgram || "") + s;
-    }
-  }
-
-  async close() {
-    this.open = false;
-  }
-}
-
-function bluetoothFromBoard(board) {
-  const replCbs = new Set();
-  const origEmit = board.emit.bind(board);
-  board.emit = (text) => {
-    origEmit(text);
-    const bytes = new TextEncoder().encode(typeof text === "string" ? text : "");
-    replCbs.forEach((cb) => {
-      try {
-        cb(bytes);
-      } catch {
-        /* ignore */
-      }
-    });
-  };
-  return {
-    isConnected: () => board.isOpen(),
-    hasRepl: () => true,
-    onReplData(cb) {
-      if (typeof cb === "function") replCbs.add(cb);
-      return () => replCbs.delete(cb);
-    },
-    async writeRepl(data) {
-      await board.write(data);
-    },
-  };
-}
-
 function nativeSession() {
-  const board = new FakeReplBoard();
-  const bt = bluetoothFromBoard(board);
+  const board = new FakeMicroPythonTransport();
+  const bt = bluetoothFromTransport(board);
   const transport = new BleReplTransport(bt);
   const session = new MicroPythonSession(transport, 115200);
   return { board, session };
 }
+
 
 const NATIVE_INFO = {
   firmware: "4.0.0",
@@ -257,7 +152,7 @@ test("A: while True: pass → Stop → Ctrl+C → KeyboardInterrupt → stopped"
   await p;
   assert.match(out, /Detenido/);
   assert.equal(board.forceStopSeen, false);
-  assert.ok(board.writes.some((w) => w.includes(CTRL_C)));
+  assert.ok(board.writes.some((w) => [...w].includes(BYTE_CTRL_C)));
   await session.close();
 });
 
@@ -341,6 +236,27 @@ test("E: 20 cycles Run infinite → Stop → Run → Stop", { timeout: 30000 }, 
   }
   assert.equal(board.forceStopSeen, false);
   await session.close();
+});
+
+test("R: handshake failure is backend NONE, never legacy", () => {
+  const plan = planBleExecutionBackend({
+    nativeFlagEnabled: true,
+    info: NATIVE_INFO,
+    hasReplChars: true,
+    notifications: true,
+    handshakeOk: false,
+    handshakeError: "BLE_REPL_HANDSHAKE_FAIL",
+  });
+  assert.equal(plan.diag.backend, null);
+  assert.equal(plan.createBleRunSession, false);
+  assert.equal(plan.createMicroPythonSession, false);
+});
+
+test("T: BLE transport write failure is BLE_REPL_TX_FAIL", async () => {
+  const board = new FakeMicroPythonTransport({ txFail: true });
+  const bt = bluetoothFromTransport(board);
+  const transport = new BleReplTransport(bt);
+  await assert.rejects(() => transport.write(new Uint8Array([0x03])), /BLE_REPL_TX_FAIL/);
 });
 
 test("hardwareBridge never constructs BleRunSession inside native failure", () => {

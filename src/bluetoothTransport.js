@@ -55,6 +55,7 @@ export class BluetoothTransport {
     this._replTxChar = null; // NOTIFY (ESP32 -> Web REPL)
     this._replNotifyOk = false;
     this._replBindError = null;
+    this._replWriteTail = Promise.resolve();
     this._state = BLE_STATE.IDLE;
     this._rxBuffer = "";
     this._dataCallbacks = new Set();
@@ -207,32 +208,40 @@ export class BluetoothTransport {
 
   /**
    * Escribe bytes crudos en REPL_RX (sin delimitador ADMIN).
+   * Serializa writes concurrentes. Prefiere writeValue (ACK GATT); no asume
+   * que writeValueWithoutResponse equivale a entrega.
    * @param {Uint8Array|string} data
    * @param {number} [chunkBytes]
-   * @param {number} [paceMs]
    */
-  async writeRepl(data, chunkBytes = 20, paceMs = 4) {
+  async writeRepl(data, chunkBytes = 20) {
+    const run = this._replWriteTail.then(() => this._writeReplNow(data, chunkBytes));
+    this._replWriteTail = run.then(
+      () => {},
+      () => {},
+    );
+    return run;
+  }
+
+  async _writeReplNow(data, chunkBytes = 20) {
     if (!this.isConnected() || !this._replRxChar) {
       throw new Error("BLE_REPL_NOT_CONNECTED");
     }
     const bytes =
-      typeof data === "string" ? this._enc.encode(data) : data instanceof Uint8Array
-        ? data
-        : new Uint8Array(data);
+      typeof data === "string"
+        ? this._enc.encode(data)
+        : data instanceof Uint8Array
+          ? data
+          : new Uint8Array(data);
     const size = chunkBytes > 0 ? chunkBytes : 20;
-    const hasNoResponse = typeof this._replRxChar.writeValueWithoutResponse === "function";
-    let first = true;
+    const writeChunk =
+      typeof this._replRxChar.writeValue === "function"
+        ? (piece) => this._replRxChar.writeValue(piece)
+        : typeof this._replRxChar.writeValueWithoutResponse === "function"
+          ? (piece) => this._replRxChar.writeValueWithoutResponse(piece)
+          : null;
+    if (!writeChunk) throw new Error("BLE_REPL_TX_FAIL");
     for (let i = 0; i < bytes.length; i += size) {
-      const piece = bytes.slice(i, i + size);
-      if (hasNoResponse) {
-        if (!first && paceMs > 0) {
-          await new Promise((r) => setTimeout(r, paceMs));
-        }
-        await this._replRxChar.writeValueWithoutResponse(piece);
-      } else {
-        await this._replRxChar.writeValue(piece);
-      }
-      first = false;
+      await writeChunk(bytes.slice(i, i + size));
     }
   }
 

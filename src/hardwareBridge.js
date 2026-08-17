@@ -27,6 +27,8 @@ import {
   connectMicroPythonFromTransport,
   MPY_PRELUDE,
 } from "./micropythonEsp32Session.js";
+import { BLE_NATIVE_PRELUDE, BLE_LINK_STATE } from "./micropython/constants.js";
+import { PROTOCOL_ERROR, errorCode } from "./micropython/errors.js";
 import {
   getEda6Profile,
   getEda6LibrarySource,
@@ -531,12 +533,20 @@ export async function prepareEsp32(hooks = {}) {
         return { ...inspection, session };
       } catch (e) {
         const msg = e?.message ?? String(e);
-        if (msg === "BUSY") {
+        const code = e?.code ?? msg;
+        if (msg === "BUSY" || code === "BUSY" || code === PROVISION_ERROR.BUSY) {
           const err = new Error(PROVISION_ERROR.BUSY);
           err.code = PROVISION_ERROR.BUSY;
           throw err;
         }
-        return { boardState: BOARD_STATE.VIRGIN, session: null };
+        if (
+          msg === "NEEDS_PREP" ||
+          code === PROTOCOL_ERROR.RAW_REPL_ENTER_TIMEOUT ||
+          code === PROTOCOL_ERROR.BLE_REPL_HANDSHAKE_FAIL
+        ) {
+          return { boardState: BOARD_STATE.REPL_UNAVAILABLE, session: null };
+        }
+        return { boardState: BOARD_STATE.UNKNOWN, session: null, error: String(code) };
       }
     },
     connectBootloader: (port) =>
@@ -629,15 +639,14 @@ export async function runOnBoard(code, cb = {}) {
       /* ignore */
     }
     if (getBoardType() === "esp32-eda6") {
-      const profile = getEda6Profile();
       const body = prepareUserCodeForExec(code);
       const probe =
         'print("EDA6", PLACA_ACTUAL, "salida 1 -> GPIO", _pins()["digital_outputs"][0])\n';
-      const userCode = probe + "detenerTodo()\n" + wrapEda6UserCodeForRun(body);
-      const prelude = buildEda6RunPrelude(code, profile);
+      const userCode = probe + wrapEda6UserCodeForRun(body);
+      const prelude = BLE_NATIVE_PRELUDE + "from EDA6 import *\n";
       return _bleMpSession.runProgram(userCode, { ...cb, prelude });
     }
-    return _bleMpSession.runProgram(code, cb);
+    return _bleMpSession.runProgram(code, { ...cb, prelude: BLE_NATIVE_PRELUDE });
   }
   if (_bleRun && _bleRun.isConnected()) {
     return runOnBoardBle(code, cb);
@@ -1227,6 +1236,10 @@ async function activateBleExecutionBackend(tr) {
     error: null,
     reason: classified.reason ?? null,
     bindError: replStatus.bindError ?? null,
+    gatt: true,
+    link: hasReplChars && replStatus.notifications !== false
+      ? BLE_LINK_STATE.REPL_TRANSPORT_READY
+      : BLE_LINK_STATE.GATT_CONNECTED,
   };
 
   const apply = (extra) => {
@@ -1286,6 +1299,7 @@ async function activateBleExecutionBackend(tr) {
       handshake: true,
       backend: BLE_BACKEND.NATIVE_REPL,
       error: null,
+      link: BLE_LINK_STATE.RAW_REPL_READY,
     });
   } catch (e) {
     _bleMpSession = null;
@@ -1293,7 +1307,8 @@ async function activateBleExecutionBackend(tr) {
     return apply({
       handshake: false,
       backend: null,
-      error: String(e?.message ?? e ?? "BLE_REPL_HANDSHAKE_FAIL"),
+      error: String(e?.code ?? e?.message ?? e ?? "BLE_REPL_HANDSHAKE_FAIL"),
+      link: BLE_LINK_STATE.REPL_TRANSPORT_READY,
     });
   }
 }
@@ -1305,6 +1320,9 @@ async function activateBleExecutionBackend(tr) {
  */
 export async function bleRunConnect() {
   if (_bleTransport && _bleTransport.isConnected()) {
+    if (isNativeBleEnabled() && !_bleMpSession) {
+      await activateBleExecutionBackend(_bleTransport);
+    }
     return { deviceName: _bleTransport.getDeviceInfo?.().deviceName ?? null };
   }
   const tr = new BluetoothTransport();
@@ -1440,21 +1458,12 @@ export async function installBleRuntime(hooks = {}) {
   onProgress?.({ phase: "start" });
   await _mpSession.interruptAndRecoverRepl();
 
-  // 1) Preludios en la placa: pin/servo/motor/wait (mpy) y librería EDA6.
-  //    Así por BLE solo viaja el código del alumno + modo/perfil (no la librería).
-  //    Se reutiliza el MISMO texto fuente que el flujo serial (única fuente).
+  // EDA6.py no viaja en el pack OTA; se instala una vez por USB.
+  // pybot_mpy.py y pybot_net.py salen SOLO de getBleRuntimeInstallFiles().
   onProgress?.({ phase: "installing-libs" });
-  await _mpSession.installFile(PYBOT_MPY_FILENAME, MPY_PRELUDE);
   await _mpSession.installFile(EDA6_FILENAME, getEda6LibrarySource(getEda6Profile()));
-  try {
-    await _mpSession.installFile("pybot_net.py", getPybotNetSource());
-  } catch {
-    /* best-effort: el pack OTA también incluye pybot_net.py */
-  }
 
-  // 2) Runtime modular 3.2+: boot.py mínimo + main.py stub + pybot_ble (núcleo) +
-  //    módulos lazy (run/deploy/update/boot_update). NO borra pybot_app.* del alumno
-  //    (para sacar un programa zombie usar clearPersistentAppUsb).
+  // Runtime 4.0.0: boot.py + main.py + módulos (ble/repl/mpy/net/run/deploy/update).
   const files = getBleRuntimeInstallFiles();
   const totalBytes = files.reduce((n, f) => n + String(f.source ?? "").length, 0);
   let doneBytes = 0;

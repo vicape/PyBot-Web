@@ -143,6 +143,7 @@ export function formatBleBackendDiagnosis(diag) {
     "dupterm=" + (d.dupterm ? "true" : "false"),
     "handshake=" + (d.handshake ? "ok" : "fail"),
   ];
+  if (d.link) parts.push("link=" + d.link);
   if (d.reason) parts.push("reason=" + d.reason);
   if (d.error) parts.push("error=" + d.error);
   if (d.bindError) parts.push("bind=" + d.bindError);

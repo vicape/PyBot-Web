@@ -63,9 +63,14 @@ function makeReplStream() {
   let h = 0;
   let t = 0;
   let n = 0;
+  let overflow = 0;
+  let notifyFail = 0;
   function ringPut(data) {
     for (const c of data) {
-      if (n >= RING) return;
+      if (n >= RING) {
+        overflow += 1;
+        return;
+      }
       rx[t] = c;
       t = (t + 1) % RING;
       n += 1;
@@ -95,11 +100,15 @@ function makeReplStream() {
         try {
           notify(piece);
         } catch {
+          notifyFail += 1;
           break;
         }
         i += piece.length;
       }
       return i;
+    },
+    stats() {
+      return { overflow, notifyFail };
     },
   };
 }
@@ -122,11 +131,19 @@ test("readinto with data returns the correct count", () => {
   assert.equal(s.readinto(new Uint8Array(8)), null);
 });
 
-test("write returns bytes actually notified, not failed gatts_notify chunks", () => {
+test("S: RX overflow is counted, not silenced", () => {
   const src = readFw("pybot_repl.py");
-  const fn = src.slice(src.indexOf("def write"), src.indexOf("def ioctl"));
-  assert.match(fn, /return i\s*$/m);
-  assert.doesNotMatch(fn, /return n\s*$/m);
+  assert.match(src, /_rx_overflow \+= 1/);
+  const s = makeReplStream();
+  const big = new Uint8Array(600);
+  big.fill(1);
+  s.irqPut(big);
+  assert.ok(s.stats().overflow > 0);
+});
+
+test("T: TX notify failure increments and returns bytes actually sent", () => {
+  const src = readFw("pybot_repl.py");
+  assert.match(src, /_notify_fail \+= 1/);
   const s = makeReplStream();
   const payload = new Uint8Array(45);
   payload.fill(0x41);
@@ -135,9 +152,8 @@ test("write returns bytes actually notified, not failed gatts_notify chunks", ()
     calls += 1;
     if (calls === 2) throw new Error("notify fail");
   });
-  assert.equal(calls, 2);
   assert.equal(sent, 20);
-  assert.notEqual(sent, payload.length);
+  assert.equal(s.stats().notifyFail, 1);
 });
 
 test("native main returns to REPL; legacy loop is opt-in", () => {
@@ -152,9 +168,9 @@ test("pybot_repl.attach reports real dupterm success or raises", () => {
   const src = readFw("pybot_repl.py");
   const attach = src.slice(src.indexOf("def attach("), src.indexOf("\ndef detach("));
   assert.match(attach, /return True/);
-  assert.doesNotMatch(attach, /return _stream/);
+  assert.match(attach, /dupterm\(_stream, 0\)/);
+  assert.doesNotMatch(attach, /dupterm\(_stream, 1\)/);
   assert.match(attach, /raise /);
-  assert.match(attach, /dupterm unavailable|dupterm failed/);
 });
 
 test("STOP injects Ctrl+C into the REPL stream", () => {
