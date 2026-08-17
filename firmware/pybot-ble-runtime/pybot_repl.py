@@ -1,5 +1,8 @@
 # BLE UART stream + os.dupterm: el REPL de MicroPython usa BLE como transporte.
 # IRQ: solo copia bytes al ring y llama dupterm_notify. Sin FS/import/sleep/JSON.
+#
+# Contrato dupterm (docs + extmod/os_dupterm.c): readinto() vacio debe ser None
+# (EAGAIN). 0 es EOF y desactiva el stream ("dupterm: EOF received, deactivating").
 
 import io
 from micropython import const
@@ -85,7 +88,7 @@ class BleReplStream(io.IOBase):
 
     def readinto(self, buf):
         if _rx_n <= 0:
-            return 0
+            return None
         return _ring_get_into(buf)
 
     def write(self, buf):
@@ -106,7 +109,7 @@ class BleReplStream(io.IOBase):
             except Exception:
                 break
             i += len(piece)
-        return n
+        return i
 
     def ioctl(self, op, arg):
         if op == _IOCTL_POLL:

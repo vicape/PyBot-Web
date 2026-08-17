@@ -55,6 +55,91 @@ test("pybot_repl IRQ path has no filesystem/import/sleep/json", () => {
   assert.doesNotMatch(irq, /import /);
 });
 
+/** Replica del ring/readinto/write de pybot_repl.BleReplStream (contrato dupterm). */
+function makeReplStream() {
+  const RING = 512;
+  const TX_CHUNK = 20;
+  const rx = new Uint8Array(RING);
+  let h = 0;
+  let t = 0;
+  let n = 0;
+  function ringPut(data) {
+    for (const c of data) {
+      if (n >= RING) return;
+      rx[t] = c;
+      t = (t + 1) % RING;
+      n += 1;
+    }
+  }
+  function ringGetInto(buf) {
+    let take = buf.length > n ? n : buf.length;
+    for (let i = 0; i < take; i++) {
+      buf[i] = rx[h];
+      h = (h + 1) % RING;
+      n -= 1;
+    }
+    return take;
+  }
+  return {
+    irqPut(data) {
+      ringPut(data);
+    },
+    readinto(buf) {
+      if (n <= 0) return null;
+      return ringGetInto(buf);
+    },
+    write(data, notify) {
+      let i = 0;
+      while (i < data.length) {
+        const piece = data.subarray(i, i + TX_CHUNK);
+        try {
+          notify(piece);
+        } catch {
+          break;
+        }
+        i += piece.length;
+      }
+      return i;
+    },
+  };
+}
+
+test("readinto empty ring returns None, not 0 (dupterm EAGAIN vs EOF)", () => {
+  const src = readFw("pybot_repl.py");
+  const fn = src.slice(src.indexOf("def readinto"), src.indexOf("def write"));
+  assert.match(fn, /if _rx_n <= 0:\s*\n\s*return None/);
+  assert.doesNotMatch(fn, /if _rx_n <= 0:\s*\n\s*return 0/);
+  const s = makeReplStream();
+  assert.equal(s.readinto(new Uint8Array(8)), null);
+});
+
+test("readinto with data returns the correct count", () => {
+  const s = makeReplStream();
+  s.irqPut(new Uint8Array([0x03, 0x03, 0x01]));
+  const buf = new Uint8Array(8);
+  assert.equal(s.readinto(buf), 3);
+  assert.deepEqual(Array.from(buf.subarray(0, 3)), [0x03, 0x03, 0x01]);
+  assert.equal(s.readinto(new Uint8Array(8)), null);
+});
+
+test("write returns bytes actually notified, not failed gatts_notify chunks", () => {
+  const src = readFw("pybot_repl.py");
+  const fn = src.slice(src.indexOf("def write"), src.indexOf("def ioctl"));
+  assert.match(fn, /return i\s*$/m);
+  assert.doesNotMatch(fn, /return n\s*$/m);
+  const s = makeReplStream();
+  const payload = new Uint8Array(45);
+  payload.fill(0x41);
+  let calls = 0;
+  const sent = s.write(payload, () => {
+    calls += 1;
+    if (calls === 2) throw new Error("notify fail");
+  });
+  assert.equal(calls, 2);
+  assert.equal(sent, 20);
+  assert.notEqual(sent, payload.length);
+});
+
 test("native main returns to REPL; legacy loop is opt-in", () => {
   const ble = readFw("pybot_ble.py");
   assert.match(ble, /pybot_legacy\.on/);

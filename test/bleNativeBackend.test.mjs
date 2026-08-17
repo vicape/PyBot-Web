@@ -147,6 +147,19 @@ const NATIVE_INFO = {
   dupterm: true,
 };
 
+test("handshake OK uses only NATIVE_REPL (never BleRunSession)", () => {
+  const plan = planBleExecutionBackend({
+    nativeFlagEnabled: true,
+    info: NATIVE_INFO,
+    hasReplChars: true,
+    notifications: true,
+    handshakeOk: true,
+  });
+  assert.equal(plan.diag.backend, BLE_BACKEND.NATIVE_REPL);
+  assert.equal(plan.createMicroPythonSession, true);
+  assert.equal(plan.createBleRunSession, false);
+});
+
 test("plan: 4.0.0 + native-repl + handshake → MicroPythonSession, never BleRunSession", () => {
   const plan = planBleExecutionBackend({
     nativeFlagEnabled: true,
