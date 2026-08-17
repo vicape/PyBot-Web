@@ -14,11 +14,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IDE = path.join(__dirname, "..", "src", "PyBotIDE.jsx");
 const BRIDGE = path.join(__dirname, "..", "src", "hardwareBridge.js");
 
-test("runtime 4.0.2 / stop-reliable min is 3.2.4", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.2");
+test("runtime 4.0.3 / stop-reliable min is 3.2.4", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.3");
   assert.equal(PYBOT_STOP_RELIABLE_MIN, "3.2.4");
   assert.equal(runtimeStopReliable({ firmware: "3.2.4" }), true);
-  assert.equal(runtimeStopReliable({ firmware: "4.0.2" }), true);
+  assert.equal(runtimeStopReliable({ firmware: "4.0.3" }), true);
   assert.equal(runtimeStopReliable({ firmware: "3.2.3" }), false);
   assert.ok(compareRuntimeVersions("3.2.3", PYBOT_STOP_RELIABLE_MIN) < 0);
 });

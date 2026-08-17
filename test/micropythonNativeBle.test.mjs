@@ -60,7 +60,6 @@ function makeReplStream(opts = {}) {
   const RING = 512;
   const TX_RING = opts.txRing ?? 2048;
   const TX_CHUNK = 20;
-  const TX_RETRY_MAX = opts.txRetryMax ?? 200;
   const rx = new Uint8Array(RING);
   let h = 0;
   let t = 0;
@@ -103,46 +102,38 @@ function makeReplStream(opts = {}) {
     }
     for (const b of data) txQueue.push(b);
   }
-  function drain() {
+  function drainOne() {
     if (ble == null || getConn() == null) {
       if (txQueue.length > 0) notifyFail += 1;
       txQueue.length = 0;
-      return;
+      return false;
     }
-    while (txQueue.length > 0) {
+    if (txQueue.length === 0) return false;
+    if (getConn() == null) {
+      notifyFail += 1;
+      txQueue.length = 0;
+      return false;
+    }
+    const pieceLen = Math.min(TX_CHUNK, txQueue.length);
+    const piece = txQueue.slice(0, pieceLen);
+    try {
+      notifyFn(new Uint8Array(piece));
+      sent.push(...piece);
+      txQueue.splice(0, pieceLen);
+      return true;
+    } catch {
       if (getConn() == null) {
         notifyFail += 1;
         txQueue.length = 0;
-        return;
+        return false;
       }
-      const pieceLen = Math.min(TX_CHUNK, txQueue.length);
-      const piece = txQueue.slice(0, pieceLen);
-      let retries = 0;
-      while (true) {
-        try {
-          notifyFn(new Uint8Array(piece));
-          sent.push(...piece);
-          txQueue.splice(0, pieceLen);
-          break;
-        } catch {
-          if (getConn() == null) {
-            notifyFail += 1;
-            txQueue.length = 0;
-            return;
-          }
-          retries += 1;
-          if (retries > TX_RETRY_MAX) {
-            notifyRetries += 1;
-            return;
-          }
-          notifyRetries += 1;
-        }
-      }
+      notifyRetries += 1;
+      return false;
     }
   }
   function scheduleDrain() {
-    if (txQueue.length === 0) return;
-    drain();
+    let ok = true;
+    while (ok && txQueue.length > 0) ok = drainOne();
   }
   return {
     irqPut(data) {
@@ -160,7 +151,7 @@ function makeReplStream(opts = {}) {
       return data.length;
     },
     flushDrain() {
-      drain();
+      scheduleDrain();
     },
     setConn(value) {
       conn = value;
@@ -223,7 +214,7 @@ test("T: TX FIFO is bounded with explicit overflow handling", () => {
   assert.match(src, /_TX_RING = const\(2048\)/);
   assert.match(src, /BLE TX queue full/);
   assert.match(src, /_tx_overflow \+= 1/);
-  const s = makeReplStream({ txRing: 64, txRetryMax: 0 });
+  const s = makeReplStream({ txRing: 64 });
   const ok = new Uint8Array(32);
   ok.fill(0x41);
   let hold = true;
@@ -278,6 +269,16 @@ test("T: >1000-byte TX completes in order via async drain", () => {
   assert.equal(s.txPending(), 0);
 });
 
+test("T: drain is cooperative (one chunk, no sleep, no retry loop)", () => {
+  const src = readFw("pybot_repl.py");
+  const drainFn = src.slice(src.indexOf("def _drain_tx"), src.indexOf("def irq_put"));
+  assert.doesNotMatch(drainFn, /sleep/);
+  assert.doesNotMatch(drainFn, /_TX_RETRY_MAX/);
+  assert.doesNotMatch(drainFn, /while _tx_n > 0/);
+  assert.match(drainFn, /_tx_consume\(n\)/);
+  assert.match(drainFn, /if _tx_n > 0:\s*\n\s*_schedule_drain\(\)/);
+});
+
 test("T: transient gatts_notify fail then recover sends all bytes", () => {
   const src = readFw("pybot_repl.py");
   assert.match(src, /_notify_retries \+= 1/);
@@ -290,14 +291,17 @@ test("T: transient gatts_notify fail then recover sends all bytes", () => {
     if (calls === 2) throw new Error("notify saturated");
   });
   assert.equal(ret, 45);
-  assert.equal(calls, 4);
+  assert.equal(calls, 2);
   assert.equal(s.stats().notifyRetries, 1);
   assert.equal(s.stats().notifyFail, 0);
+  assert.equal(s.txPending(), 25);
+  s.flushDrain();
+  assert.equal(calls, 4);
   assert.deepEqual(s.sentBytes(), [...payload]);
 });
 
 test("T: drain retries on persistent backpressure without losing queued bytes", () => {
-  const s = makeReplStream({ txRetryMax: 2 });
+  const s = makeReplStream();
   const payload = new Uint8Array(45);
   payload.fill(0x41);
   let fail = true;
@@ -306,8 +310,8 @@ test("T: drain retries on persistent backpressure without losing queued bytes", 
     calls += 1;
     if (fail) throw new Error("notify dead");
   });
-  assert.equal(calls, 3);
-  assert.equal(s.stats().notifyRetries, 3);
+  assert.equal(calls, 1);
+  assert.equal(s.stats().notifyRetries, 1);
   assert.equal(s.stats().notifyFail, 0);
   assert.equal(s.sentBytes().length, 0);
   assert.equal(s.txPending(), 45);
@@ -324,7 +328,7 @@ test("T: no connection returns 0, not false success", () => {
   const payload = new Uint8Array(10);
   assert.equal(s.write(payload, () => {}), 0);
   assert.equal(s.sentBytes().length, 0);
-  const s2 = makeReplStream({ txRetryMax: 0 });
+  const s2 = makeReplStream();
   const queued = new Uint8Array(45);
   queued.fill(0x41);
   let hold = true;
@@ -380,6 +384,39 @@ test("T: ABCD 100x100 payload completes without truncation", () => {
   assert.equal(ret, payload.length);
   assert.deepEqual(s.sentBytes(), [...payload]);
   assert.equal(payload[payload.length - 1], "D".charCodeAt(0));
+});
+
+test("T: ABCD as four consecutive 100-byte writes preserves order", () => {
+  const s = makeReplStream();
+  const blocks = [
+    new TextEncoder().encode("A".repeat(100)),
+    new TextEncoder().encode("B".repeat(100)),
+    new TextEncoder().encode("C".repeat(100)),
+    new TextEncoder().encode("D".repeat(100)),
+  ];
+  const expected = [];
+  for (const block of blocks) {
+    assert.equal(s.write(block, () => {}), block.length);
+    expected.push(...block);
+  }
+  assert.deepEqual(s.sentBytes(), expected);
+  assert.equal(s.txPending(), 0);
+});
+
+test("T: backpressure resends pending chunk exactly once (no dup, no loss)", () => {
+  const s = makeReplStream();
+  const payload = new Uint8Array(20);
+  payload.fill(0x42);
+  let attempts = 0;
+  s.write(payload, () => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("EAGAIN");
+  });
+  assert.equal(s.txPending(), 20);
+  assert.equal(s.sentBytes().length, 0);
+  s.flushDrain();
+  assert.equal(attempts, 2);
+  assert.deepEqual(s.sentBytes(), [...payload]);
 });
 
 test("T: multiple consecutive prints drain fully without cross-talk", () => {

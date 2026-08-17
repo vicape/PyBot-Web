@@ -129,8 +129,8 @@ test("classifyBoard: virgin / mpy only / incomplete / old / ready", () => {
     classifyBoard({
       hasMicroPython: true,
       files: ["pybot_ble.py", "main.py"],
-      runtimeVersion: "4.0.2",
-      publishedVersion: "4.0.2",
+      runtimeVersion: "4.0.3",
+      publishedVersion: "4.0.3",
     }),
     BOARD_STATE.INCOMPLETE,
   );
@@ -139,7 +139,7 @@ test("classifyBoard: virgin / mpy only / incomplete / old / ready", () => {
       hasMicroPython: true,
       files: ["pybot_ble.py", "main.py"],
       runtimeVersion: "3.2.7",
-      publishedVersion: "4.0.2",
+      publishedVersion: "4.0.3",
     }),
     BOARD_STATE.INCOMPLETE,
   );
@@ -148,7 +148,7 @@ test("classifyBoard: virgin / mpy only / incomplete / old / ready", () => {
       hasMicroPython: true,
       files: expectedProvisionFiles(),
       runtimeVersion: "3.2.7",
-      publishedVersion: "4.0.2",
+      publishedVersion: "4.0.3",
     }),
     BOARD_STATE.OLD_PYBOT,
   );
@@ -156,8 +156,8 @@ test("classifyBoard: virgin / mpy only / incomplete / old / ready", () => {
     classifyBoard({
       hasMicroPython: true,
       files: expectedProvisionFiles(),
-      runtimeVersion: "4.0.2",
-      publishedVersion: "4.0.2",
+      runtimeVersion: "4.0.3",
+      publishedVersion: "4.0.3",
     }),
     BOARD_STATE.READY,
   );
@@ -326,7 +326,7 @@ test("already prepared board does not erase", async () => {
         boardState: BOARD_STATE.READY,
         session: { id: "s" },
         files: expectedProvisionFiles(),
-        runtimeVersion: "4.0.2",
+        runtimeVersion: "4.0.3",
       };
     },
   });

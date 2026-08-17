@@ -2,8 +2,9 @@
 # IRQ: solo copia bytes al ring y llama dupterm_notify. Sin FS/import/sleep/JSON/print.
 #
 # TX: write() encola en FIFO acotado y retorna al instante; gatts_notify ocurre en
-# _drain_tx (micropython.schedule), fuera de write(), para no activar KeyboardInterrupt
-# ni desactivar dupterm por excepciones durante sleep/reintentos.
+# _drain_tx (micropython.schedule), fuera de write(), un chunk por invocacion
+# (cooperativo). Ante EAGAIN/ENOMEM/EBUSY se conservan los bytes y se reintenta
+# mas tarde; nunca consume antes de notify exitoso.
 #
 # Contrato dupterm (docs + extmod/os_dupterm.c): readinto() vacio debe ser None
 # (EAGAIN). 0 es EOF y desactiva el stream ("dupterm: EOF received, deactivating").
@@ -29,7 +30,6 @@ _POLL_WR = const(4)
 _TX_CHUNK = const(20)
 _RING = const(512)
 _TX_RING = const(2048)
-_TX_RETRY_MAX = const(200)
 
 _rx = bytearray(_RING)
 _rx_h = 0
@@ -154,42 +154,29 @@ def _schedule_drain():
 def _drain_tx(_arg):
     global _tx_scheduled, _tx_bytes, _notify_fail, _notify_retries
     _tx_scheduled = False
-    if _ble is None or _get_conn is None:
+    if _ble is None or _get_conn is None or _tx_n <= 0:
         return
-    while _tx_n > 0:
+    conn = _get_conn()
+    if conn is None:
+        _notify_fail += 1
+        _tx_clear()
+        return
+    n = _TX_CHUNK if _tx_n > _TX_CHUNK else _tx_n
+    chunk = bytearray(n)
+    _tx_peek_into(chunk)
+    try:
+        _ble.gatts_notify(conn, _tx_handle, chunk)
+    except Exception:
         conn = _get_conn()
         if conn is None:
             _notify_fail += 1
             _tx_clear()
             return
-        n = _TX_CHUNK if _tx_n > _TX_CHUNK else _tx_n
-        chunk = bytearray(n)
-        _tx_peek_into(chunk)
-        retries = 0
-        while True:
-            try:
-                _ble.gatts_notify(conn, _tx_handle, chunk)
-                _tx_consume(n)
-                _tx_bytes += n
-                break
-            except Exception:
-                conn = _get_conn()
-                if conn is None:
-                    _notify_fail += 1
-                    _tx_clear()
-                    return
-                retries += 1
-                if retries > _TX_RETRY_MAX:
-                    _notify_retries += 1
-                    _schedule_drain()
-                    return
-                _notify_retries += 1
-                try:
-                    import time
-
-                    time.sleep_ms(2)
-                except ImportError:
-                    pass
+        _notify_retries += 1
+        _schedule_drain()
+        return
+    _tx_consume(n)
+    _tx_bytes += n
     if _tx_n > 0:
         _schedule_drain()
 
