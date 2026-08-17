@@ -13,7 +13,7 @@ try:
 except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
-PYBOT_RUNTIME_VERSION = "4.0.1"
+PYBOT_RUNTIME_VERSION = "4.0.2"
 PYBOT_PROTOCOL_VERSION = "3.2"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"

@@ -579,6 +579,8 @@ export default function PyBotIDE() {
         appendConsole(t("mpyStateMpyOnly") + "\n", "info");
       } else if (pybotState === BOARD_STATE.OLD_PYBOT) {
         appendConsole(t("mpyStateOldPybot") + "\n", "info");
+      } else if (pybotState === BOARD_STATE.INCOMPLETE) {
+        appendConsole(t("mpyStateIncomplete") + "\n", "info");
       } else if (pybotState === BOARD_STATE.READY) {
         appendConsole(t("mpyStateReady") + "\n", "info");
       }
@@ -1856,7 +1858,8 @@ export default function PyBotIDE() {
                             }}
                             disabled={bleInstalling}
                           >
-                            {pybotBoardState === BOARD_STATE.OLD_PYBOT
+                            {pybotBoardState === BOARD_STATE.OLD_PYBOT ||
+                            pybotBoardState === BOARD_STATE.INCOMPLETE
                               ? t("pybotUpdateBtn")
                               : pybotBoardState === BOARD_STATE.MPY_ONLY
                                 ? t("pybotInstallBtn")

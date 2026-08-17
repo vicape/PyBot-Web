@@ -190,7 +190,7 @@ def _drain_tx(_arg):
                     time.sleep_ms(2)
                 except ImportError:
                     pass
-    if (_tx_n > 0:
+    if _tx_n > 0:
         _schedule_drain()
 
 
@@ -241,7 +241,10 @@ class BleReplStream(io.IOBase):
         n = len(data)
         if n == 0:
             return 0
-        _tx_put(data)
+        try:
+            _tx_put(data)
+        except OSError:
+            return 0
         _schedule_drain()
         return n
 

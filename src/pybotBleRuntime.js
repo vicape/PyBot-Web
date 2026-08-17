@@ -18,6 +18,10 @@ import bleReplRaw from "../firmware/pybot-ble-runtime/pybot_repl.py?raw";
 import bleNetRaw from "../firmware/pybot-ble-runtime/pybot_net.py?raw";
 import bleMpyRaw from "../firmware/pybot-ble-runtime/pybot_mpy.py?raw";
 import { PYBOT_RUNTIME_VERSION, PYBOT_PROTOCOL_VERSION, sha256Hex } from "./bleProtocol.js";
+import {
+  PYBOT_RUNTIME_FILES,
+  PYBOT_RUNTIME_MODULE_FILES,
+} from "./esp32/pybotInstallManifest.js";
 
 /** Se instala como main.py (stub que importa el núcleo). */
 export const BLE_RUNTIME_FILENAME = "main.py";
@@ -34,21 +38,15 @@ export const BLE_RUNTIME_PACK_MAGIC = "PYBOTRT1\n";
 /**
  * Archivos del runtime que viajan en el pack OTA / instalación USB (además de
  * boot.py, que se instala por USB y se mantiene estable).
+ * Fuente de verdad: pybotInstallManifest.js
  */
-export const BLE_RUNTIME_MODULE_FILES = Object.freeze([
-  "main.py",
-  "pybot_ble.py",
-  "pybot_run.py",
-  "pybot_deploy.py",
-  "pybot_update.py",
-  "pybot_boot_update.py",
-  "pybot_repl.py",
-  "pybot_net.py",
-  "pybot_mpy.py",
-]);
+export const BLE_RUNTIME_MODULE_FILES = PYBOT_RUNTIME_MODULE_FILES;
 
 /** Archivos que MicroPython carga en el camino crítico de advertising. */
 export const BLE_BOOT_CORE_FILES = Object.freeze(["boot.py", "main.py", "pybot_ble.py"]);
+
+/** Lista completa de archivos runtime instalados por USB (nombres). */
+export const PYBOT_USB_RUNTIME_FILES = PYBOT_RUNTIME_FILES;
 
 export { PYBOT_RUNTIME_VERSION, PYBOT_PROTOCOL_VERSION };
 

@@ -40,7 +40,7 @@ const deploy = () => fs.readFileSync(DEPLOY_PY, "utf8");
 
 test("runtime 4.0.0 declares version and schedules FORCE via Timer", () => {
   const src = ble();
-  assert.match(src, /PYBOT_RUNTIME_VERSION = "4\.0\.1"/);
+  assert.match(src, /PYBOT_RUNTIME_VERSION = "4\.0\.2"/);
   assert.match(src, /def _schedule_force_reset/);
   assert.match(src, /def _cancel_force_reset/);
   assert.match(src, /for timer_id in \(-1, 0, 1\):/);

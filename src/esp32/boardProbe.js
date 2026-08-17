@@ -7,7 +7,8 @@ import { compareRuntimeVersions, PYBOT_RUNTIME_VERSION } from "../bleProtocol.js
 import { BOARD_STATE } from "./provisioningPhases.js";
 import {
   PYBOT_MARKER_FILE,
-  PYBOT_RUNTIME_FILES,
+  expectedProvisionFiles,
+  missingProvisionFiles,
   parseRuntimeVersionFromSource,
 } from "./pybotInstallManifest.js";
 
@@ -23,11 +24,12 @@ export function classifyBoard(info) {
   if (!info?.hasMicroPython) return BOARD_STATE.VIRGIN;
   const files = Array.isArray(info.files) ? info.files : [];
   if (!files.includes(PYBOT_MARKER_FILE)) return BOARD_STATE.MICROPYTHON_ONLY;
+  const missing = missingProvisionFiles(files);
+  if (missing.length > 0) return BOARD_STATE.INCOMPLETE;
   const published = info.publishedVersion ?? PYBOT_RUNTIME_VERSION;
   const installed = info.runtimeVersion ?? null;
   if (!installed) return BOARD_STATE.OLD_PYBOT;
   if (compareRuntimeVersions(installed, published) < 0) return BOARD_STATE.OLD_PYBOT;
-  if (!files.includes("pybot_repl.py")) return BOARD_STATE.OLD_PYBOT;
   return BOARD_STATE.READY;
 }
 
@@ -36,7 +38,7 @@ export function classifyBoard(info) {
  * @param {{ fileExists: (name: string) => Promise<boolean>, execRaw?: Function }} session
  */
 export async function inspectPybotOnSession(session, options = {}) {
-  const names = options.files ?? PYBOT_RUNTIME_FILES;
+  const names = options.files ?? expectedProvisionFiles();
   const present = [];
   for (const name of names) {
     try {
@@ -72,7 +74,7 @@ export async function inspectPybotOnSession(session, options = {}) {
     runtimeVersion,
     publishedVersion: options.publishedVersion,
   });
-  return { boardState, files: present, runtimeVersion };
+  return { boardState, files: present, runtimeVersion, missing: missingProvisionFiles(present) };
 }
 
 export function recommendedAction(boardState) {
@@ -80,6 +82,7 @@ export function recommendedAction(boardState) {
   if (boardState === BOARD_STATE.MICROPYTHON_ONLY || boardState === BOARD_STATE.MPY_ONLY) {
     return "install";
   }
+  if (boardState === BOARD_STATE.INCOMPLETE) return "reinstall";
   if (boardState === BOARD_STATE.OLD_PYBOT) return "update";
   if (boardState === BOARD_STATE.RESET_REQUIRED) return "reset";
   if (boardState === BOARD_STATE.REPL_UNAVAILABLE) return "retry-repl";

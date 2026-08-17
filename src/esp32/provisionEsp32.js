@@ -200,9 +200,14 @@ export async function runEsp32Provisioning(adapters, options = {}) {
     }
 
     const needsFlash =
-      boardState === BOARD_STATE.VIRGIN ||
-      boardState === BOARD_STATE.REPL_UNAVAILABLE ||
-      options.forceReinstall === true;
+      boardState === BOARD_STATE.VIRGIN || boardState === BOARD_STATE.REPL_UNAVAILABLE;
+
+    const needsFullInstall =
+      options.forceReinstall === true ||
+      boardState === BOARD_STATE.MICROPYTHON_ONLY ||
+      boardState === BOARD_STATE.INCOMPLETE ||
+      boardState === BOARD_STATE.OLD_PYBOT ||
+      needsFlash;
 
     if (needsFlash) {
       const confirmPhase = options.forceReinstall ? PHASE.CONFIRM_REINSTALL : PHASE.CONFIRM_FLASH;
@@ -305,14 +310,20 @@ export async function runEsp32Provisioning(adapters, options = {}) {
           cause: e?.message,
         };
       }
-    } else {
-      const isOld = boardState === BOARD_STATE.OLD_PYBOT;
-      const confirmPhase = isOld ? PHASE.CONFIRM_UPDATE : PHASE.CONFIRM_INSTALL;
+    } else if (needsFullInstall) {
+      const confirmPhase =
+        options.forceReinstall || boardState === BOARD_STATE.INCOMPLETE
+          ? PHASE.CONFIRM_REINSTALL
+          : boardState === BOARD_STATE.OLD_PYBOT
+            ? PHASE.CONFIRM_UPDATE
+            : PHASE.CONFIRM_INSTALL;
       emit(confirmPhase);
       const okConfirm =
-        boardState === BOARD_STATE.OLD_PYBOT
-          ? await confirm(options.confirmUpdate, true)
-          : await confirm(options.confirmInstall, true);
+        confirmPhase === PHASE.CONFIRM_REINSTALL
+          ? await confirm(options.confirmReinstall, true)
+          : confirmPhase === PHASE.CONFIRM_UPDATE
+            ? await confirm(options.confirmUpdate, true)
+            : await confirm(options.confirmInstall, true);
       if (!okConfirm) {
         emit(PHASE.CANCELLED);
         await cleanup();
@@ -327,6 +338,8 @@ export async function runEsp32Provisioning(adapters, options = {}) {
           throw provisionError(PROVISION_ERROR.REPL_TIMEOUT, { cause: e });
         }
       }
+    } else {
+      throw provisionError(PROVISION_ERROR.UNKNOWN, { boardState });
     }
 
     throwIfCancelled();

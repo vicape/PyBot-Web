@@ -85,6 +85,7 @@ import {
   runtimeStopReliable,
   compareRuntimeVersions,
   PYBOT_STOP_RELIABLE_MIN,
+  PYBOT_RUNTIME_VERSION,
 } from "./bleProtocol.js";
 import { isNativeBleEnabled } from "./micropython/featureFlags.js";
 import { BleReplTransport } from "./micropython/bleReplTransport.js";
@@ -97,7 +98,11 @@ import {
 } from "./micropython/bleBackend.js";
 import { runEsp32Provisioning } from "./esp32/provisionEsp32.js";
 import { inspectPybotOnSession } from "./esp32/boardProbe.js";
-import { expectedProvisionFiles } from "./esp32/pybotInstallManifest.js";
+import {
+  expectedProvisionFiles,
+  PYBOT_USB_SELFTEST_SCRIPT,
+  parseSelftestOutput,
+} from "./esp32/pybotInstallManifest.js";
 import { loadOfficialFirmware } from "./esp32/firmwareLoader.js";
 import {
   connectBootloader,
@@ -582,7 +587,28 @@ export async function prepareEsp32(hooks = {}) {
           missing.push(name);
         }
       }
-      return { ok: missing.length === 0, missing };
+      if (missing.length > 0) {
+        return { ok: false, missing };
+      }
+      if (typeof _mpSession.execRaw !== "function") {
+        return { ok: false, missing: ["selftest_unavailable"] };
+      }
+      try {
+        await _mpSession.interruptAndRecoverRepl();
+        const { stdout } = await _mpSession.execRaw(PYBOT_USB_SELFTEST_SCRIPT, { timeout: 30000 });
+        const selftest = parseSelftestOutput(stdout, PYBOT_RUNTIME_VERSION);
+        if (!selftest.ok) {
+          return {
+            ok: false,
+            missing: [],
+            selftest,
+            reason: selftest.reason ?? "selftest_failed",
+          };
+        }
+        return { ok: true, missing: [], selftest };
+      } catch (e) {
+        return { ok: false, missing: [], selftest: null, reason: e?.message ?? "selftest_error" };
+      }
     },
     async closePort(port, session) {
       if (session) {

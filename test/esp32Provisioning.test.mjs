@@ -122,24 +122,42 @@ test("critical phases block modal close during erase/flash/verify", () => {
   assert.equal(canCloseModal(PHASE.READY), true);
 });
 
-test("classifyBoard: virgin / mpy only / old / ready", () => {
+test("classifyBoard: virgin / mpy only / incomplete / old / ready", () => {
   assert.equal(classifyBoard({ hasMicroPython: false }), BOARD_STATE.VIRGIN);
   assert.equal(classifyBoard({ hasMicroPython: true, files: [] }), BOARD_STATE.MICROPYTHON_ONLY);
   assert.equal(
     classifyBoard({
       hasMicroPython: true,
       files: ["pybot_ble.py", "main.py"],
+      runtimeVersion: "4.0.2",
+      publishedVersion: "4.0.2",
+    }),
+    BOARD_STATE.INCOMPLETE,
+  );
+  assert.equal(
+    classifyBoard({
+      hasMicroPython: true,
+      files: ["pybot_ble.py", "main.py"],
       runtimeVersion: "3.2.7",
-      publishedVersion: "4.0.1",
+      publishedVersion: "4.0.2",
+    }),
+    BOARD_STATE.INCOMPLETE,
+  );
+  assert.equal(
+    classifyBoard({
+      hasMicroPython: true,
+      files: expectedProvisionFiles(),
+      runtimeVersion: "3.2.7",
+      publishedVersion: "4.0.2",
     }),
     BOARD_STATE.OLD_PYBOT,
   );
   assert.equal(
     classifyBoard({
       hasMicroPython: true,
-      files: ["pybot_ble.py", "pybot_repl.py"],
-      runtimeVersion: "4.0.1",
-      publishedVersion: "4.0.1",
+      files: expectedProvisionFiles(),
+      runtimeVersion: "4.0.2",
+      publishedVersion: "4.0.2",
     }),
     BOARD_STATE.READY,
   );
@@ -308,7 +326,7 @@ test("already prepared board does not erase", async () => {
         boardState: BOARD_STATE.READY,
         session: { id: "s" },
         files: expectedProvisionFiles(),
-        runtimeVersion: "4.0.1",
+        runtimeVersion: "4.0.2",
       };
     },
   });
@@ -325,7 +343,7 @@ test("already prepared board does not erase", async () => {
   assert.ok(!phases.includes(PHASE.READY));
 });
 
-test("reinstall of a prepared board flashes after confirmation", async () => {
+test("reinstall of a prepared board reinstalls runtime without reflash", async () => {
   const { adapters, calls } = createAdapters({
     async probeBoard() {
       return { boardState: BOARD_STATE.READY, session: { id: "s" } };
@@ -333,9 +351,9 @@ test("reinstall of a prepared board flashes after confirmation", async () => {
   });
   const result = await runEsp32Provisioning(adapters, { autoConfirm: true, forceReinstall: true });
   assert.equal(result.ok, true);
-  assert.equal(result.flashed, true);
-  assert.equal(calls.eraseFlash, 1);
-  assert.equal(calls.writeFirmware, 1);
+  assert.equal(result.flashed, false);
+  assert.equal(calls.eraseFlash, 0);
+  assert.equal(calls.writeFirmware, 0);
   assert.equal(calls.installPybot, 1);
 });
 
