@@ -53,6 +53,8 @@ export class BluetoothTransport {
     this._txChar = null; // NOTIFY (ESP32 -> Web ADMIN)
     this._replRxChar = null; // WRITE (Web -> ESP32 REPL)
     this._replTxChar = null; // NOTIFY (ESP32 -> Web REPL)
+    this._replNotifyOk = false;
+    this._replBindError = null;
     this._state = BLE_STATE.IDLE;
     this._rxBuffer = "";
     this._dataCallbacks = new Set();
@@ -83,6 +85,19 @@ export class BluetoothTransport {
   /** @returns {boolean} true si el GATT expone REPL_RX/REPL_TX. */
   hasRepl() {
     return !!this._replRxChar && !!this._replTxChar;
+  }
+
+  /**
+   * Estado real de las características REPL (INFO sola no basta).
+   * @returns {{ rx: boolean, tx: boolean, notifications: boolean, bindError: string|null }}
+   */
+  getReplStatus() {
+    return {
+      rx: !!this._replRxChar,
+      tx: !!this._replTxChar,
+      notifications: this._replNotifyOk === true,
+      bindError: this._replBindError,
+    };
   }
   /** Registra callback para mensajes ADMIN (líneas). @returns {() => void} */
   onData(cb) {
@@ -154,7 +169,12 @@ export class BluetoothTransport {
   async _bindReplCharacteristics() {
     this._replRxChar = null;
     this._replTxChar = null;
-    if (!this._service) return;
+    this._replNotifyOk = false;
+    this._replBindError = null;
+    if (!this._service) {
+      this._replBindError = "NO_SERVICE";
+      return;
+    }
     try {
       this._replRxChar = await this._service.getCharacteristic(REPL_RX_UUID);
       this._replTxChar = await this._service.getCharacteristic(REPL_TX_UUID);
@@ -163,9 +183,12 @@ export class BluetoothTransport {
         "characteristicvaluechanged",
         this._onReplTxValueChanged,
       );
-    } catch {
+      this._replNotifyOk = true;
+    } catch (e) {
       this._replRxChar = null;
       this._replTxChar = null;
+      this._replNotifyOk = false;
+      this._replBindError = String(e?.message ?? e ?? "REPL_CHAR_BIND_FAIL");
     }
   }
 
@@ -412,6 +435,7 @@ export class BluetoothTransport {
     this._txChar = null;
     this._replRxChar = null;
     this._replTxChar = null;
+    this._replNotifyOk = false;
     this._rxBuffer = "";
     this._setState(BLE_STATE.DISCONNECTED);
   }
@@ -434,6 +458,7 @@ export class BluetoothTransport {
     }
     this._replTxChar = null;
     this._replRxChar = null;
+    this._replNotifyOk = false;
     if (this._txChar) {
       try {
         this._txChar.removeEventListener(

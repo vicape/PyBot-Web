@@ -75,18 +75,24 @@ import {
   RUN,
   APP,
   parseInfoResponse,
+  parseCapabilities,
   runtimeSupportsRun,
   runtimeSupportsDeploy,
   runtimeSupportsUpdate,
   runtimeUpdateStatus,
   runtimeStopReliable,
   compareRuntimeVersions,
-  runtimeSupportsNativeRepl,
   PYBOT_STOP_RELIABLE_MIN,
 } from "./bleProtocol.js";
 import { isNativeBleEnabled } from "./micropython/featureFlags.js";
 import { BleReplTransport } from "./micropython/bleReplTransport.js";
 import { STOP_LEVEL } from "./micropython/stopLifecycle.js";
+import {
+  BLE_BACKEND,
+  classifyBleRuntime,
+  finalizeBleBackend,
+  formatBleBackendDiagnosis,
+} from "./micropython/bleBackend.js";
 import { runEsp32Provisioning } from "./esp32/provisionEsp32.js";
 import { inspectPybotOnSession } from "./esp32/boardProbe.js";
 import { expectedProvisionFiles } from "./esp32/pybotInstallManifest.js";
@@ -117,10 +123,12 @@ let _baudRate = null;
 // Transporte de EJECUCION por BLE (independiente del serial). Cuando hay una
 // ESP32 conectada por Bluetooth, el Run se ejecuta por aca en vez de por serial.
 let _bleTransport = null;  // BluetoothTransport (Web Bluetooth)
-let _bleRun = null;        // LEGACY BleRunSession (RUN temporal, protocolo 3.x)
+let _bleRun = null;        // LEGACY BleRunSession: SOLO modo legado explícito / runtime < 4.0
 let _bleMpSession = null;  // MicroPythonSession sobre BLE REPL (camino nativo 4.0)
 let _bleDeploy = null;     // BleDeploySession (DEPLOY persistente, protocolo 3.0)
 let _bleUpdate = null;     // BleRuntimeUpdateSession (OTA del runtime, protocolo 3.1)
+/** Diagnóstico técnico del backend de ejecución BLE (nunca fallback silencioso). */
+let _bleBackendDiag = null;
 /** Serializa stopBoardExecution (Stop doble / carrera con Run). */
 let _bleStopInFlight = null;
 /**
@@ -634,6 +642,13 @@ export async function runOnBoard(code, cb = {}) {
   if (_bleRun && _bleRun.isConnected()) {
     return runOnBoardBle(code, cb);
   }
+  if (_bleTransport && _bleTransport.isConnected()) {
+    const detail =
+      _bleBackendDiag?.error ||
+      _bleBackendDiag?.reason ||
+      "no-native-session";
+    throw new Error("BLE_NATIVE_REPL_FAIL:" + detail);
+  }
   throw new Error("not_connected");
 }
 
@@ -705,11 +720,18 @@ async function getBleInfo() {
   return info;
 }
 
-/** @returns {boolean} true si hay una ESP32 por BLE lista para EJECUTAR (RUN). */
+/** @returns {boolean} true si hay una ESP32 por BLE lista para EJECUTAR. */
 export function bleRunReady() {
   if (isNativeBleEnabled() && _bleMpSession) return true;
   return !!_bleRun && _bleRun.isConnected();
 }
+
+/** Diagnóstico técnico del backend BLE activo (o del fallo, sin fallback). */
+export function getBleBackendDiagnosis() {
+  return _bleBackendDiag;
+}
+
+export { formatBleBackendDiagnosis, BLE_BACKEND };
 
 /**
  * Indica si el runtime BLE conectado soporta DEPLOY persistente. Prefiere las
@@ -884,23 +906,7 @@ export async function bleUpdateRuntime(hooks = {}) {
   try {
     await _bleTransport.reconnect(UPDATE_RECONNECT_TIMEOUT_MS);
     reconnected = true;
-    if (isNativeBleEnabled() && _bleTransport.hasRepl()) {
-      try {
-        if (_bleMpSession) await _bleMpSession.close();
-      } catch {
-        /* ignore */
-      }
-      try {
-        const bleTr = new BleReplTransport(_bleTransport);
-        const { session } = await connectMicroPythonFromTransport(bleTr, {
-          detect: true,
-          recoverRepl: true,
-        });
-        _bleMpSession = session;
-      } catch {
-        _bleMpSession = null;
-      }
-    }
+    await activateBleExecutionBackend(_bleTransport);
   } catch {
     reconnected = false;
   }
@@ -1015,6 +1021,10 @@ export async function stopBoardExecution() {
       /* ignore */
     }
     return { transport: "ble-native" };
+  }
+  // Runtime nativo esperado: no hay sesión REPL. NO escalar a STOP:FORCE.
+  if (isNativeBleEnabled() && !_bleRun) {
+    return { transport: "ble-native", kind: "no-session" };
   }
   if (_bleTransport && _bleTransport.isConnected()) {
     // Coalescer Stop concurrentes (doble click / Stop idle tras TEMP RUN).
@@ -1173,6 +1183,122 @@ async function stopBleExecutionBeforeDeploy() {
 // ===========================================================================
 
 /**
+ * Activa el backend de ejecución BLE. 4.0.0 + native-repl → SOLO MicroPythonSession.
+ * Si el handshake nativo falla, NO se crea BleRunSession.
+ */
+async function activateBleExecutionBackend(tr) {
+  _bleRun = null;
+  if (_bleMpSession) {
+    try {
+      await _bleMpSession.close();
+    } catch {
+      /* ignore */
+    }
+    _bleMpSession = null;
+  }
+
+  const info = await getBleInfo();
+  const replStatus =
+    typeof tr.getReplStatus === "function"
+      ? tr.getReplStatus()
+      : {
+          rx: !!tr.hasRepl?.(),
+          tx: !!tr.hasRepl?.(),
+          notifications: !!tr.hasRepl?.(),
+          bindError: null,
+        };
+  const hasReplChars = !!(replStatus.rx && replStatus.tx);
+  const classified = classifyBleRuntime({
+    nativeFlagEnabled: isNativeBleEnabled(),
+    info,
+    hasReplChars,
+  });
+
+  const baseDiag = {
+    runtime: info?.firmware ?? null,
+    protocol: info?.protocol ?? null,
+    nativeReplCap: parseCapabilities(info).includes("native-repl"),
+    replRx: !!replStatus.rx,
+    replTx: !!replStatus.tx,
+    notifications: !!replStatus.notifications,
+    dupterm: info?.dupterm === true,
+    handshake: false,
+    backend: null,
+    error: null,
+    reason: classified.reason ?? null,
+    bindError: replStatus.bindError ?? null,
+  };
+
+  const apply = (extra) => {
+    _bleBackendDiag = { ...baseDiag, ...extra };
+    try {
+      console.info(formatBleBackendDiagnosis(_bleBackendDiag));
+    } catch {
+      /* ignore */
+    }
+    return _bleBackendDiag;
+  };
+
+  if (classified.intent === "legacy") {
+    _bleRun = new BleRunSession(tr, {
+      onCoopStopped: () => noteBleCoopStopped(),
+    });
+    return apply({
+      backend: BLE_BACKEND.LEGACY_RUN,
+      reason: classified.reason,
+    });
+  }
+
+  const decided = finalizeBleBackend({
+    ...classified,
+    hasReplChars,
+    notifications: replStatus.notifications !== false,
+    handshakeOk: false,
+  });
+  if (classified.intent !== "native") {
+    return apply({
+      backend: null,
+      error: decided.error || classified.error || "BLE_REPL_UNVERIFIED",
+    });
+  }
+  if (!hasReplChars) {
+    return apply({
+      backend: null,
+      error: "BLE_REPL_CHARS_MISSING",
+    });
+  }
+  if (replStatus.notifications === false) {
+    return apply({
+      backend: null,
+      error: "BLE_REPL_NOTIFY_FAIL",
+    });
+  }
+
+  try {
+    const bleTr = new BleReplTransport(tr);
+    const { session } = await connectMicroPythonFromTransport(bleTr, {
+      detect: true,
+      recoverRepl: true,
+    });
+    _bleMpSession = session;
+    _bleRun = null;
+    return apply({
+      handshake: true,
+      backend: BLE_BACKEND.NATIVE_REPL,
+      error: null,
+    });
+  } catch (e) {
+    _bleMpSession = null;
+    _bleRun = null;
+    return apply({
+      handshake: false,
+      backend: null,
+      error: String(e?.message ?? e ?? "BLE_REPL_HANDSHAKE_FAIL"),
+    });
+  }
+}
+
+/**
  * Conecta una ESP32 por BLE para EJECUTAR programas (Run inalámbrico).
  * Devuelve el nombre del dispositivo. Reutiliza BluetoothTransport.
  * @returns {Promise<{ deviceName: string|null }>}
@@ -1184,30 +1310,15 @@ export async function bleRunConnect() {
   const tr = new BluetoothTransport();
   const info = await tr.connect();
   _bleTransport = tr;
-  _bleRun = new BleRunSession(tr, {
-    onCoopStopped: () => noteBleCoopStopped(),
-  });
   _bleDeploy = new BleDeploySession(tr);
   _bleUpdate = new BleRuntimeUpdateSession(tr);
-  _bleMpSession = null;
-  if (isNativeBleEnabled() && tr.hasRepl() && runtimeSupportsNativeRepl(tr.getDeviceInfo?.().info)) {
-    try {
-      const bleTr = new BleReplTransport(tr);
-      const { session } = await connectMicroPythonFromTransport(bleTr, {
-        detect: true,
-        recoverRepl: true,
-      });
-      _bleMpSession = session;
-    } catch {
-      _bleMpSession = null;
-    }
-  }
+  await activateBleExecutionBackend(tr);
   return info;
 }
 
-/** @returns {boolean} true si hay una ESP32 conectada por BLE para ejecucion. */
+/** @returns {boolean} true si hay una ESP32 conectada por BLE (GATT). */
 export function bleRunIsConnected() {
-  return (!!_bleRun && _bleRun.isConnected()) || (!!_bleMpSession && !!_bleTransport && _bleTransport.isConnected());
+  return !!_bleTransport && _bleTransport.isConnected();
 }
 
 /** Devuelve el BluetoothTransport activo (para diagnostico PING/INFO/LED) o null. */
@@ -1237,6 +1348,7 @@ export async function bleRunDisconnect() {
   _bleMpSession = null;
   _bleDeploy = null;
   _bleUpdate = null;
+  _bleBackendDiag = null;
 }
 
 async function clearMpSessionAfterReset() {

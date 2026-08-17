@@ -118,31 +118,40 @@ class BleReplStream(io.IOBase):
 
 
 def attach(ble, tx_handle, get_conn):
+    """Adjunta el stream REPL a dupterm. True solo si dupterm queda activo.
+
+    No silencia el fallo de dupterm: si no se puede adjuntar, lanza.
+    Slot 1 primero para no reemplazar el UART USB (slot 0).
+    """
     global _ble, _tx_handle, _get_conn, _stream
     _ble = ble
     _tx_handle = tx_handle
     _get_conn = get_conn
     if _stream is None:
         _stream = BleReplStream()
-    if os is None:
-        return _stream
-    try:
-        os.dupterm(_stream, 0)
-    except TypeError:
+    if os is None or not hasattr(os, "dupterm"):
+        raise RuntimeError("dupterm unavailable")
+    last = None
+    attached = False
+    for args in ((_stream, 1), (_stream, 0), (_stream,)):
         try:
-            os.dupterm(_stream)
+            os.dupterm(*args)
+            attached = True
+            break
+        except TypeError as e:
+            last = e
+        except Exception as e:
+            last = e
+    if not attached:
+        if last is not None:
+            raise last
+        raise RuntimeError("dupterm failed")
+    if micropython is not None:
+        try:
+            micropython.kbd_intr(3)
         except Exception:
             pass
-    except Exception:
-        try:
-            os.dupterm(_stream)
-        except Exception:
-            pass
-    try:
-        micropython.kbd_intr(3)
-    except Exception:
-        pass
-    return _stream
+    return True
 
 
 def detach():

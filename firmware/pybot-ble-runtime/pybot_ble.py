@@ -103,6 +103,9 @@ _NO_NL_COMMANDS = (
     "UPDATE:INFO", "UPDATE:END", "UPDATE:APPLY", "UPDATE:ABORT",
 )
 
+# Estado real de os.dupterm (no basta con declarar capability native-repl).
+_repl_status = {"dupterm": False}
+
 _ADV_TYPE_FLAGS = const(0x01)
 _ADV_TYPE_NAME = const(0x09)
 _ADV_TYPE_UUID128_COMPLETE = const(0x07)
@@ -269,10 +272,11 @@ class CommandProcessor:
 
     def _info(self):
         caps = '","'.join(PYBOT_CAPABILITIES)
+        dup = "true" if _repl_status.get("dupterm") else "false"
         return (
             '{"device":"%s","id":"%s","firmware":"%s",'
             '"protocol":"%s","runtime":"%s","board":"%s",'
-            '"capabilities":["%s"]}'
+            '"capabilities":["%s"],"dupterm":%s}'
             % (
                 self._name,
                 self._id,
@@ -281,6 +285,7 @@ class CommandProcessor:
                 PYBOT_RUNTIME_NAME,
                 PYBOT_BOARD,
                 caps,
+                dup,
             )
         )
 
@@ -440,14 +445,16 @@ class BluetoothTransport:
             import pybot_repl
         except Exception:
             return False
-        self._repl_mod = pybot_repl
         try:
-            pybot_repl.attach(
+            ok = pybot_repl.attach(
                 self._ble, self._repl_tx_handle, lambda: self._conn_handle
             )
-            return True
         except Exception:
             return False
+        if not ok:
+            return False
+        self._repl_mod = pybot_repl
+        return True
 
     def inject_ctrl_c(self):
         mod = self._repl_mod
@@ -604,6 +611,13 @@ def main():
     processor = CommandProcessor(hardware, dev_name, dev_id)
     holder = {}
     ctx = {"manager": None, "deploy": None, "updater": None}
+
+    native = True
+    try:
+        os.stat("pybot_legacy.on")
+        native = False
+    except OSError:
+        native = True
 
     def _send(text):
         tr = holder.get("transport")
@@ -789,6 +803,12 @@ def main():
                 _schedule_force_reset()
             return None
         if t.startswith("RUN:"):
+            if native:
+                try:
+                    _send("RUN:ERROR:NATIVE_REPL")
+                except Exception:
+                    pass
+                return None
             # Nuevo RUN del usuario: anular FORCE huerfano (Stop previo) para no
             # resetear la placa a mitad del handshake / chunks del 2º Run.
             if t.startswith("RUN:BEGIN:"):
@@ -883,17 +903,17 @@ def main():
     _confirm_update_if_pending()
 
     try:
-        transport.attach_repl()
+        _repl_status["dupterm"] = bool(transport.attach_repl())
     except Exception:
-        pass
+        _repl_status["dupterm"] = False
 
-    # Precargar pybot_run en el hilo principal DESPUÉS de advertising.
-    # El import lazy dentro del IRQ GATTS_WRITE (stack/heap limitados) puede
-    # fallar o colgarse: PING/INFO siguen OK pero RUN:BEGIN nunca emite READY.
-    try:
-        _ensure_manager()
-    except Exception:
-        pass
+    # LEGACY ONLY: precargar ProgramManager. El runtime nativo 4.0 NO importa
+    # pybot_run al boot; RUN:* se rechaza con RUN:ERROR:NATIVE_REPL.
+    if not native:
+        try:
+            _ensure_manager()
+        except Exception:
+            pass
 
     try:
         need = (
@@ -970,13 +990,6 @@ def main():
         _arm_tick()
 
     transport._dispatch = _dispatch_and_arm
-
-    native = True
-    try:
-        os.stat("pybot_legacy.on")
-        native = False
-    except OSError:
-        native = True
 
     try:
         st = _load_state()

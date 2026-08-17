@@ -45,6 +45,15 @@ test("filesystem helpers stay on MicroPythonSession (USB and BLE share them)", (
   }
 });
 
+test("About reads PyBot Web version from package.json, not a hardcoded 1.0", () => {
+  const ide = read("src/PyBotIDE.jsx");
+  assert.match(ide, /from ["']\.\.\/package\.json["']/);
+  assert.match(ide, /pkg\.version/);
+  assert.doesNotMatch(ide, /aboutVersion.*1\.0/);
+  assert.match(ide, /PYBOT_RUNTIME_VERSION/);
+  assert.match(ide, /PYBOT_PROTOCOL_VERSION/);
+});
+
 test("boot.py stays tiny and OTA-only", () => {
   const boot = read("firmware/pybot-ble-runtime/boot.py");
   assert.ok(new TextEncoder().encode(boot).length < 500);

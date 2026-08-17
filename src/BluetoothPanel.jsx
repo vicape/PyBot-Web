@@ -13,6 +13,8 @@ import {
   bleRunDisconnect,
   bleRunTransport,
   bleUpdateRuntime,
+  getBleBackendDiagnosis,
+  formatBleBackendDiagnosis,
 } from "./hardwareBridge.js";
 import {
   formatBleUpdateProgressText,
@@ -91,6 +93,10 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
         appendLog("INFO -> " + resp, "recv");
       } catch {
         /* INFO opcional: la conexion sigue siendo valida */
+      }
+      const diag = getBleBackendDiagnosis();
+      if (diag) {
+        appendLog(formatBleBackendDiagnosis(diag), diag.backend ? "ok" : "err");
       }
     } catch (e) {
       const code = e?.message ?? "BLE_CONNECT_FAIL";
@@ -305,7 +311,7 @@ export default function BluetoothPanel({ open, onClose, onConnectionChange }) {
             <li className="connect-check connect-check--ok">
               <span className="connect-check__icon" aria-hidden>FW</span>
               <span>
-                {info.firmware} · {info.runtime}
+                {info.firmware} · proto {info.protocol}
               </span>
             </li>
           </ul>

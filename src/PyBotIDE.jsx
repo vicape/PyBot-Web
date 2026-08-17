@@ -46,7 +46,14 @@ import {
   bleDeleteApp,
   bleSetAutostart,
   bleRuntimeStopStatus,
+  getBleBackendDiagnosis,
+  formatBleBackendDiagnosis,
 } from "./hardwareBridge.js";
+import pkg from "../package.json";
+import {
+  PYBOT_RUNTIME_VERSION,
+  PYBOT_PROTOCOL_VERSION,
+} from "./bleProtocol.js";
 import {
   filterExamplesForBoard,
   setEda6Profile,
@@ -1240,6 +1247,10 @@ export default function PyBotIDE() {
           t("bleRunConnected").replace("{name}", name ?? "PYBOT") + "\n",
           "info",
         );
+        const diag = getBleBackendDiagnosis();
+        if (diag) {
+          appendConsole(formatBleBackendDiagnosis(diag) + "\n", diag.backend ? "info" : "err");
+        }
         appendConsole(t("bleRunHint") + "\n", "info");
         refreshBleAppStatus();
         // Aviso aula: runtime < 3.2.4 no recupera bucles con STOP:FORCE.
@@ -2551,7 +2562,13 @@ export default function PyBotIDE() {
                 <strong>{t("aboutAuthor")}:</strong> Victor Capeluto
               </p>
               <p className="about-meta">
-                <strong>{t("aboutVersion")}:</strong> 1.0
+                <strong>{t("aboutVersion")}:</strong> {pkg.version}
+              </p>
+              <p className="about-meta">
+                <strong>{t("aboutBleRuntime")}:</strong> {PYBOT_RUNTIME_VERSION}
+              </p>
+              <p className="about-meta">
+                <strong>{t("aboutProtocol")}:</strong> {PYBOT_PROTOCOL_VERSION}
               </p>
             </div>
             <button type="button" className="modal-close" onClick={() => setAboutOpen(false)}>

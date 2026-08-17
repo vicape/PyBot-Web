@@ -338,6 +338,7 @@ export function simulateDeviceResponse(command, ctx = {}) {
       runtime: PYBOT_RUNTIME_NAME,
       board: PYBOT_BOARD,
       capabilities: [...PYBOT_CAPABILITIES],
+      dupterm: true,
     });
   }
   if (upper === COMMANDS.LED_ON) return hasLed ? "OK" : "ERR,NO_LED";

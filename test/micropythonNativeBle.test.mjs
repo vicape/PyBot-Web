@@ -63,6 +63,15 @@ test("native main returns to REPL; legacy loop is opt-in", () => {
   assert.match(ble, /def _exec_student_app/);
 });
 
+test("pybot_repl.attach reports real dupterm success or raises", () => {
+  const src = readFw("pybot_repl.py");
+  const attach = src.slice(src.indexOf("def attach("), src.indexOf("\ndef detach("));
+  assert.match(attach, /return True/);
+  assert.doesNotMatch(attach, /return _stream/);
+  assert.match(attach, /raise /);
+  assert.match(attach, /dupterm unavailable|dupterm failed/);
+});
+
 test("STOP injects Ctrl+C into the REPL stream", () => {
   const ble = readFw("pybot_ble.py");
   assert.match(ble, /inject_ctrl_c/);
@@ -117,4 +126,5 @@ test("hardwareBridge Stop native uses Ctrl+C, not STOP:FORCE", () => {
   const forceIdx = body.indexOf("STOP_FORCE");
   assert.ok(nativeIdx >= 0);
   assert.ok(nativeIdx < forceIdx || forceIdx < 0 || body.indexOf("_bleMpSession") < forceIdx);
+  assert.match(body, /kind: "no-session"/);
 });

@@ -180,6 +180,18 @@ test("disconnect() returns to IDLE and send() then fails", async () => {
   await assert.rejects(() => tr.send("PING"), /BLE_NOT_CONNECTED/);
 });
 
+test("connect() without REPL chars records bind error and hasRepl() is false", async () => {
+  const mock = makeMockBluetooth();
+  const tr = new BluetoothTransport({ bluetooth: mock.bluetooth });
+  await tr.connect();
+  assert.equal(tr.hasRepl(), false);
+  const st = tr.getReplStatus();
+  assert.equal(st.rx, false);
+  assert.equal(st.tx, false);
+  assert.equal(st.notifications, false);
+  assert.ok(st.bindError);
+});
+
 test("connect() rejects with BLE_UNSUPPORTED when no bluetooth backend", async () => {
   const tr = new BluetoothTransport({ bluetooth: undefined });
   await assert.rejects(() => tr.connect(), /BLE_UNSUPPORTED/);

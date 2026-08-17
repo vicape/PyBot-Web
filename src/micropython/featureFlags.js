@@ -6,8 +6,11 @@
  *
  * Orden de resolución:
  *   1) globalThis.__PYBOT_NATIVE_BLE__ (tests / override de sesión)
- *   2) localStorage.pybot_native_ble ("0"/"false" desactiva)
- *   3) MICROPYTHON_NATIVE_BLE (default)
+ *   2) localStorage.pybot_native_ble ("0"/"false" desactiva → LEGACY explícito)
+ *   3) MICROPYTHON_NATIVE_BLE (default true)
+ *
+ * En placa, el archivo `pybot_legacy.on` fuerza el bucle LEGACY (ProgramManager).
+ * Nunca hay fallback automático 4.0 → ProgramManager.
  */
 
 export const MICROPYTHON_NATIVE_BLE = true;

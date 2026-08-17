@@ -173,16 +173,19 @@ test("pybot_ble lazy-loads run/deploy/update modules", () => {
   assert.doesNotMatch(core, /^import pybot_update/m);
 });
 
-test("pybot_ble preloads RUN after advertise and reports LOAD errors", () => {
+test("pybot_ble reports LOAD errors; native does not preload ProgramManager", () => {
   const core = readFw("pybot_ble.py");
-  // Precarga en main() (fuera del IRQ) para que RUN:BEGIN no importe en GATTS_WRITE.
+  assert.match(core, /if not native:/);
   assert.match(core, /_ensure_manager\(\)/);
-  assert.match(core, /Precargar pybot_run/);
-  // Fallos de lazy-import deben emitir frames visibles, nunca silencio/timeout.
+  assert.match(core, /RUN:ERROR:NATIVE_REPL/);
   assert.match(core, /RUN:ERROR:LOAD:/);
   assert.match(core, /DEPLOY:ERROR:LOAD:/);
   assert.match(core, /APP:ERROR:LOAD:/);
   assert.match(core, /UPDATE:ERROR:LOAD:/);
+  const boot = core.slice(core.indexOf("def main("));
+  const preload = boot.slice(boot.indexOf("LEGACY ONLY"), boot.indexOf("try:\n        need"));
+  assert.match(preload, /if not native:/);
+  assert.match(preload, /_ensure_manager\(\)/);
 });
 
 test("RUN:BEGIN path reaches ProgramManager.begin -> RUN:READY", () => {

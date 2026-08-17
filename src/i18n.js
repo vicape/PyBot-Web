@@ -479,7 +479,9 @@ Creado por VIC.`,
     aboutName: "PyBot by VIC",
     aboutDesc: "Un IDE para programar Arduino con Python. Disenado para que chicos aprendan a programar.",
     aboutAuthor: "Autor",
-    aboutVersion: "Version",
+    aboutVersion: "PyBot Web",
+    aboutBleRuntime: "BLE Runtime",
+    aboutProtocol: "Protocolo",
     prepareEsp32Btn: "Preparar ESP32",
     prepareEsp32MenuHint:
       "Instala MicroPython oficial y PyBot en una ESP32 virgen, desde Chrome o Edge por USB. No copia el programa del editor.",
@@ -1048,7 +1050,9 @@ Built by VIC.`,
     aboutName: "PyBot by VIC",
     aboutDesc: "An IDE for programming Arduino with Python. Designed for kids learning to code.",
     aboutAuthor: "Author",
-    aboutVersion: "Version",
+    aboutVersion: "PyBot Web",
+    aboutBleRuntime: "BLE Runtime",
+    aboutProtocol: "Protocol",
     prepareEsp32Btn: "Prepare ESP32",
     prepareEsp32MenuHint:
       "Installs official MicroPython and PyBot on a blank ESP32 from Chrome or Edge over USB. Does not copy the editor program.",
@@ -1206,6 +1210,12 @@ export function formatPythonError(message) {
 
   const firstDefinedName = m.match(/name ['"]([^'"]+)['"] is not defined/i)?.[1];
 
+  if (/BLE_NATIVE_REPL_FAIL|BLE_REPL_HANDSHAKE_FAIL|BLE_REPL_CHARS_MISSING|BLE_REPL_NOTIFY_FAIL|BLE_REPL_UNVERIFIED/i.test(m)) {
+    return pick(
+      "El REPL nativo Bluetooth no inició. No se usa el runtime legado. Revisá el diagnóstico BLE (runtime, protocol, native-repl, REPL_RX/TX, dupterm, handshake).",
+      "The native Bluetooth REPL did not start. The legacy runtime is not used. Check BLE diagnostics (runtime, protocol, native-repl, REPL_RX/TX, dupterm, handshake).",
+    );
+  }
   if (/BLE_PROGRAM_TOO_LONG/i.test(m)) {
     return pick(
       "El programa es demasiado grande para enviarlo por Bluetooth. Reducilo o grabalo en la placa por USB.",
