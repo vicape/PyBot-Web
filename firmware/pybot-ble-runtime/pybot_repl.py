@@ -134,8 +134,6 @@ class BleReplStream(io.IOBase):
             return 0
         i = 0
         while i < n:
-            if _rx_n > 0 and _rx[_rx_h] == 0x03:
-                raise KeyboardInterrupt
             piece = data[i : i + _TX_CHUNK]
             retries = 0
             while True:

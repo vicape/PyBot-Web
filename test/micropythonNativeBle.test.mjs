@@ -104,7 +104,6 @@ function makeReplStream(opts = {}) {
       if (getConn() == null || ble == null) return 0;
       let i = 0;
       while (i < data.length) {
-        if (n > 0 && rx[h] === 0x03) throw new Error("KeyboardInterrupt");
         const piece = data.subarray(i, i + TX_CHUNK);
         let retries = 0;
         while (true) {
@@ -272,6 +271,23 @@ test("T: raw REPL byte sequence preserves order including both Ctrl+D", () => {
   });
   assert.equal(ret, seq.length);
   assert.deepEqual(sent, [...seq]);
+});
+
+test("T: pending Ctrl+C during TX does not raise from write()", () => {
+  const src = readFw("pybot_repl.py");
+  const writeFn = src.slice(src.indexOf("def write"), src.indexOf("def ioctl"));
+  assert.doesNotMatch(writeFn, /raise KeyboardInterrupt/);
+  assert.doesNotMatch(writeFn, /0x03/);
+  const s = makeReplStream();
+  s.irqPut(new Uint8Array([0x03]));
+  const payload = new Uint8Array(45);
+  payload.fill(0x41);
+  const ret = s.write(payload, () => {});
+  assert.equal(ret, 45);
+  assert.deepEqual(s.sentBytes(), [...payload]);
+  const buf = new Uint8Array(1);
+  assert.equal(s.readinto(buf), 1);
+  assert.equal(buf[0], 0x03);
 });
 
 test("T: ABCD 100x100 payload completes without truncation", () => {
