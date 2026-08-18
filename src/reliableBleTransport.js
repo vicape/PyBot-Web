@@ -160,7 +160,7 @@ export class ReliableBleTransport {
     this._txNext = 0;
     this._txBase = 0;
     this._rxExpected = 0;
-    this._window = []; // { seq, frame, notified, retries, sentAt }
+    this._window = [];
     this._epoch = 0;
     this._peerEpoch = -1;
     this._synced = false;
@@ -223,6 +223,17 @@ export class ReliableBleTransport {
   onReplData(cb) {
     if (typeof cb === "function") this._cbs.add(cb);
     return () => this._cbs.delete(cb);
+  }
+
+  /**
+   * Control urgente fuera de la cola REPL fiable. STOP viaja por la
+   * característica ADMIN independiente; el firmware 4.x lo consume en IRQ e
+   * inyecta un único Ctrl+C en dupterm. No espera a DATA/ACK pendientes.
+   */
+  async interruptUrgent() {
+    if (!this.isConnected()) throw new Error("BLE_REPL_NOT_CONNECTED");
+    if (typeof this._bt?.send !== "function") throw new Error("BLE_REPL_URGENT_UNSUPPORTED");
+    await this._bt.send("STOP");
   }
 
   async writeRepl(data) {
@@ -413,8 +424,6 @@ export class ReliableBleTransport {
     const same = epoch === this._peerEpoch;
     this._peerEpoch = epoch;
     if (this._handshakePending) {
-      // Initiator already reset locally and sent RESET. The peer reply only
-      // completes sync — never rewind seq (that drops in-flight raw REPL bytes).
       this._handshakePending = false;
       this._synced = true;
       this._wakeSync();
