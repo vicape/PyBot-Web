@@ -29,7 +29,10 @@ jobs:
       - name: Compile MicroPython runtime sources
         run: python -m compileall -q firmware/pybot-ble-runtime
 
-      - name: Run tests
+      - name: Native BLE Stop regression tests
+        run: timeout 30s node --test test/nativeBleUrgentStop.test.mjs
+
+      - name: Run full test suite
         run: timeout 180s npm test
 
       - name: Build
