@@ -1,9 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ReliableBleTransport } from "../src/reliableBleTransport.js";
+import {
+  ReliableBleTransport,
+  encodeFrame,
+  decodeFrame,
+  RBLE_TYPE_DATA,
+  RBLE_TYPE_ACK,
+} from "../src/reliableBleTransport.js";
 import { BleReplTransport } from "../src/micropython/bleReplTransport.js";
 import { MicroPythonSession } from "../src/micropython/micropythonSession.js";
+import { MicroPythonReplProtocol } from "../src/micropython/replProtocol.js";
+import { PROTOCOL_ERROR } from "../src/micropython/errors.js";
 
 function physicalBle() {
   const sent = [];
@@ -28,6 +36,40 @@ test("ReliableBleTransport sends urgent Stop over ADMIN, not reliable REPL DATA"
   assert.deepEqual(phy.sent, ["STOP"]);
   assert.equal(rble._window.length, 0);
   assert.equal(rble._txQueue.length, 0);
+});
+
+test("ReliableBleTransport Stop cancels unsent upload bytes but preserves in-flight sequence", async () => {
+  const admin = [];
+  const frames = [];
+  let rble;
+  const phy = {
+    isConnected: () => true,
+    hasRepl: () => true,
+    onReplData: () => () => {},
+    onStateChange: () => () => {},
+    send: async (msg) => admin.push(msg),
+    writeRepl: async (frame) => {
+      const parsed = decodeFrame(frame);
+      if (parsed?.type === RBLE_TYPE_DATA) frames.push(parsed);
+    },
+  };
+  rble = new ReliableBleTransport(phy, { autoStart: false, maxPayload: 14 });
+  rble._synced = true;
+  rble._ready = Promise.resolve();
+
+  const writing = rble.writeRepl(new Uint8Array(280).fill(0x41));
+  for (let i = 0; i < 10 && frames.length < 2; i++) await Promise.resolve();
+  assert.equal(frames.length, 2, "only the reliable window should be in flight before ACK");
+
+  const stopping = rble.interruptUrgent();
+  assert.equal(rble._txQueue.length, 0, "unsent payloads are discarded immediately on Stop");
+
+  rble._onRaw(encodeFrame(RBLE_TYPE_ACK, frames[0].seq));
+  rble._onRaw(encodeFrame(RBLE_TYPE_ACK, frames[1].seq));
+  await Promise.all([writing, stopping]);
+
+  assert.equal(frames.length, 2, "no additional program DATA may be sent after Stop");
+  assert.deepEqual(admin, ["STOP"]);
 });
 
 test("BleReplTransport urgent Stop bypasses a blocked normal write queue", async () => {
@@ -66,6 +108,21 @@ test("MicroPythonSession prefers urgent transport interrupt and sends no queued 
 
   assert.equal(urgent, 1);
   assert.deepEqual(normalWrites, []);
+});
+
+test("raw REPL upload checks cancellation before sending another chunk", async () => {
+  const writes = [];
+  const transport = {
+    onData: () => () => {},
+    write: async (bytes) => writes.push(Array.from(bytes)),
+  };
+  const protocol = new MicroPythonReplProtocol(transport);
+
+  await assert.rejects(
+    protocol.executeRawClassic("print('never sent')", { shouldAbort: () => true }),
+    (err) => err?.code === PROTOCOL_ERROR.RAW_REPL_CANCELLED,
+  );
+  assert.deepEqual(writes, []);
 });
 
 test("Stop arriving while program bytes are being sent never reports started", async () => {
