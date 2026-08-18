@@ -101,7 +101,8 @@ export default function PrepareEsp32Modal({
 
         {phase === PHASE.ERROR && error ? (
           <div className="connect-modal-error" role="alert">
-            {t(`provErr_${error}`) !== `provErr_${error}` ? t(`provErr_${error}`) : t("provErr_UNKNOWN")}
+            <p>{t("prepareEsp32Incomplete")}</p>
+            <p>{t(`provErr_${error}`) !== `provErr_${error}` ? t(`provErr_${error}`) : t("provErr_UNKNOWN")}</p>
           </div>
         ) : null}
 
@@ -155,7 +156,7 @@ export default function PrepareEsp32Modal({
             phase === PHASE.RESET_REQUIRED) &&
           !running ? (
             <button type="button" className="connect-btn connect-btn--primary" onClick={onRetry} disabled={running}>
-              {t("prepareEsp32Retry")}
+              {phase === PHASE.ERROR ? t("prepareEsp32RetryFull") : t("prepareEsp32Retry")}
             </button>
           ) : null}
 

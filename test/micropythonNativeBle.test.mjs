@@ -55,25 +55,26 @@ test("pybot_repl IRQ path has no filesystem/import/sleep/json", () => {
   assert.doesNotMatch(irq, /import /);
 });
 
-/** Replica del ring/readinto + FIFO TX async de pybot_repl.BleReplStream. */
+/** Replica del ring RX + cola TX (write encola; drain consume tras notify OK). */
 function makeReplStream(opts = {}) {
   const RING = 512;
-  const TX_RING = opts.txRing ?? 2048;
   const TX_CHUNK = 20;
   const rx = new Uint8Array(RING);
   let h = 0;
   let t = 0;
   let n = 0;
   let overflow = 0;
-  let txOverflow = 0;
   let notifyFail = 0;
   let notifyRetries = 0;
+  let notifyUnexpected = 0;
   let ble = opts.ble ?? {};
   let conn = opts.conn !== undefined ? opts.conn : 1;
   const getConn = opts.getConn ?? (() => conn);
   const sent = [];
   const txQueue = [];
   let notifyFn = () => {};
+  let scheduleBusy = false;
+  let draining = false;
 
   function ringPut(data) {
     for (const c of data) {
@@ -95,45 +96,56 @@ function makeReplStream(opts = {}) {
     }
     return take;
   }
-  function txPut(data) {
-    if (data.length > TX_RING || txQueue.length + data.length > TX_RING) {
-      txOverflow += 1;
-      throw new Error("BLE TX queue full");
+  function classifyNotifyError(err) {
+    if (getConn() == null || err?.disconnect || err?.errno === 107 || err?.errno === 19) {
+      return "disconnect";
     }
-    for (const b of data) txQueue.push(b);
+    if (err?.unexpected || err?.errno === 22) return "unexpected";
+    return "temporal";
   }
-  function drainOne() {
-    if (ble == null || getConn() == null) {
-      if (txQueue.length > 0) notifyFail += 1;
-      txQueue.length = 0;
-      return false;
-    }
-    if (txQueue.length === 0) return false;
-    if (getConn() == null) {
-      notifyFail += 1;
-      txQueue.length = 0;
-      return false;
-    }
-    const pieceLen = Math.min(TX_CHUNK, txQueue.length);
-    const piece = txQueue.slice(0, pieceLen);
+  function drainUntilBackpressure() {
+    if (draining) return;
+    draining = true;
     try {
-      notifyFn(new Uint8Array(piece));
-      sent.push(...piece);
-      txQueue.splice(0, pieceLen);
-      return true;
-    } catch {
-      if (getConn() == null) {
-        notifyFail += 1;
+      if (ble == null || getConn() == null) {
+        if (txQueue.length > 0) notifyFail += 1;
         txQueue.length = 0;
-        return false;
+        return;
       }
-      notifyRetries += 1;
-      return false;
+      while (txQueue.length > 0) {
+        if (getConn() == null) {
+          notifyFail += 1;
+          txQueue.length = 0;
+          return;
+        }
+        const pieceLen = Math.min(TX_CHUNK, txQueue.length);
+        const piece = txQueue.slice(0, pieceLen);
+        try {
+          notifyFn(new Uint8Array(piece));
+          sent.push(...piece);
+          txQueue.splice(0, pieceLen);
+        } catch (err) {
+          const kind = classifyNotifyError(err);
+          if (kind === "disconnect") {
+            notifyFail += 1;
+            txQueue.length = 0;
+            return;
+          }
+          if (kind === "unexpected") {
+            notifyUnexpected += 1;
+            return;
+          }
+          notifyRetries += 1;
+          return;
+        }
+      }
+    } finally {
+      draining = false;
     }
   }
   function scheduleDrain() {
-    let ok = true;
-    while (ok && txQueue.length > 0) ok = drainOne();
+    if (scheduleBusy) return;
+    drainUntilBackpressure();
   }
   return {
     irqPut(data) {
@@ -146,12 +158,12 @@ function makeReplStream(opts = {}) {
     write(data, notify) {
       notifyFn = notify ?? (() => {});
       if (ble == null || getConn() == null) return 0;
-      txPut(data);
+      for (const b of data) txQueue.push(b);
       scheduleDrain();
       return data.length;
     },
     flushDrain() {
-      scheduleDrain();
+      drainUntilBackpressure();
     },
     setConn(value) {
       conn = value;
@@ -159,8 +171,17 @@ function makeReplStream(opts = {}) {
     setBle(value) {
       ble = value;
     },
+    setScheduleBusy(value) {
+      scheduleBusy = value;
+    },
     stats() {
-      return { overflow, txOverflow, notifyFail, notifyRetries, txPending: txQueue.length };
+      return {
+        overflow,
+        notifyFail,
+        notifyRetries,
+        notifyUnexpected,
+        txPending: txQueue.length,
+      };
     },
     sentBytes: () => [...sent],
     clearSent() {
@@ -205,29 +226,37 @@ test("T: write() buffers only; no sleep or gatts_notify in write()", () => {
   assert.doesNotMatch(writeFn, /gatts_notify/);
   assert.match(writeFn, /_tx_put\(/);
   assert.match(writeFn, /_schedule_drain\(/);
+  assert.doesNotMatch(writeFn, /raise OSError/);
+  assert.doesNotMatch(writeFn, /except OSError:/);
   assert.match(src, /def _drain_tx\(/);
   assert.match(src, /gatts_notify/);
 });
 
-test("T: TX FIFO is bounded with explicit overflow handling", () => {
+test("T: consecutive writes beyond 2048 bytes are not dropped or claimed lost", () => {
   const src = readFw("pybot_repl.py");
-  assert.match(src, /_TX_RING = const\(2048\)/);
-  assert.match(src, /BLE TX queue full/);
-  assert.match(src, /_tx_overflow \+= 1/);
-  const s = makeReplStream({ txRing: 64 });
-  const ok = new Uint8Array(32);
-  ok.fill(0x41);
+  assert.doesNotMatch(src, /_TX_RING = const\(2048\)/);
+  assert.doesNotMatch(src, /BLE TX queue full/);
+  assert.doesNotMatch(src, /return 0\n        _schedule_drain/);
+  const s = makeReplStream();
+  const block = new Uint8Array(400);
+  block.fill(0x41);
   let hold = true;
-  s.write(ok, () => {
-    if (hold) throw new Error("hold drain");
-  });
-  assert.equal(s.txPending(), 32);
-  const big = new Uint8Array(40);
-  big.fill(0x42);
-  assert.throws(() => s.write(big, () => {}), /BLE TX queue full/);
-  assert.ok(s.stats().txOverflow > 0);
+  const notify = () => {
+    if (hold) {
+      const e = new Error("hold drain");
+      e.errno = 11;
+      throw e;
+    }
+  };
+  for (let i = 0; i < 6; i++) {
+    assert.equal(s.write(block, notify), 400);
+  }
+  assert.equal(s.txPending(), 2400);
+  assert.equal(s.sentBytes().length, 0);
   hold = false;
   s.flushDrain();
+  assert.equal(s.sentBytes().length, 2400);
+  assert.equal(s.txPending(), 0);
 });
 
 test("T: 45-byte TX sends all bytes in order and returns 45", () => {
@@ -269,14 +298,22 @@ test("T: >1000-byte TX completes in order via async drain", () => {
   assert.equal(s.txPending(), 0);
 });
 
-test("T: drain is cooperative (one chunk, no sleep, no retry loop)", () => {
+test("T: drain sends while BLE accepts, keeps chunk on backpressure, no sleep", () => {
   const src = readFw("pybot_repl.py");
   const drainFn = src.slice(src.indexOf("def _drain_tx"), src.indexOf("def irq_put"));
   assert.doesNotMatch(drainFn, /sleep/);
   assert.doesNotMatch(drainFn, /_TX_RETRY_MAX/);
-  assert.doesNotMatch(drainFn, /while _tx_n > 0/);
-  assert.match(drainFn, /_tx_consume\(n\)/);
-  assert.match(drainFn, /if _tx_n > 0:\s*\n\s*_schedule_drain\(\)/);
+  assert.doesNotMatch(drainFn, /_TX_BURST/);
+  assert.doesNotMatch(drainFn, /except Exception:/);
+  assert.match(src, /_KIND_TEMPORAL/);
+  assert.match(src, /_KIND_DISCONNECT/);
+  assert.match(src, /_KIND_UNEXPECTED/);
+  assert.match(drainFn, /except OSError as e:/);
+  assert.match(drainFn, /_KIND_TEMPORAL/);
+  assert.match(drainFn, /_KIND_DISCONNECT/);
+  assert.match(drainFn, /_notify_unexpected/);
+  assert.match(drainFn, /_tx_consume\(/);
+  assert.match(drainFn, /_schedule_drain\(\)/);
 });
 
 test("T: transient gatts_notify fail then recover sends all bytes", () => {
@@ -419,15 +456,78 @@ test("T: backpressure resends pending chunk exactly once (no dup, no loss)", () 
   assert.deepEqual(s.sentBytes(), [...payload]);
 });
 
-test("T: multiple consecutive prints drain fully without cross-talk", () => {
+test("T: 20 consecutive blocks complete in order without loss or dup", () => {
   const s = makeReplStream();
-  const a = new TextEncoder().encode("line1\n");
-  const b = new TextEncoder().encode("line2\n");
-  const c = new TextEncoder().encode("line3\n");
-  assert.equal(s.write(a, () => {}), a.length);
-  assert.equal(s.write(b, () => {}), b.length);
-  assert.equal(s.write(c, () => {}), c.length);
-  assert.deepEqual(s.sentBytes(), [...a, ...b, ...c]);
+  const expected = [];
+  for (let i = 0; i < 20; i++) {
+    const block = new Uint8Array(400);
+    block.fill(0x41 + (i % 26));
+    assert.equal(s.write(block, () => {}), 400);
+    expected.push(...block);
+  }
+  assert.deepEqual(s.sentBytes(), expected);
+  assert.equal(s.txPending(), 0);
+});
+
+test("T: 20 consecutive blocks survive held drain then flush", () => {
+  const s = makeReplStream();
+  let hold = true;
+  const notify = () => {
+    if (hold) {
+      const e = new Error("EAGAIN");
+      e.errno = 11;
+      throw e;
+    }
+  };
+  const expected = [];
+  for (let i = 0; i < 20; i++) {
+    const block = new Uint8Array(400);
+    block.fill(0x30 + (i % 10));
+    assert.equal(s.write(block, notify), 400);
+    expected.push(...block);
+  }
+  assert.equal(s.txPending(), 8000);
+  assert.equal(s.sentBytes().length, 0);
+  hold = false;
+  s.flushDrain();
+  assert.deepEqual(s.sentBytes(), expected);
+  assert.equal(s.txPending(), 0);
+});
+
+test("T: unexpected gatts_notify error keeps pending bytes (no false success)", () => {
+  const src = readFw("pybot_repl.py");
+  assert.match(src, /_notify_unexpected/);
+  const s = makeReplStream();
+  const payload = new Uint8Array(45);
+  payload.fill(0x41);
+  const ret = s.write(payload, () => {
+    const e = new Error("EINVAL");
+    e.errno = 22;
+    e.unexpected = true;
+    throw e;
+  });
+  assert.equal(ret, 45);
+  assert.equal(s.stats().notifyUnexpected, 1);
+  assert.equal(s.stats().notifyFail, 0);
+  assert.equal(s.sentBytes().length, 0);
+  assert.equal(s.txPending(), 45);
+});
+
+test("T: schedule busy does not orphan the TX queue", () => {
+  const src = readFw("pybot_repl.py");
+  const sched = src.slice(src.indexOf("def _schedule_drain"), src.indexOf("def _drain_tx"));
+  assert.match(sched, /except RuntimeError:/);
+  assert.doesNotMatch(sched, /except Exception:/);
+  const s = makeReplStream();
+  const payload = new Uint8Array(40);
+  payload.fill(0x42);
+  s.setScheduleBusy(true);
+  assert.equal(s.write(payload, () => {}), 40);
+  assert.equal(s.txPending(), 40);
+  assert.equal(s.sentBytes().length, 0);
+  s.setScheduleBusy(false);
+  s.flushDrain();
+  assert.deepEqual(s.sentBytes(), [...payload]);
   assert.equal(s.txPending(), 0);
 });
 

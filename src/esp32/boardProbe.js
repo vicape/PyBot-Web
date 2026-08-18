@@ -3,13 +3,14 @@
  * No entra al ROM bootloader. Nunca asume raw REPL si no hay MicroPython.
  */
 
-import { compareRuntimeVersions, PYBOT_RUNTIME_VERSION } from "../bleProtocol.js";
+import { PYBOT_RUNTIME_VERSION } from "../bleProtocol.js";
 import { BOARD_STATE } from "./provisioningPhases.js";
 import {
   PYBOT_MARKER_FILE,
   expectedProvisionFiles,
   missingProvisionFiles,
   parseRuntimeVersionFromSource,
+  isCompatibleMicroPython,
 } from "./pybotInstallManifest.js";
 
 /**
@@ -18,18 +19,21 @@ import {
  *   files?: string[],
  *   runtimeVersion?: string | null,
  *   publishedVersion?: string,
+ *   mpVersion?: string | null,
  * }} info
  */
 export function classifyBoard(info) {
   if (!info?.hasMicroPython) return BOARD_STATE.VIRGIN;
+  if (info.mpVersion != null && !isCompatibleMicroPython(info.mpVersion)) {
+    return BOARD_STATE.INCOMPATIBLE_MPY;
+  }
   const files = Array.isArray(info.files) ? info.files : [];
   if (!files.includes(PYBOT_MARKER_FILE)) return BOARD_STATE.MICROPYTHON_ONLY;
   const missing = missingProvisionFiles(files);
   if (missing.length > 0) return BOARD_STATE.INCOMPLETE;
   const published = info.publishedVersion ?? PYBOT_RUNTIME_VERSION;
   const installed = info.runtimeVersion ?? null;
-  if (!installed) return BOARD_STATE.OLD_PYBOT;
-  if (compareRuntimeVersions(installed, published) < 0) return BOARD_STATE.OLD_PYBOT;
+  if (!installed || installed !== published) return BOARD_STATE.OLD_PYBOT;
   return BOARD_STATE.READY;
 }
 
@@ -45,6 +49,24 @@ export async function inspectPybotOnSession(session, options = {}) {
       if (await session.fileExists(name)) present.push(name);
     } catch {
       /* ignore individual stat failures */
+    }
+  }
+  let mpVersion = null;
+  if (typeof session.execRaw === "function") {
+    try {
+      const code = [
+        "try:",
+        "    import sys",
+        "    v = sys.implementation.version",
+        "    print('PYBOT_MP', str(v[0]) + '.' + str(v[1]) + '.' + str(v[2]))",
+        "except Exception:",
+        "    print('PYBOT_MP')",
+      ].join("\n");
+      const { stdout } = await session.execRaw(code, { timeout: 5000 });
+      const m = String(stdout ?? "").match(/PYBOT_MP\s+([\d.]+)/);
+      mpVersion = m ? m[1] : null;
+    } catch {
+      mpVersion = null;
     }
   }
   let runtimeVersion = null;
@@ -73,12 +95,21 @@ export async function inspectPybotOnSession(session, options = {}) {
     files: present,
     runtimeVersion,
     publishedVersion: options.publishedVersion,
+    mpVersion,
   });
-  return { boardState, files: present, runtimeVersion, missing: missingProvisionFiles(present) };
+  return {
+    boardState,
+    files: present,
+    runtimeVersion,
+    mpVersion,
+    missing: missingProvisionFiles(present),
+  };
 }
 
 export function recommendedAction(boardState) {
-  if (boardState === BOARD_STATE.VIRGIN) return "prepare";
+  if (boardState === BOARD_STATE.VIRGIN || boardState === BOARD_STATE.INCOMPATIBLE_MPY) {
+    return "prepare";
+  }
   if (boardState === BOARD_STATE.MICROPYTHON_ONLY || boardState === BOARD_STATE.MPY_ONLY) {
     return "install";
   }

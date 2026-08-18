@@ -200,7 +200,9 @@ export async function runEsp32Provisioning(adapters, options = {}) {
     }
 
     const needsFlash =
-      boardState === BOARD_STATE.VIRGIN || boardState === BOARD_STATE.REPL_UNAVAILABLE;
+      boardState === BOARD_STATE.VIRGIN ||
+      boardState === BOARD_STATE.REPL_UNAVAILABLE ||
+      boardState === BOARD_STATE.INCOMPATIBLE_MPY;
 
     const needsFullInstall =
       options.forceReinstall === true ||

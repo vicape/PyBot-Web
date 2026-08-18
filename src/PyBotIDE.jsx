@@ -1853,19 +1853,20 @@ export default function PyBotIDE() {
                             type="button"
                             className="toolbar-menu-item toolbar-menu-item--highlight"
                             onClick={() => {
-                              onInstallBleRuntime();
                               setBoardMenuOpen(false);
+                              setConnectModalOpen(false);
+                              setPrepareModalOpen(true);
+                              setPreparePhase(PHASE.IDLE);
+                              setPrepareError(null);
+                              setPrepareBoardState(null);
+                              setPrepareLog([]);
+                              void runPrepareEsp32({ forceReinstall: true });
                             }}
-                            disabled={bleInstalling}
+                            disabled={preparingEsp32 || connecting}
                           >
-                            {pybotBoardState === BOARD_STATE.OLD_PYBOT ||
-                            pybotBoardState === BOARD_STATE.INCOMPLETE
-                              ? t("pybotUpdateBtn")
-                              : pybotBoardState === BOARD_STATE.MPY_ONLY
-                                ? t("pybotInstallBtn")
-                                : t("bleInstallBtn")}
+                            {t("prepareEsp32Reinstall")}
                           </button>
-                          <div className="toolbar-menu-hint">{t("bleInstallMenuHint")}</div>
+                          <div className="toolbar-menu-hint">{t("prepareEsp32MenuHint")}</div>
                           <button
                             type="button"
                             className="toolbar-menu-item toolbar-menu-item--secondary"
@@ -1889,30 +1890,6 @@ export default function PyBotIDE() {
                             {t("memDiagBtn")}
                           </button>
                           <div className="toolbar-menu-hint">{t("memDiagMenuHint")}</div>
-                          {boardType === "esp32-eda6" ? (
-                            <>
-                              <button
-                                type="button"
-                                className="toolbar-menu-item toolbar-menu-item--secondary"
-                                onClick={() => {
-                                  onInstallEda6();
-                                  setBoardMenuOpen(false);
-                                }}
-                              >
-                                {t("eda6InstallBtn")}
-                              </button>
-                              <button
-                                type="button"
-                                className="toolbar-menu-item toolbar-menu-item--secondary"
-                                onClick={() => {
-                                  onVerifyEda6();
-                                  setBoardMenuOpen(false);
-                                }}
-                              >
-                                {t("eda6VerifyBtn")}
-                              </button>
-                            </>
-                          ) : null}
                         </div>
                       ) : null}
                       {(boardType === "esp32-eda6" || boardType === "esp32-micropython") &&
@@ -2298,8 +2275,9 @@ export default function PyBotIDE() {
         }}
         onRetry={() => {
           const fromReset = preparePhase === PHASE.RESET_REQUIRED;
+          const incomplete = preparePhase === PHASE.ERROR;
           void runPrepareEsp32({
-            forceReinstall: false,
+            forceReinstall: incomplete,
             skipFlash: fromReset,
             resumeFromRepl: fromReset,
           });

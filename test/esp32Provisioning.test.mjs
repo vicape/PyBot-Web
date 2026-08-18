@@ -122,15 +122,15 @@ test("critical phases block modal close during erase/flash/verify", () => {
   assert.equal(canCloseModal(PHASE.READY), true);
 });
 
-test("classifyBoard: virgin / mpy only / incomplete / old / ready", () => {
+test("classifyBoard: virgin / mpy only / incomplete / old / ready / incompatible", () => {
   assert.equal(classifyBoard({ hasMicroPython: false }), BOARD_STATE.VIRGIN);
   assert.equal(classifyBoard({ hasMicroPython: true, files: [] }), BOARD_STATE.MICROPYTHON_ONLY);
   assert.equal(
     classifyBoard({
       hasMicroPython: true,
       files: ["pybot_ble.py", "main.py"],
-      runtimeVersion: "4.0.3",
-      publishedVersion: "4.0.3",
+      runtimeVersion: PYBOT_RUNTIME_VERSION,
+      publishedVersion: PYBOT_RUNTIME_VERSION,
     }),
     BOARD_STATE.INCOMPLETE,
   );
@@ -139,7 +139,7 @@ test("classifyBoard: virgin / mpy only / incomplete / old / ready", () => {
       hasMicroPython: true,
       files: ["pybot_ble.py", "main.py"],
       runtimeVersion: "3.2.7",
-      publishedVersion: "4.0.3",
+      publishedVersion: PYBOT_RUNTIME_VERSION,
     }),
     BOARD_STATE.INCOMPLETE,
   );
@@ -148,7 +148,7 @@ test("classifyBoard: virgin / mpy only / incomplete / old / ready", () => {
       hasMicroPython: true,
       files: expectedProvisionFiles(),
       runtimeVersion: "3.2.7",
-      publishedVersion: "4.0.3",
+      publishedVersion: PYBOT_RUNTIME_VERSION,
     }),
     BOARD_STATE.OLD_PYBOT,
   );
@@ -156,10 +156,53 @@ test("classifyBoard: virgin / mpy only / incomplete / old / ready", () => {
     classifyBoard({
       hasMicroPython: true,
       files: expectedProvisionFiles(),
-      runtimeVersion: "4.0.3",
-      publishedVersion: "4.0.3",
+      runtimeVersion: PYBOT_RUNTIME_VERSION,
+      publishedVersion: PYBOT_RUNTIME_VERSION,
     }),
     BOARD_STATE.READY,
+  );
+  assert.equal(
+    classifyBoard({
+      hasMicroPython: true,
+      files: expectedProvisionFiles(),
+      runtimeVersion: "4.0.3",
+      publishedVersion: PYBOT_RUNTIME_VERSION,
+    }),
+    BOARD_STATE.OLD_PYBOT,
+  );
+  assert.equal(
+    classifyBoard({
+      hasMicroPython: true,
+      files: expectedProvisionFiles().filter((n) => n !== "EDA6.py"),
+      runtimeVersion: PYBOT_RUNTIME_VERSION,
+      publishedVersion: PYBOT_RUNTIME_VERSION,
+    }),
+    BOARD_STATE.INCOMPLETE,
+  );
+  assert.equal(
+    classifyBoard({
+      hasMicroPython: true,
+      files: expectedProvisionFiles().filter((n) => n !== "pybot_repl.py"),
+      runtimeVersion: PYBOT_RUNTIME_VERSION,
+      publishedVersion: PYBOT_RUNTIME_VERSION,
+    }),
+    BOARD_STATE.INCOMPLETE,
+  );
+  assert.equal(
+    classifyBoard({
+      hasMicroPython: true,
+      files: [],
+      mpVersion: "1.22.0",
+    }),
+    BOARD_STATE.INCOMPATIBLE_MPY,
+  );
+  assert.equal(
+    classifyBoard({
+      hasMicroPython: true,
+      files: [],
+      mpVersion: "1.27.0",
+    }),
+    BOARD_STATE.MICROPYTHON_ONLY,
   );
 });
 
@@ -326,7 +369,7 @@ test("already prepared board does not erase", async () => {
         boardState: BOARD_STATE.READY,
         session: { id: "s" },
         files: expectedProvisionFiles(),
-        runtimeVersion: "4.0.3",
+        runtimeVersion: PYBOT_RUNTIME_VERSION,
       };
     },
   });
@@ -431,6 +474,65 @@ test("virgin board end-to-end simulated orchestration reaches READY", async () =
   assert.equal(calls.verifyPybotFiles, 1);
   const flashEv = events.find((e) => e.phase === PHASE.FLASHING && e.pct === 50);
   assert.ok(flashEv, "real write progress should surface");
+});
+
+test("compatible MicroPython is not reflashed; incompatible is flashed", async () => {
+  const compatible = createAdapters({
+    async probeBoard() {
+      return { boardState: BOARD_STATE.MICROPYTHON_ONLY, session: { id: "mpy" }, files: [], mpVersion: "1.27.0" };
+    },
+  });
+  const kept = await runEsp32Provisioning(compatible.adapters, { autoConfirm: true });
+  assert.equal(kept.ok, true);
+  assert.equal(kept.flashed, false);
+  assert.equal(compatible.calls.writeFirmware, 0);
+  assert.equal(compatible.calls.installPybot, 1);
+
+  const incompatible = createAdapters({
+    async probeBoard() {
+      return { boardState: BOARD_STATE.INCOMPATIBLE_MPY, session: { id: "oldmp" }, mpVersion: "1.22.0" };
+    },
+  });
+  const flashed = await runEsp32Provisioning(incompatible.adapters, { autoConfirm: true });
+  assert.equal(flashed.ok, true);
+  assert.equal(flashed.flashed, true);
+  assert.equal(incompatible.calls.writeFirmware, 1);
+  assert.equal(incompatible.calls.installPybot, 1);
+});
+
+test("interrupted install is not READY; retry reinstalls the full bundle", async () => {
+  const first = createAdapters({
+    async installPybot() {
+      throw new Error("unplugged");
+    },
+  });
+  const interrupted = await runEsp32Provisioning(first.adapters, { autoConfirm: true });
+  assert.equal(interrupted.ok, false);
+  assert.notEqual(interrupted.phase, PHASE.READY);
+  assert.equal(first.calls.verifyPybotFiles, 0);
+
+  const retry = createAdapters({
+    async probeBoard() {
+      return { boardState: BOARD_STATE.INCOMPLETE, session: { id: "partial" }, files: ["pybot_ble.py"] };
+    },
+  });
+  const recovered = await runEsp32Provisioning(retry.adapters, { autoConfirm: true, forceReinstall: true });
+  assert.equal(recovered.ok, true);
+  assert.equal(retry.calls.installPybot, 1);
+  assert.equal(retry.calls.verifyPybotFiles, 1);
+  assert.equal(retry.calls.writeFirmware, 0);
+});
+
+test("failed file self-test after install is not READY", async () => {
+  const { adapters } = createAdapters({
+    async verifyPybotFiles() {
+      return { ok: false, reason: "selftest_failed", selftest: { ok: false } };
+    },
+  });
+  const result = await runEsp32Provisioning(adapters, { autoConfirm: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, PROVISION_ERROR.VERIFY_FILES_FAIL);
+  assert.notEqual(result.phase, PHASE.READY);
 });
 
 test("READY is never emitted from writeFlash alone", async () => {

@@ -2,12 +2,19 @@
  * Manifest unificado de instalación PyBot en ESP32.
  * Fuente de verdad para: install, reinstall, verify, diagnose, READY/OLD/INCOMPLETE.
  * Los bytes de cada archivo viven en pybotBleRuntime.js (imports ?raw); acá solo
- * nombres, orden y scripts de verificación USB.
+ * nombres, orden, versión/protocolo requeridos, MicroPython compatible y scripts
+ * de verificación USB.
  */
 
-import { PYBOT_RUNTIME_VERSION } from "../bleProtocol.js";
+import { PYBOT_RUNTIME_VERSION, PYBOT_PROTOCOL_VERSION } from "../bleProtocol.js";
+import { ESP32_GENERIC_FIRMWARE } from "./firmwareManifest.js";
 
 export const PYBOT_MARKER_FILE = "pybot_ble.py";
+
+/** MicroPython oficial que PyBot flashea (y que se considera compatible). */
+export const PYBOT_REQUIRED_MICROPYTHON = ESP32_GENERIC_FIRMWARE.version;
+
+export const PYBOT_REQUIRED_PROTOCOL = PYBOT_PROTOCOL_VERSION;
 
 /** Orden de instalación USB: boot.py primero, luego módulos del runtime. */
 export const PYBOT_RUNTIME_FILES = Object.freeze([
@@ -47,6 +54,17 @@ export function missingProvisionFiles(present) {
   return expectedProvisionFiles().filter((name) => !have.has(name));
 }
 
+/**
+ * True si la versión de MicroPython en placa coincide con la imagen oficial.
+ * Si no hay versión (REPL habla pero no se pudo parsear), no se fuerza reflash.
+ */
+export function isCompatibleMicroPython(version) {
+  const v = String(version ?? "").trim();
+  if (!v) return true;
+  const required = PYBOT_REQUIRED_MICROPYTHON;
+  return v === required || v.startsWith(required + ".");
+}
+
 function selftestFileTuple() {
   return expectedProvisionFiles()
     .filter((n) => n.endsWith(".py"))
@@ -62,6 +80,11 @@ export const PYBOT_USB_SELFTEST_SCRIPT = [
   "import json",
   "try:",
   "    import os",
+  "    import binascii",
+  "    try:",
+  "        import hashlib",
+  "    except ImportError:",
+  "        import uhashlib as hashlib",
   "    import pybot_ble",
   "    import pybot_repl",
   "    r = {",
@@ -72,6 +95,10 @@ export const PYBOT_USB_SELFTEST_SCRIPT = [
   '        "eda6": False,',
   '        "pybot_mpy": False,',
   '        "files": True,',
+  '        "boot": False,',
+  '        "main": False,',
+  '        "hashes": {},',
+  '        "sizes": {},',
   "    }",
   "    try:",
   "        import EDA6",
@@ -85,12 +112,24 @@ export const PYBOT_USB_SELFTEST_SCRIPT = [
   "        pass",
   `    for fn in (${selftestFileTuple()}):`,
   "        try:",
-  "            f = open(fn)",
-  "            src = f.read()",
+  "            f = open(fn, 'rb')",
+  "            raw = f.read()",
   "            f.close()",
-  "            compile(src, fn, 'exec')",
-  "            if len(src) < 8:",
+  "            r['sizes'][fn] = len(raw)",
+  "            if len(raw) < 8:",
   '                r["files"] = False',
+  "            else:",
+  "                try:",
+  "                    h = hashlib.sha256(raw)",
+  "                    r['hashes'][fn] = binascii.hexlify(h.digest()).decode()",
+  "                except Exception:",
+  "                    r['hashes'][fn] = ''",
+  "                src = raw.decode()",
+  "                compile(src, fn, 'exec')",
+  "            if fn == 'boot.py':",
+  "                r['boot'] = len(raw) >= 8",
+  "            if fn == 'main.py':",
+  "                r['main'] = len(raw) >= 8",
   "        except Exception:",
   '            r["files"] = False',
   "    print('PYBOT_SELFTEST:OK', json.dumps(r))",
@@ -120,14 +159,37 @@ export function parseSelftestOutput(text, publishedVersion = PYBOT_RUNTIME_VERSI
   } catch {
     return { ok: false, reason: "invalid json" };
   }
+  const expected = expectedProvisionFiles().filter((n) => n.endsWith(".py"));
   const runtimeOk = data.runtime === publishedVersion;
-  const protocolOk = typeof data.protocol === "string" && data.protocol.length > 0;
+  const protocolOk = data.protocol === PYBOT_REQUIRED_PROTOCOL;
   const replOk = data.repl_import === true;
   const duptermOk = data.dupterm_available === true;
   const filesOk = data.files === true;
   const eda6Ok = data.eda6 === true;
   const mpyOk = data.pybot_mpy === true;
-  const ok = runtimeOk && protocolOk && replOk && duptermOk && filesOk && eda6Ok && mpyOk;
+  const bootOk = data.boot === true;
+  const mainOk = data.main === true;
+  const sizes = data.sizes && typeof data.sizes === "object" ? data.sizes : {};
+  const hashes = data.hashes && typeof data.hashes === "object" ? data.hashes : {};
+  let sizesOk = true;
+  let hashesOk = true;
+  for (const name of expected) {
+    const size = sizes[name];
+    if (!(typeof size === "number" && size >= 8)) sizesOk = false;
+    if (typeof hashes[name] !== "string" || hashes[name].length === 0) hashesOk = false;
+  }
+  const ok =
+    runtimeOk &&
+    protocolOk &&
+    replOk &&
+    duptermOk &&
+    filesOk &&
+    eda6Ok &&
+    mpyOk &&
+    bootOk &&
+    mainOk &&
+    sizesOk &&
+    hashesOk;
   return {
     ok,
     data,
@@ -138,5 +200,9 @@ export function parseSelftestOutput(text, publishedVersion = PYBOT_RUNTIME_VERSI
     filesOk,
     eda6Ok,
     mpyOk,
+    bootOk,
+    mainOk,
+    sizesOk,
+    hashesOk,
   };
 }

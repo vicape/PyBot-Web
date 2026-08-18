@@ -85,11 +85,18 @@ test("i18n es/en include Prepare ESP32 strings (no coming-soon copy)", () => {
   }
 });
 
-test("UI wires Prepare ESP32 for disconnected ESP32 boards", () => {
+test("UI wires a single Prepare/Reinstall flow (no separate EDA6/Bluetooth install buttons)", () => {
   const ide = read("src/PyBotIDE.jsx");
   assert.match(ide, /openPrepareEsp32/);
   assert.match(ide, /PrepareEsp32Modal/);
   assert.match(ide, /prepareEsp32Btn/);
+  assert.match(ide, /prepareEsp32Reinstall/);
+  assert.match(ide, /forceReinstall: true/);
+  const connectedMenu = ide.slice(ide.indexOf("menuBoardToolsLabel"), ide.indexOf("bleAppSectionLabel"));
+  assert.doesNotMatch(connectedMenu, /onInstallBleRuntime/);
+  assert.doesNotMatch(connectedMenu, /onInstallEda6/);
+  assert.doesNotMatch(connectedMenu, /bleInstallBtn/);
+  assert.doesNotMatch(connectedMenu, /eda6InstallBtn/);
   const modal = read("src/ConnectUsbModal.jsx");
   assert.match(modal, /onPrepareEsp32/);
   assert.match(modal, /highlightPrepare/);

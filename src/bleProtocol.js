@@ -24,7 +24,7 @@ export const REPL_TX_UUID = "8fbc0005-4d5a-4b8c-9a1f-123456789005"; // ESP32 -> 
 // decidir si ofrecer una actualizacion OTA por BLE. NO duplicar esta constante:
 // pybotBleRuntime.js la reexporta; los tests y la UI la importan de aca.
 // ===========================================================================
-export const PYBOT_RUNTIME_VERSION = "4.0.3";
+export const PYBOT_RUNTIME_VERSION = "4.0.4";
 // Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
 // verificado (size+hash), control de app (APP:*) y autostart con safe boot.
 // El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
