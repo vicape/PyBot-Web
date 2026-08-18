@@ -14,6 +14,7 @@ _RUNTIME_FILES = (
     "pybot_update.py",
     "pybot_boot_update.py",
     "pybot_repl.py",
+    "pybot_rble.py",
     "pybot_net.py",
     "pybot_mpy.py",
 )

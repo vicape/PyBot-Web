@@ -26,6 +26,7 @@ export const PYBOT_RUNTIME_FILES = Object.freeze([
   "pybot_update.py",
   "pybot_boot_update.py",
   "pybot_repl.py",
+  "pybot_rble.py",
   "pybot_net.py",
   "pybot_mpy.py",
 ]);
@@ -85,13 +86,16 @@ export const PYBOT_USB_SELFTEST_SCRIPT = [
   "        import hashlib",
   "    except ImportError:",
   "        import uhashlib as hashlib",
-  "    import pybot_ble",
-  "    import pybot_repl",
-  "    r = {",
-  '        "runtime": pybot_ble.PYBOT_RUNTIME_VERSION,',
-  '        "protocol": pybot_ble.PYBOT_PROTOCOL_VERSION,',
-  '        "repl_import": True,',
-  '        "dupterm_available": hasattr(os, "dupterm"),',
+    "    import pybot_ble",
+    "    import pybot_repl",
+    "    import pybot_rble",
+    "    r = {",
+    '        "runtime": pybot_ble.PYBOT_RUNTIME_VERSION,',
+    '        "protocol": pybot_ble.PYBOT_PROTOCOL_VERSION,',
+    '        "repl_import": True,',
+    '        "rble_import": True,',
+    '        "rble_version": getattr(pybot_rble, "RBLE_VERSION", 0),',
+    '        "dupterm_available": hasattr(os, "dupterm"),',
   '        "eda6": False,',
   '        "pybot_mpy": False,',
   '        "files": True,',
@@ -163,6 +167,7 @@ export function parseSelftestOutput(text, publishedVersion = PYBOT_RUNTIME_VERSI
   const runtimeOk = data.runtime === publishedVersion;
   const protocolOk = data.protocol === PYBOT_REQUIRED_PROTOCOL;
   const replOk = data.repl_import === true;
+  const rbleOk = data.rble_import === true && data.rble_version === 1;
   const duptermOk = data.dupterm_available === true;
   const filesOk = data.files === true;
   const eda6Ok = data.eda6 === true;
@@ -182,6 +187,7 @@ export function parseSelftestOutput(text, publishedVersion = PYBOT_RUNTIME_VERSI
     runtimeOk &&
     protocolOk &&
     replOk &&
+    rbleOk &&
     duptermOk &&
     filesOk &&
     eda6Ok &&
@@ -196,6 +202,7 @@ export function parseSelftestOutput(text, publishedVersion = PYBOT_RUNTIME_VERSI
     runtimeOk,
     protocolOk,
     replOk,
+    rbleOk,
     duptermOk,
     filesOk,
     eda6Ok,

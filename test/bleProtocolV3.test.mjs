@@ -32,12 +32,12 @@ import {
   parseInfoResponse,
 } from "../src/bleProtocol.js";
 
-test("version and protocol bumped to 4.0 / 3.2 (native REPL + OTA)", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.4");
+test("version and protocol bumped to 4.0.5 / 3.2 (native REPL + reliable BLE)", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.5");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.2");
 });
 
-test("capabilities include run/stop/deploy/app-control/autostart/runtime-update/native-repl", () => {
+test("capabilities include run/stop/deploy/app-control/autostart/runtime-update/native-repl/reliable-repl-v1", () => {
   assert.deepEqual([...PYBOT_CAPABILITIES], [
     "run",
     "stop",
@@ -46,6 +46,7 @@ test("capabilities include run/stop/deploy/app-control/autostart/runtime-update/
     "autostart",
     "runtime-update",
     "native-repl",
+    "reliable-repl-v1",
   ]);
 });
 

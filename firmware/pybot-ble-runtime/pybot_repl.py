@@ -1,14 +1,14 @@
 # BLE UART stream + os.dupterm: el REPL de MicroPython usa BLE como transporte.
-# IRQ: solo copia bytes al ring y llama dupterm_notify. Sin FS/import/sleep/JSON/print.
+# IRQ: solo copia/parsea bytes al ring y llama dupterm_notify. Sin FS/import/sleep/JSON/print.
 #
 # TX (contrato dupterm, extmod/os_dupterm.c en MicroPython 1.27.0):
 # - write() que retorna 0 => mp_os_dupterm_tx_strn trata 0 bytes escritos (perdida).
 # - write() que lanza => desactiva el stream ("Exception in write() method").
 # - write() solo encola el buffer completo y agenda _drain_tx. Sin sleep, sin
 #   busy-loop, sin gatts_notify, sin inspeccionar Ctrl+C.
-# Drain: gatts_notify fuera de write(), en orden, sin consumir hasta notify OK.
-# Sigue enviando mientras NimBLE acepte; si no puede, conserva el chunk y reintenta
-# en el proximo schedule. No monopoliza: sale al primer backpressure.
+# Drain: arma frames ReliableBle (pybot_rble), gatts_notify fuera de write().
+# gatts_notify OK NO es entrega: el frame queda hasta ACK. Retransmite por NACK
+# o timeout de ACK. Ventana pequena; sin sleep de pacing.
 #
 # Errores gatts_notify (extmod/nimble/modbluetooth_nimble.c 1.27.0):
 #   BLE_HS_EAGAIN -> EAGAIN (11), BLE_HS_ENOMEM -> ENOMEM (12),
@@ -20,6 +20,7 @@
 
 import io
 from micropython import const
+import pybot_rble as _rble
 
 try:
     import os
@@ -34,7 +35,7 @@ except ImportError:
 _IOCTL_POLL = const(3)
 _POLL_RD = const(1)
 _POLL_WR = const(4)
-_TX_CHUNK = const(20)
+_TX_CHUNK = const(14)
 _RING = const(512)
 
 # py/mperrno.h (MICROPY_USE_INTERNAL_ERRNO, valores Linux).
@@ -73,7 +74,7 @@ _dupterm_notify_count = 0
 
 
 def stats():
-    return {
+    st = {
         "rx_bytes": _rx_bytes,
         "tx_bytes": _tx_bytes,
         "rx_overflow": _rx_overflow,
@@ -85,6 +86,11 @@ def stats():
         "rx_pending": _rx_n,
         "slot": _slot,
     }
+    try:
+        st.update(_rble.stats())
+    except Exception:
+        pass
+    return st
 
 
 def _ring_put(data):
@@ -151,6 +157,7 @@ def _tx_clear():
     _tx_off = 0
     _tx_n = 0
     _tx_scheduled = False
+    _rble.reset_link()
 
 
 def _errno_of(exc):
@@ -177,9 +184,15 @@ def _classify_notify_error(exc):
     return _KIND_UNEXPECTED
 
 
+def _need_drain():
+    if _tx_n > 0:
+        return True
+    return _rble.has_pending()
+
+
 def _schedule_drain():
     global _tx_scheduled
-    if _tx_scheduled or _tx_n <= 0:
+    if _tx_scheduled or not _need_drain():
         return
     if micropython is None:
         _drain_tx(None)
@@ -197,6 +210,10 @@ def _schedule_drain():
             _drain_tx(None)
 
 
+def _on_ack_timeout(_t):
+    _schedule_drain()
+
+
 def _drain_tx(_arg):
     global _tx_scheduled, _tx_bytes, _notify_fail, _notify_retries, _notify_unexpected, _tx_draining
     _tx_scheduled = False
@@ -204,24 +221,32 @@ def _drain_tx(_arg):
         return
     _tx_draining = True
     try:
-        if _ble is None or _get_conn is None or _tx_n <= 0:
+        if _ble is None or _get_conn is None:
             return
         conn = _get_conn()
         if conn is None:
             _notify_fail += 1
             _tx_clear()
             return
-        while _tx_n > 0:
+        while _tx_n > 0 and _rble.window_free() > 0:
+            chunk = _tx_peek_chunk()
+            if not chunk:
+                break
+            packed = _rble.queue_data(chunk)
+            if packed <= 0:
+                break
+            _tx_consume(packed)
+        while True:
             conn = _get_conn()
             if conn is None:
                 _notify_fail += 1
                 _tx_clear()
                 return
-            chunk = _tx_peek_chunk()
-            if not chunk:
+            frame = _rble.next_to_send()
+            if not frame:
                 return
             try:
-                _ble.gatts_notify(conn, _tx_handle, chunk)
+                _ble.gatts_notify(conn, _tx_handle, frame)
             except OSError as e:
                 kind = _classify_notify_error(e)
                 if kind == _KIND_TEMPORAL:
@@ -234,10 +259,22 @@ def _drain_tx(_arg):
                     return
                 _notify_unexpected += 1
                 return
-            _tx_consume(len(chunk))
-            _tx_bytes += len(chunk)
+            _rble.mark_sent(frame)
+            _tx_bytes += len(frame)
+            while _tx_n > 0 and _rble.window_free() > 0:
+                chunk = _tx_peek_chunk()
+                if not chunk:
+                    break
+                packed = _rble.queue_data(chunk)
+                if packed <= 0:
+                    break
+                _tx_consume(packed)
     finally:
         _tx_draining = False
+        if _need_drain():
+            frame = _rble.next_to_send()
+            if frame:
+                _schedule_drain()
 
 
 def irq_put(data):
@@ -245,7 +282,23 @@ def irq_put(data):
     global _dupterm_notify_count
     if not data:
         return
-    _ring_put(data)
+    payload = _rble.feed_rx(data)
+    if payload:
+        _ring_put(payload)
+        if os is not None:
+            try:
+                os.dupterm_notify(None)
+                _dupterm_notify_count += 1
+            except AttributeError:
+                pass
+            except Exception:
+                pass
+    _schedule_drain()
+
+
+def inject_ctrl_c():
+    global _dupterm_notify_count
+    _ring_put(b"\x03")
     if os is not None:
         try:
             os.dupterm_notify(None)
@@ -254,10 +307,6 @@ def irq_put(data):
             pass
         except Exception:
             pass
-
-
-def inject_ctrl_c():
-    irq_put(b"\x03")
 
 
 class BleReplStream(io.IOBase):
@@ -307,6 +356,8 @@ def attach(ble, tx_handle, get_conn):
     _tx_handle = tx_handle
     _get_conn = get_conn
     _tx_clear()
+    _rble.set_timeout_cb(_on_ack_timeout)
+    _rble.reset_session(True)
     if _stream is None:
         _stream = BleReplStream()
     if os is None or not hasattr(os, "dupterm"):
@@ -323,6 +374,7 @@ def attach(ble, tx_handle, get_conn):
             micropython.kbd_intr(3)
         except Exception:
             pass
+    _schedule_drain()
     return True
 
 

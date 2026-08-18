@@ -73,6 +73,8 @@ function okSelftestPayload(overrides = {}) {
     runtime: PYBOT_RUNTIME_VERSION,
     protocol: PYBOT_PROTOCOL_VERSION,
     repl_import: true,
+    rble_import: true,
+    rble_version: 1,
     dupterm_available: true,
     eda6: true,
     pybot_mpy: true,
@@ -100,6 +102,7 @@ test("manifest is the unique source of truth for bundle + versions", () => {
       "pybot_update.py",
       "pybot_boot_update.py",
       "pybot_repl.py",
+      "pybot_rble.py",
       "pybot_net.py",
       "pybot_mpy.py",
       "EDA6.py",
@@ -159,5 +162,5 @@ test("compatible MicroPython 1.27.0 is kept; other versions are not", () => {
 test("pybot_repl.py on disk is importable Python (no syntax errors)", () => {
   const src = readFileSync(join(firmwareDir, "pybot_repl.py"), "utf8");
   assert.doesNotMatch(src, /if \(_tx_n/);
-  assert.match(src, /while _tx_n > 0:/);
+  assert.match(src, /while _tx_n > 0/);
 });

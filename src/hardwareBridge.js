@@ -81,6 +81,7 @@ import {
   runtimeSupportsRun,
   runtimeSupportsDeploy,
   runtimeSupportsUpdate,
+  runtimeSupportsReliableRepl,
   runtimeUpdateStatus,
   runtimeStopReliable,
   compareRuntimeVersions,
@@ -89,6 +90,7 @@ import {
 } from "./bleProtocol.js";
 import { isNativeBleEnabled } from "./micropython/featureFlags.js";
 import { BleReplTransport } from "./micropython/bleReplTransport.js";
+import { ReliableBleTransport } from "./reliableBleTransport.js";
 import { STOP_LEVEL } from "./micropython/stopLifecycle.js";
 import {
   BLE_BACKEND,
@@ -1253,6 +1255,7 @@ async function activateBleExecutionBackend(tr) {
     runtime: info?.firmware ?? null,
     protocol: info?.protocol ?? null,
     nativeReplCap: parseCapabilities(info).includes("native-repl"),
+    reliableReplCap: parseCapabilities(info).includes("reliable-repl-v1"),
     replRx: !!replStatus.rx,
     replTx: !!replStatus.tx,
     notifications: !!replStatus.notifications,
@@ -1312,9 +1315,16 @@ async function activateBleExecutionBackend(tr) {
       error: "BLE_REPL_NOTIFY_FAIL",
     });
   }
+  if (!runtimeSupportsReliableRepl(info)) {
+    return apply({
+      backend: null,
+      error: "BLE_REPL_NEEDS_UPDATE",
+      reason: "runtime-needs-reliable-repl",
+    });
+  }
 
   try {
-    const bleTr = new BleReplTransport(tr);
+    const bleTr = new BleReplTransport(new ReliableBleTransport(tr));
     const { session } = await connectMicroPythonFromTransport(bleTr, {
       detect: true,
       recoverRepl: true,

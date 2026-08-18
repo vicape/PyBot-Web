@@ -15,6 +15,7 @@ import bleDeployRaw from "../firmware/pybot-ble-runtime/pybot_deploy.py?raw";
 import bleUpdateRaw from "../firmware/pybot-ble-runtime/pybot_update.py?raw";
 import bleBootUpdateRaw from "../firmware/pybot-ble-runtime/pybot_boot_update.py?raw";
 import bleReplRaw from "../firmware/pybot-ble-runtime/pybot_repl.py?raw";
+import bleRbleRaw from "../firmware/pybot-ble-runtime/pybot_rble.py?raw";
 import bleNetRaw from "../firmware/pybot-ble-runtime/pybot_net.py?raw";
 import bleMpyRaw from "../firmware/pybot-ble-runtime/pybot_mpy.py?raw";
 import { PYBOT_RUNTIME_VERSION, PYBOT_PROTOCOL_VERSION, sha256Hex } from "./bleProtocol.js";
@@ -76,23 +77,31 @@ export function getBleBootSource() {
   return bleBootRaw;
 }
 
+const RUNTIME_SOURCES = Object.freeze({
+  "boot.py": bleBootRaw,
+  "main.py": bleRuntimeRaw,
+  "pybot_ble.py": bleCoreRaw,
+  "pybot_run.py": bleRunRaw,
+  "pybot_deploy.py": bleDeployRaw,
+  "pybot_update.py": bleUpdateRaw,
+  "pybot_boot_update.py": bleBootUpdateRaw,
+  "pybot_repl.py": bleReplRaw,
+  "pybot_rble.py": bleRbleRaw,
+  "pybot_net.py": bleNetRaw,
+  "pybot_mpy.py": bleMpyRaw,
+});
+
 /**
  * Módulos del runtime (nombre en placa + fuente) en orden de instalación.
  * Incluye main.py; NO incluye boot.py (se instala aparte y no va en el pack OTA
- * para no reescribir el boot en ejecución).
+ * para no reescribir el boot en ejecución). Orden: pybotInstallManifest.js.
  */
 export function getBleRuntimeModules() {
-  return [
-    { name: "main.py", source: bleRuntimeRaw },
-    { name: "pybot_ble.py", source: bleCoreRaw },
-    { name: "pybot_run.py", source: bleRunRaw },
-    { name: "pybot_deploy.py", source: bleDeployRaw },
-    { name: "pybot_update.py", source: bleUpdateRaw },
-    { name: "pybot_boot_update.py", source: bleBootUpdateRaw },
-    { name: "pybot_repl.py", source: bleReplRaw },
-    { name: "pybot_net.py", source: bleNetRaw },
-    { name: "pybot_mpy.py", source: bleMpyRaw },
-  ];
+  return PYBOT_RUNTIME_MODULE_FILES.map((name) => {
+    const source = RUNTIME_SOURCES[name];
+    if (source == null) throw new Error("missing runtime source: " + name);
+    return { name, source };
+  });
 }
 
 /**

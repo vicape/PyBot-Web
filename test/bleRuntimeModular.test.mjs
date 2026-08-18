@@ -21,6 +21,7 @@ const MODULE_FILES = [
   "pybot_update.py",
   "pybot_boot_update.py",
   "pybot_repl.py",
+  "pybot_rble.py",
   "pybot_net.py",
   "pybot_mpy.py",
 ];
@@ -57,11 +58,11 @@ function buildPackBytes(modules) {
   return out;
 }
 
-test("runtime modules declare 4.0.4 / protocol 3.2", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.4");
+test("runtime modules declare 4.0.5 / protocol 3.2", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.5");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.2");
   const core = readFw("pybot_ble.py");
-  assert.match(core, /PYBOT_RUNTIME_VERSION = "4\.0\.4"/);
+  assert.match(core, /PYBOT_RUNTIME_VERSION = "4\.0\.5"/);
   assert.match(core, /PYBOT_PROTOCOL_VERSION = "3\.2"/);
   // 3.2.3+: RUN:BEGIN/READY fuera del IRQ (cola + poll en main loop).
   assert.match(core, /poll_commands/);

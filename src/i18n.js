@@ -1256,10 +1256,19 @@ export function formatPythonError(message) {
 
   const firstDefinedName = m.match(/name ['"]([^'"]+)['"] is not defined/i)?.[1];
 
+  if (/BLE_REPL_NEEDS_UPDATE/i.test(m)) {
+    return withCode(
+      "Esta ESP32 necesita actualizar PyBot (transporte BLE fiable). Usá «Reinstalar PyBot en ESP32» por USB. No se usa el runtime legado.",
+      "This ESP32 needs a PyBot update (reliable BLE transport). Use “Reinstall PyBot on ESP32” over USB. The legacy runtime is not used.",
+      "BLE_REPL_NEEDS_UPDATE",
+    );
+  }
+
   const protoCodes = [
     "BLE_REPL_CHARS_MISSING",
     "BLE_REPL_NOTIFY_FAIL",
     "BLE_REPL_HANDSHAKE_FAIL",
+    "BLE_REPL_NEEDS_UPDATE",
     "BLE_REPL_UNVERIFIED",
     "BLE_NATIVE_REPL_FAIL",
     "RAW_REPL_ENTER_TIMEOUT",

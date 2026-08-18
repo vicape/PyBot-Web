@@ -39,11 +39,19 @@ export function classifyBleRuntime(input) {
 
   const caps = parseCapabilities(info);
   const nativeCap = caps.includes("native-repl");
+  const reliableCap = caps.includes("reliable-repl-v1");
   const major = firmwareMajor(info);
   const isV4 = major != null && major >= 4;
 
+  if (reliableCap) {
+    return { intent: "native", reason: "runtime-reliable-repl" };
+  }
   if (nativeCap || isV4) {
-    return { intent: "native", reason: "runtime-native-repl" };
+    return {
+      intent: "fail",
+      reason: "runtime-needs-reliable-repl",
+      error: "BLE_REPL_NEEDS_UPDATE",
+    };
   }
   if (hasReplChars && (info == null || caps.length === 0)) {
     return { intent: "native", reason: "repl-chars-present" };
@@ -135,6 +143,7 @@ export function formatBleBackendDiagnosis(diag) {
     "runtime=" + (d.runtime ?? "?"),
     "protocol=" + (d.protocol ?? "?"),
     "native-repl=" + (d.nativeReplCap ? "true" : "false"),
+    "reliable-repl-v1=" + (d.reliableReplCap ? "true" : "false"),
     "chars=" +
       (d.replRx ? "REPL_RX" : "no-RX") +
       "," +

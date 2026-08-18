@@ -24,7 +24,7 @@ export const REPL_TX_UUID = "8fbc0005-4d5a-4b8c-9a1f-123456789005"; // ESP32 -> 
 // decidir si ofrecer una actualizacion OTA por BLE. NO duplicar esta constante:
 // pybotBleRuntime.js la reexporta; los tests y la UI la importan de aca.
 // ===========================================================================
-export const PYBOT_RUNTIME_VERSION = "4.0.4";
+export const PYBOT_RUNTIME_VERSION = "4.0.5";
 // Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
 // verificado (size+hash), control de app (APP:*) y autostart con safe boot.
 // El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
@@ -58,7 +58,13 @@ export const PYBOT_RUNTIME_VERSION = "4.0.4";
 // Características REPL_RX/REPL_TX; capability "native-repl". ADMIN (PING/INFO/OTA)
 // permanece en RX/TX existentes. ProgramManager queda como LEGACY (pybot_legacy.on
 // / MICROPYTHON_NATIVE_BLE=false).
+// 4.0.5 (runtime; protocolo 3.2): ReliableBleTransport bajo el REPL (capability
+// "reliable-repl-v1"). El framing REPL es interno y se negocia por capability;
+// ADMIN no cambia. Placas 4.0.4 necesitan USB (el pack añade pybot_rble.py).
 export const PYBOT_PROTOCOL_VERSION = "3.2";
+/** Primera version con pybot_rble.py (pack OTA de 4.0.4 rechaza el archivo nuevo). */
+export const PYBOT_RELIABLE_REPL_MIN = "4.0.5";
+export const PYBOT_CAPABILITY_RELIABLE_REPL = "reliable-repl-v1";
 
 /** Primera version de runtime con boot/OTA multi-archivo (pack PYBOTRT1). */
 export const PYBOT_MODULAR_RUNTIME_MIN = "3.2.0";
@@ -76,6 +82,7 @@ export const PYBOT_CAPABILITIES = Object.freeze([
   "autostart",
   "runtime-update",
   "native-repl",
+  "reliable-repl-v1",
 ]);
 
 export const MAX_COMMAND_LENGTH = 64;
@@ -234,6 +241,16 @@ export function runtimeSupportsNativeRepl(info) {
 }
 
 /**
+ * True si el runtime declara framing REPL fiable (capability "reliable-repl-v1").
+ * Sin esa capability la web NO usa el camino FIFO+notify (defecto 4.0.4):
+ * la placa debe actualizarse. Estrictamente por capability.
+ * @param {null | { capabilities?: string[] }} info
+ */
+export function runtimeSupportsReliableRepl(info) {
+  return parseCapabilities(info).includes(PYBOT_CAPABILITY_RELIABLE_REPL);
+}
+
+/**
  * Compara dos versiones "x.y.z" numericamente. Devuelve -1 si a<b, 0 si igual,
  * 1 si a>b. Tolerante: partes no numericas o faltantes cuentan como 0. Cualquier
  * entrada invalida se trata conservadoramente como "igual" (0) para no ofrecer
@@ -288,15 +305,23 @@ export function runtimeUpdateStatus(info, published = PYBOT_RUNTIME_VERSION) {
   const otaLayoutReady =
     installed != null &&
     compareRuntimeVersions(installed, PYBOT_MODULAR_RUNTIME_MIN) >= 0;
-  const canUpdateOta = updateAvailable && supportsOta && otaLayoutReady;
+  const publishedNeedsNewFiles =
+    compareRuntimeVersions(latest, PYBOT_RELIABLE_REPL_MIN) >= 0;
+  const boardKnowsNewFiles =
+    installed != null &&
+    compareRuntimeVersions(installed, PYBOT_RELIABLE_REPL_MIN) >= 0;
+  const otaPackCompatible = !publishedNeedsNewFiles || boardKnowsNewFiles;
+  const canUpdateOta =
+    updateAvailable && supportsOta && otaLayoutReady && otaPackCompatible;
   return {
     installed,
     latest,
     updateAvailable,
     supportsOta,
     canUpdateOta,
-    // Novedad sin canal OTA, o salto a layout modular desde < 3.2.0.
-    needsUsb: updateAvailable && (!supportsOta || !otaLayoutReady),
+    // Novedad sin canal OTA, salto modular < 3.2.0, o pack con archivo
+    // que el boot_update viejo rechaza (pybot_rble.py desde 4.0.5).
+    needsUsb: updateAvailable && (!supportsOta || !otaLayoutReady || !otaPackCompatible),
   };
 }
 
