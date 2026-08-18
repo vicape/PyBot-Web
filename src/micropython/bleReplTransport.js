@@ -1,6 +1,7 @@
 /**
  * Transporte BLE REPL: ByteTransport (write / onData / close / isOpen).
  * No interpreta raw REPL. Cola de escritura: un solo write a la vez sobre REPL_RX.
+ * El Stop urgente usa el plano ADMIN independiente y no espera esa cola.
  */
 
 import { REPL_RX_UUID, REPL_TX_UUID } from "../bleProtocol.js";
@@ -45,6 +46,24 @@ export class BleReplTransport {
   onData(cb) {
     if (typeof cb === "function") this._cbs.add(cb);
     return () => this._cbs.delete(cb);
+  }
+
+  /**
+   * Stop de control: NO se encadena a _writeTail. ReliableBleTransport lo manda
+   * por ADMIN y el firmware inyecta Ctrl+C en dupterm desde su handler urgente.
+   */
+  async interruptUrgent() {
+    if (!this.isOpen()) {
+      throw protocolError(PROTOCOL_ERROR.BLE_REPL_NOT_CONNECTED);
+    }
+    if (typeof this._bt.interruptUrgent !== "function") {
+      throw protocolError(PROTOCOL_ERROR.BLE_REPL_TX_FAIL, { detail: "urgent-stop-unsupported" });
+    }
+    try {
+      await this._bt.interruptUrgent();
+    } catch (e) {
+      throw protocolError(PROTOCOL_ERROR.BLE_REPL_TX_FAIL, { cause: e });
+    }
   }
 
   async write(data) {
