@@ -59,13 +59,13 @@ export class MicroPythonSession {
     await this.protocol.enterRawRepl();
   }
 
-  async _execProgramBytes(program) {
+  async _execProgramBytes(program, options = {}) {
     if (this._useRawPaste) {
-      const pasted = await this.protocol.executeRawPaste(program);
+      const pasted = await this.protocol.executeRawPaste(program, options);
       if (pasted.supported) return;
       this._useRawPaste = false;
     }
-    await this.protocol.executeRawClassic(program);
+    await this.protocol.executeRawClassic(program, options);
   }
 
   async detect() {
@@ -96,13 +96,15 @@ export class MicroPythonSession {
     const stopRequested = () =>
       this._interrupted ||
       (typeof shouldStop === "function" && shouldStop() === true);
-    const finishInterruptedBeforeFollow = async () => {
+    const finishInterruptedBeforeFollow = async (exitRaw = true) => {
       this._interrupted = true;
       if (onOut) onOut("\n[Detenido]\n");
-      try {
-        await this.protocol.exitRawRepl();
-      } catch {
-        /* best-effort: el siguiente Run recupera raw REPL antes de enviar código */
+      if (exitRaw) {
+        try {
+          await this.protocol.exitRawRepl();
+        } catch {
+          /* best-effort: el siguiente Run recupera raw REPL antes de enviar código */
+        }
       }
       return { stdout: "", stderr: "", interrupted: true };
     };
@@ -113,14 +115,16 @@ export class MicroPythonSession {
       ? buildRunnableProgram(prefix, userCode)
       : prefix + "\n" + String(userCode ?? "") + "\n";
 
-    if (stopRequested()) return finishInterruptedBeforeFollow();
+    if (stopRequested()) return finishInterruptedBeforeFollow(false);
 
     try {
       await this.protocol.enterRawRepl();
       if (stopRequested()) return finishInterruptedBeforeFollow();
-      await this._execProgramBytes(program);
+      await this._execProgramBytes(program, { shouldAbort: stopRequested });
     } catch (e) {
-      if (stopRequested()) return finishInterruptedBeforeFollow();
+      if (stopRequested() || errorCode(e) === PROTOCOL_ERROR.RAW_REPL_CANCELLED) {
+        return finishInterruptedBeforeFollow();
+      }
       try {
         await this.protocol.exitRawRepl();
       } catch {
