@@ -27,6 +27,7 @@ export const RBLE_CRC_SIZE = 2;
 export const RBLE_FRAME_MAX = 20;
 export const RBLE_ACK_TIMEOUT_MS = 120;
 export const RBLE_RETRY_MAX = 10;
+export const RBLE_SYNC_TIMEOUT_MS = 2000;
 export const RBLE_CAPABILITY = "reliable-repl-v1";
 
 /** CRC16-CCITT-FALSE: poly 0x1021, init 0xFFFF, xorout 0. */
@@ -132,6 +133,7 @@ export class ReliableBleTransport {
     this._setTimeout = deps.setTimeout || ((fn, ms) => setTimeout(fn, ms));
     this._clearTimeout = deps.clearTimeout || ((id) => clearTimeout(id));
     this._ackTimeoutMs = deps.ackTimeoutMs ?? RBLE_ACK_TIMEOUT_MS;
+    this._syncTimeoutMs = deps.syncTimeoutMs ?? RBLE_SYNC_TIMEOUT_MS;
 
     this._cbs = new Set();
     this._txNext = 0;
@@ -141,10 +143,13 @@ export class ReliableBleTransport {
     this._epoch = 0;
     this._peerEpoch = -1;
     this._synced = false;
+    this._handshakePending = false;
     this._closed = false;
     this._txQueue = [];
     this._ackWaiters = [];
+    this._syncWaiters = [];
     this._timer = null;
+    this._syncTimer = null;
     this._writeTail = Promise.resolve();
     this._started = false;
     this._ready = Promise.resolve();
@@ -224,19 +229,93 @@ export class ReliableBleTransport {
     this.reset("resync-local");
     this._epoch = (this._epoch + 1) & 0xff;
     this._synced = false;
+    this._handshakePending = true;
     await this._sendCtrl(encodeFrame(RBLE_TYPE_RESET, 0, new Uint8Array([RBLE_WINDOW, this._epoch])));
+    if (this._synced) {
+      this._handshakePending = false;
+      return;
+    }
+    await this._waitSynced();
+  }
+
+  _waitSynced() {
+    if (this._synced) return Promise.resolve();
+    if (this._closed) return Promise.reject(new Error("RBLE_RESET:close"));
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let wrap;
+      const timer = this._setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this._handshakePending = false;
+        this._syncTimer = null;
+        const idx = this._syncWaiters.indexOf(wrap);
+        if (idx >= 0) this._syncWaiters.splice(idx, 1);
+        reject(new Error("RBLE_SYNC_TIMEOUT"));
+      }, this._syncTimeoutMs);
+      if (timer && typeof timer.unref === "function") timer.unref();
+      this._syncTimer = timer;
+      wrap = {
+        resolve: () => {
+          if (settled) return;
+          settled = true;
+          this._clearSyncTimer();
+          resolve();
+        },
+        reject: (err) => {
+          if (settled) return;
+          settled = true;
+          this._clearSyncTimer();
+          reject(err);
+        },
+      };
+      this._syncWaiters.push(wrap);
+      if (this._synced) wrap.resolve();
+    });
+  }
+
+  _wakeSync() {
+    const waiters = this._syncWaiters.splice(0);
+    for (const w of waiters) {
+      try {
+        w.resolve?.();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  _clearSyncTimer() {
+    if (this._syncTimer != null) {
+      try {
+        this._clearTimeout(this._syncTimer);
+      } catch {
+        /* ignore */
+      }
+      this._syncTimer = null;
+    }
   }
 
   reset(reason = "reset") {
     this._clearTimer();
+    this._clearSyncTimer();
     this._window = [];
     this._txNext = 0;
     this._txBase = 0;
     this._rxExpected = 0;
     this._txQueue = [];
     this._synced = false;
+    this._handshakePending = false;
     const waiters = this._ackWaiters.splice(0);
     for (const w of waiters) {
+      try {
+        w.reject?.(new Error("RBLE_RESET:" + reason));
+      } catch {
+        /* ignore */
+      }
+    }
+    const syncWaiters = this._syncWaiters.splice(0);
+    for (const w of syncWaiters) {
       try {
         w.reject?.(new Error("RBLE_RESET:" + reason));
       } catch {
@@ -296,6 +375,15 @@ export class ReliableBleTransport {
   _onReset(_window, epoch) {
     const same = epoch === this._peerEpoch;
     this._peerEpoch = epoch;
+    if (this._handshakePending) {
+      // Initiator already reset locally and sent RESET. The peer reply only
+      // completes sync — never rewind seq (that drops in-flight raw REPL bytes).
+      this._handshakePending = false;
+      this._synced = true;
+      this._wakeSync();
+      this._wakeAck();
+      return;
+    }
     this._synced = true;
     if (same) {
       this._wakeAck();

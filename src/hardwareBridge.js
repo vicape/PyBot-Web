@@ -1324,7 +1324,9 @@ async function activateBleExecutionBackend(tr) {
   }
 
   try {
-    const bleTr = new BleReplTransport(new ReliableBleTransport(tr));
+    const rble = new ReliableBleTransport(tr, { autoStart: false });
+    await rble.start();
+    const bleTr = new BleReplTransport(rble);
     const { session } = await connectMicroPythonFromTransport(bleTr, {
       detect: true,
       recoverRepl: true,

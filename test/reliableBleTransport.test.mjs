@@ -15,6 +15,7 @@ import {
   RBLE_MAX_PAYLOAD,
   RBLE_ACK_TIMEOUT_MS,
   RBLE_RETRY_MAX,
+  RBLE_SYNC_TIMEOUT_MS,
   RBLE_CAPABILITY,
   crc16,
   encodeFrame,
@@ -397,6 +398,109 @@ test("window full applies backpressure until ACK", async () => {
   assert.equal(t._window.length, RBLE_WINDOW);
   assert.equal(settled, false, "write waits for ACK when the window is full");
   t.reset("test-done");
+});
+
+test("delayed RESET reply does not drop the first raw REPL byte", async () => {
+  const gattWrites = [];
+  const espPayloads = [];
+  let espRxExpected = 0;
+  let espSynced = false;
+  let replHandler = null;
+  const firstReplByte = u8(0x01);
+
+  const bt = {
+    isConnected: () => true,
+    hasRepl: () => true,
+    onReplData(cb) {
+      replHandler = cb;
+      return () => {
+        replHandler = null;
+      };
+    },
+    async writeRepl(data) {
+      const parsed = decodeFrame(data);
+      gattWrites.push(parsed);
+      if (parsed?.type === RBLE_TYPE_DATA) {
+        if (!espSynced) {
+          throw new Error("DATA reached ESP32 before RESET handshake completed");
+        }
+        if (parsed.seq === espRxExpected) {
+          espRxExpected = (espRxExpected + 1) & 0xffff;
+          for (const b of parsed.payload) espPayloads.push(b);
+          const ack = encodeFrame(RBLE_TYPE_ACK, parsed.seq);
+          queueMicrotask(() => replHandler?.(ack));
+        }
+      }
+    },
+  };
+
+  const t = new ReliableBleTransport(bt, { autoStart: false, syncTimeoutMs: 5_000 });
+  const startP = t.start();
+  for (let i = 0; i < 20; i++) {
+    await Promise.resolve();
+    if (gattWrites.some((w) => w && w.type === RBLE_TYPE_RESET)) break;
+  }
+  assert.equal(
+    gattWrites.filter((w) => w && w.type === RBLE_TYPE_RESET).length,
+    1,
+    "browser sends exactly one RESET",
+  );
+  assert.equal(t._synced, false);
+  assert.equal(t._txNext, 0);
+
+  let writeSettled = false;
+  const writeP = t.writeRepl(firstReplByte).then(
+    (v) => {
+      writeSettled = true;
+      return v;
+    },
+    (err) => {
+      writeSettled = true;
+      throw err;
+    },
+  );
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  assert.equal(writeSettled, false);
+  assert.equal(
+    gattWrites.filter((w) => w && w.type === RBLE_TYPE_DATA).length,
+    0,
+    "raw REPL DATA must wait for RESET reply",
+  );
+  assert.equal(espPayloads.length, 0);
+
+  // Delayed ESP32 RESET reply (the race: used to rewind seq after TX started).
+  espSynced = true;
+  replHandler(encodeFrame(RBLE_TYPE_RESET, 0, u8(RBLE_WINDOW, 7)));
+  await startP;
+  assert.equal(t._synced, true);
+  assert.equal(t._handshakePending, false);
+
+  await writeP;
+  assert.equal(writeSettled, true);
+  const dataFrames = gattWrites.filter((w) => w && w.type === RBLE_TYPE_DATA);
+  assert.equal(dataFrames.length, 1);
+  assert.equal(dataFrames[0].seq, 0);
+  assert.deepEqual([...dataFrames[0].payload], [0x01]);
+  assert.deepEqual(espPayloads, [0x01], "first raw REPL byte is delivered once");
+  assert.equal(t._txNext, 1);
+
+  const seqAfterTx = t._txNext;
+  replHandler(encodeFrame(RBLE_TYPE_RESET, 0, u8(RBLE_WINDOW, 7)));
+  assert.equal(t._txNext, seqAfterTx, "RESET after TX must not reset sequence numbers");
+  assert.equal(RBLE_SYNC_TIMEOUT_MS, 2000);
+});
+
+test("native BLE path waits for reliable sync before MicroPython raw REPL", () => {
+  const src = readFileSync(join(root, "src/hardwareBridge.js"), "utf8");
+  const activate = src.slice(
+    src.indexOf("async function activateBleExecutionBackend"),
+    src.indexOf("export async function bleRunConnect"),
+  );
+  assert.match(activate, /autoStart:\s*false/);
+  const startAt = activate.indexOf("await rble.start()");
+  const connectAt = activate.indexOf("connectMicroPythonFromTransport");
+  assert.ok(startAt >= 0, "must await reliable BLE start()");
+  assert.ok(connectAt > startAt, "raw REPL must start only after RESET sync");
 });
 
 test("RESET/RESYNC after reconnect does not deliver old session bytes", async () => {
