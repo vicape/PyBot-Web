@@ -8,9 +8,11 @@
  * Framing is binary (reliable-repl-v1). Not JSON. MicroPythonSession still
  * sees a plain byte stream.
  *
- * Window=2: default ATT MTU 23 → 20-byte notify; header+CRC = 6 bytes →
- * 14-byte payload. NimBLE queues few notifies; 2 in-flight frames ≈ 40 bytes
- * RAM and matches controller buffers better than window=4.
+ * Window=2 stays fixed. Default ATT MTU 23 → 20-byte notify; header+CRC = 6
+ * → 14-byte payload (floor). If the peer RESET announces a larger size after
+ * MTU exchange, payload may rise up to 50 (frame 56; needs MTU ≥ 65).
+ * Chrome Web Bluetooth has no requestMtu: JS advertises the ceiling in RESET
+ * and adopts the firmware reply. Never send payload 50 before that sync.
  */
 
 import { BLE_STATE } from "./bluetoothTransport.js";
@@ -21,10 +23,13 @@ export const RBLE_TYPE_ACK = 0x02;
 export const RBLE_TYPE_NACK = 0x03;
 export const RBLE_TYPE_RESET = 0x04;
 export const RBLE_WINDOW = 2;
-export const RBLE_MAX_PAYLOAD = 14;
+/** Floor until RESET; also 4.0.5 / MTU 23 payload. */
+export const RBLE_MIN_PAYLOAD = 14;
+/** Compiled v1 ceiling. Runtime payload is instance-dynamic after RESET. */
+export const RBLE_MAX_PAYLOAD = 50;
 export const RBLE_HEADER_SIZE = 4;
 export const RBLE_CRC_SIZE = 2;
-export const RBLE_FRAME_MAX = 20;
+export const RBLE_FRAME_MAX = RBLE_HEADER_SIZE + RBLE_MAX_PAYLOAD + RBLE_CRC_SIZE;
 export const RBLE_ACK_TIMEOUT_MS = 120;
 export const RBLE_RETRY_MAX = 10;
 export const RBLE_SYNC_TIMEOUT_MS = 2000;
@@ -54,6 +59,15 @@ export function seqLte(a, b) {
 
 export function seqLt(a, b) {
   return seqMasked(a) !== seqMasked(b) && seqLte(a, b);
+}
+
+export function clampRblePayload(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return RBLE_MIN_PAYLOAD;
+  const i = v | 0;
+  if (i < RBLE_MIN_PAYLOAD) return RBLE_MIN_PAYLOAD;
+  if (i > RBLE_MAX_PAYLOAD) return RBLE_MAX_PAYLOAD;
+  return i;
 }
 
 /**
@@ -125,6 +139,8 @@ export class ReliableBleTransport {
    *   setTimeout?: (fn: Function, ms: number) => any,
    *   clearTimeout?: (id: any) => void,
    *   ackTimeoutMs?: number,
+   *   maxPayload?: number,
+   *   advertisedPayload?: number,
    * }} [deps]
    */
   constructor(bluetooth, deps = {}) {
@@ -134,6 +150,11 @@ export class ReliableBleTransport {
     this._clearTimeout = deps.clearTimeout || ((id) => clearTimeout(id));
     this._ackTimeoutMs = deps.ackTimeoutMs ?? RBLE_ACK_TIMEOUT_MS;
     this._syncTimeoutMs = deps.syncTimeoutMs ?? RBLE_SYNC_TIMEOUT_MS;
+    this._payloadFloor = clampRblePayload(deps.maxPayload ?? RBLE_MIN_PAYLOAD);
+    this._advertisedPayload = clampRblePayload(
+      deps.advertisedPayload ?? (deps.maxPayload != null ? deps.maxPayload : RBLE_MAX_PAYLOAD),
+    );
+    this._maxPayload = this._payloadFloor;
 
     this._cbs = new Set();
     this._txNext = 0;
@@ -219,8 +240,9 @@ export class ReliableBleTransport {
     const bytes =
       data instanceof Uint8Array ? data : typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data);
     if (!bytes.length) return;
-    for (let i = 0; i < bytes.length; i += RBLE_MAX_PAYLOAD) {
-      this._txQueue.push(bytes.subarray(i, i + RBLE_MAX_PAYLOAD));
+    const chunk = this._maxPayload;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      this._txQueue.push(bytes.subarray(i, i + chunk));
     }
     await this._pump();
   }
@@ -230,7 +252,7 @@ export class ReliableBleTransport {
     this._epoch = (this._epoch + 1) & 0xff;
     this._synced = false;
     this._handshakePending = true;
-    await this._sendCtrl(encodeFrame(RBLE_TYPE_RESET, 0, new Uint8Array([RBLE_WINDOW, this._epoch])));
+    await this._sendCtrl(encodeFrame(RBLE_TYPE_RESET, 0, this._resetPayload()));
     if (this._synced) {
       this._handshakePending = false;
       return;
@@ -304,6 +326,7 @@ export class ReliableBleTransport {
     this._txBase = 0;
     this._rxExpected = 0;
     this._txQueue = [];
+    this._maxPayload = this._payloadFloor;
     this._synced = false;
     this._handshakePending = false;
     const waiters = this._ackWaiters.splice(0);
@@ -345,7 +368,8 @@ export class ReliableBleTransport {
     if (parsed.type === RBLE_TYPE_RESET) {
       const window = parsed.payload[0] ?? RBLE_WINDOW;
       const epoch = parsed.payload[1] ?? 0;
-      this._onReset(window, epoch);
+      const peerMax = parsed.payload.length > 2 ? parsed.payload[2] : undefined;
+      this._onReset(window, epoch, peerMax);
       return;
     }
     if (parsed.type === RBLE_TYPE_ACK) {
@@ -372,7 +396,20 @@ export class ReliableBleTransport {
     void this._sendCtrl(encodeFrame(RBLE_TYPE_NACK, this._rxExpected, new Uint8Array(0)));
   }
 
-  _onReset(_window, epoch) {
+  _resetPayload() {
+    return new Uint8Array([RBLE_WINDOW, this._epoch, this._advertisedPayload]);
+  }
+
+  _adoptPeerPayload(peerMax) {
+    if (peerMax == null) {
+      this._maxPayload = RBLE_MIN_PAYLOAD;
+      return;
+    }
+    this._maxPayload = clampRblePayload(Math.min(peerMax, this._advertisedPayload));
+  }
+
+  _onReset(_window, epoch, peerMax) {
+    this._adoptPeerPayload(peerMax);
     const same = epoch === this._peerEpoch;
     this._peerEpoch = epoch;
     if (this._handshakePending) {
@@ -395,7 +432,7 @@ export class ReliableBleTransport {
     this._txBase = 0;
     this._rxExpected = 0;
     this._wakeAck();
-    void this._sendCtrl(encodeFrame(RBLE_TYPE_RESET, 0, new Uint8Array([RBLE_WINDOW, this._epoch])));
+    void this._sendCtrl(encodeFrame(RBLE_TYPE_RESET, 0, this._resetPayload()));
   }
 
   _onAck(seq) {

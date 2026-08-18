@@ -477,7 +477,7 @@ Características:
 
 Creado por VIC.`,
     aboutName: "PyBot by VIC",
-    aboutDesc: "Un IDE para programar Arduino con Python. Disenado para que chicos aprendan a programar.",
+    aboutDesc: "IDE para programar Python, Arduino y ESP32 con Python.",
     aboutAuthor: "Autor",
     aboutVersion: "PyBot Web",
     aboutBleRuntime: "BLE Runtime",

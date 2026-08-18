@@ -13,6 +13,8 @@ import {
   RBLE_TYPE_RESET,
   RBLE_WINDOW,
   RBLE_MAX_PAYLOAD,
+  RBLE_MIN_PAYLOAD,
+  RBLE_FRAME_MAX,
   RBLE_ACK_TIMEOUT_MS,
   RBLE_RETRY_MAX,
   RBLE_SYNC_TIMEOUT_MS,
@@ -193,10 +195,13 @@ function makeLink(opts = {}) {
 async function pair(opts = {}) {
   const link = makeLink(opts);
   const clock = opts.clock;
+  const payload = opts.maxPayload ?? RBLE_MIN_PAYLOAD;
   const deps = {
     autoStart: false,
     ackTimeoutMs: opts.ackTimeoutMs ?? RBLE_ACK_TIMEOUT_MS,
+    maxPayload: payload,
   };
+  if (opts.advertisedPayload != null) deps.advertisedPayload = opts.advertisedPayload;
   if (clock) {
     deps.now = clock.now;
     deps.setTimeout = clock.setTimeout.bind(clock);
@@ -232,12 +237,19 @@ test("INFO/firmware declare reliable-repl-v1 and pybot_rble module", () => {
   assert.match(rble, /TYPE_NACK = const\(3\)/);
   assert.match(rble, /TYPE_RESET = const\(4\)/);
   assert.match(rble, /_WINDOW = const\(2\)/);
+  assert.match(rble, /_PAYLOAD_FLOOR = const\(14\)/);
+  assert.match(rble, /_PAYLOAD_CEILING = const\(50\)/);
+  assert.match(rble, /_FRAME_MAX = const\(56\)/);
   assert.doesNotMatch(rble, /sleep_ms/);
   assert.doesNotMatch(rble, /time\.sleep/);
   const repl = readFw("pybot_repl.py");
   assert.match(repl, /import pybot_rble/);
   assert.match(repl, /mark_sent/);
+  assert.match(repl, /max_payload\(\)/);
   assert.doesNotMatch(repl, /sleep_ms/);
+  assert.match(ble, /mtu=247/);
+  assert.match(ble, /_IRQ_MTU_EXCHANGED/);
+  assert.match(ble, /gattc_exchange_mtu/);
 });
 
 test("frame format: type, seq, len, payload, CRC16-CCITT", () => {
@@ -278,9 +290,11 @@ test("JS crc16 matches firmware pybot_rble.crc16", () => {
   assert.equal(String(js), py);
 });
 
-test("window is 2; seqLte handles wrap", () => {
+test("window is 2; payload floor 14 / ceiling 50; seqLte handles wrap", () => {
   assert.equal(RBLE_WINDOW, 2);
-  assert.equal(RBLE_MAX_PAYLOAD, 14);
+  assert.equal(RBLE_MIN_PAYLOAD, 14);
+  assert.equal(RBLE_MAX_PAYLOAD, 50);
+  assert.equal(RBLE_FRAME_MAX, 56);
   assert.equal(seqLte(0, 0), true);
   assert.equal(seqLt(0, 1), true);
   assert.equal(seqLt(1, 0), false);
@@ -587,7 +601,7 @@ test("4.0.4 native-repl without reliable-repl-v1 needs update, never legacy", ()
   assert.equal(plan.diag.error, "BLE_REPL_NEEDS_UPDATE");
 });
 
-test("4.0.5 + reliable-repl-v1 plans native MicroPythonSession", () => {
+test("4.0.6 + reliable-repl-v1 plans native MicroPythonSession", () => {
   const plan = planBleExecutionBackend({
     nativeFlagEnabled: true,
     info: {
@@ -606,9 +620,195 @@ test("4.0.5 + reliable-repl-v1 plans native MicroPythonSession", () => {
 
 test("firmware pybot_repl drain does not treat gatts_notify as delivery", () => {
   const src = readFw("pybot_repl.py");
-  const drainFn = src.slice(src.indexOf("def _drain_tx"), src.indexOf("def irq_put"));
+  const drainFn = src.slice(src.indexOf("def _drain_tx"), src.indexOf("def set_mtu"));
   assert.match(drainFn, /mark_sent/);
   assert.match(drainFn, /gatts_notify/);
   assert.doesNotMatch(drainFn, /sleep/);
   assert.doesNotMatch(src, /STOP:FORCE/);
 });
+
+test("RESET 2-byte (4.0.5) keeps payload at floor 14", async () => {
+  const writes = [];
+  const bt = {
+    isConnected: () => true,
+    hasRepl: () => true,
+    onReplData() {
+      return () => {};
+    },
+    async writeRepl(data) {
+      writes.push(decodeFrame(data));
+    },
+  };
+  const t = new ReliableBleTransport(bt, { autoStart: false });
+  const startP = t.start();
+  for (let i = 0; i < 20; i++) {
+    await Promise.resolve();
+    if (writes.some((w) => w && w.type === RBLE_TYPE_RESET)) break;
+  }
+  const reset = writes.find((w) => w && w.type === RBLE_TYPE_RESET);
+  assert.ok(reset);
+  assert.equal(reset.payload.length, 3);
+  assert.equal(reset.payload[2], RBLE_MAX_PAYLOAD);
+  assert.equal(t._maxPayload, RBLE_MIN_PAYLOAD);
+  t._onRaw(encodeFrame(RBLE_TYPE_RESET, 0, u8(RBLE_WINDOW, 3)));
+  await startP;
+  assert.equal(t._maxPayload, RBLE_MIN_PAYLOAD);
+  assert.equal(t._synced, true);
+});
+
+test("RESET 3-byte adopts negotiated payload 50 on both sides", async () => {
+  const { esp, browser } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
+  assert.equal(esp._maxPayload, RBLE_MAX_PAYLOAD);
+  assert.equal(browser._maxPayload, RBLE_MAX_PAYLOAD);
+});
+
+test("firmware RESET 2-byte stays at 14; 3-byte + MTU 247 negotiates 50", () => {
+  const py = execSync(
+    `python -c "import sys; sys.path.insert(0, r'${FW.replace(/\\/g, "\\\\")}'); import pybot_rble as r; r.reset_session(False); r.set_mtu(23); r.on_reset(2,1); assert r.max_payload()==14; r.set_mtu(247); assert r.max_payload()==14; r.on_reset(2,2,50); assert r.max_payload()==50; r.on_reset(2,3); assert r.max_payload()==14; print('ok')"`,
+    { encoding: "utf8" },
+  ).trim();
+  assert.equal(py, "ok");
+});
+
+test("encode/decode accepts compiled ceiling payload", () => {
+  const payload = new Uint8Array(RBLE_MAX_PAYLOAD);
+  payload.fill(0x7a);
+  const frame = encodeFrame(RBLE_TYPE_DATA, 1, payload);
+  assert.equal(frame.length, RBLE_FRAME_MAX);
+  const parsed = decodeFrame(frame);
+  assert.equal(parsed.payload.length, RBLE_MAX_PAYLOAD);
+  assert.deepEqual([...parsed.payload], [...payload]);
+});
+
+test("throughput: 400 bytes exact reconstruct at payload 50", async () => {
+  const original = new Uint8Array(400);
+  for (let i = 0; i < original.length; i++) original[i] = (i * 3 + 1) & 0xff;
+  const { esp, got } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
+  await esp.writeRepl(original);
+  assert.deepEqual([...got()], [...original]);
+});
+
+test("throughput: 20 blocks x 200 chars consecutive at payload 50", async () => {
+  const enc = new TextEncoder();
+  const blocks = [];
+  for (let i = 0; i < 20; i++) blocks.push(enc.encode(String.fromCharCode(65 + (i % 26)).repeat(200)));
+  const { esp, got } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
+  for (const b of blocks) await esp.writeRepl(b);
+  assert.deepEqual([...got()], [...concat(blocks)]);
+});
+
+test("throughput: consecutive writes keep order at payload 50", async () => {
+  const a = new TextEncoder().encode("A".repeat(120));
+  const b = new TextEncoder().encode("B".repeat(120));
+  const c = new TextEncoder().encode("C".repeat(120));
+  const { esp, got } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
+  await esp.writeRepl(a);
+  await esp.writeRepl(b);
+  await esp.writeRepl(c);
+  assert.deepEqual([...got()], [...a, ...b, ...c]);
+});
+
+test("throughput: lost DATA then reconstruct at payload 50", async () => {
+  const original = new Uint8Array(RBLE_MAX_PAYLOAD * 8);
+  for (let i = 0; i < original.length; i++) original[i] = (i * 5 + 9) & 0xff;
+  const { esp, got, link } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, dropDataOnce: [3] });
+  await esp.writeRepl(original);
+  assert.equal(link.stats.dropped, 1);
+  assert.deepEqual([...got()], [...original]);
+});
+
+test("throughput: lost ACK does not duplicate at payload 50", async () => {
+  const original = new Uint8Array(RBLE_MAX_PAYLOAD * 4);
+  original.fill(0x31);
+  const { esp, got, link } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, dropAckOnce: [0] });
+  await esp.writeRepl(original);
+  assert.ok(link.stats.dropped >= 1);
+  assert.deepEqual([...got()], [...original]);
+});
+
+test("throughput: CRC corrupt then good frame at payload 50", async () => {
+  const original = new Uint8Array(RBLE_MAX_PAYLOAD * 3);
+  for (let i = 0; i < original.length; i++) original[i] = i & 0xff;
+  const { esp, got } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, corruptOnce: [1] });
+  await esp.writeRepl(original);
+  assert.deepEqual([...got()], [...original]);
+});
+
+test("throughput: window full still caps outstanding DATA at window=2", async () => {
+  const pending = [];
+  const bt = {
+    isConnected: () => true,
+    hasRepl: () => true,
+    onReplData() {
+      return () => {};
+    },
+    async writeRepl(data) {
+      pending.push(new Uint8Array(data));
+    },
+  };
+  const t = new ReliableBleTransport(bt, {
+    autoStart: false,
+    ackTimeoutMs: 30_000,
+    maxPayload: RBLE_MAX_PAYLOAD,
+  });
+  t._synced = true;
+  const chunk = new Uint8Array(RBLE_MAX_PAYLOAD * 3);
+  chunk.fill(0x55);
+  let settled = false;
+  const p = t.writeRepl(chunk);
+  p.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  let dataFrames = [];
+  for (let i = 0; i < 30; i++) {
+    await Promise.resolve();
+    dataFrames = pending.map(decodeFrame).filter((f) => f && f.type === RBLE_TYPE_DATA);
+    if (dataFrames.length >= RBLE_WINDOW) break;
+  }
+  assert.ok(dataFrames.length <= RBLE_WINDOW);
+  assert.equal(dataFrames.length, RBLE_WINDOW);
+  assert.equal(t._window.length, RBLE_WINDOW);
+  assert.equal(settled, false);
+  assert.equal(dataFrames[0].payload.length, RBLE_MAX_PAYLOAD);
+  t.reset("test-done");
+});
+
+test("throughput: reconnect RESET/RESYNC at payload 50", async () => {
+  const { esp, browser, received } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
+  await esp.writeRepl(u8(1, 2, 3));
+  received.length = 0;
+  browser.reset("disconnect");
+  await browser.start();
+  assert.equal(concat(received).length, 0);
+  await esp.start();
+  await esp.writeRepl(u8(9, 9));
+  assert.deepEqual([...concat(received)], [9, 9]);
+});
+
+test("throughput: stdout + EOF + stderr + EOF at payload 50", async () => {
+  const stdout = new TextEncoder().encode("line1\nline2\n");
+  const stderr = new TextEncoder().encode('Traceback (most recent call last):\n  File "<stdin>"\n');
+  const stream = concat([stdout, u8(BYTE_CTRL_D), stderr, u8(BYTE_CTRL_D)]);
+  const { esp, got } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, dropDataOnce: [1] });
+  await esp.writeRepl(stream);
+  assert.deepEqual([...got()], [...stream]);
+});
+
+test("throughput: timeout retransmits at payload 50 without duplicating", async () => {
+  const original = new Uint8Array(RBLE_MAX_PAYLOAD);
+  original.fill(0x22);
+  const { esp, got, link } = await pair({
+    maxPayload: RBLE_MAX_PAYLOAD,
+    dropAckOnce: [0],
+    ackTimeoutMs: 40,
+  });
+  await esp.writeRepl(original);
+  assert.ok(link.stats.dropped >= 1);
+  assert.deepEqual([...got()], [...original]);
+});
+

@@ -26,12 +26,14 @@ TYPE_RESET = const(4)
 
 _VER = const(1)
 _WINDOW = const(2)
-_MAX_PAYLOAD = const(14)
+_PAYLOAD_FLOOR = const(14)
+_PAYLOAD_CEILING = const(50)
 _HDR = const(4)
 _CRC = const(2)
-_FRAME_MAX = const(20)
+_FRAME_MAX = const(56)
 _ACK_MS = const(120)
 _RETRY_MAX = const(10)
+_ATT_HDR = const(3)
 
 # CRC16-CCITT-FALSE: poly 0x1021, init 0xFFFF, xorout 0.
 def crc16(data):
@@ -48,9 +50,9 @@ def crc16(data):
 
 def encode_frame(typ, seq, payload=b""):
     n = len(payload)
-    if n > _MAX_PAYLOAD:
-        payload = payload[:_MAX_PAYLOAD]
-        n = _MAX_PAYLOAD
+    if n > _PAYLOAD_CEILING:
+        payload = payload[:_PAYLOAD_CEILING]
+        n = _PAYLOAD_CEILING
     hdr = bytes(((_VER << 4) | (typ & 0x0F), (seq >> 8) & 0xFF, seq & 0xFF, n))
     body = hdr + payload
     c = crc16(body)
@@ -64,7 +66,7 @@ def decode_frame(data):
     if ntot < _HDR + _CRC:
         return None
     n = data[3]
-    if n > _MAX_PAYLOAD or ntot != _HDR + n + _CRC:
+    if n > _PAYLOAD_CEILING or ntot != _HDR + n + _CRC:
         return None
     body = data[: _HDR + n]
     got = (data[_HDR + n] << 8) | data[_HDR + n + 1]
@@ -103,6 +105,9 @@ _rx_expected = 0
 _epoch = 0
 _peer_epoch = -1
 _synced = False
+_payload = _PAYLOAD_FLOOR
+_local_mtu_payload = _PAYLOAD_FLOOR
+_peer_max_payload = _PAYLOAD_FLOOR
 _ctrl = []
 _ctrl_off = 0
 _need_reset = True
@@ -133,6 +138,42 @@ def _ticks_diff(a, b):
         return _time.ticks_diff(a, b)
     except AttributeError:
         return a - b
+
+
+def max_payload():
+    return _payload
+
+
+def _clamp_payload(n):
+    if n is None:
+        return _PAYLOAD_FLOOR
+    if n < _PAYLOAD_FLOOR:
+        return _PAYLOAD_FLOOR
+    if n > _PAYLOAD_CEILING:
+        return _PAYLOAD_CEILING
+    return n
+
+
+def _recompute_payload():
+    global _payload
+    p = _local_mtu_payload
+    if p > _peer_max_payload:
+        p = _peer_max_payload
+    _payload = _clamp_payload(p)
+
+
+def set_mtu(mtu):
+    """Observed ATT MTU. Never raises payload without a later RESET recompute."""
+    global _local_mtu_payload
+    if mtu is None or mtu <= 23:
+        _local_mtu_payload = _PAYLOAD_FLOOR
+        return
+    cap = mtu - _ATT_HDR - _HDR - _CRC
+    _local_mtu_payload = _clamp_payload(cap)
+
+
+def _reset_payload_bytes():
+    return bytes((_WINDOW, _epoch, _payload))
 
 
 def _clear_window():
@@ -222,7 +263,7 @@ def set_timeout_cb(cb):
 
 def reset_session(send_reset=True):
     global _tx_next, _tx_base, _rx_expected, _synced, _ctrl, _ctrl_off
-    global _need_reset, _epoch, _peer_epoch
+    global _need_reset, _epoch, _peer_epoch, _peer_max_payload
     _cancel_timer()
     _clear_window()
     _tx_next = 0
@@ -231,10 +272,12 @@ def reset_session(send_reset=True):
     _ctrl = []
     _ctrl_off = 0
     _synced = False
+    _peer_max_payload = _PAYLOAD_FLOOR
+    _recompute_payload()
     _epoch = (_epoch + 1) & 0xFF
     if send_reset:
         _need_reset = False
-        _queue_ctrl(encode_frame(TYPE_RESET, 0, bytes((_WINDOW, _epoch))))
+        _queue_ctrl(encode_frame(TYPE_RESET, 0, _reset_payload_bytes()))
 
 
 def reset_link():
@@ -251,6 +294,9 @@ def queue_data(payload):
     if slot < 0:
         return 0
     seq = _tx_next
+    cap = _payload
+    if len(payload) > cap:
+        payload = payload[:cap]
     frame = encode_frame(TYPE_DATA, seq, payload)
     n = len(frame)
     buf = _win_buf[slot]
@@ -265,7 +311,7 @@ def queue_data(payload):
     _win_retries[slot] = 0
     _win_ticks[slot] = 0
     _tx_next = (seq + 1) & 0xFFFF
-    return len(payload) if len(payload) <= _MAX_PAYLOAD else _MAX_PAYLOAD
+    return len(payload)
 
 
 def _oldest_unacked():
@@ -286,7 +332,7 @@ def next_to_send():
     global _need_reset, _ctrl_off, _retrans
     if _need_reset:
         if not _ctrl:
-            _queue_ctrl(encode_frame(TYPE_RESET, 0, bytes((_WINDOW, _epoch))))
+            _queue_ctrl(encode_frame(TYPE_RESET, 0, _reset_payload_bytes()))
         _need_reset = False
     if _ctrl:
         if _ctrl_off < 0 or _ctrl_off >= len(_ctrl):
@@ -322,7 +368,7 @@ def mark_sent(frame):
     parsed = decode_frame(frame)
     if parsed is None:
         return
-    typ, seq, _payload = parsed
+    typ, seq, _pl = parsed
     if typ == TYPE_ACK or typ == TYPE_NACK or typ == TYPE_RESET:
         if _ctrl and _ctrl_off < len(_ctrl):
             _ctrl.pop(_ctrl_off)
@@ -384,9 +430,14 @@ def _queue_nack(seq):
     _queue_ctrl(encode_frame(TYPE_NACK, seq, b""))
 
 
-def on_reset(window, epoch):
+def on_reset(window, epoch, peer_max=None):
     global _peer_epoch, _synced, _tx_next, _tx_base, _rx_expected
-    global _ctrl, _ctrl_off, _need_reset
+    global _ctrl, _ctrl_off, _need_reset, _peer_max_payload
+    if peer_max is None:
+        _peer_max_payload = _PAYLOAD_FLOOR
+    else:
+        _peer_max_payload = _clamp_payload(peer_max)
+    _recompute_payload()
     same = epoch == _peer_epoch
     _peer_epoch = epoch
     _synced = True
@@ -399,7 +450,7 @@ def on_reset(window, epoch):
     _rx_expected = 0
     _ctrl = []
     _ctrl_off = 0
-    _queue_ctrl(encode_frame(TYPE_RESET, 0, bytes((_WINDOW, _epoch))))
+    _queue_ctrl(encode_frame(TYPE_RESET, 0, _reset_payload_bytes()))
     _need_reset = False
 
 
@@ -422,7 +473,8 @@ def feed_rx(data):
     if typ == TYPE_RESET:
         w = payload[0] if payload else _WINDOW
         e = payload[1] if len(payload) > 1 else 0
-        on_reset(w, e)
+        peer_max = payload[2] if len(payload) > 2 else None
+        on_reset(w, e, peer_max)
         return None
     if typ != TYPE_DATA:
         _bad_rx += 1
@@ -452,7 +504,9 @@ def stats():
         i += 1
     return {
         "window": _WINDOW,
-        "payload": _MAX_PAYLOAD,
+        "payload": _payload,
+        "payload_floor": _PAYLOAD_FLOOR,
+        "payload_ceiling": _PAYLOAD_CEILING,
         "tx_next": _tx_next,
         "tx_base": _tx_base,
         "rx_expected": _rx_expected,

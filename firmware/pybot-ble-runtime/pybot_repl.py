@@ -35,7 +35,7 @@ except ImportError:
 _IOCTL_POLL = const(3)
 _POLL_RD = const(1)
 _POLL_WR = const(4)
-_TX_CHUNK = const(14)
+_TX_CHUNK = const(14)  # floor; _tx_peek_chunk usa _rble.max_payload()
 _RING = const(512)
 
 # py/mperrno.h (MICROPY_USE_INTERNAL_ERRNO, valores Linux).
@@ -134,7 +134,8 @@ def _tx_peek_chunk():
     remain = len(buf) - _tx_off
     if remain <= 0:
         return None
-    n = _TX_CHUNK if remain > _TX_CHUNK else remain
+    cap = _rble.max_payload()
+    n = cap if remain > cap else remain
     return buf[_tx_off : _tx_off + n]
 
 
@@ -275,6 +276,10 @@ def _drain_tx(_arg):
             frame = _rble.next_to_send()
             if frame:
                 _schedule_drain()
+
+
+def set_mtu(mtu):
+    _rble.set_mtu(mtu)
 
 
 def irq_put(data):

@@ -24,7 +24,7 @@ export const REPL_TX_UUID = "8fbc0005-4d5a-4b8c-9a1f-123456789005"; // ESP32 -> 
 // decidir si ofrecer una actualizacion OTA por BLE. NO duplicar esta constante:
 // pybotBleRuntime.js la reexporta; los tests y la UI la importan de aca.
 // ===========================================================================
-export const PYBOT_RUNTIME_VERSION = "4.0.5";
+export const PYBOT_RUNTIME_VERSION = "4.0.6";
 // Protocolo 3.0: STOP confiable (RUN:STOPPED + STOP:FORCE), DEPLOY persistente
 // verificado (size+hash), control de app (APP:*) y autostart con safe boot.
 // El protocolo 2.0 (solo RUN/OUT/STOP) sigue siendo compatible para RUN.
@@ -61,6 +61,8 @@ export const PYBOT_RUNTIME_VERSION = "4.0.5";
 // 4.0.5 (runtime; protocolo 3.2): ReliableBleTransport bajo el REPL (capability
 // "reliable-repl-v1"). El framing REPL es interno y se negocia por capability;
 // ADMIN no cambia. Placas 4.0.4 necesitan USB (el pack añade pybot_rble.py).
+// 4.0.6 (runtime; protocolo 3.2): payload RBLE negociado en RESET (suelo 14,
+// techo 50) + ble.config(mtu=247). Capability sigue "reliable-repl-v1".
 export const PYBOT_PROTOCOL_VERSION = "3.2";
 /** Primera version con pybot_rble.py (pack OTA de 4.0.4 rechaza el archivo nuevo). */
 export const PYBOT_RELIABLE_REPL_MIN = "4.0.5";

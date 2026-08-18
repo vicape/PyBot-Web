@@ -13,7 +13,7 @@ try:
 except ImportError:  # pragma: no cover - depende del port
     uhashlib = None
 
-PYBOT_RUNTIME_VERSION = "4.0.5"
+PYBOT_RUNTIME_VERSION = "4.0.6"
 PYBOT_PROTOCOL_VERSION = "3.2"
 PYBOT_RUNTIME_NAME = "PyBot BLE Runtime"
 PYBOT_BOARD = "ESP32"
@@ -76,6 +76,7 @@ _MAX_AUTOSTART_FAILS = const(3)
 _IRQ_CENTRAL_CONNECT = const(1)
 _IRQ_CENTRAL_DISCONNECT = const(2)
 _IRQ_GATTS_WRITE = const(3)
+_IRQ_MTU_EXCHANGED = const(21)
 
 _FLAG_READ = const(0x0002)
 _FLAG_WRITE_NO_RESPONSE = const(0x0004)
@@ -331,6 +332,10 @@ class BluetoothTransport:
 
         self._ble = bluetooth.BLE()
         self._ble.active(True)
+        try:
+            self._ble.config(mtu=247)
+        except OSError:
+            pass
         self._ble.irq(self._irq)
         (
             (
@@ -340,7 +345,16 @@ class BluetoothTransport:
                 self._repl_rx_handle,
             ),
         ) = self._ble.gatts_register_services((_PYBOT_SERVICE,))
+        try:
+            self._ble.gatts_set_buffer(self._repl_tx_handle, 64)
+        except OSError:
+            pass
+        try:
+            self._ble.gatts_set_buffer(self._repl_rx_handle, 64)
+        except OSError:
+            pass
         self._repl_mod = None
+        self._att_mtu = 23
         self._payload = _advertising_payload(services=[_SERVICE_UUID])
         self._resp_payload = _advertising_payload(name=self._name.encode())
         self._advertise()
@@ -364,6 +378,12 @@ class BluetoothTransport:
                 conn_handle, _, _ = data
                 self._conn_handle = conn_handle
                 self.state = STATE_CONNECTED
+                try:
+                    self._ble.gattc_exchange_mtu(conn_handle)
+                except AttributeError:
+                    pass
+                except OSError:
+                    pass
             elif event == _IRQ_CENTRAL_DISCONNECT:
                 self._conn_handle = None
                 self.state = STATE_DISCONNECTED
@@ -380,7 +400,20 @@ class BluetoothTransport:
                     self._handle_rx()
                 elif value_handle == self._repl_rx_handle:
                     self._handle_repl_rx()
+            elif event == _IRQ_MTU_EXCHANGED:
+                conn_handle, mtu = data
+                self._apply_mtu(mtu)
         except Exception:
+            pass
+
+    def _apply_mtu(self, mtu):
+        self._att_mtu = mtu
+        mod = self._repl_mod
+        if mod is None:
+            return
+        try:
+            mod.set_mtu(mtu)
+        except AttributeError:
             pass
 
     def _handle_rx(self):
@@ -456,6 +489,10 @@ class BluetoothTransport:
         if not ok:
             return False
         self._repl_mod = pybot_repl
+        try:
+            pybot_repl.set_mtu(self._att_mtu)
+        except AttributeError:
+            pass
         return True
 
     def inject_ctrl_c(self):

@@ -74,7 +74,7 @@ class ProgramManagerMirror {
 
 test("firmware 4.0.0 queues non-urgent RX and polls on main loop", () => {
   const ble = fs.readFileSync(BLE_PY, "utf8");
-  assert.match(ble, /PYBOT_RUNTIME_VERSION = "4\.0\.5"/);
+  assert.match(ble, /PYBOT_RUNTIME_VERSION = "4\.0\.6"/);
   assert.match(ble, /def poll_commands/);
   assert.match(ble, /def on_urgent/);
   assert.match(ble, /self\._cmd_q/);
@@ -188,7 +188,7 @@ test("cooperative stop + RUN:BEGIN cancel pending FORCE timer (model)", () => {
 
 test("FORCE while running=False does not schedule reset (3.2.7)", () => {
   const bleSrc = fs.readFileSync(BLE_PY, "utf8");
-  assert.match(bleSrc, /PYBOT_RUNTIME_VERSION = "4\.0\.5"/);
+  assert.match(bleSrc, /PYBOT_RUNTIME_VERSION = "4\.0\.6"/);
   // Callback del Timer y _schedule_force_reset exigen running.
   assert.match(bleSrc, /if not m2 or not m2\.running:/);
   assert.match(bleSrc, /huerfano post-STOPPED/);

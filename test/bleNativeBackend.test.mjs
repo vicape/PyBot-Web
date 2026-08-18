@@ -36,7 +36,7 @@ function nativeSession() {
 
 
 const NATIVE_INFO = {
-  firmware: "4.0.5",
+  firmware: "4.0.6",
   protocol: "3.2",
   capabilities: ["native-repl", "reliable-repl-v1", "run", "stop"],
   dupterm: true,
@@ -55,7 +55,7 @@ test("handshake OK uses only NATIVE_REPL (never BleRunSession)", () => {
   assert.equal(plan.createBleRunSession, false);
 });
 
-test("plan: 4.0.5 + reliable-repl-v1 + handshake → MicroPythonSession, never BleRunSession", () => {
+test("plan: 4.0.6 + reliable-repl-v1 + handshake → MicroPythonSession, never BleRunSession", () => {
   const plan = planBleExecutionBackend({
     nativeFlagEnabled: true,
     info: NATIVE_INFO,
@@ -117,7 +117,7 @@ test("legacy only when flag is explicit or runtime has no native-repl", () => {
 test("diagnosis line includes runtime, protocol, native-repl, chars, dupterm, handshake, backend", () => {
   const line = formatBleBackendDiagnosis({
     backend: BLE_BACKEND.NATIVE_REPL,
-    runtime: "4.0.5",
+    runtime: "4.0.6",
     protocol: "3.2",
     nativeReplCap: true,
     replRx: true,
@@ -128,7 +128,7 @@ test("diagnosis line includes runtime, protocol, native-repl, chars, dupterm, ha
     reason: "runtime-native-repl",
   });
   assert.match(line, /backend=NATIVE_REPL/);
-  assert.match(line, /runtime=4\.0\.5/);
+  assert.match(line, /runtime=4\.0\.6/);
   assert.match(line, /protocol=3\.2/);
   assert.match(line, /native-repl=true/);
   assert.match(line, /REPL_RX/);
