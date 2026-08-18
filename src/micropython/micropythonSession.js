@@ -90,18 +90,50 @@ export class MicroPythonSession {
    * @param {{onOut?:Function,onErr?:Function,shouldStop?:Function,prelude?:string,onStarted?:Function,wrap?:boolean}} cb
    */
   async runProgram(userCode, cb = {}) {
-    const { onOut, onErr, prelude, onStarted } = cb;
+    const { onOut, onErr, prelude, onStarted, shouldStop } = cb;
     if (!this._running) throw protocolError(PROTOCOL_ERROR.CLOSED);
     this._interrupted = false;
+    const stopRequested = () =>
+      this._interrupted ||
+      (typeof shouldStop === "function" && shouldStop() === true);
+    const finishInterruptedBeforeFollow = async () => {
+      this._interrupted = true;
+      if (onOut) onOut("\n[Detenido]\n");
+      try {
+        await this.protocol.exitRawRepl();
+      } catch {
+        /* best-effort: el siguiente Run recupera raw REPL antes de enviar código */
+      }
+      return { stdout: "", stderr: "", interrupted: true };
+    };
+
     const prefix = prelude != null ? prelude : MPY_PRELUDE;
     const wrap = cb.wrap !== false;
     const program = wrap
       ? buildRunnableProgram(prefix, userCode)
       : prefix + "\n" + String(userCode ?? "") + "\n";
 
-    await this.protocol.enterRawRepl();
-    await this._execProgramBytes(program);
-    if (onStarted) onStarted();
+    if (stopRequested()) return finishInterruptedBeforeFollow();
+
+    try {
+      await this.protocol.enterRawRepl();
+      if (stopRequested()) return finishInterruptedBeforeFollow();
+      await this._execProgramBytes(program);
+    } catch (e) {
+      if (stopRequested()) return finishInterruptedBeforeFollow();
+      try {
+        await this.protocol.exitRawRepl();
+      } catch {
+        /* cleanup */
+      }
+      throw e;
+    }
+
+    // Stop puede llegar mientras el programa todavía se estaba transfiriendo.
+    // En ese caso el Ctrl+C urgente ya fue inyectado por el transporte BLE: no
+    // anunciar falsamente "programa en ejecución"; sí consumir los EOF de raw REPL.
+    if (stopRequested()) this._interrupted = true;
+    if (!this._interrupted && onStarted) onStarted();
 
     const followOpts = {};
     if (onOut) followOpts.onStdout = onOut;
@@ -378,10 +410,15 @@ export class MicroPythonSession {
   }
 
   /**
-   * Un solo Ctrl+C. No STOP:FORCE, no reset.
+   * Un solo Ctrl+C. En BLE nativo usa el plano ADMIN urgente; en USB conserva
+   * exactamente el Ctrl+C del protocolo raw REPL existente.
    */
   async interrupt() {
     this._interrupted = true;
+    if (this.transport && typeof this.transport.interruptUrgent === "function") {
+      await this.transport.interruptUrgent();
+      return;
+    }
     await this.protocol.interruptExecution();
   }
 
