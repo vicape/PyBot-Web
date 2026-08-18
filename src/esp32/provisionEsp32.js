@@ -35,7 +35,7 @@ function sleep(ms) {
  * @property {() => Promise<{ bytes: Uint8Array, sha256: string, manifest: object }>} loadFirmware
  * @property {(port: any, opts?: object) => Promise<{ session: any }>} connectRepl
  * @property {(opts?: object) => Promise<{ size?: number }>} installPybot
- * @property {(session: any) => Promise<{ ok: boolean, missing?: string[] }>} verifyPybotFiles
+ * @property {(session: any) => Promise<{ ok: boolean, missing?: string[], reason?: string|null, selftest?: object|null }>} verifyPybotFiles
  * @property {(port?: any, session?: any) => Promise<void>} [closePort]
  * @property {(ms: number) => Promise<void>} [sleep]
  */
@@ -378,11 +378,24 @@ export async function runEsp32Provisioning(adapters, options = {}) {
     try {
       verify = await adapters.verifyPybotFiles(session);
     } catch (e) {
-      throw provisionError(PROVISION_ERROR.VERIFY_FILES_FAIL, { cause: e });
+      throw provisionError(PROVISION_ERROR.VERIFY_FILES_FAIL, {
+        cause: e,
+        reason: e?.message ?? String(e),
+      });
     }
     if (!verify?.ok) {
+      const missing = Array.isArray(verify?.missing) ? verify.missing : [];
+      const reason = verify?.reason ?? verify?.selftest?.reason ?? null;
+      if (missing.length) {
+        log("[PROVISION] verify missing: " + missing.join(", "));
+      }
+      if (reason) {
+        log("[PROVISION] verify reason: " + reason);
+      }
       throw provisionError(PROVISION_ERROR.VERIFY_FILES_FAIL, {
-        missing: verify?.missing,
+        missing,
+        reason,
+        selftest: verify?.selftest ?? null,
       });
     }
 
@@ -401,18 +414,23 @@ export async function runEsp32Provisioning(adapters, options = {}) {
     };
   } catch (e) {
     const code = e?.code ?? (e?.message && PROVISION_ERROR[e.message] ? e.message : PROVISION_ERROR.UNKNOWN);
+    const diagnostic = {
+      missing: e?.missing,
+      reason: e?.reason ?? e?.cause?.message ?? null,
+      selftest: e?.selftest ?? null,
+    };
     if (phase === PHASE.UNSUPPORTED_VARIANT || code === PROVISION_ERROR.VARIANT_UNSUPPORTED) {
-      emit(PHASE.UNSUPPORTED_VARIANT, { error: code, chipName: e?.chipName || chipName });
+      emit(PHASE.UNSUPPORTED_VARIANT, { error: code, chipName: e?.chipName || chipName, ...diagnostic });
     } else if (code === PROVISION_ERROR.CANCELLED) {
       emit(PHASE.CANCELLED, { error: code });
     } else if (code === PROVISION_ERROR.RESET_REQUIRED) {
-      emit(PHASE.RESET_REQUIRED, { error: code, boardState: BOARD_STATE.RESET_REQUIRED });
+      emit(PHASE.RESET_REQUIRED, { error: code, boardState: BOARD_STATE.RESET_REQUIRED, ...diagnostic });
     } else if (phase !== PHASE.NEED_BOOT_BUTTON) {
-      emit(PHASE.ERROR, { error: code, missing: e?.missing });
+      emit(PHASE.ERROR, { error: code, ...diagnostic });
     } else {
-      emit(PHASE.NEED_BOOT_BUTTON, { error: code });
+      emit(PHASE.NEED_BOOT_BUTTON, { error: code, ...diagnostic });
     }
-    log("[PROVISION] error " + code);
+    log("[PROVISION] error " + code + (diagnostic.reason ? " reason=" + diagnostic.reason : ""));
     try {
       await cleanup();
     } catch {
@@ -432,7 +450,7 @@ export async function runEsp32Provisioning(adapters, options = {}) {
             ? PHASE.RESET_REQUIRED
             : phase,
       error: code,
-      missing: e?.missing,
+      ...diagnostic,
     };
   }
 }
