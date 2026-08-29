@@ -116,6 +116,14 @@ export async function syncClassroomRosterToCourse(supabase, { courseId, orgId, c
       classroom_email: r.email,
     }));
 
+  const pending = results
+    .filter((r) => r.status === "no_registrado" && r.email && r.classroomUserId)
+    .map((r) => ({
+      classroom_user_id: r.classroomUserId,
+      email: r.email.trim().toLowerCase(),
+      display_name: r.name,
+    }));
+
   const activeClassroomUserIds = classroomStudents.map((s) => s.userId).filter(Boolean);
 
   const { data: syncData, error: syncErr } = await supabase.rpc("sync_classroom_course_roster", {
@@ -123,9 +131,34 @@ export async function syncClassroomRosterToCourse(supabase, { courseId, orgId, c
     p_org_id: orgId,
     p_enrolled: enrolled,
     p_active_classroom_user_ids: activeClassroomUserIds,
+    p_pending: pending,
   });
 
   if (syncErr) {
+    // Fallback si la DB aún no tiene el arg p_pending (migración 016)
+    if (/p_pending|Could not find the function|function.*does not exist/i.test(syncErr.message || "")) {
+      const legacy = await supabase.rpc("sync_classroom_course_roster", {
+        p_course_id: courseId,
+        p_org_id: orgId,
+        p_enrolled: enrolled,
+        p_active_classroom_user_ids: activeClassroomUserIds,
+      });
+      if (legacy.error) {
+        return { ok: false, error: legacy.error.message || "error_supabase", results };
+      }
+      if (!legacy.data?.ok) {
+        return { ok: false, error: legacy.data?.error || "sync_failed", results };
+      }
+      return {
+        ok: true,
+        results,
+        summary: summarizeClassroomSyncResults(results),
+        removed: legacy.data.removed ?? 0,
+        synced: legacy.data.synced ?? 0,
+        pendingUpserted: 0,
+        pendingLegacy: true,
+      };
+    }
     return { ok: false, error: syncErr.message || "error_supabase", results };
   }
 
@@ -140,6 +173,7 @@ export async function syncClassroomRosterToCourse(supabase, { courseId, orgId, c
     summary: summarizeClassroomSyncResults(results),
     removed: syncData.removed ?? 0,
     synced: syncData.synced ?? 0,
+    pendingUpserted: syncData.pending_upserted ?? pending.length,
   };
 }
 

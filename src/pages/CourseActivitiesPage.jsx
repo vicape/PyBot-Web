@@ -119,6 +119,7 @@ function ActivitiesTab({ activities, staff, orgId, courseId, saving, err, onCrea
 function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
   const sb = getSupabase();
   const [members, setMembers] = useState([]);
+  const [pending, setPending] = useState([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
   const [importState, setImportState] = useState(null); // null | 'loading' | 'done'
   const [importResults, setImportResults] = useState([]);
@@ -140,23 +141,32 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
     if (rpc.error) {
       console.error("loadMembers.list_course_members:", rpc.error);
       setMembers([]);
-      setLoadingMembers(false);
-      return;
+    } else {
+      const students = (rpc.data ?? []).filter((r) => r.role === "student");
+      setMembers(
+        students.map((r) => ({
+          user_id: r.user_id,
+          role: r.role,
+          source: r.source,
+          profiles: {
+            display_name: r.display_name,
+            avatar_url: r.avatar_url,
+            email: r.email,
+          },
+        })),
+      );
     }
 
-    const students = (rpc.data ?? []).filter((r) => r.role === "student");
-    const merged = students.map((r) => ({
-      user_id: r.user_id,
-      role: r.role,
-      source: r.source,
-      profiles: {
-        display_name: r.display_name,
-        avatar_url: r.avatar_url,
-        email: r.email,
-      },
-    }));
+    const pendingRpc = await sb.rpc("list_course_roster_pending", { p_course_id: courseId });
+    if (pendingRpc.error) {
+      if (!/list_course_roster_pending|Could not find the function/i.test(pendingRpc.error.message || "")) {
+        console.error("loadMembers.list_course_roster_pending:", pendingRpc.error);
+      }
+      setPending([]);
+    } else {
+      setPending(pendingRpc.data ?? []);
+    }
 
-    setMembers(merged);
     setLoadingMembers(false);
   }, [sb, courseId]);
 
@@ -274,17 +284,25 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
 
   return (
     <>
-      {/* Lista de alumnos actuales */}
+      {/* Lista de alumnos actuales + pendientes Classroom */}
       <div style={{ marginBottom: "1.25rem" }}>
         <h3 className="auth-section__title">
-          Alumnos del curso ({loadingMembers ? "…" : members.length})
+          Alumnos del curso (
+          {loadingMembers
+            ? "…"
+            : `${members.length} activo${members.length === 1 ? "" : "s"}${
+                pending.length
+                  ? ` · ${pending.length} pendiente${pending.length === 1 ? "" : "s"}`
+                  : ""
+              }`}
+          )
         </h3>
         {loadingMembers ? (
           <p className="auth-card__muted">Cargando…</p>
-        ) : members.length === 0 ? (
+        ) : members.length === 0 && pending.length === 0 ? (
           <p className="auth-card__muted">
-            Todavía no hay alumnos en este curso. Sincronizalos desde Classroom (solo agrega quienes ya
-            tienen cuenta PyBot) o compartí el código de invitación de este curso.
+            Todavía no hay alumnos en este curso. Sincronizalos desde Classroom (quedan pendientes hasta
+            que inicien sesión) o compartí el código de invitación de este curso.
           </p>
         ) : (
           <ul className="auth-org-list">
@@ -306,6 +324,21 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
                     {removingId === m.user_id ? "…" : "Quitar"}
                   </button>
                 ) : null}
+              </li>
+            ))}
+            {pending.map((p) => (
+              <li
+                key={p.classroom_user_id || p.email}
+                className="auth-org-row auth-org-row--split"
+                style={{ opacity: 0.55 }}
+              >
+                <div>
+                  <span className="auth-org-row__name">{p.display_name || p.email}</span>
+                  <span className="auth-org-row__meta">
+                    {p.email} · Pendiente (sin cuenta PyBot)
+                  </span>
+                </div>
+                <span className="dash-badge dash-badge--muted">Pendiente</span>
               </li>
             ))}
           </ul>
@@ -344,8 +377,9 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
                   </p>
                   {imported.length === 0 && updated.length === 0 ? (
                     <p className="auth-card__notice auth-card__notice--warn">
-                      Ninguno pudo agregarse al curso todavía. Hace falta email de Classroom + cuenta
-                      PyBot con ese mismo email, o el código de invitación de este curso.
+                      Ninguno tenía cuenta PyBot todavía. Quedan como pendientes (grisados); al iniciar
+                      sesión con ese email se activan solos. También podés usar el código de
+                      invitación del curso.
                     </p>
                   ) : null}
                   {imported.length > 0 ? (
@@ -377,17 +411,9 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
                   {noRegistered.length > 0 ? (
                     <div>
                       <p className="auth-card__notice auth-card__notice--warn">
-                        {noRegistered.length} alumno(s) aún no tienen cuenta en PyBot. Compartiles el
-                        código de invitación de este curso:
+                        {noRegistered.length} quedaron como pendientes (grisados). Cuando inicien
+                        sesión en PyBot con ese mismo email, se activan solos en el curso.
                       </p>
-                      <ul className="auth-org-list" style={{ marginTop: "0.5rem" }}>
-                        {noRegistered.map((r) => (
-                          <li key={r.email || r.classroomUserId} className="auth-org-row">
-                            <span className="auth-org-row__name">{r.name}</span>
-                            <span className="auth-org-row__meta">{r.email || "sin email"}</span>
-                          </li>
-                        ))}
-                      </ul>
                     </div>
                   ) : null}
                 </div>

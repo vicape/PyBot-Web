@@ -2,6 +2,29 @@ import { getSupabase } from "../supabaseClient.js";
 import { isValidSignupRole } from "./signupRole.js";
 
 /**
+ * Si el email del usuario está en un roster pendiente de Classroom,
+ * lo convierte en organization_members + course_members.
+ */
+export async function claimPendingCourseRosters() {
+  const sb = getSupabase();
+  if (!sb) return { ok: false, claimed: 0 };
+  const { data, error } = await sb.rpc("claim_pending_course_rosters");
+  if (error) {
+    // Migración 016 aún no aplicada: no bloquear login
+    if (/claim_pending_course_rosters|Could not find the function/i.test(error.message || "")) {
+      return { ok: true, claimed: 0, skipped: true };
+    }
+    console.error("claimPendingCourseRosters:", error);
+    return { ok: false, claimed: 0, error: error.message };
+  }
+  return {
+    ok: !!data?.ok,
+    claimed: data?.claimed ?? 0,
+    courseIds: data?.course_ids ?? [],
+  };
+}
+
+/**
  * Garantiza fila en profiles para el usuario de sesión (trigger puede fallar en usuarios viejos).
  */
 export async function ensureProfileForUser(user, preferredRole = null) {
@@ -37,6 +60,7 @@ export async function ensureProfileForUser(user, preferredRole = null) {
         // Otros errores: no bloquear el flujo
       }
     }
+    await claimPendingCourseRosters();
     return { ok: true, created: false };
   }
 
@@ -61,8 +85,12 @@ export async function ensureProfileForUser(user, preferredRole = null) {
   }
 
   if (insErr) {
-    if (insErr.code === "23505") return { ok: true, created: false };
+    if (insErr.code === "23505") {
+      await claimPendingCourseRosters();
+      return { ok: true, created: false };
+    }
     return { ok: false, error: insErr.message };
   }
+  await claimPendingCourseRosters();
   return { ok: true, created: true };
 }
