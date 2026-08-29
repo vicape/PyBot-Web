@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 import { roleLabelEs } from "../orgRole.js";
+import {
+  joinPathAfterRedeem,
+  joinSuccessMessage,
+} from "../platform/redeemOrgInvitePlan.js";
 
 function redeemErrorEs(code) {
   switch (code) {
@@ -13,6 +17,8 @@ function redeemErrorEs(code) {
       return "Este código ya no tiene usos disponibles.";
     case "already_member":
       return "Ya sos miembro de este colegio.";
+    case "curso_invalido":
+      return "El curso de esta invitación no es válido.";
     case "empty_code":
       return "Ingresá un código.";
     case "no_session":
@@ -67,9 +73,9 @@ export default function JoinOrgPage() {
       setMsg(redeemErrorEs(out?.error));
       return;
     }
-    setMsg(`Listo: te uniste como ${roleLabelEs(out.role)}.`);
+    setMsg(joinSuccessMessage(out, roleLabelEs));
     window.setTimeout(() => {
-      navigate(`/dashboard/org/${out.org_id}`, { replace: true });
+      navigate(joinPathAfterRedeem(out), { replace: true });
     }, 900);
   }, [code, navigate, supabase]);
 

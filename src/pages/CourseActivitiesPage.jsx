@@ -212,12 +212,13 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
   };
 
   const generateInvite = async () => {
-    if (!sb || !user?.id || generatingInvite) return;
+    if (!sb || !user?.id || !courseId || generatingInvite) return;
     setGeneratingInvite(true);
     const { data, error } = await sb
       .from("organization_invites")
       .insert({
         org_id: orgId,
+        course_id: courseId,
         role: "student",
         max_uses: 100,
         created_by: user.id,
@@ -362,7 +363,7 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
           <div className="dash-panel" style={{ padding: "1rem" }}>
             <h3 className="auth-section__title">Código de invitación</h3>
             <p className="auth-card__muted auth-card__muted--tight">
-              Generá un link que los alumnos pueden usar para unirse al colegio sin que vos tengas
+              Generá un link que los alumnos pueden usar para unirse a este curso sin que vos tengas
               que agregarlos manualmente.
             </p>
             {inviteLink ? (
