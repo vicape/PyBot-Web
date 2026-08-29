@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { fetchMyOrgRole, isStaffRole, roleLabelEs } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { slugifyOrganizationName } from "../slugify.js";
-import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
+import { isSupabaseConfigured } from "../supabaseClient.js";
+import DashboardSubpageShell from "../components/dashboard/DashboardSubpageShell.jsx";
 
 export default function OrgCoursesPage() {
   const { orgId } = useParams();
@@ -20,6 +21,20 @@ export default function OrgCoursesPage() {
   const [myRole, setMyRole] = useState(null);
 
   const staff = isStaffRole(myRole);
+
+  const signOut = useCallback(async () => {
+    if (supabase) {
+      const { error } = await supabase.auth.signOut();
+      if (error) console.error("signOut:", error);
+    }
+    navigate("/login", { replace: true });
+  }, [supabase, navigate]);
+
+  const shell = (body) => (
+    <DashboardSubpageShell user={user} myRole={myRole} onSignOut={() => void signOut()}>
+      {body}
+    </DashboardSubpageShell>
+  );
 
   const load = useCallback(async () => {
     if (!supabase || !orgId || !user) return;
@@ -119,18 +134,25 @@ export default function OrgCoursesPage() {
 
   if (authLoading || loading) {
     return (
-      <main className="auth-root">
+      <main className="dash-root dash-root--center">
         <p className="auth-card__muted">Cargando cursos…</p>
       </main>
     );
   }
 
-  return (
-    <main className="auth-root">
-      <div className="auth-card auth-card--wide auth-card--max">
+  if (!user) {
+    return null;
+  }
+
+  return shell(
+    <>
         <p className="auth-breadcrumb">
           <Link to="/dashboard" className="auth-link">
-            Panel
+            Inicio
+          </Link>
+          <span aria-hidden> / </span>
+          <Link to="/dashboard?tab=schools" className="auth-link">
+            Colegios
           </Link>
           <span aria-hidden> / </span>
           <span>{orgName || "Colegio"}</span>
@@ -203,14 +225,9 @@ export default function OrgCoursesPage() {
             cursos.
           </p>
         ) : null}
-        <Link to="/dashboard" className="auth-link">
-          Volver al panel
-        </Link>
-        {" · "}
         <Link to="/" className="auth-link">
           IDE anónimo
         </Link>
-      </div>
-    </main>
+    </>,
   );
 }

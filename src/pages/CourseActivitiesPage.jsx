@@ -9,6 +9,7 @@ import {
   syncClassroomRosterToCourse,
 } from "../classroom/classroomRosterSync.js";
 import { getValidClassroomToken } from "../platform/classroomToken.js";
+import DashboardSubpageShell from "../components/dashboard/DashboardSubpageShell.jsx";
 
 // ─── Pestaña Actividades ─────────────────────────────────────────────────────
 
@@ -514,6 +515,20 @@ export default function CourseActivitiesPage() {
   const setTab = (t) =>
     setSearchParams(t === "actividades" ? {} : { tab: t }, { replace: true });
 
+  const signOut = useCallback(async () => {
+    if (supabase) {
+      const { error } = await supabase.auth.signOut();
+      if (error) console.error("signOut:", error);
+    }
+    navigate("/login", { replace: true });
+  }, [supabase, navigate]);
+
+  const shell = (body) => (
+    <DashboardSubpageShell user={user} myRole={myRole} onSignOut={() => void signOut()}>
+      {body}
+    </DashboardSubpageShell>
+  );
+
   const load = useCallback(async () => {
     if (!supabase || !courseId || !user) return;
     setErr("");
@@ -611,17 +626,22 @@ export default function CourseActivitiesPage() {
 
   if (authLoading || loading) {
     return (
-      <main className="auth-root">
+      <main className="dash-root dash-root--center">
         <p className="auth-card__muted">Cargando…</p>
       </main>
     );
   }
 
-  return (
-    <main className="auth-root">
-      <div className="auth-card auth-card--wide auth-card--max">
+  if (!user) {
+    return null;
+  }
+
+  return shell(
+    <>
         <p className="auth-breadcrumb">
-          <Link to="/dashboard" className="auth-link">Panel</Link>
+          <Link to="/dashboard" className="auth-link">Inicio</Link>
+          <span aria-hidden> / </span>
+          <Link to="/dashboard?tab=schools" className="auth-link">Colegios</Link>
           <span aria-hidden> / </span>
           <Link to={`/dashboard/org/${orgId}`} className="auth-link">{orgName || "Colegio"}</Link>
           <span aria-hidden> / </span>
@@ -691,7 +711,6 @@ export default function CourseActivitiesPage() {
         <div style={{ marginTop: "1.5rem" }}>
           <Link to="/" className="auth-link">Ir al IDE (anónimo)</Link>
         </div>
-      </div>
-    </main>
+    </>,
   );
 }
