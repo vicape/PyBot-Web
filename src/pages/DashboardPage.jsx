@@ -80,17 +80,23 @@ export default function DashboardPage() {
     if (!supabase || !sessionUser) return;
     setOrgError("");
 
-    // 1) Mis membresías
-    const { data: memberships, error: eMem } = await supabase
-      .from("organization_members")
-      .select("org_id, role")
-      .eq("user_id", sessionUser.id);
-
-    if (eMem) {
-      console.error("loadOrganizations.memberships:", eMem);
-      setOrgError(eMem.message);
-      setOrgs([]);
-      return;
+    // 1) Mis membresías (RPC security definer evita recursión RLS)
+    let memberships = null;
+    const rpc = await supabase.rpc("list_my_org_memberships");
+    if (!rpc.error) {
+      memberships = rpc.data;
+    } else {
+      const direct = await supabase
+        .from("organization_members")
+        .select("org_id, role")
+        .eq("user_id", sessionUser.id);
+      if (direct.error) {
+        console.error("loadOrganizations.memberships:", direct.error);
+        setOrgError(direct.error.message);
+        setOrgs([]);
+        return;
+      }
+      memberships = direct.data;
     }
 
     const orgIds = (memberships ?? []).map((m) => m.org_id);
