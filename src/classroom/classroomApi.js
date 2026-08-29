@@ -1,4 +1,5 @@
 const CLASSROOM_ROOT = "https://classroom.googleapis.com/v1";
+const MAX_PAGES = 50;
 
 async function classroomFetch(path, accessToken) {
   if (!accessToken) {
@@ -20,25 +21,55 @@ async function classroomFetch(path, accessToken) {
 }
 
 /**
+ * Recorre páginas de una API de Classroom con nextPageToken.
+ * @param {(pageToken: string | null) => Promise<{ items: unknown[], nextPageToken: string | null }>} fetchPage
+ */
+export async function fetchAllClassroomPages(fetchPage) {
+  const all = [];
+  let pageToken = null;
+  let pages = 0;
+
+  do {
+    const { items, nextPageToken } = await fetchPage(pageToken);
+    if (Array.isArray(items)) all.push(...items);
+    pageToken = nextPageToken || null;
+    pages += 1;
+  } while (pageToken && pages < MAX_PAGES);
+
+  return all;
+}
+
+/**
  * Lista cursos ACTIVOS donde el usuario es teacher.
  */
 export async function listTeacherClassroomCourses(accessToken) {
-  const qs = new URLSearchParams({ courseStates: "ACTIVE", teacherId: "me", pageSize: "50" });
-  const json = await classroomFetch(`/courses?${qs}`, accessToken);
-  return Array.isArray(json.courses) ? json.courses : [];
+  return fetchAllClassroomPages(async (pageToken) => {
+    const qs = new URLSearchParams({ courseStates: "ACTIVE", teacherId: "me", pageSize: "50" });
+    if (pageToken) qs.set("pageToken", pageToken);
+    const json = await classroomFetch(`/courses?${qs}`, accessToken);
+    return {
+      items: Array.isArray(json.courses) ? json.courses : [],
+      nextPageToken: json.nextPageToken || null,
+    };
+  });
 }
 
 /**
  * Lista alumnos de un curso de Classroom.
  * Requiere scope classroom.rosters.readonly.
- * Devuelve array de { userId, profile: { name, emailAddress, photoUrl } }
  */
 export async function listCourseStudents(accessToken, classroomCourseId) {
   if (!classroomCourseId) return [];
-  const qs = new URLSearchParams({ pageSize: "200" });
-  const json = await classroomFetch(
-    `/courses/${encodeURIComponent(classroomCourseId)}/students?${qs}`,
-    accessToken,
-  );
-  return Array.isArray(json.students) ? json.students : [];
+  return fetchAllClassroomPages(async (pageToken) => {
+    const qs = new URLSearchParams({ pageSize: "200" });
+    if (pageToken) qs.set("pageToken", pageToken);
+    const json = await classroomFetch(
+      `/courses/${encodeURIComponent(classroomCourseId)}/students?${qs}`,
+      accessToken,
+    );
+    return {
+      items: Array.isArray(json.students) ? json.students : [],
+      nextPageToken: json.nextPageToken || null,
+    };
+  });
 }

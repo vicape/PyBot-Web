@@ -4,6 +4,10 @@ import { fetchMyOrgRole, isStaffRole, roleLabelEs } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 import { listCourseStudents } from "../classroom/classroomApi.js";
+import {
+  classroomSyncErrorMessage,
+  syncClassroomRosterToCourse,
+} from "../classroom/classroomRosterSync.js";
 import { getValidClassroomToken } from "../platform/classroomToken.js";
 
 // ─── Pestaña Actividades ─────────────────────────────────────────────────────
@@ -126,70 +130,46 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
   const [removingId, setRemovingId] = useState(null);
 
   const loadMembers = useCallback(async () => {
-    if (!sb || !orgId) {
+    if (!sb || !courseId) {
       setLoadingMembers(false);
       return;
     }
     setLoadingMembers(true);
 
-    // 1) Traer membresías vía RPC security definer (evita recursión RLS)
-    let rows = null;
-    let rpcError = null;
-    const rpc = await sb.rpc("list_org_members", { p_org_id: orgId });
+    const rpc = await sb.rpc("list_course_members", { p_course_id: courseId });
     if (rpc.error) {
-      rpcError = rpc.error;
-      // Fallback: query directo (puede fallar por RLS recursivo si DB sin migración 012)
-      const direct = await sb
-        .from("organization_members")
-        .select("user_id, role")
-        .eq("org_id", orgId);
-      if (direct.error) {
-        console.error("loadMembers (direct fallback):", direct.error);
-        setMembers([]);
-        setLoadingMembers(false);
-        return;
-      }
-      rows = direct.data ?? [];
-    } else {
-      rows = rpc.data ?? [];
-    }
-
-    if (rpcError) console.warn("loadMembers RPC missing/failing:", rpcError);
-
-    const students = rows.filter((r) => r.role === "student");
-    const userIds = students.map((r) => r.user_id);
-
-    if (userIds.length === 0) {
+      console.error("loadMembers.list_course_members:", rpc.error);
       setMembers([]);
       setLoadingMembers(false);
       return;
     }
 
-    // 2) Traer perfiles
-    const { data: profs, error: eProfs } = await sb
-      .from("profiles")
-      .select("id, display_name, avatar_url, email")
-      .in("id", userIds);
-
-    if (eProfs) console.error("loadMembers.profiles:", eProfs);
-
-    const profMap = new Map((profs ?? []).map((p) => [p.id, p]));
+    const students = (rpc.data ?? []).filter((r) => r.role === "student");
     const merged = students.map((r) => ({
       user_id: r.user_id,
       role: r.role,
-      profiles: profMap.get(r.user_id) ?? null,
+      source: r.source,
+      profiles: {
+        display_name: r.display_name,
+        avatar_url: r.avatar_url,
+        email: r.email,
+      },
     }));
 
     setMembers(merged);
     setLoadingMembers(false);
-  }, [sb, orgId]);
+  }, [sb, courseId]);
 
   useEffect(() => {
     void loadMembers();
   }, [loadMembers]);
 
   const importFromClassroom = async () => {
-    if (!sb || !classroomCourseId) return;
+    if (!sb || !classroomCourseId) {
+      setImportErr("Este curso no tiene classroom_course_id vinculado.");
+      return;
+    }
+    if (!orgId || !courseId) return;
     setImportState("loading");
     setImportErr("");
     setImportResults([]);
@@ -197,9 +177,7 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
     try {
       const tok = await getValidClassroomToken(user?.id);
       if (!tok) {
-        setImportErr(
-          "No hay token de Classroom. Andá al panel → Classroom y hacé clic en «Conectar Google Classroom».",
-        );
+        setImportErr(classroomSyncErrorMessage({ code: "missing_access_token" }));
         setImportState(null);
         return;
       }
@@ -211,61 +189,24 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
         return;
       }
 
-      const results = [];
-      for (const s of classroomStudents) {
-        const email = s.profile?.emailAddress;
-        const name = s.profile?.name?.fullName || email || s.userId;
+      const sync = await syncClassroomRosterToCourse(sb, {
+        courseId,
+        orgId,
+        classroomStudents,
+      });
 
-        if (!email) {
-          results.push({ name, email: null, status: "sin_email" });
-          continue;
-        }
-
-        // Buscar perfil PyBot por email (usa función security definer)
-        const { data: profileRows } = await sb.rpc("find_profile_by_email", { p_email: email });
-        const profile = Array.isArray(profileRows) ? profileRows[0] : null;
-
-        if (!profile?.id) {
-          results.push({ name, email, status: "no_registrado" });
-          continue;
-        }
-
-        // Verificar si ya es miembro
-        const { data: existing } = await sb
-          .from("organization_members")
-          .select("role")
-          .eq("org_id", orgId)
-          .eq("user_id", profile.id)
-          .maybeSingle();
-
-        if (existing) {
-          results.push({ name, email, status: "ya_miembro", role: existing.role });
-          continue;
-        }
-
-        // Agregar al colegio
-        const { error: insErr } = await sb.from("organization_members").insert({
-          org_id: orgId,
-          user_id: profile.id,
-          role: "student",
-        });
-
-        if (insErr) {
-          results.push({ name, email, status: "error", error: insErr.message });
-        } else {
-          results.push({ name, email, status: "importado" });
-        }
+      if (!sync.ok) {
+        setImportErr(classroomSyncErrorMessage({ message: sync.error, code: sync.error }));
+        setImportState(null);
+        return;
       }
 
-      setImportResults(results);
+      setImportResults(sync.results);
       setImportState("done");
       await loadMembers();
     } catch (ex) {
-      setImportErr(
-        ex?.status === 403
-          ? "Token de Classroom sin permisos. Reconectá Classroom desde el panel."
-          : ex?.message || "Error al importar alumnos.",
-      );
+      console.error("importFromClassroom:", ex);
+      setImportErr(classroomSyncErrorMessage(ex));
       setImportState(null);
     }
   };
@@ -297,27 +238,39 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
   };
 
   const removeMember = async (userId) => {
-    if (!sb || !orgId) return;
+    if (!sb || !courseId) return;
     setRemovingId(userId);
-    await sb.from("organization_members").delete().eq("org_id", orgId).eq("user_id", userId);
+    const { data, error } = await sb.rpc("remove_course_member", {
+      p_course_id: courseId,
+      p_user_id: userId,
+    });
+    if (error) {
+      console.error("removeMember:", error);
+    } else if (!data?.ok) {
+      console.error("removeMember:", data?.error || "sin_permisos");
+    }
     setRemovingId(null);
     await loadMembers();
   };
 
   const noRegistered = importResults.filter((r) => r.status === "no_registrado");
   const imported = importResults.filter((r) => r.status === "importado");
+  const updated = importResults.filter((r) => r.status === "actualizado");
 
   return (
     <>
       {/* Lista de alumnos actuales */}
       <div style={{ marginBottom: "1.25rem" }}>
         <h3 className="auth-section__title">
-          Alumnos en el colegio ({loadingMembers ? "…" : members.length})
+          Alumnos del curso ({loadingMembers ? "…" : members.length})
         </h3>
         {loadingMembers ? (
           <p className="auth-card__muted">Cargando…</p>
         ) : members.length === 0 ? (
-          <p className="auth-card__muted">Todavía no hay alumnos. Importalos o compartí el código de invitación.</p>
+          <p className="auth-card__muted">
+            Todavía no hay alumnos en este curso. Sincronizalos desde Classroom o compartí el código de
+            invitación del colegio.
+          </p>
         ) : (
           <ul className="auth-org-list">
             {members.map((m) => (
@@ -351,8 +304,9 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
             <div className="dash-panel" style={{ marginBottom: "1.25rem", padding: "1rem" }}>
               <h3 className="auth-section__title">Importar desde Google Classroom</h3>
               <p className="auth-card__muted auth-card__muted--tight">
-                Busca los emails de los alumnos de Classroom en PyBot y los agrega automáticamente.
-                Los que aún no tienen cuenta van a aparecer en una lista para compartirles el link.
+                Sincroniza el roster de Classroom con este curso: agrega alumnos nuevos, actualiza los
+                existentes y quita del curso a quienes ya no están en Classroom. Los que aún no tienen
+                cuenta PyBot aparecen en la lista para invitarlos.
               </p>
               {importErr ? (
                 <p className="auth-card__notice auth-card__notice--err">{importErr}</p>
@@ -370,12 +324,12 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
                 <div style={{ marginTop: "1rem" }}>
                   {imported.length > 0 ? (
                     <p className="auth-card__notice">
-                      ✓ {imported.length} alumno(s) importados correctamente.
+                      ✓ {imported.length} alumno(s) agregados al curso.
                     </p>
                   ) : null}
-                  {importResults.filter((r) => r.status === "ya_miembro").length > 0 ? (
+                  {updated.length > 0 ? (
                     <p className="auth-card__muted auth-card__muted--tight">
-                      {importResults.filter((r) => r.status === "ya_miembro").length} ya eran miembros.
+                      {updated.length} alumno(s) ya estaban en el curso y se actualizaron.
                     </p>
                   ) : null}
                   {noRegistered.length > 0 ? (
