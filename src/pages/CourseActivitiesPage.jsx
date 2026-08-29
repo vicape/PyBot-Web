@@ -226,7 +226,31 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
 
       setImportResults(sync.results);
       setImportState("done");
+
+      // Mostrar pendientes de inmediato (nombre + email), aunque la DB aún no responda
+      const pendingFromSync =
+        sync.pendingRows ??
+        (sync.results || [])
+          .filter((r) => r.status === "no_registrado" && r.email)
+          .map((r) => ({
+            classroom_user_id: r.classroomUserId,
+            email: r.email,
+            display_name: r.name,
+          }));
+      if (pendingFromSync.length > 0) {
+        setPending(pendingFromSync);
+      }
+
       await loadMembers();
+
+      // Si loadMembers no trajo pendientes (migración faltante), conservar los del import
+      setPending((prev) => (prev.length > 0 ? prev : pendingFromSync));
+
+      if (pendingFromSync.length > 0 && (sync.pendingUpserted ?? 0) === 0) {
+        setImportErr(
+          "Los alumnos se muestran abajo, pero falta aplicar en Supabase la migración 017 para guardarlos. Ejecutá 20260829000017_replace_course_roster_pending.sql",
+        );
+      }
     } catch (ex) {
       console.error("importFromClassroom:", ex);
       setImportErr(classroomSyncErrorMessage(ex));
@@ -330,15 +354,16 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
               <li
                 key={p.classroom_user_id || p.email}
                 className="auth-org-row auth-org-row--split"
-                style={{ opacity: 0.55 }}
+                style={{ opacity: 0.6 }}
               >
                 <div>
-                  <span className="auth-org-row__name">{p.display_name || p.email}</span>
+                  <span className="auth-org-row__name">{p.display_name || "Sin nombre"}</span>
+                  <span className="auth-org-row__meta">{p.email}</span>
                   <span className="auth-org-row__meta">
-                    {p.email} · Pendiente (sin cuenta PyBot)
+                    Incorporado al curso · aún no inició sesión en PyBot
                   </span>
                 </div>
-                <span className="dash-badge dash-badge--muted">Pendiente</span>
+                <span className="dash-badge dash-badge--muted">Sin login</span>
               </li>
             ))}
           </ul>

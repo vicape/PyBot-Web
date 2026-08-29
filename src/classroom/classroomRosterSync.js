@@ -126,13 +126,16 @@ export async function syncClassroomRosterToCourse(supabase, { courseId, orgId, c
 
   const activeClassroomUserIds = classroomStudents.map((s) => s.userId).filter(Boolean);
 
-  const { data: syncData, error: syncErr } = await supabase.rpc("sync_classroom_course_roster", {
+  let syncData = null;
+  let syncErr = null;
+
+  ({ data: syncData, error: syncErr } = await supabase.rpc("sync_classroom_course_roster", {
     p_course_id: courseId,
     p_org_id: orgId,
     p_enrolled: enrolled,
     p_active_classroom_user_ids: activeClassroomUserIds,
     p_pending: pending,
-  });
+  }));
 
   if (syncErr) {
     // Fallback si la DB aún no tiene el arg p_pending (migración 016)
@@ -149,22 +152,31 @@ export async function syncClassroomRosterToCourse(supabase, { courseId, orgId, c
       if (!legacy.data?.ok) {
         return { ok: false, error: legacy.data?.error || "sync_failed", results };
       }
-      return {
-        ok: true,
-        results,
-        summary: summarizeClassroomSyncResults(results),
-        removed: legacy.data.removed ?? 0,
-        synced: legacy.data.synced ?? 0,
-        pendingUpserted: 0,
-        pendingLegacy: true,
-      };
+      syncData = legacy.data;
+      syncErr = null;
+    } else {
+      return { ok: false, error: syncErr.message || "error_supabase", results };
     }
-    return { ok: false, error: syncErr.message || "error_supabase", results };
   }
 
   if (!syncData?.ok) {
-    const errCode = syncData?.error || "sync_failed";
-    return { ok: false, error: errCode, results };
+    return { ok: false, error: syncData?.error || "sync_failed", results };
+  }
+
+  // Persistir pendientes con RPC dedicada (017) — garantiza lista grisada
+  let pendingUpserted = syncData.pending_upserted ?? 0;
+  if (pending.length > 0) {
+    const rep = await supabase.rpc("replace_course_roster_pending", {
+      p_course_id: courseId,
+      p_org_id: orgId,
+      p_pending: pending,
+      p_active_classroom_user_ids: activeClassroomUserIds,
+    });
+    if (!rep.error && rep.data?.ok) {
+      pendingUpserted = rep.data.upserted ?? pending.length;
+    } else if (rep.error) {
+      console.warn("replace_course_roster_pending:", rep.error.message);
+    }
   }
 
   return {
@@ -173,7 +185,12 @@ export async function syncClassroomRosterToCourse(supabase, { courseId, orgId, c
     summary: summarizeClassroomSyncResults(results),
     removed: syncData.removed ?? 0,
     synced: syncData.synced ?? 0,
-    pendingUpserted: syncData.pending_upserted ?? pending.length,
+    pendingUpserted,
+    pendingRows: pending.map((p) => ({
+      classroom_user_id: p.classroom_user_id,
+      email: p.email,
+      display_name: p.display_name,
+    })),
   };
 }
 
