@@ -13,7 +13,28 @@ export const GOOGLE_CLASSROOM_SCOPES = [
 ].join(" ");
 
 /**
- * Re-autoriza Google con permisos de Classroom (docentes).
+ * Login docente: mismos scopes que Classroom (un solo consentimiento Google).
+ * Incluye offline + consent para obtener refresh_token.
+ */
+export function teacherLoginOAuthOptions(redirectTo) {
+  return {
+    redirectTo,
+    scopes: GOOGLE_CLASSROOM_SCOPES,
+    queryParams: { prompt: "consent", access_type: "offline" },
+  };
+}
+
+/** Login alumno: solo identidad (sin Classroom). */
+export function studentLoginOAuthOptions(redirectTo) {
+  return {
+    redirectTo,
+    scopes: GOOGLE_BASE_SCOPES,
+    queryParams: { prompt: "select_account" },
+  };
+}
+
+/**
+ * Re-autoriza Google con permisos de Classroom (si el docente revocó o expiró el refresh).
  * Tras el callback, volver a /dashboard?tab=classroom
  */
 export async function connectGoogleClassroom() {
@@ -30,11 +51,7 @@ export async function connectGoogleClassroom() {
   const redirectTo = `${window.location.origin}/auth/callback`;
   await sb.auth.signInWithOAuth({
     provider: "google",
-    options: {
-      redirectTo,
-      scopes: GOOGLE_CLASSROOM_SCOPES,
-      queryParams: { prompt: "consent", access_type: "offline" },
-    },
+    options: teacherLoginOAuthOptions(redirectTo),
   });
 }
 
@@ -45,5 +62,14 @@ export function wasClassroomOAuthIntent() {
     return v === "1";
   } catch {
     return false;
+  }
+}
+
+/** Marca el login docente para guardar tokens de Classroom en el callback. */
+export function markTeacherLoginOAuthIntent() {
+  try {
+    sessionStorage.setItem("pybot_oauth_classroom", "1");
+  } catch {
+    //
   }
 }

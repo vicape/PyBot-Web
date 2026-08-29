@@ -4,6 +4,11 @@ import { GoogleLogin } from "@react-oauth/google";
 import { saveGoogleProfile, getGoogleProfile } from "../authSession.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 import { SIGNUP_ROLES, setSignupRole, signupRoleLabelEs } from "../platform/signupRole.js";
+import {
+  markTeacherLoginOAuthIntent,
+  studentLoginOAuthOptions,
+  teacherLoginOAuthOptions,
+} from "../platform/googleOAuth.js";
 
 const hasClientId =
   typeof import.meta.env.VITE_GOOGLE_CLIENT_ID === "string" &&
@@ -34,12 +39,20 @@ export default function LoginPage() {
     }
 
     const redirectTo = `${window.location.origin}/auth/callback`;
+
+    // Docente: un solo consentimiento = login + Classroom
+    if (role === SIGNUP_ROLES.teacher) {
+      markTeacherLoginOAuthIntent();
+      await sb.auth.signInWithOAuth({
+        provider: "google",
+        options: teacherLoginOAuthOptions(redirectTo),
+      });
+      return;
+    }
+
     await sb.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo,
-        queryParams: { prompt: "select_account" },
-      },
+      options: studentLoginOAuthOptions(redirectTo),
     });
   };
 
@@ -78,7 +91,8 @@ export default function LoginPage() {
                 </span>
                 <span className="auth-role-card__title">Soy docente</span>
                 <span className="auth-role-card__desc">
-                  Creo colegios, cursos y actividades. Puedo vincular Google Classroom.
+                  Creo colegios, cursos y actividades. Al entrar con Google también autorizás
+                  Classroom (un solo paso).
                 </span>
               </button>
               <button

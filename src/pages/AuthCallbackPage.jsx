@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSupabase } from "../supabaseClient.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
-import { updatePreferredRole, saveGoogleTokens } from "../platform/profileApi.js";
-import { consumeSignupRole } from "../platform/signupRole.js";
+import { updatePreferredRole, saveGoogleTokens, markClassroomLinked } from "../platform/profileApi.js";
+import { consumeSignupRole, SIGNUP_ROLES } from "../platform/signupRole.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 
 function safeInternalNext(raw) {
@@ -62,16 +62,19 @@ export default function AuthCallbackPage() {
 
       const signupRole = consumeSignupRole();
       const isClassroomIntent = wasClassroomOAuthIntent();
+      const shouldSaveClassroomTokens =
+        isClassroomIntent || signupRole === SIGNUP_ROLES.teacher;
       try {
         await ensureProfileForUser(session.user, signupRole);
         if (signupRole) await updatePreferredRole(session.user.id, signupRole);
-        // Guardar refresh_token de Google para renovar el token de Classroom automáticamente
-        if (isClassroomIntent && session.provider_refresh_token) {
+        // Guardar tokens de Google (login docente unificado o reconexión Classroom)
+        if (shouldSaveClassroomTokens && (session.provider_refresh_token || session.provider_token)) {
           await saveGoogleTokens(session.user.id, {
             accessToken: session.provider_token,
             refreshToken: session.provider_refresh_token,
             expiresIn: 3600,
           });
+          await markClassroomLinked(session.user.id);
         }
       } catch {
         // No bloquear la navegación si falla la sincronización del perfil
