@@ -169,7 +169,10 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
       setImportErr("Este curso no tiene classroom_course_id vinculado.");
       return;
     }
-    if (!orgId || !courseId) return;
+    if (!orgId || !courseId) {
+      setImportErr("Faltan datos del curso o del colegio.");
+      return;
+    }
     setImportState("loading");
     setImportErr("");
     setImportResults([]);
@@ -196,8 +199,18 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
       });
 
       if (!sync.ok) {
-        setImportErr(classroomSyncErrorMessage({ message: sync.error, code: sync.error }));
-        setImportState(null);
+        const raw = sync.error || "";
+        const missingRpc =
+          /sync_classroom_course_roster|list_course_members|Could not find the function|schema cache/i.test(
+            raw,
+          );
+        setImportErr(
+          missingRpc
+            ? "Falta aplicar en Supabase la migración 013 (course_members). Sin eso no se pueden guardar alumnos del curso."
+            : classroomSyncErrorMessage({ message: raw, code: raw }),
+        );
+        setImportResults(sync.results ?? []);
+        setImportState(sync.results?.length ? "done" : null);
         return;
       }
 
@@ -257,6 +270,7 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
   const noRegistered = importResults.filter((r) => r.status === "no_registrado");
   const imported = importResults.filter((r) => r.status === "importado");
   const updated = importResults.filter((r) => r.status === "actualizado");
+  const sinEmail = importResults.filter((r) => r.status === "sin_email");
 
   return (
     <>
@@ -269,8 +283,8 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
           <p className="auth-card__muted">Cargando…</p>
         ) : members.length === 0 ? (
           <p className="auth-card__muted">
-            Todavía no hay alumnos en este curso. Sincronizalos desde Classroom o compartí el código de
-            invitación del colegio.
+            Todavía no hay alumnos en este curso. Sincronizalos desde Classroom (solo agrega quienes ya
+            tienen cuenta PyBot) o compartí el código de invitación de este curso.
           </p>
         ) : (
           <ul className="auth-org-list">
@@ -321,8 +335,19 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
                 {importState === "loading" ? "Importando…" : "Importar alumnos de Classroom"}
               </button>
 
-              {importState === "done" && importResults.length > 0 ? (
+              {importState === "done" ? (
                 <div style={{ marginTop: "1rem" }}>
+                  <p className="auth-card__muted auth-card__muted--tight">
+                    Resultado: {importResults.length} alumno(s) en Classroom · {imported.length}{" "}
+                    agregados · {updated.length} actualizados · {noRegistered.length} sin cuenta
+                    PyBot · {sinEmail.length} sin email
+                  </p>
+                  {imported.length === 0 && updated.length === 0 ? (
+                    <p className="auth-card__notice auth-card__notice--warn">
+                      Ninguno pudo agregarse al curso todavía. Hace falta email de Classroom + cuenta
+                      PyBot con ese mismo email, o el código de invitación de este curso.
+                    </p>
+                  ) : null}
                   {imported.length > 0 ? (
                     <p className="auth-card__notice">
                       ✓ {imported.length} alumno(s) agregados al curso.
@@ -333,17 +358,33 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
                       {updated.length} alumno(s) ya estaban en el curso y se actualizaron.
                     </p>
                   ) : null}
+                  {sinEmail.length > 0 ? (
+                    <div>
+                      <p className="auth-card__notice auth-card__notice--warn">
+                        {sinEmail.length} sin email expuesto por Google. Reconectá Classroom (hace
+                        falta el permiso de emails del perfil) o usá el código de invitación:
+                      </p>
+                      <ul className="auth-org-list" style={{ marginTop: "0.5rem" }}>
+                        {sinEmail.map((r) => (
+                          <li key={r.classroomUserId || r.name} className="auth-org-row">
+                            <span className="auth-org-row__name">{r.name}</span>
+                            <span className="auth-org-row__meta">sin email</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   {noRegistered.length > 0 ? (
                     <div>
                       <p className="auth-card__notice auth-card__notice--warn">
                         {noRegistered.length} alumno(s) aún no tienen cuenta en PyBot. Compartiles el
-                        código de invitación para que se registren:
+                        código de invitación de este curso:
                       </p>
                       <ul className="auth-org-list" style={{ marginTop: "0.5rem" }}>
                         {noRegistered.map((r) => (
-                          <li key={r.email} className="auth-org-row">
+                          <li key={r.email || r.classroomUserId} className="auth-org-row">
                             <span className="auth-org-row__name">{r.name}</span>
-                            <span className="auth-org-row__meta">{r.email}</span>
+                            <span className="auth-org-row__meta">{r.email || "sin email"}</span>
                           </li>
                         ))}
                       </ul>

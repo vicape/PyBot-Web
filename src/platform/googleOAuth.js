@@ -8,6 +8,8 @@ export const GOOGLE_CLASSROOM_SCOPES = [
   "profile",
   "https://www.googleapis.com/auth/classroom.courses.readonly",
   "https://www.googleapis.com/auth/classroom.rosters.readonly",
+  // Necesario para profile.emailAddress en el roster (sin esto no se puede matchear a PyBot)
+  "https://www.googleapis.com/auth/classroom.profile.emails",
 ].join(" ");
 
 /**
