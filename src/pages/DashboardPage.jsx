@@ -6,7 +6,12 @@ import DashboardShell from "../components/dashboard/DashboardShell.jsx";
 import { getGoogleProfile } from "../authSession.js";
 import { signOutGoogleClient } from "../authGoogle.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
-import { isTeacherInAnyOrg, isTeacherProfile, roleLabelEs } from "../orgRole.js";
+import {
+  hasStaffMembership,
+  hasTeacherPreference,
+  resolveStaffOrgId,
+  roleLabelEs,
+} from "../orgRole.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
 import { fetchMyEnrolledCourses } from "../platform/studentCoursesApi.js";
@@ -61,24 +66,20 @@ export default function DashboardPage() {
   const [preferredRole, setPreferredRole] = useState(null);
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [coursesError, setCoursesError] = useState("");
+  const [orgsLoaded, setOrgsLoaded] = useState(false);
 
   const legacyProfile = getGoogleProfile();
 
   const rawTab = searchParams.get("tab") || "home";
-  const isTeacher = isTeacherProfile(orgs, preferredRole);
-  const isStudentView = !isTeacher;
+  const hasStaffAccess = hasStaffMembership(orgs);
+  const teacherPreference = hasTeacherPreference(preferredRole);
+  const isStudentView = !hasStaffAccess;
   const activeTab = VALID_TABS.has(rawTab)
     ? isStudentView && rawTab === "schools"
       ? "courses"
       : rawTab
     : "home";
-  const staffOrgId = useMemo(() => {
-    const staff = orgs.find((o) => {
-      const r = o.organization_members?.[0]?.role;
-      return r === "owner" || r === "teacher";
-    });
-    return staff?.id ?? orgs[0]?.id ?? null;
-  }, [orgs]);
+  const staffOrgId = useMemo(() => resolveStaffOrgId(orgs), [orgs]);
 
   const setTab = (tabId) => {
     setSearchParams(tabId === "home" ? {} : { tab: tabId }, { replace: true });
@@ -87,6 +88,7 @@ export default function DashboardPage() {
   const loadOrganizations = useCallback(async () => {
     if (!supabase || !sessionUser) return;
     setOrgError("");
+    setOrgsLoaded(false);
 
     // 1) Mis membresías (RPC security definer evita recursión RLS)
     let memberships = null;
@@ -102,6 +104,7 @@ export default function DashboardPage() {
         console.error("loadOrganizations.memberships:", direct.error);
         setOrgError(direct.error.message);
         setOrgs([]);
+        setOrgsLoaded(true);
         return;
       }
       memberships = direct.data;
@@ -110,6 +113,7 @@ export default function DashboardPage() {
     const orgIds = (memberships ?? []).map((m) => m.org_id);
     if (orgIds.length === 0) {
       setOrgs([]);
+      setOrgsLoaded(true);
       return;
     }
 
@@ -123,6 +127,7 @@ export default function DashboardPage() {
       console.error("loadOrganizations.orgs:", eOrg);
       setOrgError(eOrg.message);
       setOrgs([]);
+      setOrgsLoaded(true);
       return;
     }
 
@@ -134,6 +139,7 @@ export default function DashboardPage() {
     }));
 
     setOrgs(merged);
+    setOrgsLoaded(true);
   }, [supabase, sessionUser]);
 
   const loadEnrolledCourses = useCallback(async () => {
@@ -214,16 +220,15 @@ export default function DashboardPage() {
   }, [useCloud, sessionUser, isStudentView, loadEnrolledCourses]);
 
   useEffect(() => {
-    if (activeTab === "classroom" && !isTeacher && orgs.length > 0) {
+    if (activeTab === "classroom" && !hasStaffAccess) {
       setTab("home");
     }
-  }, [activeTab, isTeacher, orgs.length]);
+  }, [activeTab, hasStaffAccess]);
 
   useEffect(() => {
-    if (isStudentView && rawTab === "schools") {
-      setSearchParams({ tab: "courses" }, { replace: true });
-    }
-  }, [isStudentView, rawTab, setSearchParams]);
+    if (!orgsLoaded || !isStudentView || rawTab !== "schools") return;
+    setSearchParams({ tab: "courses" }, { replace: true });
+  }, [orgsLoaded, isStudentView, rawTab, setSearchParams]);
 
   const signOutLegacy = () => {
     signOutGoogleClient();
@@ -365,7 +370,7 @@ export default function DashboardPage() {
       <DashboardShell
         activeTab={activeTab}
         onTabChange={setTab}
-        showClassroomTab={isTeacher}
+        showClassroomTab={hasStaffAccess}
         studentView={isStudentView}
         userName={name}
         userEmail={email}
@@ -383,6 +388,11 @@ export default function DashboardPage() {
                 <Link to="/">la página principal</Link> sigue libre y sin cuenta.
               </p>
               {profileWarn ? <p className="auth-card__notice">{profileWarn}</p> : null}
+              {teacherPreference && !hasStaffAccess ? (
+                <p className="auth-card__notice">
+                  Creá o unite a un colegio como docente para usar Classroom.
+                </p>
+              ) : null}
               {preferredRole === "student" && orgs.length === 0 ? (
                 <p className="auth-card__notice">
                   ¿Tenés código de invitación de tu colegio?{" "}
@@ -403,13 +413,35 @@ export default function DashboardPage() {
                 )}
                 <div className="dash-stat">
                   <span className="dash-stat__value">
-                    {isTeacherInAnyOrg(orgs)
+                    {hasStaffAccess
                       ? "Docente (colegio)"
-                      : signupRoleLabelEs(preferredRole) || (isTeacher ? "Docente" : "Alumno")}
+                      : signupRoleLabelEs(preferredRole) || "Alumno"}
                   </span>
                   <span className="dash-stat__label">Perfil principal</span>
                 </div>
               </div>
+              {teacherPreference && !hasStaffAccess ? (
+                <form className="auth-org-form" onSubmit={createOrganization}>
+                  <label className="auth-org-label" htmlFor="new-org-home">
+                    Crear colegio
+                  </label>
+                  <div className="auth-org-form__row">
+                    <input
+                      id="new-org-home"
+                      className="auth-org-input"
+                      type="text"
+                      placeholder="Ej. Escuela San Martín"
+                      value={newOrgName}
+                      onChange={(e) => setNewOrgName(e.target.value)}
+                      maxLength={120}
+                      disabled={savingOrg}
+                    />
+                    <button type="submit" className="auth-btn auth-btn--primary" disabled={savingOrg}>
+                      Crear
+                    </button>
+                  </div>
+                </form>
+              ) : null}
               <div className="auth-org-row__actions">
                 {isStudentView ? (
                   <button type="button" className="auth-btn auth-btn--primary" onClick={() => setTab("courses")}>
@@ -423,7 +455,7 @@ export default function DashboardPage() {
                 <button type="button" className="auth-btn auth-btn--ghost" onClick={() => setTab("account")}>
                   Configurar cuenta
                 </button>
-                {isTeacher ? (
+                {hasStaffAccess ? (
                   <button type="button" className="auth-btn auth-btn--ghost" onClick={() => setTab("classroom")}>
                     Google Classroom
                   </button>
@@ -483,7 +515,7 @@ export default function DashboardPage() {
                 ))}
               </ul>
             )}
-            {isTeacher ? (
+            {hasStaffAccess ? (
               <form className="auth-org-form" onSubmit={createOrganization}>
                 <label className="auth-org-label" htmlFor="new-org-name">
                   Crear colegio
@@ -512,7 +544,7 @@ export default function DashboardPage() {
           <AccountSettings user={sessionUser} onProfileUpdated={setDisplayName} />
         ) : null}
 
-        {activeTab === "classroom" && isTeacher ? (
+        {activeTab === "classroom" && hasStaffAccess ? (
           <ClassroomPanel user={sessionUser} staffOrgId={staffOrgId} />
         ) : null}
       </DashboardShell>

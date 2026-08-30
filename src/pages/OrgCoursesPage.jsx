@@ -47,9 +47,10 @@ export default function OrgCoursesPage() {
     setErr("");
     setLoading(true);
 
+    let role = null;
     try {
-      const r = await fetchMyOrgRole(supabase, orgId, user.id);
-      setMyRole(r);
+      role = await fetchMyOrgRole(supabase, orgId, user.id);
+      setMyRole(role);
     } catch {
       setMyRole(null);
     }
@@ -68,7 +69,7 @@ export default function OrgCoursesPage() {
 
     setOrgName(org.name ?? "");
 
-    if (!staff) {
+    if (!isStaffRole(role)) {
       const { courses: enrolled, error: enrollErr } = await fetchMyEnrolledCourses(supabase, user.id, {
         orgId,
       });

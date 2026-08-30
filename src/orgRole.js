@@ -17,29 +17,43 @@ export function roleLabelEs(role) {
   }
 }
 
-/** True si el usuario es owner o teacher en al menos un colegio. */
-export function isTeacherInAnyOrg(orgs) {
+/** Permiso real: owner o teacher en al menos un colegio (organization_members). */
+export function hasStaffMembership(orgs) {
   if (!Array.isArray(orgs)) return false;
-  return orgs.some((o) => {
-    const role = o.organization_members?.[0]?.role;
-    return role === "owner" || role === "teacher";
-  });
+  return orgs.some((o) => isStaffRole(o.organization_members?.[0]?.role));
 }
 
-/** Docente por membresía en colegio o por preferred_role antes de unirse. */
-export function isTeacherProfile(orgs, preferredRole) {
-  if (isTeacherInAnyOrg(orgs)) return true;
+/** @deprecated Alias de hasStaffMembership — usar nombre explícito en código nuevo. */
+export function isTeacherInAnyOrg(orgs) {
+  return hasStaffMembership(orgs);
+}
+
+/** Preferencia de onboarding; NO concede permisos institucionales. */
+export function hasTeacherPreference(preferredRole) {
   return preferredRole === "teacher";
+}
+
+/**
+ * Permiso docente real (solo membresía institucional).
+ * El segundo argumento se ignora (compatibilidad); no usar preferred_role aquí.
+ */
+export function isTeacherProfile(orgs, _preferredRoleIgnored) {
+  return hasStaffMembership(orgs);
+}
+
+/** Primera organización donde el usuario es owner/teacher; nunca una donde es student. */
+export function resolveStaffOrgId(orgs) {
+  if (!Array.isArray(orgs)) return null;
+  const staff = orgs.find((o) => isStaffRole(o.organization_members?.[0]?.role));
+  return staff?.id ?? null;
 }
 
 export async function fetchMyOrgRole(supabase, orgId, userId) {
   if (!supabase || !orgId || !userId) return null;
 
-  // Preferir RPC security definer (evita problemas de RLS)
   const rpc = await supabase.rpc("my_role_in_org", { p_org_id: orgId });
   if (!rpc.error) return rpc.data ?? null;
 
-  // Fallback: query directo (filtrando por user_id propio para evitar recursión)
   const { data, error } = await supabase
     .from("organization_members")
     .select("role")
