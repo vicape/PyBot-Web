@@ -511,7 +511,8 @@ export default function CourseActivitiesPage() {
   const [myRole, setMyRole] = useState(null);
 
   const staff = isStaffRole(myRole);
-  const activeTab = searchParams.get("tab") === "alumnos" ? "alumnos" : "actividades";
+  const activeTab =
+    staff && searchParams.get("tab") === "alumnos" ? "alumnos" : "actividades";
   const setTab = (t) =>
     setSearchParams(t === "actividades" ? {} : { tab: t }, { replace: true });
 
@@ -700,13 +701,15 @@ export default function CourseActivitiesPage() {
               <span className="course-tab__count">{activities.length}</span>
             ) : null}
           </button>
-          <button
-            type="button"
-            className={`course-tab${activeTab === "alumnos" ? " course-tab--active" : ""}`}
-            onClick={() => setTab("alumnos")}
-          >
-            Alumnos
-          </button>
+          {staff ? (
+            <button
+              type="button"
+              className={`course-tab${activeTab === "alumnos" ? " course-tab--active" : ""}`}
+              onClick={() => setTab("alumnos")}
+            >
+              Alumnos
+            </button>
+          ) : null}
         </nav>
 
         {activeTab === "actividades" ? (
