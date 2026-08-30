@@ -174,19 +174,20 @@ export default function DashboardPage() {
     }
 
     let cancelled = false;
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (cancelled) return;
-      const u = data.session?.user ?? null;
-      setSessionUser(u);
-      if (u) {
+
+    const finishLoading = () => {
+      if (!cancelled) setLoading(false);
+    };
+
+    const applyProfile = async (u) => {
+      try {
         const prof = await ensureProfileForUser(u);
         if (!prof.ok && !cancelled) {
           setProfileWarn(prof.error || "No se pudo sincronizar tu perfil.");
         }
         const { profile } = await fetchProfile(u.id);
-        if (!cancelled && profile?.preferred_role) {
-          setPreferredRole(profile.preferred_role);
-        }
+        if (cancelled) return;
+        if (profile?.preferred_role) setPreferredRole(profile.preferred_role);
         const meta = u.user_metadata || {};
         setDisplayName(
           profile?.display_name ||
@@ -194,29 +195,53 @@ export default function DashboardPage() {
             meta.name ||
             (u.email ? u.email.split("@")[0] : "Usuario"),
         );
+      } catch (ex) {
+        console.error("DashboardPage.applyProfile:", ex);
       }
-      setLoading(false);
-      if (wasClassroomOAuthIntent() && !cancelled) {
-        setSearchParams({ tab: "classroom" }, { replace: true });
-      }
-    });
+    };
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, sess) => {
+    const timer = setTimeout(finishLoading, 8000);
+
+    supabase.auth
+      .getSession()
+      .then(async ({ data }) => {
+        if (cancelled) return;
+        const u = data.session?.user ?? null;
+        setSessionUser(u);
+        finishLoading();
+        if (u) void applyProfile(u);
+        if (wasClassroomOAuthIntent() && !cancelled) {
+          setSearchParams({ tab: "classroom" }, { replace: true });
+        }
+      })
+      .catch((ex) => {
+        console.error("DashboardPage.getSession:", ex);
+        finishLoading();
+      });
+
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, sess) => {
       const u = sess?.user ?? null;
+      if (event === "INITIAL_SESSION") {
+        if (!cancelled) {
+          setSessionUser(u);
+          finishLoading();
+          if (u) void applyProfile(u);
+        }
+        return;
+      }
       setSessionUser(u);
       if (u) {
-        const prof = await ensureProfileForUser(u);
-        if (!prof.ok) setProfileWarn(prof.error || "No se pudo sincronizar tu perfil.");
-        else setProfileWarn("");
-        const { profile } = await fetchProfile(u.id);
-        setPreferredRole(profile?.preferred_role ?? null);
+        void applyProfile(u);
       } else {
         setProfileWarn("");
         setPreferredRole(null);
+        setDisplayName("");
       }
     });
+
     return () => {
       cancelled = true;
+      clearTimeout(timer);
       sub.subscription.unsubscribe();
     };
   }, [useCloud, supabase, setSearchParams]);
