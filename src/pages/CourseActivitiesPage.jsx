@@ -524,7 +524,12 @@ export default function CourseActivitiesPage() {
   }, [supabase, navigate]);
 
   const shell = (body) => (
-    <DashboardSubpageShell user={user} myRole={myRole} onSignOut={() => void signOut()}>
+    <DashboardSubpageShell
+      user={user}
+      myRole={myRole}
+      studentView={!staff}
+      onSignOut={() => void signOut()}
+    >
       {body}
     </DashboardSubpageShell>
   );
@@ -648,10 +653,19 @@ export default function CourseActivitiesPage() {
         <p className="auth-breadcrumb">
           <Link to="/dashboard" className="auth-link">Inicio</Link>
           <span aria-hidden> / </span>
-          <Link to="/dashboard?tab=schools" className="auth-link">Colegios</Link>
-          <span aria-hidden> / </span>
-          <Link to={`/dashboard/org/${orgId}`} className="auth-link">{orgName || "Colegio"}</Link>
-          <span aria-hidden> / </span>
+          {staff ? (
+            <>
+              <Link to="/dashboard?tab=schools" className="auth-link">Colegios</Link>
+              <span aria-hidden> / </span>
+              <Link to={`/dashboard/org/${orgId}`} className="auth-link">{orgName || "Colegio"}</Link>
+              <span aria-hidden> / </span>
+            </>
+          ) : (
+            <>
+              <Link to="/dashboard?tab=courses" className="auth-link">Mis cursos</Link>
+              <span aria-hidden> / </span>
+            </>
+          )}
           <span>{courseTitle || "Curso"}</span>
         </p>
 

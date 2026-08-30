@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { fetchMyOrgRole, isStaffRole, roleLabelEs } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
+import { fetchMyEnrolledCourses } from "../platform/studentCoursesApi.js";
 import { slugifyOrganizationName } from "../slugify.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
 import DashboardSubpageShell from "../components/dashboard/DashboardSubpageShell.jsx";
@@ -31,7 +32,12 @@ export default function OrgCoursesPage() {
   }, [supabase, navigate]);
 
   const shell = (body) => (
-    <DashboardSubpageShell user={user} myRole={myRole} onSignOut={() => void signOut()}>
+    <DashboardSubpageShell
+      user={user}
+      myRole={myRole}
+      studentView={!staff}
+      onSignOut={() => void signOut()}
+    >
       {body}
     </DashboardSubpageShell>
   );
@@ -61,6 +67,21 @@ export default function OrgCoursesPage() {
     }
 
     setOrgName(org.name ?? "");
+
+    if (!staff) {
+      const { courses: enrolled, error: enrollErr } = await fetchMyEnrolledCourses(supabase, user.id, {
+        orgId,
+      });
+      if (enrollErr) {
+        console.error("loadCourses.enrolled:", enrollErr);
+        setErr(enrollErr.message || "No se pudieron cargar tus cursos.");
+        setCourses([]);
+      } else {
+        setCourses(enrolled);
+      }
+      setLoading(false);
+      return;
+    }
 
     const { data: rows, error: e1 } = await supabase
       .from("courses")
@@ -151,15 +172,26 @@ export default function OrgCoursesPage() {
             Inicio
           </Link>
           <span aria-hidden> / </span>
-          <Link to="/dashboard?tab=schools" className="auth-link">
-            Colegios
-          </Link>
-          <span aria-hidden> / </span>
+          {staff ? (
+            <>
+              <Link to="/dashboard?tab=schools" className="auth-link">
+                Colegios
+              </Link>
+              <span aria-hidden> / </span>
+            </>
+          ) : (
+            <>
+              <Link to="/dashboard?tab=courses" className="auth-link">
+                Mis cursos
+              </Link>
+              <span aria-hidden> / </span>
+            </>
+          )}
           <span>{orgName || "Colegio"}</span>
         </p>
 
         <h1 className="auth-card__title">
-          Cursos
+          {staff ? "Cursos" : "Mis cursos"}
           <span
             style={{
               display: "block",
@@ -178,7 +210,9 @@ export default function OrgCoursesPage() {
 
         {courses.length === 0 ? (
           <p className="auth-card__muted">
-            {staff ? "No hay cursos todavía. Creá uno abajo." : "Todavía no hay cursos publicados."}
+            {staff
+              ? "No hay cursos todavía. Creá uno abajo."
+              : "No estás inscripto en ningún curso de este colegio."}
           </p>
         ) : (
           <ul className="auth-org-list">

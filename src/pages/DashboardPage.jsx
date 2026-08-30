@@ -9,6 +9,7 @@ import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 import { isTeacherInAnyOrg, isTeacherProfile, roleLabelEs } from "../orgRole.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
+import { fetchMyEnrolledCourses } from "../platform/studentCoursesApi.js";
 import { signupRoleLabelEs } from "../platform/signupRole.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 import { slugifyOrganizationName } from "../slugify.js";
@@ -41,7 +42,7 @@ function LegacyDashboard({ profile, onSignOut }) {
   );
 }
 
-const VALID_TABS = new Set(["home", "schools", "account", "classroom"]);
+const VALID_TABS = new Set(["home", "schools", "courses", "account", "classroom"]);
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -58,12 +59,19 @@ export default function DashboardPage() {
   const [profileWarn, setProfileWarn] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [preferredRole, setPreferredRole] = useState(null);
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [coursesError, setCoursesError] = useState("");
 
   const legacyProfile = getGoogleProfile();
 
   const rawTab = searchParams.get("tab") || "home";
-  const activeTab = VALID_TABS.has(rawTab) ? rawTab : "home";
   const isTeacher = isTeacherProfile(orgs, preferredRole);
+  const isStudentView = !isTeacher;
+  const activeTab = VALID_TABS.has(rawTab)
+    ? isStudentView && rawTab === "schools"
+      ? "courses"
+      : rawTab
+    : "home";
   const staffOrgId = useMemo(() => {
     const staff = orgs.find((o) => {
       const r = o.organization_members?.[0]?.role;
@@ -128,6 +136,19 @@ export default function DashboardPage() {
     setOrgs(merged);
   }, [supabase, sessionUser]);
 
+  const loadEnrolledCourses = useCallback(async () => {
+    if (!supabase || !sessionUser || !isStudentView) return;
+    setCoursesError("");
+    const { courses, error } = await fetchMyEnrolledCourses(supabase, sessionUser.id);
+    if (error) {
+      console.error("loadEnrolledCourses:", error);
+      setCoursesError(error.message || "No se pudieron cargar tus cursos.");
+      setEnrolledCourses([]);
+      return;
+    }
+    setEnrolledCourses(courses);
+  }, [supabase, sessionUser, isStudentView]);
+
   useEffect(() => {
     if (!useCloud) {
       setLoading(false);
@@ -188,10 +209,21 @@ export default function DashboardPage() {
   }, [useCloud, sessionUser, loadOrganizations]);
 
   useEffect(() => {
+    if (!useCloud || !sessionUser || !isStudentView) return;
+    void loadEnrolledCourses();
+  }, [useCloud, sessionUser, isStudentView, loadEnrolledCourses]);
+
+  useEffect(() => {
     if (activeTab === "classroom" && !isTeacher && orgs.length > 0) {
       setTab("home");
     }
   }, [activeTab, isTeacher, orgs.length]);
+
+  useEffect(() => {
+    if (isStudentView && rawTab === "schools") {
+      setSearchParams({ tab: "courses" }, { replace: true });
+    }
+  }, [isStudentView, rawTab, setSearchParams]);
 
   const signOutLegacy = () => {
     signOutGoogleClient();
@@ -334,6 +366,7 @@ export default function DashboardPage() {
         activeTab={activeTab}
         onTabChange={setTab}
         showClassroomTab={isTeacher}
+        studentView={isStudentView}
         userName={name}
         userEmail={email}
         userPicture={picture}
@@ -344,7 +377,9 @@ export default function DashboardPage() {
             <section className="dash-panel dash-panel--highlight">
               <h2 className="dash-panel__title">Bienvenido, {name}</h2>
               <p className="auth-card__muted auth-card__muted--tight">
-                Gestioná colegios, cursos y actividades PyBot. El IDE en{" "}
+                {isStudentView
+                  ? "Accedé a las actividades de tus cursos. El IDE en "
+                  : "Gestioná colegios, cursos y actividades PyBot. El IDE en "}
                 <Link to="/">la página principal</Link> sigue libre y sin cuenta.
               </p>
               {profileWarn ? <p className="auth-card__notice">{profileWarn}</p> : null}
@@ -355,10 +390,17 @@ export default function DashboardPage() {
                 </p>
               ) : null}
               <div className="dash-stat-row">
-                <div className="dash-stat">
-                  <span className="dash-stat__value">{orgs.length}</span>
-                  <span className="dash-stat__label">Colegios</span>
-                </div>
+                {isStudentView ? (
+                  <div className="dash-stat">
+                    <span className="dash-stat__value">{enrolledCourses.length}</span>
+                    <span className="dash-stat__label">Cursos</span>
+                  </div>
+                ) : (
+                  <div className="dash-stat">
+                    <span className="dash-stat__value">{orgs.length}</span>
+                    <span className="dash-stat__label">Colegios</span>
+                  </div>
+                )}
                 <div className="dash-stat">
                   <span className="dash-stat__value">
                     {isTeacherInAnyOrg(orgs)
@@ -369,9 +411,15 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="auth-org-row__actions">
-                <button type="button" className="auth-btn auth-btn--primary" onClick={() => setTab("schools")}>
-                  Ver colegios
-                </button>
+                {isStudentView ? (
+                  <button type="button" className="auth-btn auth-btn--primary" onClick={() => setTab("courses")}>
+                    Mis cursos
+                  </button>
+                ) : (
+                  <button type="button" className="auth-btn auth-btn--primary" onClick={() => setTab("schools")}>
+                    Ver colegios
+                  </button>
+                )}
                 <button type="button" className="auth-btn auth-btn--ghost" onClick={() => setTab("account")}>
                   Configurar cuenta
                 </button>
@@ -385,7 +433,37 @@ export default function DashboardPage() {
           </div>
         ) : null}
 
-        {activeTab === "schools" ? (
+        {activeTab === "courses" && isStudentView ? (
+          <section className="dash-panel">
+            <h2 className="dash-panel__title">Mis cursos</h2>
+            {coursesError ? <p className="auth-card__notice auth-card__notice--err">{coursesError}</p> : null}
+            {enrolledCourses.length === 0 ? (
+              <p className="auth-card__muted">
+                Todavía no estás inscripto en ningún curso. Si tu docente te dio un código,{" "}
+                <Link to="/join">unite acá</Link>.
+              </p>
+            ) : (
+              <ul className="auth-org-list">
+                {enrolledCourses.map((c) => (
+                  <li key={c.id} className="auth-org-row auth-org-row--link">
+                    <Link
+                      className="auth-org-row__link"
+                      to={`/dashboard/org/${c.org_id}/course/${c.id}`}
+                    >
+                      <span className="auth-org-row__name">{c.title}</span>
+                      <span className="auth-org-row__meta">
+                        {c.orgName ? `${c.orgName} · ` : ""}
+                        {c.slug ? `@${c.slug}` : "Actividades"}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
+
+        {activeTab === "schools" && !isStudentView ? (
           <section className="dash-panel">
             <h2 className="dash-panel__title">Tus colegios</h2>
             {orgError ? <p className="auth-card__notice auth-card__notice--err">{orgError}</p> : null}
@@ -405,26 +483,28 @@ export default function DashboardPage() {
                 ))}
               </ul>
             )}
-            <form className="auth-org-form" onSubmit={createOrganization}>
-              <label className="auth-org-label" htmlFor="new-org-name">
-                Crear colegio
-              </label>
-              <div className="auth-org-form__row">
-                <input
-                  id="new-org-name"
-                  className="auth-org-input"
-                  type="text"
-                  placeholder="Ej. Escuela San Martín"
-                  value={newOrgName}
-                  onChange={(e) => setNewOrgName(e.target.value)}
-                  maxLength={120}
-                  disabled={savingOrg}
-                />
-                <button type="submit" className="auth-btn auth-btn--primary" disabled={savingOrg}>
-                  Crear
-                </button>
-              </div>
-            </form>
+            {isTeacher ? (
+              <form className="auth-org-form" onSubmit={createOrganization}>
+                <label className="auth-org-label" htmlFor="new-org-name">
+                  Crear colegio
+                </label>
+                <div className="auth-org-form__row">
+                  <input
+                    id="new-org-name"
+                    className="auth-org-input"
+                    type="text"
+                    placeholder="Ej. Escuela San Martín"
+                    value={newOrgName}
+                    onChange={(e) => setNewOrgName(e.target.value)}
+                    maxLength={120}
+                    disabled={savingOrg}
+                  />
+                  <button type="submit" className="auth-btn auth-btn--primary" disabled={savingOrg}>
+                    Crear
+                  </button>
+                </div>
+              </form>
+            ) : null}
           </section>
         ) : null}
 

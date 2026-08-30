@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 
 const TABS = [
   { id: "home", label: "Inicio" },
-  { id: "schools", label: "Colegios" },
+  { id: "schools", label: "Colegios", staffOnly: true },
+  { id: "courses", label: "Mis cursos", studentOnly: true },
   { id: "account", label: "Cuenta" },
   { id: "classroom", label: "Classroom", teacherOnly: true },
 ];
@@ -11,13 +12,19 @@ export default function DashboardShell({
   activeTab,
   onTabChange,
   showClassroomTab,
+  studentView = false,
   userName,
   userEmail,
   userPicture,
   onSignOut,
   children,
 }) {
-  const visibleTabs = TABS.filter((t) => !t.teacherOnly || showClassroomTab);
+  const visibleTabs = TABS.filter((t) => {
+    if (t.teacherOnly && !showClassroomTab) return false;
+    if (t.staffOnly && studentView) return false;
+    if (t.studentOnly && !studentView) return false;
+    return true;
+  });
 
   return (
     <main className="dash-root">

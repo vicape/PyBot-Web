@@ -65,6 +65,8 @@ import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
 import PrepareEsp32Modal from "./PrepareEsp32Modal.jsx";
 import BluetoothPanel from "./BluetoothPanel.jsx";
+import IdeUserChip from "./components/IdeUserChip.jsx";
+import { useOptionalSession } from "./platform/useOptionalSession.js";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
 import { PHASE, BOARD_STATE, canCloseModal } from "./esp32/provisioningPhases.js";
 import {
@@ -100,6 +102,8 @@ function readInitialPythonOnly() {
 }
 
 export default function PyBotIDE() {
+  const { user: sessionUser, loading: sessionLoading, signOut: sessionSignOut } =
+    useOptionalSession();
   const [theme, setTheme] = useState(() => readInitialTheme());
   const [contrast, setContrast] = useState(
     () => localStorage.getItem("pybot_contrast") || "normal",
@@ -1715,6 +1719,11 @@ export default function PyBotIDE() {
                 </div>
               </div>
               <div className="toolbar-actions">
+                <IdeUserChip
+                  user={sessionUser}
+                  loading={sessionLoading}
+                  onSignOut={sessionSignOut}
+                />
                 <div className="tb-group">
                   <button
                     type="button"
@@ -2043,14 +2052,37 @@ export default function PyBotIDE() {
                       >
                         {t("settings")}
                       </button>
-                      <Link
-                        to="/login"
-                        className="toolbar-menu-item"
-                        role="menuitem"
-                        onClick={() => setToolbarMenuOpen(false)}
-                      >
-                        {t("accountMenu")}
-                      </Link>
+                      {sessionUser ? (
+                        <Link
+                          to="/dashboard"
+                          className="toolbar-menu-item"
+                          role="menuitem"
+                          onClick={() => setToolbarMenuOpen(false)}
+                        >
+                          {t("accountPanelMenu")}
+                        </Link>
+                      ) : (
+                        <Link
+                          to="/login"
+                          className="toolbar-menu-item"
+                          role="menuitem"
+                          onClick={() => setToolbarMenuOpen(false)}
+                        >
+                          {t("accountMenu")}
+                        </Link>
+                      )}
+                      {sessionUser ? (
+                        <button
+                          type="button"
+                          className="toolbar-menu-item"
+                          onClick={() => {
+                            void sessionSignOut();
+                            setToolbarMenuOpen(false);
+                          }}
+                        >
+                          {t("signOut")}
+                        </button>
+                      ) : null}
                       <button type="button" className="toolbar-menu-item" onClick={openHelp}>
                         {t("help")}
                       </button>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
 import { saveGoogleProfile, getGoogleProfile } from "../authSession.js";
@@ -19,6 +19,27 @@ export default function LoginPage() {
   const existing = getGoogleProfile();
   const supabaseConfigured = isSupabaseConfigured();
   const [role, setRole] = useState(null);
+
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    const sb = getSupabase();
+    if (!sb) return;
+
+    let cancelled = false;
+    sb.auth.getSession().then(({ data }) => {
+      if (cancelled || !data?.session?.user) return;
+      const next = new URLSearchParams(window.location.search).get("next");
+      const dest =
+        typeof next === "string" && next.startsWith("/") && !next.startsWith("//")
+          ? next
+          : "/dashboard";
+      navigate(dest, { replace: true });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabaseConfigured, navigate]);
 
   const oauthSupabaseGoogle = async () => {
     if (!role) return;

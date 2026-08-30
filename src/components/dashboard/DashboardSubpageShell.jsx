@@ -10,6 +10,7 @@ export default function DashboardSubpageShell({
   user,
   myRole = null,
   showClassroomTab,
+  studentView = false,
   onSignOut,
   children,
 }) {
@@ -20,6 +21,7 @@ export default function DashboardSubpageShell({
   const picture = meta.avatar_url || meta.picture || null;
   const classroom =
     typeof showClassroomTab === "boolean" ? showClassroomTab : isStaffRole(myRole);
+  const isStudent = studentView || (myRole === "student" && !isStaffRole(myRole));
 
   const goTab = (tabId) => {
     if (tabId === "home") navigate("/dashboard");
@@ -28,9 +30,10 @@ export default function DashboardSubpageShell({
 
   return (
     <DashboardShell
-      activeTab="schools"
+      activeTab={isStudent ? "courses" : "schools"}
       onTabChange={goTab}
       showClassroomTab={classroom}
+      studentView={isStudent}
       userName={name}
       userEmail={user?.email}
       userPicture={picture}
