@@ -609,10 +609,17 @@ export default function CourseActivitiesPage() {
     };
 
     let { error } = await supabase.from("activities").insert(full);
-    if (error?.message?.includes("description") || error?.message?.includes("pybot_lesson")) {
-      ({ error } = await supabase
-        .from("activities")
-        .insert({ ...base, starter_code: description.trim() || "" }));
+
+    if (error?.message?.includes("starter_code")) {
+      const { starter_code: _omitStarter, ...withoutStarter } = full;
+      ({ error } = await supabase.from("activities").insert(withoutStarter));
+    }
+
+    if (
+      error &&
+      (error.message?.includes("description") || error.message?.includes("pybot_lesson"))
+    ) {
+      ({ error } = await supabase.from("activities").insert(base));
     }
 
     setSaving(false);
