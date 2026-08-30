@@ -8,11 +8,13 @@ import OrgCoursesPage from "./pages/OrgCoursesPage.jsx";
 import CourseActivitiesPage from "./pages/CourseActivitiesPage.jsx";
 import JoinOrgPage from "./pages/JoinOrgPage.jsx";
 import ActivityPage from "./pages/ActivityPage.jsx";
+import TelemetryBootstrap from "./components/TelemetryBootstrap.jsx";
 import { isSupabaseConfigured } from "./supabaseClient.js";
 
 function AppRoutes() {
   return (
     <BrowserRouter>
+      <TelemetryBootstrap />
       <Routes>
         <Route path="/" element={<PyBotIDE />} />
         <Route path="/login" element={<LoginPage />} />

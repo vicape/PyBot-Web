@@ -6,6 +6,7 @@ import { fetchProfile, markClassroomLinked } from "../../platform/profileApi.js"
 import { getValidClassroomToken } from "../../platform/classroomToken.js";
 import { getSupabase } from "../../supabaseClient.js";
 import { slugifyOrganizationName } from "../../slugify.js";
+import { track } from "../../telemetry/index.js";
 
 function classroomErrorEs(err) {
   const code = err?.code;
@@ -28,6 +29,10 @@ export default function ClassroomPanel({ user, staffOrgId }) {
   const [testing, setTesting] = useState(false);
   const [err, setErr] = useState("");
   const [okMsg, setOkMsg] = useState("");
+
+  useEffect(() => {
+    track("classroom_open", { feature: "classroom" });
+  }, []);
 
   const refreshCourses = useCallback(async () => {
     const sb = getSupabase();
@@ -63,6 +68,15 @@ export default function ClassroomPanel({ user, staffOrgId }) {
       setCourses([]);
       const msg = classroomErrorEs(ex);
       if (msg) setErr(msg);
+      try {
+        track("error", {
+          error_code: ex?.code || "classroom_error",
+          feature: "classroom",
+          http_status: ex?.status || null,
+        });
+      } catch {
+        //
+      }
       // si msg es null (missing_access_token) no mostramos error, solo el botón conectar
     } finally {
       setTesting(false);

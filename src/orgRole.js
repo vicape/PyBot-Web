@@ -4,6 +4,10 @@ export function isStaffRole(role) {
   return role === "owner" || role === "teacher";
 }
 
+export function isStudentRole(role) {
+  return role === "student";
+}
+
 export function roleLabelEs(role) {
   switch (role) {
     case "owner":
@@ -17,35 +21,71 @@ export function roleLabelEs(role) {
   }
 }
 
-/** Permiso real: owner o teacher en al menos un colegio (organization_members). */
-export function hasStaffMembership(orgs) {
-  if (!Array.isArray(orgs)) return false;
-  return orgs.some((o) => isStaffRole(o.organization_members?.[0]?.role));
+function memberRole(org) {
+  return org?.organization_members?.[0]?.role ?? null;
 }
 
-/** @deprecated Alias de hasStaffMembership — usar nombre explícito en código nuevo. */
+/** Permiso real: owner o teacher en al menos un colegio. */
+export function hasStaffMembership(orgs) {
+  if (!Array.isArray(orgs)) return false;
+  return orgs.some((o) => isStaffRole(memberRole(o)));
+}
+
+/** Membresía student explícita (no se infiere por ausencia de staff). */
+export function hasStudentMembership(orgs) {
+  if (!Array.isArray(orgs)) return false;
+  return orgs.some((o) => isStudentRole(memberRole(o)));
+}
+
+export function getStaffOrganizations(orgs) {
+  if (!Array.isArray(orgs)) return [];
+  return orgs.filter((o) => isStaffRole(memberRole(o)));
+}
+
+export function getStudentOrganizations(orgs) {
+  if (!Array.isArray(orgs)) return [];
+  return orgs.filter((o) => isStudentRole(memberRole(o)));
+}
+
+/** @deprecated Alias de hasStaffMembership */
 export function isTeacherInAnyOrg(orgs) {
   return hasStaffMembership(orgs);
 }
 
-/** Preferencia de onboarding; NO concede permisos institucionales. */
+/** Preferencia de onboarding; NO concede permisos. */
 export function hasTeacherPreference(preferredRole) {
   return preferredRole === "teacher";
 }
 
 /**
- * Permiso docente real (solo membresía institucional).
- * El segundo argumento se ignora (compatibilidad); no usar preferred_role aquí.
+ * Permiso docente real (solo membresía).
+ * El segundo argumento se ignora (compatibilidad).
  */
 export function isTeacherProfile(orgs, _preferredRoleIgnored) {
   return hasStaffMembership(orgs);
 }
 
-/** Primera organización donde el usuario es owner/teacher; nunca una donde es student. */
+/** Primera org donde el usuario es owner/teacher; nunca una donde solo es student. */
 export function resolveStaffOrgId(orgs) {
   if (!Array.isArray(orgs)) return null;
-  const staff = orgs.find((o) => isStaffRole(o.organization_members?.[0]?.role));
+  const staff = orgs.find((o) => isStaffRole(memberRole(o)));
   return staff?.id ?? null;
+}
+
+/**
+ * Capacidades de navegación independientes (multirol).
+ * @param {{ orgs?: unknown[], enrolledCourseCount?: number }} opts
+ */
+export function getDashboardNavCapabilities({ orgs = [], enrolledCourseCount = 0 } = {}) {
+  const hasStaffAccess = hasStaffMembership(orgs);
+  const hasStudentAccess = hasStudentMembership(orgs) || enrolledCourseCount > 0;
+  return {
+    hasStaffAccess,
+    hasStudentAccess,
+    showSchoolsTab: hasStaffAccess,
+    showCoursesTab: hasStudentAccess,
+    showClassroomTab: hasStaffAccess,
+  };
 }
 
 export async function fetchMyOrgRole(supabase, orgId, userId) {

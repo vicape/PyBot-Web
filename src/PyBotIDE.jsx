@@ -67,6 +67,7 @@ import PrepareEsp32Modal from "./PrepareEsp32Modal.jsx";
 import BluetoothPanel from "./BluetoothPanel.jsx";
 import IdeUserChip from "./components/IdeUserChip.jsx";
 import { useOptionalSession } from "./platform/useOptionalSession.js";
+import { track } from "./telemetry/index.js";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
 import { PHASE, BOARD_STATE, canCloseModal } from "./esp32/provisioningPhases.js";
 import {
@@ -105,6 +106,10 @@ export default function PyBotIDE() {
   const { user: sessionUser, loading: sessionLoading, signOut: sessionSignOut } =
     useOptionalSession();
   const [theme, setTheme] = useState(() => readInitialTheme());
+
+  useEffect(() => {
+    track("ide_open", {});
+  }, []);
   const [contrast, setContrast] = useState(
     () => localStorage.getItem("pybot_contrast") || "normal",
   );
@@ -565,6 +570,15 @@ export default function PyBotIDE() {
       const { mode, pybotState } = result;
       setConnected(true);
       setPybotBoardState(pybotState ?? null);
+      try {
+        const transport = mode?.includes("esp32") ? "usb" : "usb";
+        track("usb_connect", { transport, board_type: mode || boardType });
+        if (mode === "esp32-eda6" || mode === "esp32-micropython") {
+          track("esp32_connect", { transport: "usb", board_type: mode });
+        }
+      } catch {
+        //
+      }
       if (mode === "esp32-eda6") {
         appendConsole(
           (eda6Profile === "ESP32" ? t("eda6ConnectedEsp32") : t("eda6ConnectedWemos")) + "\n",
@@ -749,11 +763,19 @@ export default function PyBotIDE() {
   );
 
   const onDisconnect = useCallback(async () => {
+    const wasEsp =
+      boardType === "esp32-eda6" || boardType === "esp32-micropython";
     await hardwareDisconnect();
     setConnected(false);
     setPybotBoardState(null);
+    try {
+      track("usb_disconnect", { transport: "usb", board_type: boardType });
+      if (wasEsp) track("esp32_disconnect", { transport: "usb", board_type: boardType });
+    } catch {
+      //
+    }
     appendConsole(t("logDisconnected") + "\n", "info");
-  }, [appendConsole]);
+  }, [appendConsole, boardType]);
 
   const onRun = useCallback(async () => {
     if (running || stopping) return;
@@ -762,6 +784,15 @@ export default function PyBotIDE() {
     if (!activeCode.trim()) {
       appendConsole(t("pyblockEmpty") + "\n", "err");
       return;
+    }
+    try {
+      track("ide_run", {
+        language_mode: editorMode === "pyblock" ? "blocks" : "python",
+        editor_mode: editorMode,
+        board_type: boardType,
+      });
+    } catch {
+      //
     }
     const needsHw = codeNeedsHardware(activeCode);
     const canvasCode = hasCanvasCode(activeCode);
@@ -1250,6 +1281,11 @@ export default function PyBotIDE() {
   const onBleConnectionChange = useCallback(
     (isConnected, name) => {
       setBleConnected(isConnected);
+      try {
+        track(isConnected ? "ble_connect" : "ble_disconnect", { transport: "ble" });
+      } catch {
+        //
+      }
       if (isConnected) {
         appendConsole(
           t("bleRunConnected").replace("{name}", name ?? "PYBOT") + "\n",
@@ -1283,6 +1319,11 @@ export default function PyBotIDE() {
   );
 
   const onStop = useCallback(() => {
+    try {
+      track("ide_stop", { board_type: boardType });
+    } catch {
+      //
+    }
     signalStop();
     globalThis.__PYBOT_STOP__ = true;
     // Liberar cualquier input() pendiente (Pyodide) siempre.

@@ -525,12 +525,7 @@ export default function CourseActivitiesPage() {
   }, [supabase, navigate]);
 
   const shell = (body) => (
-    <DashboardSubpageShell
-      user={user}
-      myRole={myRole}
-      studentView={!staff}
-      onSignOut={() => void signOut()}
-    >
+    <DashboardSubpageShell user={user} myRole={myRole} onSignOut={() => void signOut()}>
       {body}
     </DashboardSubpageShell>
   );

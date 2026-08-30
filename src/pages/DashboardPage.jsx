@@ -7,7 +7,8 @@ import { getGoogleProfile } from "../authSession.js";
 import { signOutGoogleClient } from "../authGoogle.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 import {
-  hasStaffMembership,
+  getDashboardNavCapabilities,
+  getStaffOrganizations,
   hasTeacherPreference,
   resolveStaffOrgId,
   roleLabelEs,
@@ -71,14 +72,25 @@ export default function DashboardPage() {
   const legacyProfile = getGoogleProfile();
 
   const rawTab = searchParams.get("tab") || "home";
-  const hasStaffAccess = hasStaffMembership(orgs);
   const teacherPreference = hasTeacherPreference(preferredRole);
-  const isStudentView = !hasStaffAccess;
-  const activeTab = VALID_TABS.has(rawTab)
-    ? isStudentView && rawTab === "schools"
-      ? "courses"
-      : rawTab
-    : "home";
+  const staffOrgs = useMemo(() => getStaffOrganizations(orgs), [orgs]);
+  const nav = useMemo(
+    () =>
+      getDashboardNavCapabilities({
+        orgs,
+        enrolledCourseCount: enrolledCourses.length,
+      }),
+    [orgs, enrolledCourses.length],
+  );
+  const { hasStaffAccess, hasStudentAccess, showSchoolsTab, showCoursesTab, showClassroomTab } =
+    nav;
+  const activeTab = (() => {
+    if (!VALID_TABS.has(rawTab)) return "home";
+    if (rawTab === "schools" && !showSchoolsTab) return showCoursesTab ? "courses" : "home";
+    if (rawTab === "courses" && !showCoursesTab) return showSchoolsTab ? "schools" : "home";
+    if (rawTab === "classroom" && !showClassroomTab) return "home";
+    return rawTab;
+  })();
   const staffOrgId = useMemo(() => resolveStaffOrgId(orgs), [orgs]);
 
   const setTab = (tabId) => {
@@ -143,7 +155,7 @@ export default function DashboardPage() {
   }, [supabase, sessionUser]);
 
   const loadEnrolledCourses = useCallback(async () => {
-    if (!supabase || !sessionUser || !isStudentView) return;
+    if (!supabase || !sessionUser) return;
     setCoursesError("");
     const { courses, error } = await fetchMyEnrolledCourses(supabase, sessionUser.id);
     if (error) {
@@ -153,7 +165,7 @@ export default function DashboardPage() {
       return;
     }
     setEnrolledCourses(courses);
-  }, [supabase, sessionUser, isStudentView]);
+  }, [supabase, sessionUser]);
 
   useEffect(() => {
     if (!useCloud) {
@@ -215,20 +227,31 @@ export default function DashboardPage() {
   }, [useCloud, sessionUser, loadOrganizations]);
 
   useEffect(() => {
-    if (!useCloud || !sessionUser || !isStudentView) return;
+    if (!useCloud || !sessionUser) return;
     void loadEnrolledCourses();
-  }, [useCloud, sessionUser, isStudentView, loadEnrolledCourses]);
+  }, [useCloud, sessionUser, loadEnrolledCourses]);
 
   useEffect(() => {
-    if (activeTab === "classroom" && !hasStaffAccess) {
-      setTab("home");
+    if (!orgsLoaded) return;
+    if (rawTab === "schools" && !showSchoolsTab) {
+      setSearchParams(showCoursesTab ? { tab: "courses" } : {}, { replace: true });
+      return;
     }
-  }, [activeTab, hasStaffAccess]);
-
-  useEffect(() => {
-    if (!orgsLoaded || !isStudentView || rawTab !== "schools") return;
-    setSearchParams({ tab: "courses" }, { replace: true });
-  }, [orgsLoaded, isStudentView, rawTab, setSearchParams]);
+    if (rawTab === "courses" && !showCoursesTab) {
+      setSearchParams(showSchoolsTab ? { tab: "schools" } : {}, { replace: true });
+      return;
+    }
+    if (rawTab === "classroom" && !showClassroomTab) {
+      setSearchParams({}, { replace: true });
+    }
+  }, [
+    orgsLoaded,
+    rawTab,
+    showSchoolsTab,
+    showCoursesTab,
+    showClassroomTab,
+    setSearchParams,
+  ]);
 
   const signOutLegacy = () => {
     signOutGoogleClient();
@@ -370,8 +393,9 @@ export default function DashboardPage() {
       <DashboardShell
         activeTab={activeTab}
         onTabChange={setTab}
-        showClassroomTab={hasStaffAccess}
-        studentView={isStudentView}
+        showSchoolsTab={showSchoolsTab}
+        showCoursesTab={showCoursesTab}
+        showClassroomTab={showClassroomTab}
         userName={name}
         userEmail={email}
         userPicture={picture}
@@ -382,9 +406,11 @@ export default function DashboardPage() {
             <section className="dash-panel dash-panel--highlight">
               <h2 className="dash-panel__title">Bienvenido, {name}</h2>
               <p className="auth-card__muted auth-card__muted--tight">
-                {isStudentView
-                  ? "Accedé a las actividades de tus cursos. El IDE en "
-                  : "Gestioná colegios, cursos y actividades PyBot. El IDE en "}
+                {hasStaffAccess && hasStudentAccess
+                  ? "Administrá colegios y también accedé a tus cursos como alumno. El IDE en "
+                  : hasStaffAccess
+                    ? "Gestioná colegios, cursos y actividades PyBot. El IDE en "
+                    : "Accedé a las actividades de tus cursos. El IDE en "}
                 <Link to="/">la página principal</Link> sigue libre y sin cuenta.
               </p>
               {profileWarn ? <p className="auth-card__notice">{profileWarn}</p> : null}
@@ -400,24 +426,27 @@ export default function DashboardPage() {
                 </p>
               ) : null}
               <div className="dash-stat-row">
-                {isStudentView ? (
+                {hasStaffAccess ? (
+                  <div className="dash-stat">
+                    <span className="dash-stat__value">{staffOrgs.length}</span>
+                    <span className="dash-stat__label">Colegios</span>
+                  </div>
+                ) : null}
+                {hasStudentAccess ? (
                   <div className="dash-stat">
                     <span className="dash-stat__value">{enrolledCourses.length}</span>
                     <span className="dash-stat__label">Cursos</span>
                   </div>
-                ) : (
-                  <div className="dash-stat">
-                    <span className="dash-stat__value">{orgs.length}</span>
-                    <span className="dash-stat__label">Colegios</span>
-                  </div>
-                )}
+                ) : null}
                 <div className="dash-stat">
                   <span className="dash-stat__value">
-                    {hasStaffAccess
-                      ? "Docente (colegio)"
-                      : signupRoleLabelEs(preferredRole) || "Alumno"}
+                    {hasStaffAccess && hasStudentAccess
+                      ? "Docente + alumno"
+                      : hasStaffAccess
+                        ? "Docente (colegio)"
+                        : signupRoleLabelEs(preferredRole) || "Alumno"}
                   </span>
-                  <span className="dash-stat__label">Perfil principal</span>
+                  <span className="dash-stat__label">Perfil</span>
                 </div>
               </div>
               {teacherPreference && !hasStaffAccess ? (
@@ -443,19 +472,24 @@ export default function DashboardPage() {
                 </form>
               ) : null}
               <div className="auth-org-row__actions">
-                {isStudentView ? (
-                  <button type="button" className="auth-btn auth-btn--primary" onClick={() => setTab("courses")}>
-                    Mis cursos
-                  </button>
-                ) : (
+                {showSchoolsTab ? (
                   <button type="button" className="auth-btn auth-btn--primary" onClick={() => setTab("schools")}>
                     Ver colegios
                   </button>
-                )}
+                ) : null}
+                {showCoursesTab ? (
+                  <button
+                    type="button"
+                    className={`auth-btn ${showSchoolsTab ? "auth-btn--ghost" : "auth-btn--primary"}`}
+                    onClick={() => setTab("courses")}
+                  >
+                    Mis cursos
+                  </button>
+                ) : null}
                 <button type="button" className="auth-btn auth-btn--ghost" onClick={() => setTab("account")}>
                   Configurar cuenta
                 </button>
-                {hasStaffAccess ? (
+                {showClassroomTab ? (
                   <button type="button" className="auth-btn auth-btn--ghost" onClick={() => setTab("classroom")}>
                     Google Classroom
                   </button>
@@ -465,7 +499,7 @@ export default function DashboardPage() {
           </div>
         ) : null}
 
-        {activeTab === "courses" && isStudentView ? (
+        {activeTab === "courses" && showCoursesTab ? (
           <section className="dash-panel">
             <h2 className="dash-panel__title">Mis cursos</h2>
             {coursesError ? <p className="auth-card__notice auth-card__notice--err">{coursesError}</p> : null}
@@ -495,15 +529,15 @@ export default function DashboardPage() {
           </section>
         ) : null}
 
-        {activeTab === "schools" && !isStudentView ? (
+        {activeTab === "schools" && showSchoolsTab ? (
           <section className="dash-panel">
             <h2 className="dash-panel__title">Tus colegios</h2>
             {orgError ? <p className="auth-card__notice auth-card__notice--err">{orgError}</p> : null}
-            {orgs.length === 0 ? (
-              <p className="auth-card__muted">Todavía no registraste ningún colegio.</p>
+            {staffOrgs.length === 0 ? (
+              <p className="auth-card__muted">Todavía no administrás ningún colegio.</p>
             ) : (
               <ul className="auth-org-list">
-                {orgs.map((o) => (
+                {staffOrgs.map((o) => (
                   <li key={o.id} className="auth-org-row auth-org-row--link">
                     <Link className="auth-org-row__link" to={`/dashboard/org/${o.id}`}>
                       <span className="auth-org-row__name">{o.name}</span>
@@ -515,28 +549,26 @@ export default function DashboardPage() {
                 ))}
               </ul>
             )}
-            {hasStaffAccess ? (
-              <form className="auth-org-form" onSubmit={createOrganization}>
-                <label className="auth-org-label" htmlFor="new-org-name">
-                  Crear colegio
-                </label>
-                <div className="auth-org-form__row">
-                  <input
-                    id="new-org-name"
-                    className="auth-org-input"
-                    type="text"
-                    placeholder="Ej. Escuela San Martín"
-                    value={newOrgName}
-                    onChange={(e) => setNewOrgName(e.target.value)}
-                    maxLength={120}
-                    disabled={savingOrg}
-                  />
-                  <button type="submit" className="auth-btn auth-btn--primary" disabled={savingOrg}>
-                    Crear
-                  </button>
-                </div>
-              </form>
-            ) : null}
+            <form className="auth-org-form" onSubmit={createOrganization}>
+              <label className="auth-org-label" htmlFor="new-org-name">
+                Crear colegio
+              </label>
+              <div className="auth-org-form__row">
+                <input
+                  id="new-org-name"
+                  className="auth-org-input"
+                  type="text"
+                  placeholder="Ej. Escuela San Martín"
+                  value={newOrgName}
+                  onChange={(e) => setNewOrgName(e.target.value)}
+                  maxLength={120}
+                  disabled={savingOrg}
+                />
+                <button type="submit" className="auth-btn auth-btn--primary" disabled={savingOrg}>
+                  Crear
+                </button>
+              </div>
+            </form>
           </section>
         ) : null}
 

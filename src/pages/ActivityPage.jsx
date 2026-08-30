@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { fetchActivityProgress } from "../platform/activityProgress.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { getSupabase } from "../supabaseClient.js";
+import { track } from "../telemetry/index.js";
 
 export default function ActivityPage() {
   const { activityId } = useParams();
@@ -15,6 +16,10 @@ export default function ActivityPage() {
   const [progressHint, setProgressHint] = useState("");
   const [loadErr, setLoadErr] = useState("");
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (activityId) track("activity_open", { feature: "activity" });
+  }, [activityId]);
 
   const load = useCallback(async () => {
     if (!supabase || !activityId || !user) return;

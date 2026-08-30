@@ -2,29 +2,43 @@ import { Link } from "react-router-dom";
 
 const TABS = [
   { id: "home", label: "Inicio" },
-  { id: "schools", label: "Colegios", staffOnly: true },
-  { id: "courses", label: "Mis cursos", studentOnly: true },
+  { id: "schools", label: "Colegios", flag: "showSchoolsTab" },
+  { id: "courses", label: "Mis cursos", flag: "showCoursesTab" },
+  { id: "classroom", label: "Classroom", flag: "showClassroomTab" },
   { id: "account", label: "Cuenta" },
-  { id: "classroom", label: "Classroom", teacherOnly: true },
 ];
 
 export default function DashboardShell({
   activeTab,
   onTabChange,
-  showClassroomTab,
-  studentView = false,
+  showSchoolsTab = false,
+  showCoursesTab = false,
+  showClassroomTab = false,
+  /** @deprecated usar showSchoolsTab/showCoursesTab */
+  studentView,
   userName,
   userEmail,
   userPicture,
   onSignOut,
   children,
 }) {
-  const visibleTabs = TABS.filter((t) => {
-    if (t.teacherOnly && !showClassroomTab) return false;
-    if (t.staffOnly && studentView) return false;
-    if (t.studentOnly && !studentView) return false;
-    return true;
-  });
+  // Compat: studentView true = solo alumno; false = solo staff (legado)
+  let schools = showSchoolsTab;
+  let courses = showCoursesTab;
+  let classroom = showClassroomTab;
+  if (typeof studentView === "boolean" && !showSchoolsTab && !showCoursesTab) {
+    schools = !studentView;
+    courses = studentView;
+    classroom = showClassroomTab && !studentView;
+  }
+
+  const flags = {
+    showSchoolsTab: schools,
+    showCoursesTab: courses,
+    showClassroomTab: classroom,
+  };
+
+  const visibleTabs = TABS.filter((t) => !t.flag || flags[t.flag]);
 
   return (
     <main className="dash-root">
