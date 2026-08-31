@@ -70,6 +70,8 @@ import { useOptionalSession } from "./platform/useOptionalSession.js";
 import { useActivityIde } from "./platform/useActivityIde.js";
 import { parseActivityId, readActivityLaunchCode, isGenericIdeTemplate } from "./platform/activityIdeSession.js";
 import { saveActivityProgress } from "./platform/activityProgress.js";
+import { submitActivity } from "./platform/activitySubmissions.js";
+import { fetchMyCourseRole, isCourseStudent } from "./platform/courseRole.js";
 import { track } from "./telemetry/index.js";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
 import { PHASE, BOARD_STATE, canCloseModal } from "./esp32/provisioningPhases.js";
@@ -149,6 +151,8 @@ export default function PyBotIDE() {
   const [activitySaveStatus, setActivitySaveStatus] = useState("idle");
   const [activityEditorKey, setActivityEditorKey] = useState(0);
   const [activityCodeReady, setActivityCodeReady] = useState(!activityId);
+  const [activityIsStudent, setActivityIsStudent] = useState(false);
+  const [activitySubmitStatus, setActivitySubmitStatus] = useState("idle");
   const activityLastSavedRef = useRef("");
   const appliedActivityLoadRef = useRef(null);
   const pendingActivityCodeRef = useRef(null);
@@ -164,7 +168,32 @@ export default function PyBotIDE() {
     pendingActivityCodeRef.current = null;
     setActivitySaveStatus("idle");
     setActivityCodeReady(!activityId);
+    setActivityIsStudent(false);
+    setActivitySubmitStatus("idle");
   }, [activityId]);
+
+  useEffect(() => {
+    if (!activityId || !activityContext?.course_id || !sessionUser || sessionUser._legacy || !sessionSupabase) {
+      setActivityIsStudent(false);
+      return;
+    }
+    let cancelled = false;
+    void fetchMyCourseRole(sessionSupabase, activityContext.course_id, sessionUser.id).then((role) => {
+      if (!cancelled) setActivityIsStudent(isCourseStudent({ courseRole: role }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activityId, activityContext?.course_id, sessionUser, sessionSupabase]);
+
+  const onSubmitActivity = useCallback(async () => {
+    if (!activityId || !sessionUser || sessionUser._legacy || !activityIsStudent) return;
+    if (!window.confirm("¿Entregar esta actividad?")) return;
+    setActivitySubmitStatus("saving");
+    const r = await submitActivity(activityId, code);
+    if (r.ok) setActivitySubmitStatus("saved");
+    else setActivitySubmitStatus("error");
+  }, [activityId, sessionUser, activityIsStudent, code]);
 
   useEffect(() => {
     if (!activityId || activityLoading || activityInitialCode === null) return;
@@ -1933,6 +1962,21 @@ export default function PyBotIDE() {
                             {activitySaveStatus === "saved" ? " · Guardado" : null}
                             {activitySaveStatus === "error" ? " · Error al guardar" : null}
                           </span>
+                        ) : null}
+                        {activityIsStudent ? (
+                          <button
+                            type="button"
+                            className="tb-btn tb-btn--ghost"
+                            style={{ marginLeft: "0.35rem" }}
+                            onClick={() => void onSubmitActivity()}
+                            disabled={activitySubmitStatus === "saving"}
+                          >
+                            {activitySubmitStatus === "saving"
+                              ? "Entregando…"
+                              : activitySubmitStatus === "saved"
+                                ? "Entregada"
+                                : "Entregar actividad"}
+                          </button>
                         ) : null}
                         {activityCodeReady &&
                         !activityContext.starter_code?.trim() &&

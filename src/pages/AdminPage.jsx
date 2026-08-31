@@ -23,6 +23,8 @@ import {
   deleteAdminCourseMember,
   deleteAdminOrganization,
   deleteAdminOrgMember,
+  deleteAdminUsageSession,
+  deleteAdminUserTelemetry,
   fetchAdminActivities,
   fetchAdminCourseMembers,
   fetchAdminCourses,
@@ -208,24 +210,7 @@ export default function AdminPage() {
       {loadError ? <p className="dash-error">{loadError}</p> : null}
 
       {activeTab === "visits" ? (
-        <AdminTable
-          rowKey={(r) => r.id}
-          rows={sessions}
-          columns={[
-            { key: "started_at", label: "Entrada", render: (r) => fmtDate(r.started_at) },
-            {
-              key: "user",
-              label: "Usuario",
-              render: (r) =>
-                profileById.get(r.user_id)?.email || (r.is_authenticated ? r.user_id?.slice(0, 8) : "Anónimo"),
-            },
-            { key: "ip", label: "IP", render: (r) => r.ip || r.ip_prefix || "—" },
-            { key: "country", label: "País" },
-            { key: "city", label: "Ciudad" },
-            { key: "landing_path", label: "Página" },
-            { key: "browser", label: "Navegador" },
-          ]}
-        />
+        <VisitsPanel sessions={sessions} profileById={profileById} onSaved={loadAll} />
       ) : null}
 
       {activeTab === "users" ? (
@@ -268,6 +253,53 @@ export default function AdminPage() {
   );
 }
 
+function VisitsPanel({ sessions, profileById, onSaved }) {
+  const { msg, err, wrap } = useCrudMessage();
+
+  const remove = (id) => {
+    if (!confirm("¿Eliminar esta visita y sus eventos de telemetría?")) return;
+    void wrap(async () => {
+      const r = await deleteAdminUsageSession(id);
+      if (r.ok) await onSaved();
+      return r;
+    });
+  };
+
+  return (
+    <section>
+      {msg ? <p className="admin-ok">{msg}</p> : null}
+      {err ? <p className="dash-error">{err}</p> : null}
+      <AdminTable
+        rowKey={(r) => r.id}
+        rows={sessions}
+        columns={[
+          { key: "started_at", label: "Entrada", render: (r) => fmtDate(r.started_at) },
+          {
+            key: "user",
+            label: "Usuario",
+            render: (r) =>
+              profileById.get(r.user_id)?.email || (r.is_authenticated ? r.user_id?.slice(0, 8) : "Anónimo"),
+          },
+          { key: "ip", label: "IP", render: (r) => r.ip || r.ip_prefix || "—" },
+          { key: "country", label: "País" },
+          { key: "city", label: "Ciudad" },
+          { key: "landing_path", label: "Página" },
+          { key: "browser", label: "Navegador" },
+          {
+            key: "a",
+            label: "",
+            render: (r) => (
+              <ActionBtn danger onClick={() => remove(r.id)}>
+                Eliminar
+              </ActionBtn>
+            ),
+          },
+        ]}
+      />
+    </section>
+  );
+}
+
 function UsersPanel({ profiles, onSaved, currentUserId }) {
   const { msg, err, wrap } = useCrudMessage();
   const [editId, setEditId] = useState(null);
@@ -295,6 +327,17 @@ function UsersPanel({ profiles, onSaved, currentUserId }) {
       }
       return r;
     });
+
+  const wipeTelemetry = (userId) => {
+    if (!confirm("¿Eliminar toda la telemetría de este usuario? No borra la cuenta ni datos académicos.")) {
+      return;
+    }
+    void wrap(async () => {
+      const r = await deleteAdminUserTelemetry(userId);
+      if (r.ok) await onSaved();
+      return r;
+    });
+  };
 
   return (
     <section>
@@ -343,9 +386,14 @@ function UsersPanel({ profiles, onSaved, currentUserId }) {
             key: "actions",
             label: "",
             render: (r) => (
-              <ActionBtn onClick={() => startEdit(r)} disabled={r.id === currentUserId && r.is_super_admin}>
-                Editar
-              </ActionBtn>
+              <>
+                <ActionBtn onClick={() => startEdit(r)} disabled={r.id === currentUserId && r.is_super_admin}>
+                  Editar
+                </ActionBtn>{" "}
+                <ActionBtn danger onClick={() => wipeTelemetry(r.id)}>
+                  Eliminar telemetría
+                </ActionBtn>
+              </>
             ),
           },
         ]}

@@ -190,6 +190,105 @@ export async function syncClassroomRosterToCourse(supabase, { courseId, orgId, c
       classroom_user_id: p.classroom_user_id,
       email: p.email,
       display_name: p.display_name,
+      role: "student",
+    })),
+  };
+}
+
+/**
+ * Importa co-docentes de Classroom al curso PyBot.
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabase
+ * @param {{ courseId: string, orgId: string, classroomTeachers: ClassroomStudent[], currentUserId?: string }} params
+ */
+export async function syncClassroomTeachersToCourse(
+  supabase,
+  { courseId, orgId, classroomTeachers, currentUserId },
+) {
+  if (!supabase || !courseId || !orgId) {
+    return { ok: false, error: "missing_args", results: [] };
+  }
+
+  const { data: existingRows, error: listErr } = await supabase.rpc("list_course_members", {
+    p_course_id: courseId,
+  });
+  if (listErr) {
+    return { ok: false, error: listErr.message || "error_list_members", results: [] };
+  }
+
+  const byClassroomUserId = new Map();
+  for (const row of existingRows ?? []) {
+    if (row.classroom_user_id) {
+      byClassroomUserId.set(row.classroom_user_id, { user_id: row.user_id });
+    }
+  }
+
+  const profileByEmail = new Map();
+  const emailsToResolve = new Set();
+  for (const t of classroomTeachers ?? []) {
+    if (byClassroomUserId.has(t.userId)) continue;
+    const email = t.profile?.emailAddress?.trim().toLowerCase();
+    if (email) emailsToResolve.add(email);
+  }
+
+  for (const email of emailsToResolve) {
+    const { data: profileRows, error: profErr } = await supabase.rpc("find_profile_by_email", {
+      p_email: email,
+    });
+    if (profErr) {
+      return { ok: false, error: profErr.message || "error_profile_lookup", results: [] };
+    }
+    const profile = Array.isArray(profileRows) ? profileRows[0] : null;
+    if (profile?.id) profileByEmail.set(email, profile);
+  }
+
+  const results = (classroomTeachers ?? []).map((t) =>
+    resolveClassroomStudent(t, byClassroomUserId, profileByEmail),
+  );
+
+  const enrolled = results
+    .filter((r) => r.userId && r.userId !== currentUserId)
+    .map((r) => ({
+      user_id: r.userId,
+      classroom_user_id: r.classroomUserId,
+      classroom_email: r.email,
+    }));
+
+  const pending = results
+    .filter((r) => r.status === "no_registrado" && r.email && r.classroomUserId)
+    .map((r) => ({
+      classroom_user_id: r.classroomUserId,
+      email: r.email.trim().toLowerCase(),
+      display_name: r.name,
+    }));
+
+  const activeClassroomUserIds = (classroomTeachers ?? []).map((t) => t.userId).filter(Boolean);
+
+  const { data: syncData, error: syncErr } = await supabase.rpc("sync_classroom_course_teachers", {
+    p_course_id: courseId,
+    p_org_id: orgId,
+    p_enrolled: enrolled,
+    p_active_classroom_user_ids: activeClassroomUserIds,
+    p_pending: pending,
+  });
+
+  if (syncErr) {
+    return { ok: false, error: syncErr.message || "error_supabase", results };
+  }
+  if (!syncData?.ok) {
+    return { ok: false, error: syncData?.error || "sync_failed", results };
+  }
+
+  return {
+    ok: true,
+    results,
+    summary: summarizeClassroomSyncResults(results),
+    synced: syncData.synced ?? 0,
+    pendingUpserted: syncData.pending_upserted ?? 0,
+    pendingRows: pending.map((p) => ({
+      classroom_user_id: p.classroom_user_id,
+      email: p.email,
+      display_name: p.display_name,
+      role: "teacher",
     })),
   };
 }

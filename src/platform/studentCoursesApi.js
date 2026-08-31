@@ -34,6 +34,7 @@ export async function fetchMyEnrolledCourses(supabase, userId, opts = {}) {
     .select(
       `
       course_id,
+      role,
       courses (
         id,
         title,
@@ -44,7 +45,8 @@ export async function fetchMyEnrolledCourses(supabase, userId, opts = {}) {
       )
     `,
     )
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("role", "student");
 
   if (error) return { courses: [], error };
 

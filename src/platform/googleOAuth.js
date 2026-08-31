@@ -10,6 +10,9 @@ export const GOOGLE_CLASSROOM_SCOPES = [
   "https://www.googleapis.com/auth/classroom.rosters.readonly",
   // Necesario para profile.emailAddress en el roster (sin esto no se puede matchear a PyBot)
   "https://www.googleapis.com/auth/classroom.profile.emails",
+  // CourseWork + student submissions + grades (punto 4)
+  "https://www.googleapis.com/auth/classroom.coursework.students",
+  "https://www.googleapis.com/auth/classroom.student-submissions.students.readonly",
 ].join(" ");
 
 /**

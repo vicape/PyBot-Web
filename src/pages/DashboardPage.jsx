@@ -607,7 +607,7 @@ export default function DashboardPage() {
         ) : null}
 
         {activeTab === "classroom" && hasStaffAccess ? (
-          <ClassroomPanel user={sessionUser} staffOrgId={staffOrgId} />
+          <ClassroomPanel user={sessionUser} staffOrgId={staffOrgId} staffOrgs={staffOrgs} />
         ) : null}
       </DashboardShell>
     );

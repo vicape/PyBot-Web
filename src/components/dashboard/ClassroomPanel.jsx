@@ -18,8 +18,10 @@ function classroomErrorEs(err) {
   return err?.message || "No se pudo comunicar con Classroom.";
 }
 
-export default function ClassroomPanel({ user, staffOrgId }) {
+export default function ClassroomPanel({ user, staffOrgId, staffOrgs = [] }) {
   const navigate = useNavigate();
+  const [selectedOrgId, setSelectedOrgId] = useState(staffOrgId || staffOrgs[0]?.id || "");
+  const effectiveOrgId = selectedOrgId || staffOrgId || "";
   const [linkedAt, setLinkedAt] = useState(null);
   const [courses, setCourses] = useState([]);
   const [importedIds, setImportedIds] = useState(new Set());
@@ -51,11 +53,11 @@ export default function ClassroomPanel({ user, staffOrgId }) {
       setOkMsg(`Conectado: ${list.length} curso(s) activo(s) en Classroom.`);
 
       // Cargar qué cursos ya fueron importados en el colegio
-      if (sb && staffOrgId) {
+      if (sb && effectiveOrgId) {
         const { data: existing, error: eEx } = await sb
           .from("courses")
           .select("classroom_course_id")
-          .eq("org_id", staffOrgId)
+          .eq("org_id", effectiveOrgId)
           .not("classroom_course_id", "is", null);
         if (eEx) {
           console.error("ClassroomPanel.loadImported:", eEx);
@@ -81,7 +83,17 @@ export default function ClassroomPanel({ user, staffOrgId }) {
     } finally {
       setTesting(false);
     }
-  }, [user?.id, staffOrgId]);
+  }, [user?.id, effectiveOrgId]);
+
+  useEffect(() => {
+    if (staffOrgId && !selectedOrgId) setSelectedOrgId(staffOrgId);
+  }, [staffOrgId, selectedOrgId]);
+
+  useEffect(() => {
+    if (staffOrgs.length === 1 && staffOrgs[0]?.id) {
+      setSelectedOrgId(staffOrgs[0].id);
+    }
+  }, [staffOrgs]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -97,7 +109,7 @@ export default function ClassroomPanel({ user, staffOrgId }) {
 
   const importCourse = async (classroomCourse) => {
     const sb = getSupabase();
-    if (!sb || !user?.id || !staffOrgId) {
+    if (!sb || !user?.id || !effectiveOrgId) {
       setImportErr("Seleccioná un colegio antes de importar.");
       return;
     }
@@ -111,19 +123,19 @@ export default function ClassroomPanel({ user, staffOrgId }) {
     const { data: existing } = await sb
       .from("courses")
       .select("id")
-      .eq("org_id", staffOrgId)
+      .eq("org_id", effectiveOrgId)
       .eq("classroom_course_id", classroomCourse.id)
       .maybeSingle();
 
     if (existing?.id) {
       setImporting(null);
       setImportedIds((prev) => new Set([...prev, classroomCourse.id]));
-      navigate(`/dashboard/org/${staffOrgId}/course/${existing.id}`);
+      navigate(`/dashboard/org/${effectiveOrgId}/course/${existing.id}`);
       return;
     }
 
     const payload = {
-      org_id: staffOrgId,
+      org_id: effectiveOrgId,
       title,
       slug,
       classroom_course_id: classroomCourse.id,
@@ -165,7 +177,7 @@ export default function ClassroomPanel({ user, staffOrgId }) {
     setImportedIds((prev) => new Set([...prev, classroomCourse.id]));
 
     if (row?.id) {
-      navigate(`/dashboard/org/${staffOrgId}/course/${row.id}`);
+      navigate(`/dashboard/org/${effectiveOrgId}/course/${row.id}`);
     }
   };
 
@@ -180,6 +192,24 @@ export default function ClassroomPanel({ user, staffOrgId }) {
         Como docente podés vincular tu cuenta de Google para listar cursos y enlazarlos a PyBot desde cada
         colegio.
       </p>
+
+      {staffOrgs.length >= 2 ? (
+        <label className="auth-org-label" style={{ display: "block", marginBottom: "0.75rem" }}>
+          Importar en colegio:
+          <select
+            className="auth-org-input auth-org-input--block"
+            value={effectiveOrgId}
+            onChange={(e) => setSelectedOrgId(e.target.value)}
+            style={{ marginTop: "0.35rem" }}
+          >
+            {staffOrgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name || o.id.slice(0, 8)}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <div className="dash-status-row">
         <span

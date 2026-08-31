@@ -7,9 +7,31 @@ import {
 } from "../platform/activityIdeSession.js";
 import { writeActivityLaunchCache } from "../platform/courseActivityApi.js";
 import { fetchActivityProgress } from "../platform/activityProgress.js";
+import {
+  fetchActivitySubmissions,
+  fetchMySubmission,
+  gradeSubmission,
+  submissionStatusLabelEs,
+  submitActivity,
+} from "../platform/activitySubmissions.js";
+import {
+  publishActivityToClassroom,
+  sendGradeToClassroom,
+  syncClassroomSubmissionsForActivity,
+} from "../platform/activityClassroom.js";
+import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
+import { fetchMyOrgRole } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
-import { getSupabase } from "../supabaseClient.js";
 import { track } from "../telemetry/index.js";
+
+function fmtTs(v) {
+  if (!v) return "—";
+  try {
+    return new Date(v).toLocaleString("es-AR");
+  } catch {
+    return String(v);
+  }
+}
 
 export default function ActivityPage() {
   const { activityId } = useParams();
@@ -20,10 +42,25 @@ export default function ActivityPage() {
   const [activity, setActivity] = useState(null);
   const [courseTitle, setCourseTitle] = useState("");
   const [orgId, setOrgId] = useState(null);
+  const [classroomCourseId, setClassroomCourseId] = useState(null);
+  const [classroomSubs, setClassroomSubs] = useState([]);
   const [progressHint, setProgressHint] = useState("");
   const [savedCode, setSavedCode] = useState(false);
   const [loadErr, setLoadErr] = useState("");
   const [loading, setLoading] = useState(true);
+  const [orgRole, setOrgRole] = useState(null);
+  const [courseRole, setCourseRole] = useState(null);
+  const [mySubmission, setMySubmission] = useState(null);
+  const [teacherRows, setTeacherRows] = useState([]);
+  const [profilesById, setProfilesById] = useState(new Map());
+  const [viewCode, setViewCode] = useState(null);
+  const [gradeDraft, setGradeDraft] = useState({});
+  const [actionMsg, setActionMsg] = useState("");
+  const [actionErr, setActionErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const canTeach = canTeachCourse({ orgRole, courseRole });
+  const isStudent = isCourseStudent({ courseRole });
 
   useEffect(() => {
     if (activityId) track("activity_open", { feature: "activity" });
@@ -33,6 +70,8 @@ export default function ActivityPage() {
     if (!supabase || !activityId || !user) return;
     setLoadErr("");
     setLoading(true);
+    setActionMsg("");
+    setActionErr("");
 
     let { data: act, error: eAct } = await supabase
       .from("activities")
@@ -41,18 +80,28 @@ export default function ActivityPage() {
       .maybeSingle();
 
     if (eAct) {
-      console.error("ActivityPage.load (full):", eAct);
       const fb = await supabase
         .from("activities")
-        .select("id, title, description, pybot_lesson_id, course_id, created_at")
+        .select("id, title, description, pybot_lesson_id, course_id, created_at, starter_code")
         .eq("id", activityId)
         .maybeSingle();
       act = fb.data;
       eAct = fb.error;
     }
 
+    // Campos Classroom (migración 028) — best effort
+    if (act?.id) {
+      const cw = await supabase
+        .from("activities")
+        .select("classroom_coursework_id, classroom_coursework_url")
+        .eq("id", activityId)
+        .maybeSingle();
+      if (!cw.error && cw.data) {
+        act = { ...act, ...cw.data };
+      }
+    }
+
     if (eAct) {
-      console.error("ActivityPage.load (fallback):", eAct);
       setLoadErr(eAct.message);
       setLoading(false);
       return;
@@ -65,14 +114,27 @@ export default function ActivityPage() {
 
     setActivity(act);
 
+    let nextOrgRole = null;
+    let nextCourseRole = null;
+    let nextOrgId = null;
+
     if (act.course_id) {
       const { data: course } = await supabase
         .from("courses")
-        .select("title, org_id")
+        .select("title, org_id, classroom_course_id")
         .eq("id", act.course_id)
         .maybeSingle();
       setCourseTitle(course?.title ?? "");
-      setOrgId(course?.org_id ?? null);
+      nextOrgId = course?.org_id ?? null;
+      setOrgId(nextOrgId);
+      setClassroomCourseId(course?.classroom_course_id ?? null);
+
+      if (nextOrgId) {
+        nextOrgRole = await fetchMyOrgRole(supabase, nextOrgId, user.id);
+        setOrgRole(nextOrgRole);
+      }
+      nextCourseRole = await fetchMyCourseRole(supabase, act.course_id, user.id);
+      setCourseRole(nextCourseRole);
     }
 
     const prog = await fetchActivityProgress(activityId, user.id);
@@ -92,10 +154,39 @@ export default function ActivityPage() {
       setProgressHint("Al abrir PyBot vas a ver el código inicial de esta tarea.");
     } else {
       setSavedCode(false);
-      setProgressHint("Todavía no hay entrega guardada en la nube.");
+      setProgressHint("Todavía no hay progreso guardado en la nube.");
     }
 
     writeActivityLaunchCache(activityId, launchCode);
+
+    const teach = canTeachCourse({ orgRole: nextOrgRole, courseRole: nextCourseRole });
+    const student = isCourseStudent({ courseRole: nextCourseRole });
+
+    if (student) {
+      const sub = await fetchMySubmission(activityId, user.id);
+      setMySubmission(sub.submission);
+    } else {
+      setMySubmission(null);
+    }
+
+    if (teach) {
+      const list = await fetchActivitySubmissions(activityId);
+      setTeacherRows(list.rows ?? []);
+      const ids = [...new Set((list.rows ?? []).map((r) => r.user_id))];
+      if (ids.length) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, display_name, email")
+          .in("id", ids);
+        const map = new Map();
+        for (const p of profiles ?? []) map.set(p.id, p);
+        setProfilesById(map);
+      } else {
+        setProfilesById(new Map());
+      }
+    } else {
+      setTeacherRows([]);
+    }
 
     setLoading(false);
   }, [supabase, activityId, user]);
@@ -117,6 +208,115 @@ export default function ActivityPage() {
         state: { [ACTIVITY_LAUNCH_STATE_KEY]: launchCode },
       });
     });
+  };
+
+  const onPublishClassroom = async () => {
+    if (!activity || !classroomCourseId || !user || busy) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await publishActivityToClassroom({
+      activity,
+      classroomCourseId,
+      userId: user.id,
+    });
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo publicar en Classroom.");
+      return;
+    }
+    setActionMsg(r.alreadyPublished ? "Ya estaba publicada en Classroom." : "Publicada en Classroom.");
+    await load();
+  };
+
+  const onSyncClassroom = async () => {
+    if (!activity?.classroom_coursework_id || !classroomCourseId || !user || busy) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await syncClassroomSubmissionsForActivity({
+      classroomCourseId,
+      courseWorkId: activity.classroom_coursework_id,
+      userId: user.id,
+    });
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo sincronizar Classroom.");
+      return;
+    }
+    setClassroomSubs(r.rows ?? []);
+    setActionMsg(`Classroom: ${r.rows?.length ?? 0} entrega(s) leídas (no reemplazan PyBot).`);
+  };
+
+  const onSendGradeClassroom = async (row) => {
+    if (!activity?.classroom_coursework_id || !classroomCourseId || !user || busy) return;
+    let classroomSubmissionId = row.classroom_submission_id;
+    if (!classroomSubmissionId) {
+      const { data: cm } = await supabase
+        .from("course_members")
+        .select("classroom_user_id")
+        .eq("course_id", activity.course_id)
+        .eq("user_id", row.user_id)
+        .maybeSingle();
+      const googleUid = cm?.classroom_user_id;
+      const found = classroomSubs.find((cs) => cs.userId === googleUid);
+      classroomSubmissionId = found?.id || null;
+    }
+    if (!classroomSubmissionId) {
+      setActionErr("No se encontró la entrega Classroom del alumno. Primero «Sincronizar Classroom».");
+      return;
+    }
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await sendGradeToClassroom({
+      submission: row,
+      classroomCourseId,
+      courseWorkId: activity.classroom_coursework_id,
+      classroomSubmissionId,
+      userId: user.id,
+    });
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo enviar la nota a Classroom.");
+      return;
+    }
+    setActionMsg("Nota enviada a Classroom.");
+    await load();
+  };
+
+  const onSubmit = async () => {
+    if (!activityId || !user || busy) return;
+    if (!window.confirm("¿Entregar esta actividad?")) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const prog = await fetchActivityProgress(activityId, user.id);
+    const code = prog.code ?? activity?.starter_code ?? "";
+    const r = await submitActivity(activityId, code);
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo entregar.");
+      return;
+    }
+    setActionMsg("Actividad entregada.");
+    await load();
+  };
+
+  const onGrade = async (submissionId) => {
+    if (busy) return;
+    const draft = gradeDraft[submissionId] || {};
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await gradeSubmission(submissionId, draft.grade, draft.feedback);
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo guardar la corrección.");
+      return;
+    }
+    setActionMsg("Corrección guardada.");
+    await load();
   };
 
   if (authLoading || loading) {
@@ -171,6 +371,8 @@ export default function ActivityPage() {
         {profileError ? (
           <p className="auth-card__notice auth-card__notice--err">{profileError}</p>
         ) : null}
+        {actionErr ? <p className="auth-card__notice auth-card__notice--err">{actionErr}</p> : null}
+        {actionMsg ? <p className="auth-card__notice">{actionMsg}</p> : null}
 
         {activity?.description ? (
           <p className="auth-card__lead">{activity.description}</p>
@@ -186,10 +388,35 @@ export default function ActivityPage() {
 
         <p className="auth-card__muted">{progressHint}</p>
 
+        {isStudent && mySubmission ? (
+          <div className="auth-card__muted" style={{ marginBottom: "1rem" }}>
+            <p>
+              Entrega: <strong>{submissionStatusLabelEs(mySubmission.status)}</strong>
+              {mySubmission.submitted_at ? ` · ${fmtTs(mySubmission.submitted_at)}` : null}
+            </p>
+            {mySubmission.grade != null ? (
+              <p>
+                Nota: <strong>{mySubmission.grade}</strong>
+              </p>
+            ) : null}
+            {mySubmission.feedback ? <p>Feedback: {mySubmission.feedback}</p> : null}
+          </div>
+        ) : null}
+
         <div className="auth-card__actions auth-card__actions--row">
           <button type="button" className="auth-btn auth-btn--primary" onClick={openPyBot}>
             Abrir PyBot
           </button>
+          {isStudent ? (
+            <button
+              type="button"
+              className="auth-btn auth-btn--ghost"
+              disabled={busy}
+              onClick={() => void onSubmit()}
+            >
+              {busy ? "Entregando…" : "Entregar actividad"}
+            </button>
+          ) : null}
           <Link to="/dashboard" className="auth-btn auth-btn--ghost">
             Panel
           </Link>
@@ -197,11 +424,139 @@ export default function ActivityPage() {
 
         <p className="auth-card__muted">
           {savedCode
-            ? "PyBot abre con tu último código guardado. Los cambios se sincronizan automáticamente en la nube."
+            ? "El autosave guarda progreso; «Entregar» registra la entrega formal."
             : activity?.starter_code
-              ? "PyBot abre con el código inicial de la tarea. Los cambios se guardan automáticamente en la nube."
-              : "PyBot abre el editor en blanco para esta actividad. Los cambios se guardan automáticamente en la nube."}
+              ? "PyBot abre con el código inicial. Usá «Entregar» cuando termines."
+              : "Trabajá en el IDE y entregá cuando estés listo."}
         </p>
+
+        {canTeach && classroomCourseId ? (
+          <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.75rem" }}>
+            {activity?.classroom_coursework_id ? (
+              <>
+                <span className="auth-card__muted">Publicada en Classroom</span>
+                {activity.classroom_coursework_url ? (
+                  <a
+                    className="auth-link"
+                    href={activity.classroom_coursework_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Abrir courseWork
+                  </a>
+                ) : null}
+                <button
+                  type="button"
+                  className="auth-btn auth-btn--ghost auth-btn--sm"
+                  disabled={busy}
+                  onClick={() => void onSyncClassroom()}
+                >
+                  Sincronizar Classroom
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="auth-btn auth-btn--ghost"
+                disabled={busy}
+                onClick={() => void onPublishClassroom()}
+              >
+                Publicar en Classroom
+              </button>
+            )}
+          </div>
+        ) : null}
+
+        {canTeach ? (
+          <section style={{ marginTop: "1.5rem" }}>
+            <h2 className="auth-section__title">Entregas del curso</h2>
+            {teacherRows.length === 0 ? (
+              <p className="auth-card__muted">Todavía no hay entregas.</p>
+            ) : (
+              <ul className="auth-org-list">
+                {teacherRows.map((row) => {
+                  const profile = profilesById.get(row.user_id);
+                  const draft = gradeDraft[row.id] || {
+                    grade: row.grade ?? "",
+                    feedback: row.feedback ?? "",
+                  };
+                  return (
+                    <li key={row.id} className="auth-org-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
+                      <div className="auth-org-row--split" style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+                        <div>
+                          <span className="auth-org-row__name">
+                            {profile?.display_name || profile?.email || row.user_id.slice(0, 8)}
+                          </span>
+                          <span className="auth-org-row__meta">
+                            {submissionStatusLabelEs(row.status)}
+                            {row.submitted_at ? ` · ${fmtTs(row.submitted_at)}` : ""}
+                            {row.grade != null ? ` · Nota ${row.grade}` : ""}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="auth-btn auth-btn--ghost auth-btn--sm"
+                          onClick={() => setViewCode(viewCode === row.id ? null : row.id)}
+                        >
+                          {viewCode === row.id ? "Ocultar código" : "Ver código"}
+                        </button>
+                      </div>
+                      {viewCode === row.id ? (
+                        <pre className="auth-code-area" style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem" }}>
+                          {row.submitted_code || "(vacío)"}
+                        </pre>
+                      ) : null}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.5rem" }}>
+                        <input
+                          className="auth-org-input"
+                          style={{ width: "6rem" }}
+                          placeholder="Nota"
+                          value={draft.grade}
+                          onChange={(e) =>
+                            setGradeDraft((prev) => ({
+                              ...prev,
+                              [row.id]: { ...draft, grade: e.target.value },
+                            }))
+                          }
+                        />
+                        <input
+                          className="auth-org-input"
+                          style={{ flex: 1, minWidth: "12rem" }}
+                          placeholder="Feedback"
+                          value={draft.feedback}
+                          onChange={(e) =>
+                            setGradeDraft((prev) => ({
+                              ...prev,
+                              [row.id]: { ...draft, feedback: e.target.value },
+                            }))
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="auth-btn auth-btn--primary auth-btn--sm"
+                          disabled={busy}
+                          onClick={() => void onGrade(row.id)}
+                        >
+                          Guardar corrección
+                        </button>
+                        {activity?.classroom_coursework_id && row.grade != null ? (
+                          <button
+                            type="button"
+                            className="auth-btn auth-btn--ghost auth-btn--sm"
+                            disabled={busy}
+                            onClick={() => void onSendGradeClassroom(row)}
+                          >
+                            Enviar nota a Classroom
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        ) : null}
       </div>
     </main>
   );

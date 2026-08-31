@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { fetchMyOrgRole, isStaffRole, roleLabelEs } from "../orgRole.js";
+import { canTeachCourse, fetchMyCourseRole } from "../platform/courseRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
-import { listCourseStudents } from "../classroom/classroomApi.js";
+import { listCourseStudents, listCourseTeachers } from "../classroom/classroomApi.js";
 import {
   classroomSyncErrorMessage,
   syncClassroomRosterToCourse,
+  syncClassroomTeachersToCourse,
 } from "../classroom/classroomRosterSync.js";
 import { getValidClassroomToken } from "../platform/classroomToken.js";
 import { createCourseActivity, updateCourseActivity } from "../platform/courseActivityApi.js";
@@ -327,10 +329,20 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
       }
 
       const classroomStudents = await listCourseStudents(tok, classroomCourseId);
-      if (classroomStudents.length === 0) {
-        setImportErr("No se encontraron alumnos en este curso de Classroom.");
-        setImportState(null);
-        return;
+
+      // Roster vacío es válido: limpia alumnos source=classroom que ya no están.
+      // Si hay alumnos Classroom en PyBot y Google devolvió 0, pedir confirmación.
+      const classroomMembersNow = members.filter((m) => m.source === "classroom");
+      if (classroomStudents.length === 0 && classroomMembersNow.length > 0) {
+        const ok = window.confirm(
+          "Classroom actualmente devuelve 0 alumnos.\n\n" +
+            "La sincronización quitará del curso a los alumnos importados desde Classroom.\n\n" +
+            "¿Continuar?",
+        );
+        if (!ok) {
+          setImportState(null);
+          return;
+        }
       }
 
       const sync = await syncClassroomRosterToCourse(sb, {
@@ -355,10 +367,22 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
         return;
       }
 
+      // Co-docentes Classroom (best-effort; no bloquea sync de alumnos)
+      try {
+        const classroomTeachers = await listCourseTeachers(tok, classroomCourseId);
+        await syncClassroomTeachersToCourse(sb, {
+          courseId,
+          orgId,
+          classroomTeachers,
+          currentUserId: user?.id,
+        });
+      } catch (teacherEx) {
+        console.warn("importFromClassroom.teachers:", teacherEx);
+      }
+
       setImportResults(sync.results);
       setImportState("done");
 
-      // Mostrar pendientes de inmediato (nombre + email), aunque la DB aún no responda
       const pendingFromSync =
         sync.pendingRows ??
         (sync.results || [])
@@ -367,14 +391,13 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
             classroom_user_id: r.classroomUserId,
             email: r.email,
             display_name: r.name,
+            role: "student",
           }));
       if (pendingFromSync.length > 0) {
         setPending(pendingFromSync);
       }
 
       await loadMembers();
-
-      // Si loadMembers no trajo pendientes (migración faltante), conservar los del import
       setPending((prev) => (prev.length > 0 ? prev : pendingFromSync));
 
       if (pendingFromSync.length > 0 && (sync.pendingUpserted ?? 0) === 0) {
@@ -639,12 +662,22 @@ export default function CourseActivitiesPage() {
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [myRole, setMyRole] = useState(null);
+  const [courseRole, setCourseRole] = useState(null);
 
-  const staff = isStaffRole(myRole);
+  const orgStaff = isStaffRole(myRole);
+  const canTeach = canTeachCourse({ orgRole: myRole, courseRole });
+  /** @deprecated alias — UI docente del curso = canTeach */
+  const staff = canTeach;
   const activeTab =
-    staff && searchParams.get("tab") === "alumnos" ? "alumnos" : "actividades";
+    canTeach && searchParams.get("tab") === "alumnos" ? "alumnos" : "actividades";
   const setTab = (t) =>
     setSearchParams(t === "actividades" ? {} : { tab: t }, { replace: true });
+
+  const roleDisplay = orgStaff
+    ? roleLabelEs(myRole)
+    : courseRole === "teacher"
+      ? "Co-docente"
+      : roleLabelEs(courseRole || myRole);
 
   const signOut = useCallback(async () => {
     if (supabase) {
@@ -687,6 +720,13 @@ export default function CourseActivitiesPage() {
       setMyRole(null);
     }
 
+    try {
+      const cr = await fetchMyCourseRole(supabase, courseId, user.id);
+      setCourseRole(cr);
+    } catch {
+      setCourseRole(null);
+    }
+
     if (course.org_id) {
       const { data: org } = await supabase
         .from("organizations")
@@ -727,7 +767,7 @@ export default function CourseActivitiesPage() {
 
   const createActivity = async ({ title, description, pybotLessonId, starterCode }) => {
     const t = title.trim();
-    if (!t || saving || !supabase || !staff || !user) return false;
+    if (!t || saving || !supabase || !canTeach || !user) return false;
     setSaving(true);
     setErr("");
 
@@ -750,7 +790,7 @@ export default function CourseActivitiesPage() {
   };
 
   const updateActivity = async (activityId, { title, description, pybotLessonId, starterCode }) => {
-    if (saving || !supabase || !staff || !activityId) return false;
+    if (saving || !supabase || !canTeach || !activityId) return false;
     setSaving(true);
     setErr("");
 
@@ -787,7 +827,7 @@ export default function CourseActivitiesPage() {
         <p className="auth-breadcrumb">
           <Link to="/dashboard" className="auth-link">Inicio</Link>
           <span aria-hidden> / </span>
-          {staff ? (
+          {orgStaff ? (
             <>
               <Link to="/dashboard?tab=schools" className="auth-link">Colegios</Link>
               <span aria-hidden> / </span>
@@ -814,7 +854,7 @@ export default function CourseActivitiesPage() {
               marginTop: "0.25rem",
             }}
           >
-            Tu rol: {roleLabelEs(myRole)}
+            Tu rol: {roleDisplay}
           </span>
         </h1>
 

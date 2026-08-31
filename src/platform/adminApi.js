@@ -25,6 +25,28 @@ export async function fetchAdminUsageSessions() {
   return { rows: data ?? [], error: e?.message ?? null };
 }
 
+export async function deleteAdminUsageSession(sessionId) {
+  const { client, error } = sb();
+  if (error) return { ok: false, error };
+  const { data, error: e } = await client.rpc("admin_delete_usage_session", {
+    p_session_id: sessionId,
+  });
+  if (e) return { ok: false, error: e.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "delete_failed" };
+  return { ok: true, error: null };
+}
+
+export async function deleteAdminUserTelemetry(userId) {
+  const { client, error } = sb();
+  if (error) return { ok: false, error };
+  const { data, error: e } = await client.rpc("admin_delete_user_telemetry", {
+    p_user_id: userId,
+  });
+  if (e) return { ok: false, error: e.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "delete_failed" };
+  return { ok: true, deleted: data.deleted ?? 0, error: null };
+}
+
 export async function fetchAdminProfiles() {
   const { client, error } = sb();
   if (error) return { rows: [], error };

@@ -73,3 +73,124 @@ export async function listCourseStudents(accessToken, classroomCourseId) {
     };
   });
 }
+
+/**
+ * Lista docentes de un curso de Classroom.
+ * Mismo scope de roster (classroom.rosters.readonly).
+ */
+export async function listCourseTeachers(accessToken, classroomCourseId) {
+  if (!classroomCourseId) return [];
+  return fetchAllClassroomPages(async (pageToken) => {
+    const qs = new URLSearchParams({ pageSize: "200" });
+    if (pageToken) qs.set("pageToken", pageToken);
+    const json = await classroomFetch(
+      `/courses/${encodeURIComponent(classroomCourseId)}/teachers?${qs}`,
+      accessToken,
+    );
+    return {
+      items: Array.isArray(json.teachers) ? json.teachers : [],
+      nextPageToken: json.nextPageToken || null,
+    };
+  });
+}
+
+async function classroomMutate(path, accessToken, { method = "POST", body } = {}) {
+  if (!accessToken) {
+    const err = new Error("missing_access_token");
+    err.code = "missing_access_token";
+    throw err;
+  }
+  const res = await fetch(`${CLASSROOM_ROOT}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(json?.error?.message || `Classroom HTTP ${res.status}`);
+    err.code = json?.error?.status || "classroom_error";
+    err.status = res.status;
+    throw err;
+  }
+  return json;
+}
+
+/**
+ * Crea un courseWork (assignment) en Classroom.
+ * Scope: classroom.coursework.students
+ */
+export async function createCourseWork(accessToken, classroomCourseId, { title, description, maxPoints, materials }) {
+  return classroomMutate(`/courses/${encodeURIComponent(classroomCourseId)}/courseWork`, accessToken, {
+    method: "POST",
+    body: {
+      title,
+      description: description || "",
+      workType: "ASSIGNMENT",
+      state: "PUBLISHED",
+      maxPoints: maxPoints ?? 100,
+      materials: materials || [],
+    },
+  });
+}
+
+/**
+ * Lista studentSubmissions de un courseWork.
+ */
+export async function listStudentSubmissions(accessToken, classroomCourseId, courseWorkId) {
+  if (!classroomCourseId || !courseWorkId) return [];
+  return fetchAllClassroomPages(async (pageToken) => {
+    const qs = new URLSearchParams({ pageSize: "100" });
+    if (pageToken) qs.set("pageToken", pageToken);
+    const json = await classroomFetch(
+      `/courses/${encodeURIComponent(classroomCourseId)}/courseWork/${encodeURIComponent(courseWorkId)}/studentSubmissions?${qs}`,
+      accessToken,
+    );
+    return {
+      items: Array.isArray(json.studentSubmissions) ? json.studentSubmissions : [],
+      nextPageToken: json.nextPageToken || null,
+    };
+  });
+}
+
+/**
+ * Asigna nota (draftGrade + assignedGrade) a una studentSubmission.
+ */
+export async function patchStudentSubmissionGrade(
+  accessToken,
+  classroomCourseId,
+  courseWorkId,
+  submissionId,
+  grade,
+) {
+  const qs = new URLSearchParams({ updateMask: "draftGrade,assignedGrade" });
+  return classroomMutate(
+    `/courses/${encodeURIComponent(classroomCourseId)}/courseWork/${encodeURIComponent(courseWorkId)}/studentSubmissions/${encodeURIComponent(submissionId)}?${qs}`,
+    accessToken,
+    {
+      method: "PATCH",
+      body: {
+        draftGrade: Number(grade),
+        assignedGrade: Number(grade),
+      },
+    },
+  );
+}
+
+/**
+ * Devuelve la submission al alumno (return).
+ */
+export async function returnStudentSubmission(
+  accessToken,
+  classroomCourseId,
+  courseWorkId,
+  submissionId,
+) {
+  return classroomMutate(
+    `/courses/${encodeURIComponent(classroomCourseId)}/courseWork/${encodeURIComponent(courseWorkId)}/studentSubmissions/${encodeURIComponent(submissionId)}:return`,
+    accessToken,
+    { method: "POST", body: {} },
+  );
+}
