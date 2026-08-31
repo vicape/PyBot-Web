@@ -576,7 +576,7 @@ function ActivitiesPanel({ activities, courses, courseById, createdBy, onSaved }
           placeholder="Ej. U1 - T1"
         />
       </Field>
-      <Field label="Código inicial (plantilla en el IDE, fase siguiente)">
+      <Field label="Código inicial (lo que ve el alumno al abrir PyBot)">
         <TextArea value={starter} onChange={(e) => setStarter(e.target.value)} />
       </Field>
     </>
@@ -590,7 +590,7 @@ function ActivitiesPanel({ activities, courses, courseById, createdBy, onSaved }
       <Field label="ID lección PyBot (opcional)">
         <TextInput value={editPybotLessonId} onChange={(e) => setEditPybotLessonId(e.target.value)} />
       </Field>
-      <Field label="Código inicial (plantilla en el IDE, fase siguiente)">
+      <Field label="Código inicial (lo que ve el alumno al abrir PyBot)">
         <TextArea value={editStarter} onChange={(e) => setEditStarter(e.target.value)} />
       </Field>
     </>

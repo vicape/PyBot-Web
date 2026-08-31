@@ -9,7 +9,7 @@ import {
   syncClassroomRosterToCourse,
 } from "../classroom/classroomRosterSync.js";
 import { getValidClassroomToken } from "../platform/classroomToken.js";
-import { updateCourseActivity } from "../platform/courseActivityApi.js";
+import { createCourseActivity, updateCourseActivity } from "../platform/courseActivityApi.js";
 import DashboardSubpageShell from "../components/dashboard/DashboardSubpageShell.jsx";
 
 // ─── Pestaña Actividades ─────────────────────────────────────────────────────
@@ -157,7 +157,7 @@ function ActivitiesTab({
             disabled={saving}
           />
           <label className="auth-org-label" htmlFor="edit-act-starter">
-            Código inicial (plantilla en el IDE, fase siguiente)
+            Código inicial (lo que ve el alumno al abrir PyBot)
           </label>
           <textarea
             id="edit-act-starter"
@@ -224,7 +224,7 @@ function ActivitiesTab({
             disabled={saving}
           />
           <label className="auth-org-label" htmlFor="act-starter">
-            Código inicial (plantilla en el IDE, fase siguiente)
+            Código inicial (lo que ve el alumno al abrir PyBot)
           </label>
           <textarea
             id="act-starter"
@@ -731,31 +731,18 @@ export default function CourseActivitiesPage() {
     setSaving(true);
     setErr("");
 
-    const base = { course_id: courseId, title: t, created_by: user.id };
-    const full = {
-      ...base,
-      description: description.trim(),
-      pybot_lesson_id: pybotLessonId.trim() || null,
-      starter_code: starterCode?.trim() ?? "",
-    };
-
-    let { error } = await supabase.from("activities").insert(full);
-
-    if (error?.message?.includes("starter_code")) {
-      const { starter_code: _omitStarter, ...withoutStarter } = full;
-      ({ error } = await supabase.from("activities").insert(withoutStarter));
-    }
-
-    if (
-      error &&
-      (error.message?.includes("description") || error.message?.includes("pybot_lesson"))
-    ) {
-      ({ error } = await supabase.from("activities").insert(base));
-    }
+    const result = await createCourseActivity(supabase, {
+      courseId,
+      title: t,
+      description,
+      pybotLessonId,
+      starterCode,
+      createdBy: user.id,
+    });
 
     setSaving(false);
-    if (error) {
-      setErr(error.message);
+    if (result.error) {
+      setErr(result.error);
       return false;
     }
     await load();

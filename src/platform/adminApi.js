@@ -1,5 +1,6 @@
 import { getSupabase } from "../supabaseClient.js";
 import { slugifyOrganizationName } from "../slugify.js";
+import { updateCourseActivity } from "./courseActivityApi.js";
 
 const LIMIT = 500;
 
@@ -204,17 +205,13 @@ export async function updateAdminActivity(id, patch) {
   const { client, error } = sb();
   if (error) return { ok: false, error };
 
-  const body = {};
-  if (patch.title != null) body.title = String(patch.title).trim();
-  if (patch.description != null) body.description = String(patch.description);
-  if (patch.starter_code != null) body.starter_code = String(patch.starter_code);
-  if (patch.pybot_lesson_id !== undefined) {
-    body.pybot_lesson_id = patch.pybot_lesson_id ? String(patch.pybot_lesson_id).trim() : null;
-  }
-  if (patch.course_id) body.course_id = patch.course_id;
-
-  const { error: e } = await client.from("activities").update(body).eq("id", id);
-  return { ok: !e, error: e?.message ?? null };
+  return updateCourseActivity(client, id, {
+    title: patch.title,
+    description: patch.description,
+    pybotLessonId: patch.pybot_lesson_id,
+    starterCode: patch.starter_code,
+    courseId: patch.course_id,
+  });
 }
 
 export async function deleteAdminActivity(id) {
