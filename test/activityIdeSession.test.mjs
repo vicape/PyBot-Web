@@ -6,6 +6,7 @@ import {
   parseActivityId,
   pickActivityEditorCode,
   resolveActivityEditorCode,
+  isGenericIdeTemplate,
 } from "../src/platform/activityIdeSession.js";
 import {
   readActivityLaunchCache,
@@ -38,6 +39,19 @@ test("resolveActivityEditorCode ignora guardado genérico si hay starter", () =>
     }),
     "print('tarea')",
   );
+});
+
+test("resolveActivityEditorCode no restaura plantilla genérica guardada", () => {
+  assert.equal(
+    resolveActivityEditorCode({
+      starterCode: "",
+      savedCode: DEFAULT_CODE,
+      launchCode: "",
+    }),
+    DEFAULT_CODE,
+  );
+  assert.equal(isGenericIdeTemplate(DEFAULT_CODE), true);
+  assert.equal(isGenericIdeTemplate('print("hola")'), false);
 });
 
 test("pickActivityEditorCode usa starter si no hay guardado", () => {

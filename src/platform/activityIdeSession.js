@@ -13,6 +13,17 @@ export function parseActivityId(searchParams) {
   return id.length > 0 ? id : null;
 }
 
+/** Normaliza saltos de línea para comparar código. */
+export function normalizeEditorCode(code) {
+  return String(code ?? "").replace(/\r\n/g, "\n").trim();
+}
+
+export function isGenericIdeTemplate(code, genericTemplate = DEFAULT_CODE) {
+  const normalized = normalizeEditorCode(code);
+  if (!normalized) return false;
+  return normalized === normalizeEditorCode(genericTemplate);
+}
+
 /**
  * Prioridad:
  * 1. código pasado al abrir el IDE (state/cache)
@@ -30,12 +41,10 @@ export function resolveActivityEditorCode({
   const launch = launchCode != null ? String(launchCode) : "";
   const saved = savedCode != null ? String(savedCode) : "";
   const starter = starterCode != null ? String(starterCode) : "";
-  const generic = genericTemplate != null ? String(genericTemplate).trim() : "";
 
   if (launch.length > 0) return launch;
-  if (saved.length > 0 && saved.trim() !== generic) return saved;
+  if (saved.length > 0 && !isGenericIdeTemplate(saved, genericTemplate)) return saved;
   if (starter.length > 0) return starter;
-  if (saved.length > 0) return saved;
   return fallback;
 }
 
@@ -48,10 +57,25 @@ export function pickActivityEditorCode(starterCode, savedCode, fallback = "") {
  * Carga metadatos de la actividad y el código que debe mostrar el IDE.
  * @returns {Promise<{ activity: object | null, code: string, error: string | null }>}
  */
+async function fetchStarterCode(supabase, activityId) {
+  const { data, error } = await supabase
+    .from("activities")
+    .select("starter_code")
+    .eq("id", activityId)
+    .maybeSingle();
+  if (error || !data) return "";
+  return data.starter_code != null ? String(data.starter_code) : "";
+}
+
 async function fetchActivityRow(supabase, activityId) {
   const rpc = await supabase.rpc("get_activity_for_ide", { p_activity_id: activityId });
   if (!rpc.error && Array.isArray(rpc.data) && rpc.data.length > 0) {
-    return { act: rpc.data[0], error: null };
+    const act = rpc.data[0];
+    if (act.starter_code == null || String(act.starter_code).length === 0) {
+      const starter = await fetchStarterCode(supabase, activityId);
+      if (starter) act.starter_code = starter;
+    }
+    return { act, error: null };
   }
 
   let { data: act, error: eAct } = await supabase
@@ -63,7 +87,7 @@ async function fetchActivityRow(supabase, activityId) {
   if (eAct) {
     const fb = await supabase
       .from("activities")
-      .select("id, title, description, course_id")
+      .select("id, title, description, pybot_lesson_id, course_id")
       .eq("id", activityId)
       .maybeSingle();
     act = fb.data;
@@ -72,6 +96,12 @@ async function fetchActivityRow(supabase, activityId) {
 
   if (eAct) return { act: null, error: eAct.message };
   if (!act) return { act: null, error: "not_found" };
+
+  if (act.starter_code == null || String(act.starter_code).length === 0) {
+    const starter = await fetchStarterCode(supabase, activityId);
+    if (starter) act.starter_code = starter;
+  }
+
   return { act, error: null };
 }
 

@@ -68,7 +68,7 @@ import BluetoothPanel from "./BluetoothPanel.jsx";
 import IdeUserChip from "./components/IdeUserChip.jsx";
 import { useOptionalSession } from "./platform/useOptionalSession.js";
 import { useActivityIde } from "./platform/useActivityIde.js";
-import { parseActivityId, readActivityLaunchCode } from "./platform/activityIdeSession.js";
+import { parseActivityId, readActivityLaunchCode, isGenericIdeTemplate } from "./platform/activityIdeSession.js";
 import { saveActivityProgress } from "./platform/activityProgress.js";
 import { track } from "./telemetry/index.js";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
@@ -106,9 +106,20 @@ function readInitialPythonOnly() {
 }
 
 function readInitialEditorCode(activityId, launchCode) {
-  if (activityId && launchCode) return launchCode;
-  if (activityId) return DEFAULT_CODE;
+  if (activityId) return launchCode || "";
   return localStorage.getItem("pybot_code") || DEFAULT_CODE;
+}
+
+function applyActivityEditorCode(nextCode, refs) {
+  const code = nextCode || DEFAULT_CODE;
+  refs.pending.current = code;
+  refs.lastSaved.current = code;
+  refs.applied.current = refs.loadKey;
+  refs.setCode(code);
+  refs.setEditorKey((k) => k + 1);
+  refs.setReady(true);
+  refs.editorRef.current?.setValue(code);
+  return code;
 }
 
 export default function PyBotIDE() {
@@ -161,13 +172,22 @@ export default function PyBotIDE() {
     const loadKey = `${activityId}:${activityInitialCode}`;
     if (appliedActivityLoadRef.current === loadKey) return;
 
-    const nextCode = activityInitialCode || DEFAULT_CODE;
-    pendingActivityCodeRef.current = nextCode;
-    setCode(nextCode);
-    activityLastSavedRef.current = nextCode;
-    appliedActivityLoadRef.current = loadKey;
-    setActivityEditorKey((k) => k + 1);
-    setActivityCodeReady(true);
+    const starter = activityContext?.starter_code ? String(activityContext.starter_code) : "";
+    let nextCode = activityInitialCode || DEFAULT_CODE;
+    if (starter && isGenericIdeTemplate(nextCode) && !isGenericIdeTemplate(starter)) {
+      nextCode = starter;
+    }
+
+    applyActivityEditorCode(nextCode, {
+      loadKey,
+      pending: pendingActivityCodeRef,
+      lastSaved: activityLastSavedRef,
+      applied: appliedActivityLoadRef,
+      setCode,
+      setEditorKey: setActivityEditorKey,
+      setReady: setActivityCodeReady,
+      editorRef,
+    });
 
     if (activityContext) {
       track("activity_ide_open", { feature: "activity" });
@@ -193,6 +213,7 @@ export default function PyBotIDE() {
     }
 
     if (code === activityLastSavedRef.current) return;
+    if (isGenericIdeTemplate(code)) return;
 
     setActivitySaveStatus("pending");
     const timer = window.setTimeout(() => {
@@ -1911,6 +1932,14 @@ export default function PyBotIDE() {
                               : null}
                             {activitySaveStatus === "saved" ? " · Guardado" : null}
                             {activitySaveStatus === "error" ? " · Error al guardar" : null}
+                          </span>
+                        ) : null}
+                        {activityCodeReady &&
+                        !activityContext.starter_code?.trim() &&
+                        isGenericIdeTemplate(code) ? (
+                          <span className="brand-activity--warn">
+                            {" "}
+                            · El docente aún no configuró el código inicial de esta tarea
                           </span>
                         ) : null}
                       </>
