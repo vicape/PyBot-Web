@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  ACTIVITY_ID_QUERY,
+  ACTIVITY_LAUNCH_STATE_KEY,
+  resolveActivityEditorCode,
+} from "../platform/activityIdeSession.js";
+import { writeActivityLaunchCache } from "../platform/courseActivityApi.js";
 import { fetchActivityProgress } from "../platform/activityProgress.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { getSupabase } from "../supabaseClient.js";
@@ -7,6 +13,7 @@ import { track } from "../telemetry/index.js";
 
 export default function ActivityPage() {
   const { activityId } = useParams();
+  const navigate = useNavigate();
   const loginPath = `/actividad/${activityId}`;
   const { user, loading: authLoading, profileError, supabase } = useRequireSession(loginPath);
 
@@ -14,6 +21,7 @@ export default function ActivityPage() {
   const [courseTitle, setCourseTitle] = useState("");
   const [orgId, setOrgId] = useState(null);
   const [progressHint, setProgressHint] = useState("");
+  const [savedCode, setSavedCode] = useState(false);
   const [loadErr, setLoadErr] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -28,7 +36,7 @@ export default function ActivityPage() {
 
     let { data: act, error: eAct } = await supabase
       .from("activities")
-      .select("id, title, description, pybot_lesson_id, course_id, created_at")
+      .select("id, title, description, starter_code, pybot_lesson_id, course_id, created_at")
       .eq("id", activityId)
       .maybeSingle();
 
@@ -36,7 +44,7 @@ export default function ActivityPage() {
       console.error("ActivityPage.load (full):", eAct);
       const fb = await supabase
         .from("activities")
-        .select("id, title, course_id, created_at")
+        .select("id, title, description, pybot_lesson_id, course_id, created_at")
         .eq("id", activityId)
         .maybeSingle();
       act = fb.data;
@@ -68,13 +76,26 @@ export default function ActivityPage() {
     }
 
     const prog = await fetchActivityProgress(activityId, user.id);
+    const launchCode = resolveActivityEditorCode({
+      starterCode: act.starter_code,
+      savedCode: prog.code,
+      launchCode: "",
+    });
     if (prog.error) {
       setProgressHint("");
+      setSavedCode(false);
     } else if (prog.code && prog.code.length > 0) {
+      setSavedCode(true);
       setProgressHint("Tenés código guardado en la nube para esta actividad.");
+    } else if (act.starter_code && act.starter_code.length > 0) {
+      setSavedCode(false);
+      setProgressHint("Al abrir PyBot vas a ver el código inicial de esta tarea.");
     } else {
+      setSavedCode(false);
       setProgressHint("Todavía no hay entrega guardada en la nube.");
     }
+
+    writeActivityLaunchCache(activityId, launchCode);
 
     setLoading(false);
   }, [supabase, activityId, user]);
@@ -83,10 +104,20 @@ export default function ActivityPage() {
     if (!authLoading && user) void load();
   }, [authLoading, user, load]);
 
-  const pybotUrl = useMemo(() => {
-    const base = typeof window !== "undefined" ? window.location.origin : "";
-    return `${base}/`;
-  }, []);
+  const openPyBot = () => {
+    if (!activityId || !activity || !user) return;
+    void fetchActivityProgress(activityId, user.id).then((prog) => {
+      const launchCode = resolveActivityEditorCode({
+        starterCode: activity.starter_code,
+        savedCode: prog.code,
+        launchCode: "",
+      });
+      writeActivityLaunchCache(activityId, launchCode);
+      navigate(`/?${ACTIVITY_ID_QUERY}=${encodeURIComponent(activityId)}`, {
+        state: { [ACTIVITY_LAUNCH_STATE_KEY]: launchCode },
+      });
+    });
+  };
 
   if (authLoading || loading) {
     return (
@@ -156,17 +187,20 @@ export default function ActivityPage() {
         <p className="auth-card__muted">{progressHint}</p>
 
         <div className="auth-card__actions auth-card__actions--row">
-          <a className="auth-btn auth-btn--primary" href={pybotUrl}>
+          <button type="button" className="auth-btn auth-btn--primary" onClick={openPyBot}>
             Abrir PyBot
-          </a>
+          </button>
           <Link to="/dashboard" className="auth-btn auth-btn--ghost">
             Panel
           </Link>
         </div>
 
         <p className="auth-card__muted">
-          El IDE en la página principal sigue siendo anónimo. En la próxima fase se podrá abrir esta actividad
-          con código y guardado automático sin modificar el núcleo del editor.
+          {savedCode
+            ? "PyBot abre con tu último código guardado. Los cambios se sincronizan automáticamente en la nube."
+            : activity?.starter_code
+              ? "PyBot abre con el código inicial de la tarea. Los cambios se guardan automáticamente en la nube."
+              : "PyBot abre el editor en blanco para esta actividad. Los cambios se guardan automáticamente en la nube."}
         </p>
       </div>
     </main>

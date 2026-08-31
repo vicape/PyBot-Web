@@ -73,6 +73,14 @@ async function startSession(req, res, { anonymousId, userId, body }) {
         is_authenticated: !!userId || row.is_authenticated,
       };
       if (userId) patch.user_id = userId;
+      if (!row.ip && ip) patch.ip = str(ip, 45);
+      if (!row.ip_hash && ip) {
+        patch.ip_hash = hashIp(ip);
+        patch.ip_prefix = ipPrefix(ip);
+      }
+      if (!row.country && geo.country) patch.country = geo.country;
+      if (!row.region && geo.region) patch.region = geo.region;
+      if (!row.city && geo.city) patch.city = geo.city;
       await supabaseRest(`usage_sessions?id=eq.${row.id}`, {
         method: "PATCH",
         body: patch,
@@ -99,6 +107,7 @@ async function startSession(req, res, { anonymousId, userId, body }) {
     duration_seconds: 0,
     is_authenticated: !!userId,
     consent_state: consent,
+    ip: str(ip, 45),
     ip_hash: hashIp(ip),
     ip_prefix: ipPrefix(ip),
     country: geo.country,

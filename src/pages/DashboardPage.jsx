@@ -17,6 +17,7 @@ import { fetchProfile } from "../platform/profileApi.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
 import { fetchMyEnrolledCourses } from "../platform/studentCoursesApi.js";
 import { signupRoleLabelEs } from "../platform/signupRole.js";
+import { isSuperAdmin } from "../platformRole.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 import { slugifyOrganizationName } from "../slugify.js";
 
@@ -65,6 +66,7 @@ export default function DashboardPage() {
   const [profileWarn, setProfileWarn] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [preferredRole, setPreferredRole] = useState(null);
+  const [superAdmin, setSuperAdmin] = useState(false);
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [coursesError, setCoursesError] = useState("");
   const [orgsLoaded, setOrgsLoaded] = useState(false);
@@ -188,6 +190,7 @@ export default function DashboardPage() {
         const { profile } = await fetchProfile(u.id);
         if (cancelled) return;
         if (profile?.preferred_role) setPreferredRole(profile.preferred_role);
+        setSuperAdmin(isSuperAdmin(profile));
         const meta = u.user_metadata || {};
         setDisplayName(
           profile?.display_name ||
@@ -235,6 +238,7 @@ export default function DashboardPage() {
       } else {
         setProfileWarn("");
         setPreferredRole(null);
+        setSuperAdmin(false);
         setDisplayName("");
       }
     });
@@ -421,6 +425,7 @@ export default function DashboardPage() {
         showSchoolsTab={showSchoolsTab}
         showCoursesTab={showCoursesTab}
         showClassroomTab={showClassroomTab}
+        showAdminTab={superAdmin}
         userName={name}
         userEmail={email}
         userPicture={picture}

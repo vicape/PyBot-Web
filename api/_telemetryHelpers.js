@@ -97,13 +97,34 @@ export function anonCookieHeader(anonymousId, isProd) {
   return parts.join("; ");
 }
 
+function headerFirst(req, name) {
+  const headers = req?.headers || {};
+  const key = name.toLowerCase();
+  const raw = headers[key] ?? headers[name];
+  if (Array.isArray(raw)) return raw[0] ?? null;
+  return typeof raw === "string" ? raw : null;
+}
+
+function normalizeIp(raw) {
+  if (!raw || typeof raw !== "string") return null;
+  const ip = raw.split(",")[0].trim();
+  if (!ip || ip.toLowerCase() === "unknown") return null;
+  return ip;
+}
+
+/** IP del cliente. Vercel expone x-forwarded-for / x-vercel-forwarded-for / x-real-ip. */
 export function clientIp(req) {
-  const xf = req.headers["x-forwarded-for"];
-  if (typeof xf === "string" && xf.trim()) {
-    return xf.split(",")[0].trim();
+  const candidates = [
+    headerFirst(req, "x-forwarded-for"),
+    headerFirst(req, "x-vercel-forwarded-for"),
+    headerFirst(req, "x-real-ip"),
+    headerFirst(req, "cf-connecting-ip"),
+    headerFirst(req, "true-client-ip"),
+  ];
+  for (const raw of candidates) {
+    const ip = normalizeIp(raw);
+    if (ip) return ip;
   }
-  const real = req.headers["x-real-ip"];
-  if (typeof real === "string" && real.trim()) return real.trim();
   return null;
 }
 
@@ -135,8 +156,8 @@ export function geoFromHeaders(req) {
 }
 
 function headerStr(req, name) {
-  const v = req.headers[name];
-  return typeof v === "string" && v.trim() ? v.trim() : null;
+  const v = headerFirst(req, name);
+  return v && v.trim() ? v.trim() : null;
 }
 
 /**

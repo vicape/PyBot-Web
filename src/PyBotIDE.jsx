@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, lazy, Suspense } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import "./PyBotIDE.css";
 import {
@@ -67,6 +67,9 @@ import PrepareEsp32Modal from "./PrepareEsp32Modal.jsx";
 import BluetoothPanel from "./BluetoothPanel.jsx";
 import IdeUserChip from "./components/IdeUserChip.jsx";
 import { useOptionalSession } from "./platform/useOptionalSession.js";
+import { useActivityIde } from "./platform/useActivityIde.js";
+import { parseActivityId, readActivityLaunchCode } from "./platform/activityIdeSession.js";
+import { saveActivityProgress } from "./platform/activityProgress.js";
 import { track } from "./telemetry/index.js";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
 import { PHASE, BOARD_STATE, canCloseModal } from "./esp32/provisioningPhases.js";
@@ -102,19 +105,118 @@ function readInitialPythonOnly() {
   return v === "1";
 }
 
+function readInitialEditorCode(activityId, launchCode) {
+  if (activityId && launchCode) return launchCode;
+  if (activityId) return DEFAULT_CODE;
+  return localStorage.getItem("pybot_code") || DEFAULT_CODE;
+}
+
 export default function PyBotIDE() {
-  const { user: sessionUser, loading: sessionLoading, signOut: sessionSignOut } =
-    useOptionalSession();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const activityId = parseActivityId(searchParams);
+  const activityLaunchCode = activityId ? readActivityLaunchCode(activityId, location.state) : "";
+  const {
+    user: sessionUser,
+    loading: sessionLoading,
+    signOut: sessionSignOut,
+    supabase: sessionSupabase,
+  } = useOptionalSession();
+  const [code, setCode] = useState(() => readInitialEditorCode(activityId, activityLaunchCode));
+  const {
+    activity: activityContext,
+    initialCode: activityInitialCode,
+    loading: activityLoading,
+    error: activityError,
+  } = useActivityIde({
+    activityId,
+    user: sessionUser,
+    supabase: sessionSupabase,
+    sessionLoading,
+    launchCode: activityLaunchCode,
+  });
+  const [activitySaveStatus, setActivitySaveStatus] = useState("idle");
+  const [activityEditorKey, setActivityEditorKey] = useState(0);
+  const [activityCodeReady, setActivityCodeReady] = useState(!activityId);
+  const activityLastSavedRef = useRef("");
+  const appliedActivityLoadRef = useRef(null);
+  const pendingActivityCodeRef = useRef(null);
   const [theme, setTheme] = useState(() => readInitialTheme());
 
   useEffect(() => {
     track("ide_open", {});
   }, []);
+
+  useEffect(() => {
+    appliedActivityLoadRef.current = null;
+    activityLastSavedRef.current = "";
+    pendingActivityCodeRef.current = null;
+    setActivitySaveStatus("idle");
+    setActivityCodeReady(!activityId);
+  }, [activityId]);
+
+  useEffect(() => {
+    if (!activityId || activityLoading || activityInitialCode === null) return;
+
+    const loadKey = `${activityId}:${activityInitialCode}`;
+    if (appliedActivityLoadRef.current === loadKey) return;
+
+    const nextCode = activityInitialCode || DEFAULT_CODE;
+    pendingActivityCodeRef.current = nextCode;
+    setCode(nextCode);
+    activityLastSavedRef.current = nextCode;
+    appliedActivityLoadRef.current = loadKey;
+    setActivityEditorKey((k) => k + 1);
+    setActivityCodeReady(true);
+
+    if (activityContext) {
+      track("activity_ide_open", { feature: "activity" });
+    }
+  }, [activityId, activityLoading, activityInitialCode, activityContext]);
+
+  useEffect(() => {
+    if (!activityId) return;
+    if (!activityLoading && activityError && activityInitialCode === null) {
+      setActivityCodeReady(true);
+    }
+  }, [activityId, activityLoading, activityError, activityInitialCode]);
+
+  useEffect(() => {
+    if (
+      !activityId ||
+      !sessionUser ||
+      sessionUser._legacy ||
+      appliedActivityLoadRef.current == null ||
+      activityLoading
+    ) {
+      return;
+    }
+
+    if (code === activityLastSavedRef.current) return;
+
+    setActivitySaveStatus("pending");
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setActivitySaveStatus("saving");
+        const result = await saveActivityProgress(activityId, sessionUser.id, code);
+        if (result.ok) {
+          activityLastSavedRef.current = code;
+          setActivitySaveStatus("saved");
+        } else {
+          setActivitySaveStatus("error");
+        }
+      })();
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [code, activityId, sessionUser, activityLoading]);
+
+  const activityLoginPath =
+    activityId != null
+      ? `/login?next=${encodeURIComponent(`/?actividad=${activityId}`)}`
+      : "/login";
   const [contrast, setContrast] = useState(
     () => localStorage.getItem("pybot_contrast") || "normal",
-  );
-  const [code, setCode] = useState(
-    () => localStorage.getItem("pybot_code") || DEFAULT_CODE,
   );
   const [consoleLines, setConsoleLines] = useState([]);
   const [connected, setConnected] = useState(false);
@@ -248,8 +350,9 @@ export default function PyBotIDE() {
   }, [contrast]);
 
   useEffect(() => {
+    if (activityId) return;
     localStorage.setItem("pybot_code", code);
-  }, [code]);
+  }, [code, activityId]);
 
   useEffect(() => {
     localStorage.setItem("pybot_python_only", pythonOnly ? "1" : "0");
@@ -331,6 +434,7 @@ export default function PyBotIDE() {
   // Python canonico con lo que muestra esa vista una sola vez, para que no se
   // pierda al primer cambio de pestaña.
   useEffect(() => {
+    if (activityId) return;
     if (editorMode === "pseudo" && pseudoCode.trim()) {
       setCode(pseudocodeToPython(pseudoCode));
     }
@@ -346,12 +450,28 @@ export default function PyBotIDE() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editorMode]);
 
+  useEffect(() => {
+    if (!activityId || !activityCodeReady) return;
+    setEditorMode("python");
+  }, [activityId, activityCodeReady]);
+
+  useEffect(() => {
+    if (!activityId || activityLoading || activityInitialCode === null) return;
+    if (appliedActivityLoadRef.current == null) return;
+    editorRef.current?.setValue(activityInitialCode || DEFAULT_CODE);
+  }, [activityId, activityLoading, activityInitialCode, activityCodeReady]);
+
   // --- Diagnóstico de sintaxis Python (Monaco markers). Aislado y aditivo. ---
   const SYNTAX_MARKER_OWNER = "pybot-python";
 
   const handleEditorMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+    const pending = pendingActivityCodeRef.current;
+    if (pending != null) {
+      editor.setValue(pending);
+      setCode(pending);
+    }
   }, []);
 
   const applySyntaxResult = useCallback((res) => {
@@ -1610,9 +1730,12 @@ export default function PyBotIDE() {
         />
       </Suspense>
     );
+  } else if (activityId && !activityCodeReady) {
+    editorSurface = <div className="pyblock-loading">Cargando actividad…</div>;
   } else {
     editorSurface = (
       <Editor
+        key={activityId ? `activity-${activityId}-${activityEditorKey}` : "default-editor"}
         height="100%"
         language="python"
         theme={monacoTheme}
@@ -1758,6 +1881,42 @@ export default function PyBotIDE() {
                     />
                   ) : null}
                 </div>
+                {activityId ? (
+                  <div className="brand-activity">
+                    {activityLoading ? (
+                      <span>Cargando actividad…</span>
+                    ) : activityError ? (
+                      <span className="brand-activity--warn">
+                        No se pudo cargar la actividad.{" "}
+                        <Link to={`/actividad/${activityId}`}>Ver detalle</Link>
+                      </span>
+                    ) : activityContext ? (
+                      <>
+                        Actividad:{" "}
+                        <Link to={`/actividad/${activityId}`}>{activityContext.title}</Link>
+                        {activityContext.pybot_lesson_id ? (
+                          <span> · {activityContext.pybot_lesson_id}</span>
+                        ) : null}
+                        {!sessionUser && !sessionLoading ? (
+                          <span className="brand-activity--warn">
+                            {" "}
+                            ·{" "}
+                            <Link to={activityLoginPath}>Iniciá sesión</Link> para guardar en la nube
+                          </span>
+                        ) : null}
+                        {sessionUser && !sessionUser._legacy ? (
+                          <span>
+                            {activitySaveStatus === "saving" || activitySaveStatus === "pending"
+                              ? " · Guardando…"
+                              : null}
+                            {activitySaveStatus === "saved" ? " · Guardado" : null}
+                            {activitySaveStatus === "error" ? " · Error al guardar" : null}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
               <div className="toolbar-actions">
                 <IdeUserChip

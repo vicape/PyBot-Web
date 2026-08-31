@@ -28,6 +28,7 @@ export const ALLOWED_EVENT_NAMES = new Set([
   "usb_connect",
   "usb_disconnect",
   "activity_open",
+  "activity_ide_open",
   "classroom_open",
   "error",
 ]);

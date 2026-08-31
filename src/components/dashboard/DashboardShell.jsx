@@ -14,6 +14,9 @@ export default function DashboardShell({
   showSchoolsTab = false,
   showCoursesTab = false,
   showClassroomTab = false,
+  showAdminTab = false,
+  adminActive = false,
+  wideBody = false,
   /** @deprecated usar showSchoolsTab/showCoursesTab */
   studentView,
   userName,
@@ -78,9 +81,17 @@ export default function DashboardShell({
             {tab.label}
           </button>
         ))}
+        {showAdminTab ? (
+          <Link
+            to="/dashboard/admin"
+            className={`dash-nav__tab dash-nav__tab--link ${adminActive ? "dash-nav__tab--active" : ""}`}
+          >
+            Admin
+          </Link>
+        ) : null}
       </nav>
 
-      <div className="dash-body">{children}</div>
+      <div className={`dash-body${wideBody ? " dash-body--wide" : ""}`}>{children}</div>
     </main>
   );
 }

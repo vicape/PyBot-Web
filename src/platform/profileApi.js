@@ -5,7 +5,7 @@ import { getSupabase } from "../supabaseClient.js";
  * el código sigue funcionando con las que sí existen.
  */
 const PROFILE_COLUMNS_FULL =
-  "id, email, display_name, avatar_url, preferred_role, classroom_linked_at, google_refresh_token, google_token_expires_at";
+  "id, email, display_name, avatar_url, preferred_role, is_super_admin, classroom_linked_at, google_refresh_token, google_token_expires_at";
 const PROFILE_COLUMNS_FALLBACK = "id, email, display_name, avatar_url";
 
 export async function fetchProfile(userId) {

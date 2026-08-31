@@ -7,6 +7,7 @@ import {
 import { sanitizeMetadata, ALLOWED_EVENT_NAMES } from "../src/telemetry/sanitizeMetadata.js";
 import { parseUserAgent } from "../src/telemetry/deviceInfo.js";
 import {
+  clientIp,
   hashIp,
   ipPrefix,
   isValidUuid,
@@ -79,6 +80,18 @@ test("IP nunca queda almacenada completa", () => {
   assert.equal(h.includes(ip), false);
   assert.equal(h.length, 64);
   assert.equal(ipPrefix(ip), "192.168.10.xxx");
+});
+
+test("clientIp lee headers de Vercel/proxy", () => {
+  assert.equal(
+    clientIp({ headers: { "x-vercel-forwarded-for": "203.0.113.9" } }),
+    "203.0.113.9",
+  );
+  assert.equal(
+    clientIp({ headers: { "x-forwarded-for": ["198.51.100.2", "10.0.0.1"] } }),
+    "198.51.100.2",
+  );
+  assert.equal(clientIp({ headers: {} }), null);
 });
 
 test("cookie name no contiene PII", () => {

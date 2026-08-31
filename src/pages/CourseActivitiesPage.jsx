@@ -9,24 +9,67 @@ import {
   syncClassroomRosterToCourse,
 } from "../classroom/classroomRosterSync.js";
 import { getValidClassroomToken } from "../platform/classroomToken.js";
+import { updateCourseActivity } from "../platform/courseActivityApi.js";
 import DashboardSubpageShell from "../components/dashboard/DashboardSubpageShell.jsx";
 
 // ─── Pestaña Actividades ─────────────────────────────────────────────────────
 
-function ActivitiesTab({ activities, staff, orgId, courseId, saving, err, onCreateActivity }) {
+function ActivitiesTab({
+  activities,
+  staff,
+  orgId,
+  courseId,
+  saving,
+  err,
+  onCreateActivity,
+  onUpdateActivity,
+}) {
   const activityUrl = (id) => `/actividad/${encodeURIComponent(id)}`;
   const [actTitle, setActTitle] = useState("");
   const [actDescription, setActDescription] = useState("");
   const [pybotLessonId, setPybotLessonId] = useState("");
+  const [starterCode, setStarterCode] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPybotLessonId, setEditPybotLessonId] = useState("");
+  const [editStarterCode, setEditStarterCode] = useState("");
+
+  const startEdit = (a) => {
+    setEditingId(a.id);
+    setEditTitle(a.title || "");
+    setEditDescription(a.description || "");
+    setEditPybotLessonId(a.pybot_lesson_id || "");
+    setEditStarterCode(a.starter_code || "");
+  };
+
+  const cancelEdit = () => setEditingId(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const ok = await onCreateActivity({ title: actTitle, description: actDescription, pybotLessonId });
+    const ok = await onCreateActivity({
+      title: actTitle,
+      description: actDescription,
+      pybotLessonId,
+      starterCode,
+    });
     if (ok) {
       setActTitle("");
       setActDescription("");
       setPybotLessonId("");
+      setStarterCode("");
     }
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    const ok = await onUpdateActivity(editingId, {
+      title: editTitle,
+      description: editDescription,
+      pybotLessonId: editPybotLessonId,
+      starterCode: editStarterCode,
+    });
+    if (ok) setEditingId(null);
   };
 
   return (
@@ -44,6 +87,15 @@ function ActivitiesTab({ activities, staff, orgId, courseId, saving, err, onCrea
                 </span>
               </div>
               <div className="auth-org-row__actions">
+                {staff ? (
+                  <button
+                    type="button"
+                    className="auth-btn auth-btn--ghost auth-btn--sm"
+                    onClick={() => startEdit(a)}
+                  >
+                    Editar
+                  </button>
+                ) : null}
                 <Link className="auth-btn auth-btn--ghost auth-btn--sm" to={activityUrl(a.id)}>
                   Abrir
                 </Link>
@@ -63,6 +115,73 @@ function ActivitiesTab({ activities, staff, orgId, courseId, saving, err, onCrea
           ))}
         </ul>
       )}
+
+      {staff && editingId ? (
+        <form className="auth-activity-form" onSubmit={handleEditSubmit}>
+          <h2 className="auth-section__title">Editar actividad</h2>
+          {err ? <p className="auth-card__notice auth-card__notice--err">{err}</p> : null}
+          <label className="auth-org-label" htmlFor="edit-act-title">
+            Título
+          </label>
+          <input
+            id="edit-act-title"
+            className="auth-org-input auth-org-input--block"
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            maxLength={160}
+            disabled={saving}
+            required
+          />
+          <label className="auth-org-label" htmlFor="edit-act-desc">
+            Descripción
+          </label>
+          <textarea
+            id="edit-act-desc"
+            className="auth-code-area"
+            rows={4}
+            value={editDescription}
+            onChange={(e) => setEditDescription(e.target.value)}
+            placeholder="Instrucciones para el alumno"
+            disabled={saving}
+          />
+          <label className="auth-org-label" htmlFor="edit-act-lesson">
+            ID lección PyBot (opcional)
+          </label>
+          <input
+            id="edit-act-lesson"
+            className="auth-org-input auth-org-input--block"
+            value={editPybotLessonId}
+            onChange={(e) => setEditPybotLessonId(e.target.value)}
+            placeholder="Ej. U1 - T1"
+            maxLength={120}
+            disabled={saving}
+          />
+          <label className="auth-org-label" htmlFor="edit-act-starter">
+            Código inicial (plantilla en el IDE, fase siguiente)
+          </label>
+          <textarea
+            id="edit-act-starter"
+            className="auth-code-area"
+            rows={4}
+            value={editStarterCode}
+            onChange={(e) => setEditStarterCode(e.target.value)}
+            disabled={saving}
+          />
+          <div className="auth-card__actions auth-card__actions--row">
+            <button type="submit" className="auth-btn auth-btn--primary" disabled={saving}>
+              {saving ? "Guardando…" : "Guardar cambios"}
+            </button>
+            <button
+              type="button"
+              className="auth-btn auth-btn--ghost"
+              onClick={cancelEdit}
+              disabled={saving}
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       {staff ? (
         <form className="auth-activity-form" onSubmit={handleSubmit}>
@@ -100,8 +219,19 @@ function ActivitiesTab({ activities, staff, orgId, courseId, saving, err, onCrea
             className="auth-org-input auth-org-input--block"
             value={pybotLessonId}
             onChange={(e) => setPybotLessonId(e.target.value)}
-            placeholder="Ej. modulo-1-leccion-3"
+            placeholder="Ej. U1 - T1"
             maxLength={120}
+            disabled={saving}
+          />
+          <label className="auth-org-label" htmlFor="act-starter">
+            Código inicial (plantilla en el IDE, fase siguiente)
+          </label>
+          <textarea
+            id="act-starter"
+            className="auth-code-area"
+            rows={4}
+            value={starterCode}
+            onChange={(e) => setStarterCode(e.target.value)}
             disabled={saving}
           />
           <button type="submit" className="auth-btn auth-btn--primary" disabled={saving}>
@@ -568,14 +698,14 @@ export default function CourseActivitiesPage() {
 
     let { data: rows, error: e1 } = await supabase
       .from("activities")
-      .select("id,title,description,pybot_lesson_id,created_at")
+      .select("id,title,description,pybot_lesson_id,starter_code,created_at")
       .eq("course_id", courseId)
       .order("created_at", { ascending: false });
 
     if (e1) {
       const fb = await supabase
         .from("activities")
-        .select("id,title,created_at")
+        .select("id,title,description,pybot_lesson_id,created_at")
         .eq("course_id", courseId)
         .order("created_at", { ascending: false });
       if (fb.error) setErr(fb.error.message);
@@ -595,7 +725,7 @@ export default function CourseActivitiesPage() {
     if (!authLoading && user) void load();
   }, [authLoading, user, load, navigate]);
 
-  const createActivity = async ({ title, description, pybotLessonId }) => {
+  const createActivity = async ({ title, description, pybotLessonId, starterCode }) => {
     const t = title.trim();
     if (!t || saving || !supabase || !staff || !user) return false;
     setSaving(true);
@@ -606,7 +736,7 @@ export default function CourseActivitiesPage() {
       ...base,
       description: description.trim(),
       pybot_lesson_id: pybotLessonId.trim() || null,
-      starter_code: "",
+      starter_code: starterCode?.trim() ?? "",
     };
 
     let { error } = await supabase.from("activities").insert(full);
@@ -626,6 +756,27 @@ export default function CourseActivitiesPage() {
     setSaving(false);
     if (error) {
       setErr(error.message);
+      return false;
+    }
+    await load();
+    return true;
+  };
+
+  const updateActivity = async (activityId, { title, description, pybotLessonId, starterCode }) => {
+    if (saving || !supabase || !staff || !activityId) return false;
+    setSaving(true);
+    setErr("");
+
+    const result = await updateCourseActivity(supabase, activityId, {
+      title,
+      description,
+      pybotLessonId,
+      starterCode,
+    });
+
+    setSaving(false);
+    if (!result.ok) {
+      setErr(result.error || "No se pudo guardar la actividad.");
       return false;
     }
     await load();
@@ -716,6 +867,7 @@ export default function CourseActivitiesPage() {
             saving={saving}
             err={err}
             onCreateActivity={createActivity}
+            onUpdateActivity={updateActivity}
           />
         ) : (
           <StudentsTab
