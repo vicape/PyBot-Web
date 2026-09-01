@@ -85,6 +85,7 @@ export function getDashboardNavCapabilities({ orgs = [], enrolledCourseCount = 0
     showSchoolsTab: hasStaffAccess,
     showCoursesTab: hasStudentAccess,
     showClassroomTab: hasStaffAccess,
+    showPyBotClassTab: hasStaffAccess || hasStudentAccess,
   };
 }
 

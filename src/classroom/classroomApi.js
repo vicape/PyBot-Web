@@ -122,17 +122,85 @@ async function classroomMutate(path, accessToken, { method = "POST", body } = {}
  * Crea un courseWork (assignment) en Classroom.
  * Scope: classroom.coursework.students
  */
-export async function createCourseWork(accessToken, classroomCourseId, { title, description, maxPoints, materials }) {
+export async function createCourseWork(
+  accessToken,
+  classroomCourseId,
+  { title, description, maxPoints, materials, dueDate, dueTime },
+) {
+  const body = {
+    title,
+    description: description || "",
+    workType: "ASSIGNMENT",
+    state: "PUBLISHED",
+    materials: materials || [],
+  };
+  if (maxPoints != null && Number.isFinite(Number(maxPoints))) {
+    body.maxPoints = Number(maxPoints);
+  }
+  if (dueDate) body.dueDate = dueDate;
+  if (dueTime) body.dueTime = dueTime;
   return classroomMutate(`/courses/${encodeURIComponent(classroomCourseId)}/courseWork`, accessToken, {
     method: "POST",
-    body: {
-      title,
-      description: description || "",
-      workType: "ASSIGNMENT",
-      state: "PUBLISHED",
-      maxPoints: maxPoints ?? 100,
-      materials: materials || [],
-    },
+    body,
+  });
+}
+
+/**
+ * Actualiza un courseWork existente en Classroom.
+ */
+export async function patchCourseWork(
+  accessToken,
+  classroomCourseId,
+  courseWorkId,
+  { title, description, maxPoints, dueDate, dueTime },
+) {
+  const fields = [];
+  const body = {};
+  if (title != null) {
+    body.title = title;
+    fields.push("title");
+  }
+  if (description != null) {
+    body.description = description;
+    fields.push("description");
+  }
+  if (maxPoints != null && Number.isFinite(Number(maxPoints))) {
+    body.maxPoints = Number(maxPoints);
+    fields.push("maxPoints");
+  }
+  if (dueDate) {
+    body.dueDate = dueDate;
+    fields.push("dueDate");
+  }
+  if (dueTime) {
+    body.dueTime = dueTime;
+    fields.push("dueTime");
+  }
+  if (!fields.length) return null;
+  const qs = new URLSearchParams({ updateMask: fields.join(",") });
+  return classroomMutate(
+    `/courses/${encodeURIComponent(classroomCourseId)}/courseWork/${encodeURIComponent(courseWorkId)}?${qs}`,
+    accessToken,
+    { method: "PATCH", body },
+  );
+}
+
+/**
+ * Lista courseWork de un curso Classroom con paginación.
+ */
+export async function listCourseWork(accessToken, classroomCourseId) {
+  if (!classroomCourseId) return [];
+  return fetchAllClassroomPages(async (pageToken) => {
+    const qs = new URLSearchParams({ pageSize: "100" });
+    if (pageToken) qs.set("pageToken", pageToken);
+    const json = await classroomFetch(
+      `/courses/${encodeURIComponent(classroomCourseId)}/courseWork?${qs}`,
+      accessToken,
+    );
+    return {
+      items: Array.isArray(json.courseWork) ? json.courseWork : [],
+      nextPageToken: json.nextPageToken || null,
+    };
   });
 }
 

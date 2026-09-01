@@ -42,6 +42,7 @@ test("classroomApi exporta courseWork y teachers", () => {
   const src = readFileSync(resolve(root, "src/classroom/classroomApi.js"), "utf8");
   assert.match(src, /export async function listCourseTeachers/);
   assert.match(src, /export async function createCourseWork/);
+  assert.match(src, /export async function listCourseWork/);
   assert.match(src, /export async function listStudentSubmissions/);
   assert.match(src, /export async function patchStudentSubmissionGrade/);
   assert.match(src, /export async function returnStudentSubmission/);

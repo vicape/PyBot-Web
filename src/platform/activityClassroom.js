@@ -2,10 +2,31 @@ import { getSupabase } from "../supabaseClient.js";
 import { getValidClassroomToken } from "./classroomToken.js";
 import {
   createCourseWork,
+  patchCourseWork,
   listStudentSubmissions,
   patchStudentSubmissionGrade,
   returnStudentSubmission,
 } from "../classroom/classroomApi.js";
+
+function activityDueParts(activity) {
+  if (!activity?.due_at) return { dueDate: null, dueTime: null };
+  const d = new Date(activity.due_at);
+  if (Number.isNaN(d.getTime())) return { dueDate: null, dueTime: null };
+  return {
+    dueDate: { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() },
+    dueTime: { hours: d.getHours(), minutes: d.getMinutes() },
+  };
+}
+
+function validateGradeForActivity(activity, grade) {
+  if (grade == null) return null;
+  const n = Number(grade);
+  if (!Number.isFinite(n) || n < 0) return "Nota inválida.";
+  if (activity?.max_points != null && n > Number(activity.max_points)) {
+    return `La nota no puede superar el puntaje máximo (${activity.max_points}).`;
+  }
+  return null;
+}
 
 /**
  * Publica la actividad PyBot como courseWork en Classroom (sin duplicar).
@@ -19,48 +40,57 @@ export async function publishActivityToClassroom({
   if (!sb || !activity?.id || !classroomCourseId) {
     return { ok: false, error: "missing_args" };
   }
-  if (activity.classroom_coursework_id) {
-    return {
-      ok: true,
-      alreadyPublished: true,
-      courseWorkId: activity.classroom_coursework_id,
-      url: activity.classroom_coursework_url || null,
-    };
-  }
 
   const tok = await getValidClassroomToken(userId);
   if (!tok) return { ok: false, error: "missing_access_token" };
 
   const activityUrl = `${window.location.origin}/actividad/${encodeURIComponent(activity.id)}`;
-  try {
-    const cw = await createCourseWork(tok, classroomCourseId, {
-      title: activity.title || "Actividad PyBot",
-      description: activity.description || "Abrí la actividad en PyBot para trabajar y entregar.",
-      materials: [
-        {
-          link: {
-            url: activityUrl,
-            title: "Abrir en PyBot",
-          },
+  const { dueDate, dueTime } = activityDueParts(activity);
+  const payload = {
+    title: activity.title || "Actividad PyBot",
+    description: activity.description || "Abrí la actividad en PyBot para trabajar y entregar.",
+    materials: [
+      {
+        link: {
+          url: activityUrl,
+          title: "Abrir en PyBot",
         },
-      ],
-    });
+      },
+    ],
+    dueDate,
+    dueTime,
+  };
+  if (activity.max_points != null && Number.isFinite(Number(activity.max_points))) {
+    payload.maxPoints = Number(activity.max_points);
+  }
 
-    const courseWorkId = cw.id;
-    const courseWorkUrl =
-      cw.alternateLink ||
-      `https://classroom.google.com/c/${classroomCourseId}/a/${courseWorkId}`;
+  try {
+    let courseWorkId = activity.classroom_coursework_id;
+    let courseWorkUrl = activity.classroom_coursework_url || null;
+    let alreadyPublished = false;
+
+    if (courseWorkId) {
+      await patchCourseWork(tok, classroomCourseId, courseWorkId, payload);
+      alreadyPublished = true;
+    } else {
+      const cw = await createCourseWork(tok, classroomCourseId, payload);
+      courseWorkId = cw.id;
+      courseWorkUrl =
+        cw.alternateLink ||
+        `https://classroom.google.com/c/${classroomCourseId}/a/${courseWorkId}`;
+    }
 
     const { error } = await sb
       .from("activities")
       .update({
         classroom_coursework_id: courseWorkId,
         classroom_coursework_url: courseWorkUrl,
+        classroom_last_synced_at: new Date().toISOString(),
       })
       .eq("id", activity.id);
 
     if (error) return { ok: false, error: error.message };
-    return { ok: true, courseWorkId, url: courseWorkUrl, alreadyPublished: false };
+    return { ok: true, courseWorkId, url: courseWorkUrl, alreadyPublished };
   } catch (ex) {
     return { ok: false, error: ex?.message || "classroom_publish_failed", code: ex?.code };
   }
@@ -89,6 +119,7 @@ export async function syncClassroomSubmissionsForActivity({
  */
 export async function sendGradeToClassroom({
   submission,
+  activity,
   classroomCourseId,
   courseWorkId,
   classroomSubmissionId,
@@ -100,6 +131,16 @@ export async function sendGradeToClassroom({
   }
   if (!classroomCourseId || !courseWorkId || !classroomSubmissionId) {
     return { ok: false, error: "missing_classroom_ids" };
+  }
+
+  const gradeErr = validateGradeForActivity(activity, submission.grade);
+  if (gradeErr) return { ok: false, error: gradeErr };
+
+  if (activity?.max_points == null) {
+    return {
+      ok: false,
+      error: "Definí el puntaje máximo de la actividad antes de enviar notas a Classroom.",
+    };
   }
 
   const tok = await getValidClassroomToken(userId);
@@ -148,9 +189,19 @@ export async function sendGradeToClassroom({
 /**
  * Relaciona submissions Classroom ↔ PyBot por userId Google / email.
  */
-export function matchClassroomSubmission(classroomSub, pybotRow, profileByUserId, classroomUserIdByPybotUser) {
+export function matchClassroomSubmission(
+  classroomSub,
+  pybotRow,
+  profileByUserId,
+  classroomUserIdByPybotUser,
+  emailByPybotUser,
+) {
   if (!classroomSub || !pybotRow) return false;
   const googleUid = classroomUserIdByPybotUser?.get(pybotRow.user_id);
   if (googleUid && classroomSub.userId === googleUid) return true;
+  const email = emailByPybotUser?.get(pybotRow.user_id);
+  if (email && classroomSub.profile?.emailAddress) {
+    return email.trim().toLowerCase() === classroomSub.profile.emailAddress.trim().toLowerCase();
+  }
   return false;
 }

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 const TABS = [
   { id: "home", label: "Inicio" },
+  { id: "pybotclass", label: "PyBotClass", flag: "showPyBotClassTab" },
   { id: "schools", label: "Colegios", flag: "showSchoolsTab" },
   { id: "courses", label: "Mis cursos", flag: "showCoursesTab" },
   { id: "classroom", label: "Classroom", flag: "showClassroomTab" },
@@ -14,6 +15,7 @@ export default function DashboardShell({
   showSchoolsTab = false,
   showCoursesTab = false,
   showClassroomTab = false,
+  showPyBotClassTab = false,
   showAdminTab = false,
   adminActive = false,
   wideBody = false,
@@ -39,9 +41,18 @@ export default function DashboardShell({
     showSchoolsTab: schools,
     showCoursesTab: courses,
     showClassroomTab: classroom,
+    showPyBotClassTab,
   };
 
   const visibleTabs = TABS.filter((t) => !t.flag || flags[t.flag]);
+
+  const handleTab = (tabId) => {
+    if (tabId === "pybotclass") {
+      window.location.href = "/dashboard/classes";
+      return;
+    }
+    onTabChange(tabId);
+  };
 
   return (
     <main className="dash-root">
@@ -76,7 +87,7 @@ export default function DashboardShell({
             key={tab.id}
             type="button"
             className={`dash-nav__tab ${activeTab === tab.id ? "dash-nav__tab--active" : ""}`}
-            onClick={() => onTabChange(tab.id)}
+            onClick={() => handleTab(tab.id)}
           >
             {tab.label}
           </button>

@@ -455,6 +455,25 @@ body {
   color: #93c5fd;
 }
 
+.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.dash-table th,
+.dash-table td {
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  text-align: left;
+  vertical-align: top;
+}
+
+.dash-table th {
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
 .auth-section {
   margin: 0 0 1.25rem;
 }

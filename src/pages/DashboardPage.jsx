@@ -84,7 +84,7 @@ export default function DashboardPage() {
       }),
     [orgs, enrolledCourses.length],
   );
-  const { hasStaffAccess, hasStudentAccess, showSchoolsTab, showCoursesTab, showClassroomTab } =
+  const { hasStaffAccess, hasStudentAccess, showSchoolsTab, showCoursesTab, showClassroomTab, showPyBotClassTab } =
     nav;
   const activeTab = (() => {
     if (!VALID_TABS.has(rawTab)) return "home";
@@ -425,6 +425,7 @@ export default function DashboardPage() {
         showSchoolsTab={showSchoolsTab}
         showCoursesTab={showCoursesTab}
         showClassroomTab={showClassroomTab}
+        showPyBotClassTab={showPyBotClassTab}
         showAdminTab={superAdmin}
         userName={name}
         userEmail={email}
@@ -502,6 +503,11 @@ export default function DashboardPage() {
                 </form>
               ) : null}
               <div className="auth-org-row__actions">
+                {showPyBotClassTab ? (
+                  <Link to="/dashboard/classes" className="auth-btn auth-btn--primary">
+                    PyBotClass
+                  </Link>
+                ) : null}
                 {showSchoolsTab ? (
                   <button type="button" className="auth-btn auth-btn--primary" onClick={() => setTab("schools")}>
                     Ver colegios
