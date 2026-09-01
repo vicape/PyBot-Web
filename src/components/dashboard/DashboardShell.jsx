@@ -56,13 +56,35 @@ export default function DashboardShell({
 
   return (
     <main className="dash-root">
-      <header className="dash-header">
-        <div className="dash-header__brand">
+      <header className="dash-topbar">
+        <div className="dash-topbar__brand">
           <Link to="/" className="dash-header__logo">
             PyBot
           </Link>
           <span className="dash-header__tag">Panel</span>
         </div>
+
+        <nav className="dash-nav" aria-label="Secciones del panel">
+          {visibleTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`dash-nav__tab ${activeTab === tab.id ? "dash-nav__tab--active" : ""}`}
+              onClick={() => handleTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+          {showAdminTab ? (
+            <Link
+              to="/dashboard/admin"
+              className={`dash-nav__tab dash-nav__tab--link ${adminActive ? "dash-nav__tab--active" : ""}`}
+            >
+              Admin
+            </Link>
+          ) : null}
+        </nav>
+
         <div className="dash-header__user">
           {userPicture ? (
             <img src={userPicture} alt="" className="dash-header__avatar" width={40} height={40} />
@@ -80,27 +102,6 @@ export default function DashboardShell({
           </button>
         </div>
       </header>
-
-      <nav className="dash-nav" aria-label="Secciones del panel">
-        {visibleTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`dash-nav__tab ${activeTab === tab.id ? "dash-nav__tab--active" : ""}`}
-            onClick={() => handleTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-        {showAdminTab ? (
-          <Link
-            to="/dashboard/admin"
-            className={`dash-nav__tab dash-nav__tab--link ${adminActive ? "dash-nav__tab--active" : ""}`}
-          >
-            Admin
-          </Link>
-        ) : null}
-      </nav>
 
       <div className={`dash-body${wideBody ? " dash-body--wide" : ""}`}>{children}</div>
     </main>
