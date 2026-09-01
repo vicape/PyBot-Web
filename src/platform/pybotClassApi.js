@@ -1,11 +1,127 @@
 import { getSupabase } from "../supabaseClient.js";
 
+export const PYBOTCLASS_MIGRATION_HINT =
+  "Faltan las migraciones PyBotClass en Supabase. Ejecutá en el SQL Editor: 20260831000031_pybotclass_security_fix.sql, 20260831000032_pybotclass_activity_meta.sql y 20260831000033_pybotclass_queries.sql";
+
+function isMissingRpcError(message) {
+  return /Could not find the function|schema cache|function.*does not exist/i.test(message ?? "");
+}
+
+function isStaffOrgRole(role) {
+  return role === "owner" || role === "teacher";
+}
+
+async function fallbackListPybotclassOrganizations(sb) {
+  const orgMap = new Map();
+
+  const rpc = await sb.rpc("list_my_org_memberships");
+  if (!rpc.error && Array.isArray(rpc.data)) {
+    for (const m of rpc.data) {
+      orgMap.set(m.org_id, {
+        org_id: m.org_id,
+        org_name: m.org_name || m.org_id,
+        access_kind: "org_member",
+      });
+    }
+  }
+
+  const { data: session } = await sb.auth.getUser();
+  const userId = session?.user?.id;
+  if (userId) {
+    const { data: cmRows } = await sb
+      .from("course_members")
+      .select("course_id, courses ( org_id, organizations ( name ) )")
+      .eq("user_id", userId);
+    for (const row of cmRows ?? []) {
+      const orgId = row.courses?.org_id;
+      if (!orgId || orgMap.has(orgId)) continue;
+      orgMap.set(orgId, {
+        org_id: orgId,
+        org_name: row.courses?.organizations?.name || orgId,
+        access_kind: "course_member",
+      });
+    }
+  }
+
+  return { rows: [...orgMap.values()].sort((a, b) => a.org_name.localeCompare(b.org_name)), error: null };
+}
+
+async function fallbackListPybotclassMyCourses(sb, orgId) {
+  const { data: session } = await sb.auth.getUser();
+  const userId = session?.user?.id;
+  if (!userId) return { rows: [], error: "no_session" };
+
+  const byCourse = new Map();
+
+  const memberships = await sb.rpc("list_my_org_memberships");
+  const staffOrgIds = (memberships.data ?? [])
+    .filter((m) => isStaffOrgRole(m.role))
+    .map((m) => m.org_id)
+    .filter((id) => !orgId || id === orgId);
+
+  if (staffOrgIds.length > 0) {
+    let q = sb
+      .from("courses")
+      .select("id, title, org_id, classroom_course_id, organizations ( name )")
+      .in("org_id", staffOrgIds);
+    const { data: staffCourses, error: staffErr } = await q;
+    if (staffErr) return { rows: [], error: staffErr.message };
+    for (const c of staffCourses ?? []) {
+      byCourse.set(c.id, {
+        course_id: c.id,
+        course_title: c.title,
+        org_id: c.org_id,
+        org_name: c.organizations?.name || "",
+        classroom_course_id: c.classroom_course_id,
+        my_course_role: "teacher",
+        student_count: 0,
+        activity_count: 0,
+        submission_count: 0,
+        pending_grade_count: 0,
+      });
+    }
+  }
+
+  let cmQuery = sb
+    .from("course_members")
+    .select("role, courses ( id, title, org_id, classroom_course_id, organizations ( name ) )")
+    .eq("user_id", userId);
+  const { data: cmRows, error: cmErr } = await cmQuery;
+  if (cmErr) return { rows: [], error: cmErr.message };
+
+  for (const row of cmRows ?? []) {
+    const c = row.courses;
+    if (!c?.id) continue;
+    if (orgId && c.org_id !== orgId) continue;
+    if (!byCourse.has(c.id)) {
+      byCourse.set(c.id, {
+        course_id: c.id,
+        course_title: c.title,
+        org_id: c.org_id,
+        org_name: c.organizations?.name || "",
+        classroom_course_id: c.classroom_course_id,
+        my_course_role: row.role,
+        student_count: 0,
+        activity_count: 0,
+        submission_count: 0,
+        pending_grade_count: 0,
+      });
+    }
+  }
+
+  return {
+    rows: [...byCourse.values()].sort((a, b) => a.course_title.localeCompare(b.course_title)),
+    error: null,
+  };
+}
+
 export async function listPybotclassOrganizations() {
   const sb = getSupabase();
   if (!sb) return { rows: [], error: "no_supabase" };
   const { data, error } = await sb.rpc("list_pybotclass_organizations");
-  if (error) return { rows: [], error: error.message };
-  return { rows: data ?? [], error: null };
+  if (!error) return { rows: data ?? [], error: null };
+  if (isMissingRpcError(error.message)) return fallbackListPybotclassOrganizations(sb);
+  return { rows: [], error: error.message };
 }
 
 export async function listPybotclassMyCourses(orgId = null) {
@@ -14,8 +130,9 @@ export async function listPybotclassMyCourses(orgId = null) {
   const { data, error } = await sb.rpc("list_pybotclass_my_courses", {
     p_org_id: orgId || null,
   });
-  if (error) return { rows: [], error: error.message };
-  return { rows: data ?? [], error: null };
+  if (!error) return { rows: data ?? [], error: null };
+  if (isMissingRpcError(error.message)) return fallbackListPybotclassMyCourses(sb, orgId);
+  return { rows: [], error: error.message };
 }
 
 export async function fetchPybotclassCourseSummary(courseId) {
