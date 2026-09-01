@@ -8,6 +8,12 @@ export default function AccountSettings({ user, onProfileUpdated }) {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
+  const meta = user?.user_metadata || {};
+  const picture = meta.avatar_url || meta.picture || null;
+  const email = user?.email ?? "";
+  const initial =
+    meta.full_name || meta.name || (email ? email.split("@")[0] : "") || "?";
+
   useEffect(() => {
     if (!user?.id) {
       setLoading(false);
@@ -30,12 +36,8 @@ export default function AccountSettings({ user, onProfileUpdated }) {
       if (error) {
         setErr(typeof error === "string" ? error : "Error al cargar el perfil.");
       } else {
-        const meta = user.user_metadata || {};
         setDisplayName(
-          profile?.display_name ||
-            meta.full_name ||
-            meta.name ||
-            (user.email ? user.email.split("@")[0] : ""),
+          profile?.display_name || meta.full_name || meta.name || (email ? email.split("@")[0] : ""),
         );
       }
       setLoading(false);
@@ -45,7 +47,7 @@ export default function AccountSettings({ user, onProfileUpdated }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [user]);
+  }, [user, meta.full_name, meta.name, email]);
 
   const save = async (e) => {
     e.preventDefault();
@@ -64,45 +66,67 @@ export default function AccountSettings({ user, onProfileUpdated }) {
   };
 
   if (loading) {
-    return <p className="auth-card__muted">Cargando cuenta…</p>;
+    return (
+      <section className="dash-panel account-panel">
+        <p className="auth-card__muted">Cargando cuenta…</p>
+      </section>
+    );
   }
 
   return (
-    <section className="dash-panel">
-      <h2 className="dash-panel__title">Configuración de cuenta</h2>
-      <p className="auth-card__muted auth-card__muted--tight">
-        Estos datos se guardan en tu perfil de la plataforma (Supabase).
+    <section className="dash-panel account-panel">
+      <div className="account-profile">
+        {picture ? (
+          <img src={picture} alt="" className="account-profile__avatar" width={64} height={64} />
+        ) : (
+          <div className="account-profile__avatar account-profile__avatar--letter" aria-hidden>
+            {(displayName || initial).slice(0, 1).toUpperCase()}
+          </div>
+        )}
+        <div className="account-profile__text">
+          <h2 className="account-profile__name">{displayName || initial}</h2>
+          <p className="account-profile__email">{email}</p>
+        </div>
+      </div>
+
+      <p className="account-panel__lead">
+        Estos datos se guardan en tu perfil de la plataforma.
       </p>
 
-      {err ? <p className="auth-card__notice auth-card__notice--err">{err}</p> : null}
-      {msg ? <p className="auth-card__notice">{msg}</p> : null}
+      {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+      {msg ? <p className="pbc-alert pbc-alert--info">{msg}</p> : null}
 
-      <form className="dash-form" onSubmit={save}>
-        <label className="auth-org-label" htmlFor="profile-email">
-          Correo (Google)
-        </label>
-        <input
-          id="profile-email"
-          className="auth-org-input auth-org-input--block"
-          type="email"
-          value={user?.email ?? ""}
-          disabled
-          readOnly
-        />
+      <form className="dash-form account-form" onSubmit={save}>
+        <div className="account-field">
+          <label className="auth-org-label" htmlFor="profile-email">
+            Correo (Google)
+          </label>
+          <input
+            id="profile-email"
+            className="auth-org-input auth-org-input--block"
+            type="email"
+            value={email}
+            disabled
+            readOnly
+          />
+          <p className="account-field__hint">El correo viene de tu cuenta de Google y no se puede cambiar acá.</p>
+        </div>
 
-        <label className="auth-org-label" htmlFor="profile-name">
-          Nombre visible
-        </label>
-        <input
-          id="profile-name"
-          className="auth-org-input auth-org-input--block"
-          type="text"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          maxLength={80}
-          disabled={saving}
-          placeholder="Tu nombre en el panel"
-        />
+        <div className="account-field">
+          <label className="auth-org-label" htmlFor="profile-name">
+            Nombre visible
+          </label>
+          <input
+            id="profile-name"
+            className="auth-org-input auth-org-input--block"
+            type="text"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            maxLength={80}
+            disabled={saving}
+            placeholder="Tu nombre en el panel"
+          />
+        </div>
 
         <button type="submit" className="auth-btn auth-btn--primary" disabled={saving}>
           {saving ? "Guardando…" : "Guardar cambios"}

@@ -272,6 +272,8 @@ body {
   width: 100%;
 }
 
+/* block modifier redefined after .auth-org-input base — see below */
+
 .auth-code-area {
   width: 100%;
   min-height: 160px;
@@ -537,6 +539,22 @@ body {
 
 .auth-org-input::placeholder {
   color: rgba(232, 236, 241, 0.45);
+}
+
+.auth-org-input.auth-org-input--block,
+.dash-form .auth-org-input {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dash-form .auth-org-label {
+  margin-bottom: -0.35rem;
+}
+
+.dash-form .auth-btn {
+  align-self: flex-start;
+  margin-top: 0.25rem;
 }
 
 /* —— Panel profesional (/dashboard) —— */
@@ -1498,4 +1516,73 @@ body {
   background: transparent;
   border: none;
   box-shadow: none;
+}
+
+/* —— Cuenta (/dashboard?tab=account) —— */
+
+.account-panel {
+  max-width: 520px;
+}
+
+.account-profile {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.account-profile__avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.account-profile__avatar--letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, #2563eb, #1e40af);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.account-profile__name {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.account-profile__email {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.account-panel__lead {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  opacity: 0.72;
+  line-height: 1.45;
+}
+
+.account-form {
+  margin-top: 0.5rem;
+}
+
+.account-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.account-field__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.55;
+  line-height: 1.4;
 }
