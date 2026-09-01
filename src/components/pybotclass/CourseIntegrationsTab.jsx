@@ -21,6 +21,13 @@ import {
   syncClassroomTeachersToCourse,
 } from "../../classroom/classroomRosterSync.js";
 import { listCourseStudents, listCourseTeachers } from "../../classroom/classroomApi.js";
+import {
+  PbcAlert,
+  PbcEmpty,
+  PbcFormPanel,
+  PbcSection,
+  PbcStatGrid,
+} from "./PyBotClassUi.jsx";
 
 export default function CourseIntegrationsTab({
   courseId,
@@ -232,28 +239,32 @@ export default function CourseIntegrationsTab({
 
   if (!classroomCourseId) {
     return (
-      <p className="auth-card__muted">
-        Esta clase no está vinculada a Google Classroom. Importala desde Classroom en Mis clases.
-      </p>
+      <PbcEmpty
+        title="Classroom no vinculado"
+        description="Esta clase no está conectada a Google Classroom. Importala desde Mis clases o desde el panel de Classroom."
+      />
     );
   }
 
   return (
-    <div className="dash-panel" style={{ padding: "1rem" }}>
-      <h3 className="auth-section__title">Google Classroom</h3>
-      <p className="auth-card__muted">● Conectado</p>
+    <PbcSection
+      title="Google Classroom"
+      description="Sincronización manual con tu curso de Classroom"
+      actions={<span className="pbc-pill pbc-pill--classroom">Conectado</span>}
+    >
+      <PbcStatGrid
+        items={[
+          { label: "Alumnos", value: stats.students, highlight: true },
+          { label: "Docentes", value: stats.teachers },
+          { label: "Actividades", value: stats.activities },
+          { label: "Notas pendientes", value: stats.pendingGrades, warn: stats.pendingGrades > 0 },
+        ]}
+      />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "0.75rem", margin: "1rem 0" }}>
-        <div><div className="auth-card__muted">Alumnos</div><strong>{stats.students}</strong></div>
-        <div><div className="auth-card__muted">Docentes</div><strong>{stats.teachers}</strong></div>
-        <div><div className="auth-card__muted">Actividades</div><strong>{stats.activities}</strong></div>
-        <div><div className="auth-card__muted">Notas pendientes</div><strong>{stats.pendingGrades}</strong></div>
-      </div>
+      {err ? <PbcAlert variant="error">{err}</PbcAlert> : null}
+      {msg ? <PbcAlert variant="info">{msg}</PbcAlert> : null}
 
-      {err ? <p className="auth-card__notice auth-card__notice--err">{err}</p> : null}
-      {msg ? <p className="auth-card__notice">{msg}</p> : null}
-
-      <div className="auth-card__actions auth-card__actions--row" style={{ flexWrap: "wrap" }}>
+      <div className="pbc-section__actions" style={{ marginTop: "1rem" }}>
         <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" disabled={!!busy} onClick={() => void syncStudents()}>
           {busy === "students" ? "…" : "Sincronizar alumnos"}
         </button>
@@ -272,12 +283,11 @@ export default function CourseIntegrationsTab({
       </div>
 
       {showImport ? (
-        <div style={{ marginTop: "1rem" }}>
-          <h4 className="auth-section__title">Importar desde Classroom</h4>
-          <ul className="auth-org-list">
+        <PbcFormPanel title="Importar desde Classroom" onCancel={() => setShowImport(false)}>
+          <ul className="pbc-list">
             {importList.map((cw) => (
-              <li key={cw.id} className="auth-org-row">
-                <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <li key={cw.id} className="pbc-list-item">
+                <label style={{ display: "flex", gap: "0.65rem", alignItems: "center", cursor: "pointer" }}>
                   <input
                     type="checkbox"
                     checked={selectedCw.has(cw.id)}
@@ -288,21 +298,18 @@ export default function CourseIntegrationsTab({
                       setSelectedCw(next);
                     }}
                   />
-                  <span>{cw.title}</span>
+                  <span className="pbc-list-item__title">{cw.title}</span>
                 </label>
               </li>
             ))}
           </ul>
-          <div className="auth-card__actions auth-card__actions--row">
+          <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.85rem" }}>
             <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" disabled={busy === "import"} onClick={() => void doImport()}>
               {busy === "import" ? "Importando…" : "Importar seleccionadas"}
             </button>
-            <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={() => setShowImport(false)}>
-              Cancelar
-            </button>
           </div>
-        </div>
+        </PbcFormPanel>
       ) : null}
-    </div>
+    </PbcSection>
   );
 }

@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import PyBotClassShell, {
-  CourseTabs,
-  PyBotClassBreadcrumb,
-} from "../components/pybotclass/PyBotClassShell.jsx";
+import PyBotClassShell, { CourseTabs, PyBotClassBreadcrumb } from "../components/pybotclass/PyBotClassShell.jsx";
+import {
+  PbcAlert,
+  PbcCourseHeader,
+  PbcFormPanel,
+  PbcLoading,
+  PbcPage,
+} from "../components/pybotclass/PyBotClassUi.jsx";
 import CourseSummaryTab from "../components/pybotclass/CourseSummaryTab.jsx";
 import CourseActivitiesTab from "../components/pybotclass/CourseActivitiesTab.jsx";
 import CourseRosterTab from "../components/pybotclass/CourseRosterTab.jsx";
@@ -158,7 +162,7 @@ export default function PyBotClassCoursePage() {
   if (authLoading || loading) {
     return (
       <main className="dash-root dash-root--center">
-        <p className="auth-card__muted">Cargando clase…</p>
+        <PbcLoading label="Cargando clase…" />
       </main>
     );
   }
@@ -167,118 +171,112 @@ export default function PyBotClassCoursePage() {
 
   return (
     <PyBotClassShell user={user} showAdminTab={superAdmin} onSignOut={() => void signOut()}>
-      <PyBotClassBreadcrumb items={[{ label: course?.title || "Clase" }]} />
+      <PbcPage>
+        <PyBotClassBreadcrumb items={[{ label: course?.title || "Clase" }]} />
 
-      <h1 className="auth-card__title">{course?.title || "Clase"}</h1>
-      <p className="auth-card__muted">
-        {canTeach ? (
-          <>
-            {orgName}
-            {course?.classroom_course_id ? " · Google Classroom conectado" : ""}
-          </>
-        ) : (
-          <span>Tu rol: {roleDisplay}</span>
-        )}
-      </p>
-
-      {profileError ? <p className="auth-card__notice auth-card__notice--err">{profileError}</p> : null}
-      {err ? <p className="auth-card__notice auth-card__notice--err">{err}</p> : null}
-
-      <CourseTabs tabs={tabs} activeTab={activeTab} onTabChange={setTab} />
-
-      {activeTab === "resumen" ? (
-        <CourseSummaryTab
-          courseId={courseId}
-          canTeach={canTeach}
-          onGoSubmissions={canTeach ? () => setTab("entregas") : undefined}
+        <PbcCourseHeader
+          title={course?.title || "Clase"}
+          orgName={orgName}
+          roleLabel={canTeach ? roleDisplay : `Tu rol: ${roleDisplay}`}
+          classroomLinked={!!course?.classroom_course_id}
         />
-      ) : null}
 
-      {activeTab === "actividades" ? (
-        <CourseActivitiesTab
-          activities={activities}
-          canTeach={canTeach}
-          isStudent={isStudent}
-          user={user}
-          supabase={supabase}
-          courseId={courseId}
-          saving={false}
-          err={err}
-          onReload={load}
-          onImportClassroom={canTeach && course?.classroom_course_id ? importFromClassroom : null}
-          importBusy={importBusy}
-        />
-      ) : null}
+        {profileError ? <PbcAlert variant="error">{profileError}</PbcAlert> : null}
+        {err ? <PbcAlert variant="error">{err}</PbcAlert> : null}
 
-      {activeTab === "alumnos" && canTeach ? (
-        <CourseRosterTab
-          orgId={course?.org_id}
-          courseId={courseId}
-          classroomCourseId={course?.classroom_course_id}
-          user={user}
-          orgRole={myRole}
-        />
-      ) : null}
+        <CourseTabs tabs={tabs} activeTab={activeTab} onTabChange={setTab} />
 
-      {activeTab === "entregas" && canTeach ? <CourseSubmissionsTab courseId={courseId} /> : null}
+        {activeTab === "resumen" ? (
+          <CourseSummaryTab
+            courseId={courseId}
+            canTeach={canTeach}
+            onGoSubmissions={canTeach ? () => setTab("entregas") : undefined}
+          />
+        ) : null}
 
-      {activeTab === "notas" ? <CourseGradesTab courseId={courseId} canTeach={canTeach} /> : null}
+        {activeTab === "actividades" ? (
+          <CourseActivitiesTab
+            activities={activities}
+            canTeach={canTeach}
+            isStudent={isStudent}
+            user={user}
+            supabase={supabase}
+            courseId={courseId}
+            saving={false}
+            err={err}
+            onReload={load}
+            onImportClassroom={canTeach && course?.classroom_course_id ? importFromClassroom : null}
+            importBusy={importBusy}
+          />
+        ) : null}
 
-      {activeTab === "integraciones" && canTeach ? (
-        <CourseIntegrationsTab
-          courseId={courseId}
-          orgId={course?.org_id}
-          classroomCourseId={course?.classroom_course_id}
-          user={user}
-          onReloadActivities={load}
-        />
-      ) : null}
+        {activeTab === "alumnos" && canTeach ? (
+          <CourseRosterTab
+            orgId={course?.org_id}
+            courseId={courseId}
+            classroomCourseId={course?.classroom_course_id}
+            user={user}
+            orgRole={myRole}
+          />
+        ) : null}
 
-      {importPicker ? (
-        <div className="dash-panel" style={{ marginTop: "1rem", padding: "1rem" }}>
-          <h3 className="auth-section__title">Importar desde Classroom</h3>
-          <ul className="auth-org-list">
-            {importPicker.list.map((cw) => (
-              <li key={cw.id}>
-                <label style={{ display: "flex", gap: "0.5rem" }}>
-                  <input
-                    type="checkbox"
-                    checked={importPicker.selected.has(cw.id)}
-                    onChange={(e) => {
-                      const next = new Set(importPicker.selected);
-                      if (e.target.checked) next.add(cw.id);
-                      else next.delete(cw.id);
-                      setImportPicker({ ...importPicker, selected: next });
-                    }}
-                  />
-                  {cw.title}
-                </label>
-              </li>
-            ))}
-          </ul>
-          <div className="auth-card__actions auth-card__actions--row">
-            <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" disabled={importBusy} onClick={() => void confirmImport()}>
-              Importar seleccionadas
-            </button>
-            <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={() => setImportPicker(null)}>
-              Cancelar
-            </button>
-          </div>
+        {activeTab === "entregas" && canTeach ? <CourseSubmissionsTab courseId={courseId} /> : null}
+
+        {activeTab === "notas" ? <CourseGradesTab courseId={courseId} canTeach={canTeach} /> : null}
+
+        {activeTab === "integraciones" && canTeach ? (
+          <CourseIntegrationsTab
+            courseId={courseId}
+            orgId={course?.org_id}
+            classroomCourseId={course?.classroom_course_id}
+            user={user}
+            onReloadActivities={load}
+          />
+        ) : null}
+
+        {importPicker ? (
+          <PbcFormPanel title="Importar desde Classroom" onCancel={() => setImportPicker(null)}>
+            <ul className="pbc-list">
+              {importPicker.list.map((cw) => (
+                <li key={cw.id} className="pbc-list-item">
+                  <label style={{ display: "flex", gap: "0.65rem", alignItems: "center", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={importPicker.selected.has(cw.id)}
+                      onChange={(e) => {
+                        const next = new Set(importPicker.selected);
+                        if (e.target.checked) next.add(cw.id);
+                        else next.delete(cw.id);
+                        setImportPicker({ ...importPicker, selected: next });
+                      }}
+                    />
+                    <span className="pbc-list-item__title">{cw.title}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.85rem" }}>
+              <button
+                type="button"
+                className="auth-btn auth-btn--primary auth-btn--sm"
+                disabled={importBusy}
+                onClick={() => void confirmImport()}
+              >
+                {importBusy ? "Importando…" : "Importar seleccionadas"}
+              </button>
+            </div>
+          </PbcFormPanel>
+        ) : null}
+
+        <div className="pbc-footer-links">
+          <Link to="/dashboard/classes" className="auth-link">
+            ← Mis clases
+          </Link>
+          <Link to={`/dashboard/org/${course?.org_id}/course/${courseId}`} className="auth-link">
+            Vista clásica
+          </Link>
         </div>
-      ) : null}
-
-      <div style={{ marginTop: "1.5rem" }}>
-        <Link to="/dashboard/classes" className="auth-link">
-          ← Volver a Mis clases
-        </Link>
-        {" · "}
-        <Link
-          to={`/dashboard/org/${course?.org_id}/course/${courseId}`}
-          className="auth-link"
-        >
-          Vista clásica
-        </Link>
-      </div>
+      </PbcPage>
     </PyBotClassShell>
   );
 }

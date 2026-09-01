@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import DashboardShell from "../dashboard/DashboardShell.jsx";
 
 export default function PyBotClassShell({
@@ -30,47 +29,9 @@ export default function PyBotClassShell({
       userPicture={picture}
       onSignOut={onSignOut}
     >
-      <section className="dash-panel">{children}</section>
+      <div className="pbc-shell">{children}</div>
     </DashboardShell>
   );
 }
 
-export function PyBotClassBreadcrumb({ items }) {
-  return (
-    <p className="auth-breadcrumb">
-      <Link to="/dashboard/classes" className="auth-link">
-        PyBotClass
-      </Link>
-      {items.map((item, i) => (
-        <span key={item.href || item.label || i}>
-          <span aria-hidden> / </span>
-          {item.href ? (
-            <Link to={item.href} className="auth-link">
-              {item.label}
-            </Link>
-          ) : (
-            <span>{item.label}</span>
-          )}
-        </span>
-      ))}
-    </p>
-  );
-}
-
-export function CourseTabs({ tabs, activeTab, onTabChange }) {
-  return (
-    <nav className="course-tabs" aria-label="Secciones de la clase">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          className={`course-tab${activeTab === tab.id ? " course-tab--active" : ""}`}
-          onClick={() => onTabChange(tab.id)}
-        >
-          {tab.label}
-          {tab.count != null ? <span className="course-tab__count">{tab.count}</span> : null}
-        </button>
-      ))}
-    </nav>
-  );
-}
+export { PbcBreadcrumb as PyBotClassBreadcrumb, PbcTabs as CourseTabs } from "./PyBotClassUi.jsx";

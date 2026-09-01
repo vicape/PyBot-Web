@@ -1,10 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import PyBotClassShell from "../components/pybotclass/PyBotClassShell.jsx";
+import {
+  PbcAlert,
+  PbcClassCard,
+  PbcClassGrid,
+  PbcEmpty,
+  PbcHero,
+  PbcLoading,
+  PbcPage,
+  PbcSection,
+  PbcSelect,
+  PbcToolbar,
+} from "../components/pybotclass/PyBotClassUi.jsx";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
 import { isSuperAdmin } from "../platformRole.js";
-import { isStaffRole } from "../orgRole.js";
 import {
   listPybotclassMyCourses,
   listPybotclassOrganizations,
@@ -22,6 +33,7 @@ export default function PyBotClassPage() {
   const [superAdmin, setSuperAdmin] = useState(false);
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [creating, setCreating] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -62,6 +74,9 @@ export default function PyBotClassPage() {
     return org?.access_kind === "org_member";
   }, [orgs, selectedOrgId]);
 
+  const showOrgOnCards = orgs.length >= 2 || !selectedOrgId;
+  const pendingTotal = courses.reduce((n, c) => n + (c.pending_grade_count ?? 0), 0);
+
   const createCourse = async (e) => {
     e.preventDefault();
     const title = newCourseTitle.trim();
@@ -79,13 +94,14 @@ export default function PyBotClassPage() {
       return;
     }
     setNewCourseTitle("");
+    setShowCreate(false);
     await load();
   };
 
   if (authLoading || loading) {
     return (
       <main className="dash-root dash-root--center">
-        <p className="auth-card__muted">Cargando PyBotClass…</p>
+        <PbcLoading label="Cargando PyBotClass…" />
       </main>
     );
   }
@@ -94,84 +110,96 @@ export default function PyBotClassPage() {
 
   return (
     <PyBotClassShell user={user} showAdminTab={superAdmin} onSignOut={() => void signOut()}>
-      <h1 className="auth-card__title">PyBotClass</h1>
-      <p className="auth-card__lead">Mis clases</p>
-
-      {profileError ? <p className="auth-card__notice auth-card__notice--err">{profileError}</p> : null}
-      {err ? <p className="auth-card__notice auth-card__notice--err">{err}</p> : null}
-
-      {orgs.length >= 2 ? (
-        <div style={{ marginBottom: "1rem" }}>
-          <label className="auth-org-label" htmlFor="org-select">
-            Colegio
-          </label>
-          <select
-            id="org-select"
-            className="auth-org-input auth-org-input--block"
-            value={selectedOrgId}
-            onChange={(e) => setSelectedOrgId(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {orgs.map((o) => (
-              <option key={o.org_id} value={o.org_id}>
-                {o.org_name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
-
-      {courses.length === 0 ? (
-        <p className="auth-card__muted">Todavía no tenés clases asignadas.</p>
-      ) : (
-        <ul className="auth-org-list">
-          {courses.map((c) => (
-            <li key={c.course_id} className="auth-org-row auth-org-row--split">
-              <div>
-                <span className="auth-org-row__name">{c.course_title}</span>
-                <span className="auth-org-row__meta">
-                  {c.student_count ?? 0} alumnos · {c.activity_count ?? 0} actividades
-                  {(c.pending_grade_count ?? 0) > 0
-                    ? ` · ${c.pending_grade_count} entregas por corregir`
-                    : ""}
-                  {c.classroom_course_id ? " · Classroom conectado" : ""}
-                </span>
-                {orgs.length >= 2 || !selectedOrgId ? (
-                  <span className="auth-org-row__meta">{c.org_name}</span>
-                ) : null}
-              </div>
-              <Link
-                className="auth-btn auth-btn--primary auth-btn--sm"
-                to={`/dashboard/classes/${c.course_id}`}
-              >
-                Abrir
+      <PbcPage>
+        <PbcHero
+          eyebrow="Gestión escolar"
+          title="PyBotClass"
+          subtitle="Tus clases, actividades, entregas y notas en un solo lugar."
+          actions={
+            <>
+              {canCreate ? (
+                <button
+                  type="button"
+                  className="auth-btn auth-btn--primary auth-btn--sm"
+                  onClick={() => setShowCreate((v) => !v)}
+                >
+                  {showCreate ? "Cancelar" : "+ Nueva clase"}
+                </button>
+              ) : null}
+              <Link to="/dashboard?tab=classroom" className="auth-btn auth-btn--ghost auth-btn--sm">
+                Importar Classroom
               </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+            </>
+          }
+        />
 
-      {canCreate ? (
-        <form className="auth-activity-form" onSubmit={createCourse} style={{ marginTop: "1.5rem" }}>
-          <h2 className="auth-section__title">Crear clase</h2>
-          <input
-            className="auth-org-input auth-org-input--block"
-            placeholder="Nombre de la clase"
-            value={newCourseTitle}
-            onChange={(e) => setNewCourseTitle(e.target.value)}
-            disabled={creating}
+        {profileError ? <PbcAlert variant="error">{profileError}</PbcAlert> : null}
+        {err ? <PbcAlert variant="error">{err}</PbcAlert> : null}
+
+        <PbcToolbar>
+          <div className="pbc-toolbar__left">
+            <span className="pbc-field__label">
+              {courses.length} clase{courses.length === 1 ? "" : "s"}
+              {pendingTotal > 0 ? ` · ${pendingTotal} por corregir` : ""}
+            </span>
+          </div>
+          {orgs.length >= 2 ? (
+            <PbcSelect
+              id="org-select"
+              label="Colegio"
+              value={selectedOrgId}
+              onChange={(e) => setSelectedOrgId(e.target.value)}
+            >
+              <option value="">Todos los colegios</option>
+              {orgs.map((o) => (
+                <option key={o.org_id} value={o.org_id}>
+                  {o.org_name}
+                </option>
+              ))}
+            </PbcSelect>
+          ) : orgs.length === 1 ? (
+            <span className="pbc-pill pbc-pill--muted">{orgs[0].org_name}</span>
+          ) : null}
+        </PbcToolbar>
+
+        {showCreate && canCreate ? (
+          <PbcSection title="Crear clase">
+            <form className="dash-form" onSubmit={createCourse}>
+              <input
+                className="auth-org-input auth-org-input--block"
+                placeholder="Ej. Python 8A"
+                value={newCourseTitle}
+                onChange={(e) => setNewCourseTitle(e.target.value)}
+                disabled={creating}
+                autoFocus
+              />
+              <div className="auth-card__actions auth-card__actions--row">
+                <button type="submit" className="auth-btn auth-btn--primary" disabled={creating}>
+                  {creating ? "Creando…" : "Crear clase"}
+                </button>
+              </div>
+            </form>
+          </PbcSection>
+        ) : null}
+
+        {courses.length === 0 ? (
+          <PbcEmpty
+            title="Sin clases todavía"
+            description="Cuando te asignen una clase o importes un curso desde Classroom, va a aparecer acá."
+            action={
+              <Link to="/dashboard?tab=classroom" className="auth-btn auth-btn--primary auth-btn--sm">
+                Importar desde Classroom
+              </Link>
+            }
           />
-          <button type="submit" className="auth-btn auth-btn--primary" disabled={creating}>
-            {creating ? "Creando…" : "+ Crear clase"}
-          </button>
-        </form>
-      ) : null}
-
-      <div style={{ marginTop: "1rem" }}>
-        <Link to="/dashboard?tab=classroom" className="auth-btn auth-btn--ghost auth-btn--sm">
-          Importar desde Classroom
-        </Link>
-      </div>
+        ) : (
+          <PbcClassGrid>
+            {courses.map((c) => (
+              <PbcClassCard key={c.course_id} course={c} showOrg={showOrgOnCards} />
+            ))}
+          </PbcClassGrid>
+        )}
+      </PbcPage>
     </PyBotClassShell>
   );
 }

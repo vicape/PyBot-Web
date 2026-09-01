@@ -5,8 +5,14 @@ import {
   formatDueDateEs,
   updatePybotclassActivity,
 } from "../../platform/pybotClassApi.js";
-import { submissionStatusLabelEs } from "../../platform/activitySubmissions.js";
 import { fetchMySubmission } from "../../platform/activitySubmissions.js";
+import {
+  PbcEmpty,
+  PbcFormPanel,
+  PbcList,
+  PbcListItem,
+  PbcSection,
+} from "./PyBotClassUi.jsx";
 
 function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
   const [formTitle, setFormTitle] = useState(initial?.title || "");
@@ -22,7 +28,7 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
 
   return (
     <form
-      className="auth-activity-form"
+      className="dash-form"
       onSubmit={(e) => {
         e.preventDefault();
         void onSubmit({
@@ -35,8 +41,7 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
         });
       }}
     >
-      <h2 className="auth-section__title">{title}</h2>
-      {err ? <p className="auth-card__notice auth-card__notice--err">{err}</p> : null}
+      {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
       <label className="auth-org-label" htmlFor="act-title">
         Título
       </label>
@@ -59,40 +64,36 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
         onChange={(e) => setDescription(e.target.value)}
         disabled={saving}
       />
-      <label className="auth-org-label" htmlFor="act-due">
-        Fecha de entrega
-      </label>
-      <input
-        id="act-due"
-        type="datetime-local"
-        className="auth-org-input auth-org-input--block"
-        value={dueAt}
-        onChange={(e) => setDueAt(e.target.value)}
-        disabled={saving}
-      />
-      <label className="auth-org-label" htmlFor="act-points">
-        Puntaje máximo
-      </label>
-      <input
-        id="act-points"
-        type="number"
-        min="0"
-        step="0.5"
-        className="auth-org-input auth-org-input--block"
-        value={maxPoints}
-        onChange={(e) => setMaxPoints(e.target.value)}
-        disabled={saving}
-      />
-      <label className="auth-org-label" htmlFor="act-lesson">
-        ID lección PyBot (opcional)
-      </label>
-      <input
-        id="act-lesson"
-        className="auth-org-input auth-org-input--block"
-        value={pybotLessonId}
-        onChange={(e) => setPybotLessonId(e.target.value)}
-        disabled={saving}
-      />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+        <div>
+          <label className="auth-org-label" htmlFor="act-due">
+            Fecha de entrega
+          </label>
+          <input
+            id="act-due"
+            type="datetime-local"
+            className="auth-org-input auth-org-input--block"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+            disabled={saving}
+          />
+        </div>
+        <div>
+          <label className="auth-org-label" htmlFor="act-points">
+            Puntaje máximo
+          </label>
+          <input
+            id="act-points"
+            type="number"
+            min="0"
+            step="0.5"
+            className="auth-org-input auth-org-input--block"
+            value={maxPoints}
+            onChange={(e) => setMaxPoints(e.target.value)}
+            disabled={saving}
+          />
+        </div>
+      </div>
       <label className="auth-org-label" htmlFor="act-starter">
         Código inicial
       </label>
@@ -140,27 +141,32 @@ function StudentActivityRow({ activity, userId }) {
 
   const status = submission?.status;
   const due = formatDueDateEs(activity.due_at);
+  const statusLabel =
+    status === "graded" || status === "returned"
+      ? `Corregida · Nota ${submission?.grade ?? "—"}`
+      : status === "submitted"
+        ? "Entregada · Esperando corrección"
+        : "Pendiente";
 
   return (
-    <li className="auth-org-row auth-org-row--split">
-      <div>
-        <span className="auth-org-row__name">{activity.title}</span>
-        <span className="auth-org-row__meta">
-          {status === "graded" || status === "returned"
-            ? `Corregida · Nota: ${submission?.grade ?? "—"}`
-            : status === "submitted"
-              ? "Entregada · Esperando corrección"
-              : "Pendiente"}
-          {due ? ` · Entrega: ${due}` : ""}
-        </span>
-        {submission?.feedback ? (
-          <span className="auth-org-row__meta">{submission.feedback}</span>
-        ) : null}
-      </div>
-      <Link className="auth-btn auth-btn--ghost auth-btn--sm" to={`/actividad/${activity.id}`}>
-        Abrir
-      </Link>
-    </li>
+    <PbcListItem
+      title={activity.title}
+      meta={[statusLabel, due ? `Entrega ${due}` : null, submission?.feedback].filter(Boolean).join(" · ")}
+      badges={
+        status === "graded" || status === "returned" ? (
+          <span className="pbc-pill pbc-pill--ok">Corregida</span>
+        ) : status === "submitted" ? (
+          <span className="pbc-pill pbc-pill--warn">Entregada</span>
+        ) : (
+          <span className="pbc-pill pbc-pill--muted">Pendiente</span>
+        )
+      }
+      actions={
+        <Link className="auth-btn auth-btn--primary auth-btn--sm" to={`/actividad/${activity.id}`}>
+          Abrir
+        </Link>
+      }
+    />
   );
 }
 
@@ -210,98 +216,118 @@ export default function CourseActivitiesTab({
 
   if (isStudent) {
     return (
-      <>
+      <PbcSection title="Actividades">
         {activities.length === 0 ? (
-          <p className="auth-card__muted">Todavía no hay actividades.</p>
+          <PbcEmpty title="Sin actividades" description="Tu docente todavía no publicó actividades en esta clase." />
         ) : (
-          <ul className="auth-org-list">
+          <PbcList>
             {activities.map((a) => (
               <StudentActivityRow key={a.id} activity={a} userId={user.id} />
             ))}
-          </ul>
+          </PbcList>
         )}
-      </>
+      </PbcSection>
     );
   }
 
   return (
     <>
-      <div className="auth-card__actions auth-card__actions--row" style={{ marginBottom: "1rem" }}>
-        <button
-          type="button"
-          className="auth-btn auth-btn--primary auth-btn--sm"
-          onClick={() => {
-            setShowCreate(true);
-            setEditing(null);
-          }}
-        >
-          + Nueva actividad
-        </button>
-        {onImportClassroom ? (
-          <button
-            type="button"
-            className="auth-btn auth-btn--ghost auth-btn--sm"
-            disabled={importBusy}
-            onClick={() => void onImportClassroom()}
-          >
-            {importBusy ? "Importando…" : "Importar desde Classroom"}
-          </button>
-        ) : null}
-      </div>
-
-      {activities.length === 0 ? (
-        <p className="auth-card__muted">Todavía no hay actividades en esta clase.</p>
-      ) : (
-        <ul className="auth-org-list">
-          {activities.map((a) => (
-            <li key={a.id} className="auth-org-row auth-org-row--split">
-              <div>
-                <span className="auth-org-row__name">{a.title}</span>
-                <span className="auth-org-row__meta">
-                  {a.due_at ? `Entrega: ${formatDueDateEs(a.due_at)}` : "Sin fecha de entrega"}
-                  {a.classroom_coursework_id ? " · Classroom ● sincronizada" : " · Solo PyBotClass"}
-                  {a.max_points != null ? ` · ${a.max_points} pts` : ""}
-                </span>
-              </div>
-              <div className="auth-org-row__actions">
-                <button
-                  type="button"
-                  className="auth-btn auth-btn--ghost auth-btn--sm"
-                  onClick={() => {
-                    setEditing(a);
-                    setShowCreate(false);
-                  }}
-                >
-                  Editar
-                </button>
-                <Link className="auth-btn auth-btn--ghost auth-btn--sm" to={`/actividad/${a.id}`}>
-                  Abrir
-                </Link>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <PbcSection
+        title="Actividades"
+        description={`${activities.length} actividad${activities.length === 1 ? "" : "es"} en esta clase`}
+        actions={
+          <>
+            <button
+              type="button"
+              className="auth-btn auth-btn--primary auth-btn--sm"
+              onClick={() => {
+                setShowCreate(true);
+                setEditing(null);
+              }}
+            >
+              + Nueva
+            </button>
+            {onImportClassroom ? (
+              <button
+                type="button"
+                className="auth-btn auth-btn--ghost auth-btn--sm"
+                disabled={importBusy}
+                onClick={() => void onImportClassroom()}
+              >
+                {importBusy ? "Importando…" : "Importar Classroom"}
+              </button>
+            ) : null}
+          </>
+        }
+      >
+        {activities.length === 0 ? (
+          <PbcEmpty
+            title="Creá la primera actividad"
+            description="Publicá una tarea para que los alumnos trabajen en PyBot y entreguen desde acá."
+          />
+        ) : (
+          <PbcList>
+            {activities.map((a) => (
+              <PbcListItem
+                key={a.id}
+                title={a.title}
+                meta={[
+                  a.due_at ? `Entrega ${formatDueDateEs(a.due_at)}` : "Sin fecha",
+                  a.max_points != null ? `${a.max_points} pts` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                badges={
+                  a.classroom_coursework_id ? (
+                    <span className="pbc-pill pbc-pill--classroom">Classroom</span>
+                  ) : (
+                    <span className="pbc-pill pbc-pill--muted">PyBotClass</span>
+                  )
+                }
+                actions={
+                  <>
+                    <button
+                      type="button"
+                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      onClick={() => {
+                        setEditing(a);
+                        setShowCreate(false);
+                      }}
+                    >
+                      Editar
+                    </button>
+                    <Link className="auth-btn auth-btn--ghost auth-btn--sm" to={`/actividad/${a.id}`}>
+                      Abrir
+                    </Link>
+                  </>
+                }
+              />
+            ))}
+          </PbcList>
+        )}
+      </PbcSection>
 
       {showCreate ? (
-        <ActivityForm
-          title="Nueva actividad"
-          saving={saving}
-          err={localErr || err}
-          onSubmit={handleCreate}
-          onCancel={() => setShowCreate(false)}
-        />
+        <PbcFormPanel title="Nueva actividad" onCancel={() => setShowCreate(false)}>
+          <ActivityForm
+            saving={saving}
+            err={localErr || err}
+            onSubmit={handleCreate}
+            onCancel={() => setShowCreate(false)}
+          />
+        </PbcFormPanel>
       ) : null}
 
       {editing ? (
-        <ActivityForm
-          title="Editar actividad"
-          initial={editing}
-          saving={saving}
-          err={localErr || err}
-          onSubmit={handleUpdate}
-          onCancel={() => setEditing(null)}
-        />
+        <PbcFormPanel title="Editar actividad" onCancel={() => setEditing(null)}>
+          <ActivityForm
+            initial={editing}
+            saving={saving}
+            err={localErr || err}
+            onSubmit={handleUpdate}
+            onCancel={() => setEditing(null)}
+          />
+        </PbcFormPanel>
       ) : null}
     </>
   );

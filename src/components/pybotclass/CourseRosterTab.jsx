@@ -8,20 +8,29 @@ import {
 } from "../../classroom/classroomRosterSync.js";
 import { getValidClassroomToken } from "../../platform/classroomToken.js";
 import { isStaffRole } from "../../orgRole.js";
+import {
+  PbcAlert,
+  PbcList,
+  PbcListItem,
+  PbcLoading,
+  PbcSection,
+  PbcSubTabs,
+} from "./PyBotClassUi.jsx";
 
 function MemberList({ rows, onRemove, removingId, badge }) {
-  if (!rows.length) return <p className="auth-card__muted">Sin registros.</p>;
+  if (!rows.length) {
+    return <p className="auth-card__muted">Sin registros en esta sección.</p>;
+  }
   return (
-    <ul className="auth-org-list">
+    <PbcList>
       {rows.map((m) => (
-        <li key={m.key} className="auth-org-row auth-org-row--split">
-          <div>
-            <span className="auth-org-row__name">{m.name}</span>
-            <span className="auth-org-row__meta">{m.meta}</span>
-          </div>
-          <div className="auth-org-row__actions">
-            {badge ? <span className="dash-badge dash-badge--muted">{badge(m)}</span> : null}
-            {onRemove ? (
+        <PbcListItem
+          key={m.key}
+          title={m.name}
+          meta={m.meta}
+          badges={badge ? <span className="pbc-pill pbc-pill--muted">{badge(m)}</span> : null}
+          actions={
+            onRemove && m.userId ? (
               <button
                 type="button"
                 className="auth-btn auth-btn--ghost auth-btn--sm"
@@ -30,11 +39,11 @@ function MemberList({ rows, onRemove, removingId, badge }) {
               >
                 {removingId === m.userId ? "…" : "Quitar"}
               </button>
-            ) : null}
-          </div>
-        </li>
+            ) : null
+          }
+        />
       ))}
-    </ul>
+    </PbcList>
   );
 }
 
@@ -199,29 +208,21 @@ export default function CourseRosterTab({
   ];
 
   return (
-    <>
-      <nav className="course-tabs" style={{ marginBottom: "1rem" }}>
-        <button
-          type="button"
-          className={`course-tab${subTab === "alumnos" ? " course-tab--active" : ""}`}
-          onClick={() => setSubTab("alumnos")}
-        >
-          Alumnos
-        </button>
-        <button
-          type="button"
-          className={`course-tab${subTab === "docentes" ? " course-tab--active" : ""}`}
-          onClick={() => setSubTab("docentes")}
-        >
-          Docentes
-        </button>
-      </nav>
+    <PbcSection title="Personas de la clase">
+      <PbcSubTabs
+        tabs={[
+          { id: "alumnos", label: "Alumnos" },
+          { id: "docentes", label: "Docentes" },
+        ]}
+        active={subTab}
+        onChange={setSubTab}
+      />
 
-      {syncErr ? <p className="auth-card__notice auth-card__notice--err">{syncErr}</p> : null}
+      {syncErr ? <PbcAlert variant="error">{syncErr}</PbcAlert> : null}
 
       {subTab === "alumnos" ? (
         <>
-          <div className="auth-card__actions auth-card__actions--row" style={{ marginBottom: "1rem" }}>
+          <div className="pbc-section__actions" style={{ marginBottom: "1rem" }}>
             <button
               type="button"
               className="auth-btn auth-btn--ghost auth-btn--sm"
@@ -240,19 +241,19 @@ export default function CourseRosterTab({
             </button>
           </div>
           {inviteLink ? (
-            <p className="auth-card__muted auth-card__muted--tight" style={{ marginBottom: "1rem" }}>
+            <p className="pbc-alert pbc-alert--info" style={{ marginBottom: "1rem" }}>
               Link de invitación: <code>{inviteLink}</code>
             </p>
           ) : null}
           {loading ? (
-            <p className="auth-card__muted">Cargando…</p>
+            <PbcLoading label="Cargando alumnos…" />
           ) : (
             <MemberList rows={studentRows} onRemove={removeMember} removingId={removingId} badge={(m) => m.badge?.()} />
           )}
         </>
       ) : (
         <>
-          <div className="auth-card__actions auth-card__actions--row" style={{ marginBottom: "1rem" }}>
+          <div className="pbc-section__actions" style={{ marginBottom: "1rem" }}>
             <button
               type="button"
               className="auth-btn auth-btn--primary auth-btn--sm"
@@ -263,12 +264,12 @@ export default function CourseRosterTab({
             </button>
           </div>
           {loading ? (
-            <p className="auth-card__muted">Cargando…</p>
+            <PbcLoading label="Cargando docentes…" />
           ) : (
             <MemberList rows={teacherRows} badge={(m) => m.badge?.()} />
           )}
         </>
       )}
-    </>
+    </PbcSection>
   );
 }

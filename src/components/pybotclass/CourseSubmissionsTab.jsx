@@ -3,9 +3,15 @@ import {
   deriveSubmissionOverviewStatus,
   fetchCourseSubmissionOverview,
   formatDateTimeEs,
-  submissionOverviewLabelEs,
 } from "../../platform/pybotClassApi.js";
 import { gradeSubmission } from "../../platform/activitySubmissions.js";
+import {
+  PbcAlert,
+  PbcFormPanel,
+  PbcLoading,
+  PbcSection,
+  PbcSubTabs,
+} from "./PyBotClassUi.jsx";
 
 const FILTERS = [
   { id: "todas", label: "Todas" },
@@ -13,6 +19,12 @@ const FILTERS = [
   { id: "por_corregir", label: "Por corregir" },
   { id: "corregidas", label: "Corregidas" },
 ];
+
+function statusPill(status) {
+  if (status === "por_corregir") return <span className="pbc-pill pbc-pill--warn">Por corregir</span>;
+  if (status === "corregida") return <span className="pbc-pill pbc-pill--ok">Corregida</span>;
+  return <span className="pbc-pill pbc-pill--muted">No entregó</span>;
+}
 
 export default function CourseSubmissionsTab({ courseId }) {
   const [rows, setRows] = useState([]);
@@ -79,72 +91,60 @@ export default function CourseSubmissionsTab({ courseId }) {
     setSelected(null);
   };
 
-  if (loading) return <p className="auth-card__muted">Cargando entregas…</p>;
-  if (err) return <p className="auth-card__notice auth-card__notice--err">{err}</p>;
+  if (loading) return <PbcLoading label="Cargando entregas…" />;
+  if (err) return <PbcAlert variant="error">{err}</PbcAlert>;
 
   return (
     <>
-      <div className="auth-card__actions auth-card__actions--row" style={{ marginBottom: "1rem" }}>
-        {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            className={`auth-btn auth-btn--sm ${filter === f.id ? "auth-btn--primary" : "auth-btn--ghost"}`}
-            onClick={() => setFilter(f.id)}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <PbcSection title="Entregas del curso" description={`${filtered.length} fila(s) con el filtro actual`}>
+        <PbcSubTabs tabs={FILTERS} active={filter} onChange={setFilter} />
 
-      {filtered.length === 0 ? (
-        <p className="auth-card__muted">No hay entregas con este filtro.</p>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table className="dash-table">
-            <thead>
-              <tr>
-                <th>Alumno</th>
-                <th>Actividad</th>
-                <th>Estado</th>
-                <th>Última actividad</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => (
-                <tr key={`${r.student_user_id}-${r.activity_id}`}>
-                  <td>{r.student_name}</td>
-                  <td>{r.activity_title}</td>
-                  <td>{submissionOverviewLabelEs(r.derivedStatus)}</td>
-                  <td>{formatDateTimeEs(r.progress_updated_at || r.submitted_at)}</td>
-                  <td>
-                    {r.submission_id ? (
-                      <button
-                        type="button"
-                        className="auth-btn auth-btn--ghost auth-btn--sm"
-                        onClick={() => openRow(r)}
-                      >
-                        Corregir
-                      </button>
-                    ) : null}
-                  </td>
+        {filtered.length === 0 ? (
+          <p className="auth-card__muted">No hay entregas con este filtro.</p>
+        ) : (
+          <div className="dash-table-wrap">
+            <table className="dash-table">
+              <thead>
+                <tr>
+                  <th>Alumno</th>
+                  <th>Actividad</th>
+                  <th>Estado</th>
+                  <th>Última actividad</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={`${r.student_user_id}-${r.activity_id}`}>
+                    <td>{r.student_name}</td>
+                    <td>{r.activity_title}</td>
+                    <td>{statusPill(r.derivedStatus)}</td>
+                    <td>{formatDateTimeEs(r.progress_updated_at || r.submitted_at)}</td>
+                    <td>
+                      {r.submission_id ? (
+                        <button
+                          type="button"
+                          className="auth-btn auth-btn--ghost auth-btn--sm"
+                          onClick={() => openRow(r)}
+                        >
+                          Corregir
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </PbcSection>
 
       {selected ? (
-        <div className="dash-panel" style={{ marginTop: "1rem", padding: "1rem" }}>
-          <h3 className="auth-section__title">Corrección</h3>
+        <PbcFormPanel title="Corregir entrega" onCancel={() => setSelected(null)}>
           <p className="auth-card__muted">
             {selected.student_name} · {selected.activity_title}
           </p>
-          <p className="auth-card__muted">
-            Entregada: {formatDateTimeEs(selected.submitted_at)}
-          </p>
+          <p className="auth-card__muted">Entregada: {formatDateTimeEs(selected.submitted_at)}</p>
           <label className="auth-org-label" htmlFor="grade">
             Nota
           </label>
@@ -167,16 +167,13 @@ export default function CourseSubmissionsTab({ courseId }) {
             onChange={(e) => setFeedbackDraft(e.target.value)}
             disabled={busy}
           />
-          {actionMsg ? <p className="auth-card__notice">{actionMsg}</p> : null}
+          {actionMsg ? <PbcAlert variant="info">{actionMsg}</PbcAlert> : null}
           <div className="auth-card__actions auth-card__actions--row">
             <button type="button" className="auth-btn auth-btn--primary" disabled={busy} onClick={() => void onGrade()}>
               {busy ? "Guardando…" : "Guardar corrección"}
             </button>
-            <button type="button" className="auth-btn auth-btn--ghost" disabled={busy} onClick={() => setSelected(null)}>
-              Cerrar
-            </button>
           </div>
-        </div>
+        </PbcFormPanel>
       ) : null}
     </>
   );
