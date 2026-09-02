@@ -3,12 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
 import { saveGoogleProfile, getGoogleProfile } from "../authSession.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
-import { SIGNUP_ROLES, setSignupRole, signupRoleLabelEs } from "../platform/signupRole.js";
-import {
-  markTeacherLoginOAuthIntent,
-  studentLoginOAuthOptions,
-  teacherLoginOAuthOptions,
-} from "../platform/googleOAuth.js";
+import { baseLoginOAuthOptions } from "../platform/googleOAuth.js";
+import "../styles/dashboard-theme.css";
 
 const hasClientId =
   typeof import.meta.env.VITE_GOOGLE_CLIENT_ID === "string" &&
@@ -18,7 +14,6 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const existing = getGoogleProfile();
   const supabaseConfigured = isSupabaseConfigured();
-  const [role, setRole] = useState(null);
 
   useEffect(() => {
     if (!supabaseConfigured) return;
@@ -32,7 +27,7 @@ export default function LoginPage() {
       const dest =
         typeof next === "string" && next.startsWith("/") && !next.startsWith("//")
           ? next
-          : "/dashboard";
+          : "/dashboard/classes";
       navigate(dest, { replace: true });
     });
 
@@ -42,11 +37,8 @@ export default function LoginPage() {
   }, [supabaseConfigured, navigate]);
 
   const oauthSupabaseGoogle = async () => {
-    if (!role) return;
     const sb = getSupabase();
     if (!sb) return;
-
-    setSignupRole(role);
 
     try {
       const next = new URLSearchParams(window.location.search).get("next");
@@ -60,20 +52,9 @@ export default function LoginPage() {
     }
 
     const redirectTo = `${window.location.origin}/auth/callback`;
-
-    // Docente: un solo consentimiento = login + Classroom
-    if (role === SIGNUP_ROLES.teacher) {
-      markTeacherLoginOAuthIntent();
-      await sb.auth.signInWithOAuth({
-        provider: "google",
-        options: teacherLoginOAuthOptions(redirectTo),
-      });
-      return;
-    }
-
     await sb.auth.signInWithOAuth({
       provider: "google",
-      options: studentLoginOAuthOptions(redirectTo),
+      options: baseLoginOAuthOptions(redirectTo),
     });
   };
 
@@ -81,12 +62,13 @@ export default function LoginPage() {
   const showStub = !supabaseConfigured && !hasClientId;
 
   return (
-    <main className="auth-root">
-      <div className="auth-card auth-card--login">
-        <h1 className="auth-card__title">PyBot Web</h1>
+    <main className="auth-root auth-root--pbc">
+      <div className="auth-card auth-card--login auth-card--pbc">
+        <div className="auth-card__brand">PyBotClass</div>
+        <p className="auth-card__tagline">PyBot Web · Tecnología · Educación</p>
         <p className="auth-card__lead">
           {supabaseConfigured
-            ? "Elegí tu perfil y entrá con Google para usar colegios, cursos y Classroom."
+            ? "Una cuenta por email. Entrá con Google para usar PyBotClass."
             : hasClientId
               ? "Iniciá sesión con tu cuenta de Google."
               : "Configurá el inicio de sesión con Google para esta instalación."}
@@ -96,45 +78,6 @@ export default function LoginPage() {
           <Link to="/">página principal</Link>.
         </p>
 
-        {supabaseConfigured ? (
-          <>
-            <p className="auth-role-label">¿Cómo vas a usar PyBot?</p>
-            <div className="auth-role-grid" role="radiogroup" aria-label="Perfil">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={role === SIGNUP_ROLES.teacher}
-                className={`auth-role-card${role === SIGNUP_ROLES.teacher ? " auth-role-card--active" : ""}`}
-                onClick={() => setRole(SIGNUP_ROLES.teacher)}
-              >
-                <span className="auth-role-card__icon" aria-hidden>
-                  👩‍🏫
-                </span>
-                <span className="auth-role-card__title">Soy docente</span>
-                <span className="auth-role-card__desc">
-                  Creo colegios, cursos y actividades. Al entrar con Google también autorizás
-                  Classroom (un solo paso).
-                </span>
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={role === SIGNUP_ROLES.student}
-                className={`auth-role-card${role === SIGNUP_ROLES.student ? " auth-role-card--active" : ""}`}
-                onClick={() => setRole(SIGNUP_ROLES.student)}
-              >
-                <span className="auth-role-card__icon" aria-hidden>
-                  🎓
-                </span>
-                <span className="auth-role-card__title">Soy alumno</span>
-                <span className="auth-role-card__desc">
-                  Me uno a un colegio con código de invitación y hago las actividades.
-                </span>
-              </button>
-            </div>
-          </>
-        ) : null}
-
         {existing && !supabaseConfigured ? (
           <p className="auth-card__notice">
             Ya hay una sesión guardada en este navegador. Podés ir al panel o cerrar sesión allí.
@@ -143,15 +86,8 @@ export default function LoginPage() {
 
         <div className="auth-card__actions">
           {supabaseConfigured ? (
-            <button
-              type="button"
-              className="auth-btn auth-btn--primary"
-              onClick={oauthSupabaseGoogle}
-              disabled={!role}
-            >
-              {role
-                ? `Continuar con Google como ${signupRoleLabelEs(role)}`
-                : "Elegí docente o alumno arriba"}
+            <button type="button" className="auth-btn auth-btn--primary" onClick={oauthSupabaseGoogle}>
+              Continuar con Google
             </button>
           ) : null}
           {showGIS ? (
@@ -159,7 +95,7 @@ export default function LoginPage() {
               <GoogleLogin
                 onSuccess={(res) => {
                   const cred = res.credential;
-                  if (cred && saveGoogleProfile(cred)) navigate("/dashboard", { replace: true });
+                  if (cred && saveGoogleProfile(cred)) navigate("/dashboard/classes", { replace: true });
                 }}
                 onError={() => {}}
                 theme="filled_blue"
@@ -183,14 +119,20 @@ export default function LoginPage() {
             </>
           ) : null}
           {existing && !supabaseConfigured ? (
-            <Link to="/dashboard" className="auth-link">
-              Ir al panel
+            <Link to="/dashboard/classes" className="auth-link">
+              Ir a PyBotClass
             </Link>
           ) : null}
           <Link to="/" className="auth-link">
             Volver al IDE
           </Link>
         </div>
+
+        {supabaseConfigured ? (
+          <p className="auth-classroom-hint">
+            Google Classroom se conecta después, cuando elijas importar cursos.
+          </p>
+        ) : null}
       </div>
     </main>
   );

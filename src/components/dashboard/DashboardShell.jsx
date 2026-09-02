@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 const TABS = [
   { id: "home", label: "Inicio" },
   { id: "pybotclass", label: "PyBotClass", flag: "showPyBotClassTab" },
-  { id: "schools", label: "Colegios", flag: "showSchoolsTab" },
+  { id: "schools", label: "Instituciones", flag: "showSchoolsTab" },
   { id: "courses", label: "Mis cursos", flag: "showCoursesTab" },
   { id: "classroom", label: "Classroom", flag: "showClassroomTab" },
   { id: "account", label: "Cuenta" },

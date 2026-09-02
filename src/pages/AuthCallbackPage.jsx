@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getSupabase } from "../supabaseClient.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
 import { updatePreferredRole, saveGoogleTokens, markClassroomLinked } from "../platform/profileApi.js";
-import { consumeSignupRole, SIGNUP_ROLES } from "../platform/signupRole.js";
+import { consumeSignupRole } from "../platform/signupRole.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 
 function safeInternalNext(raw) {
@@ -62,13 +62,10 @@ export default function AuthCallbackPage() {
 
       const signupRole = consumeSignupRole();
       const isClassroomIntent = wasClassroomOAuthIntent();
-      const shouldSaveClassroomTokens =
-        isClassroomIntent || signupRole === SIGNUP_ROLES.teacher;
       try {
         await ensureProfileForUser(session.user, signupRole);
         if (signupRole) await updatePreferredRole(session.user.id, signupRole);
-        // Guardar tokens de Google (login docente unificado o reconexión Classroom)
-        if (shouldSaveClassroomTokens && (session.provider_refresh_token || session.provider_token)) {
+        if (isClassroomIntent && (session.provider_refresh_token || session.provider_token)) {
           await saveGoogleTokens(session.user.id, {
             accessToken: session.provider_token,
             refreshToken: session.provider_refresh_token,
@@ -81,7 +78,7 @@ export default function AuthCallbackPage() {
       }
 
       const explicit = safeInternalNext(storedNext);
-      navigate(explicit ?? "/dashboard", { replace: true });
+      navigate(explicit ?? "/dashboard/classes", { replace: true });
     };
 
     const { data: sub } = sb.auth.onAuthStateChange((event, session) => {

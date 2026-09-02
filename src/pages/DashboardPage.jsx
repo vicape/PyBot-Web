@@ -19,7 +19,8 @@ import { fetchMyEnrolledCourses } from "../platform/studentCoursesApi.js";
 import { signupRoleLabelEs } from "../platform/signupRole.js";
 import { isSuperAdmin } from "../platformRole.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
-import { slugifyOrganizationName } from "../slugify.js";
+import { createOrganizationWithOwner } from "../platform/organizationApi.js";
+import { COUNTRIES, countryNameByCode } from "../data/countries.js";
 
 function LegacyDashboard({ profile, onSignOut }) {
   return (
@@ -62,6 +63,7 @@ export default function DashboardPage() {
   const [orgs, setOrgs] = useState([]);
   const [orgError, setOrgError] = useState("");
   const [newOrgName, setNewOrgName] = useState("");
+  const [newOrgCountry, setNewOrgCountry] = useState("AR");
   const [savingOrg, setSavingOrg] = useState(false);
   const [profileWarn, setProfileWarn] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -134,8 +136,31 @@ export default function DashboardPage() {
     // 2) Datos de organizaciones
     const { data: orgRows, error: eOrg } = await supabase
       .from("organizations")
-      .select("id, name, slug, created_at")
+      .select("id, name, slug, created_at, country_code")
       .in("id", orgIds);
+
+    if (eOrg?.message?.includes("country_code")) {
+      const fb = await supabase
+        .from("organizations")
+        .select("id, name, slug, created_at")
+        .in("id", orgIds);
+      if (fb.error) {
+        console.error("loadOrganizations.orgs:", fb.error);
+        setOrgError(fb.error.message);
+        setOrgs([]);
+        setOrgsLoaded(true);
+        return;
+      }
+      const roleByOrg = new Map((memberships ?? []).map((m) => [m.org_id, m.role]));
+      const merged = (fb.data ?? []).map((o) => ({
+        ...o,
+        country_code: null,
+        organization_members: [{ role: roleByOrg.get(o.id) }],
+      }));
+      setOrgs(merged);
+      setOrgsLoaded(true);
+      return;
+    }
 
     if (eOrg) {
       console.error("loadOrganizations.orgs:", eOrg);
@@ -303,83 +328,23 @@ export default function DashboardPage() {
     setSavingOrg(true);
     setOrgError("");
 
-    let baseSlug = slugifyOrganizationName(name);
-    let slug = baseSlug;
-
     try {
-      // Estrategia 1: RPC atómico (si está definido en DB)
-      const rpc = await supabase.rpc("create_organization_with_owner", {
-        p_name: name,
-        p_slug: baseSlug,
+      const { orgId, error } = await createOrganizationWithOwner({
+        name,
+        countryCode: newOrgCountry,
       });
 
-      if (!rpc.error && rpc.data?.org_id) {
-        setNewOrgName("");
-        await loadOrganizations();
-        setTab("schools");
+      if (error || !orgId) {
+        setOrgError(error || "No se pudo crear la institución.");
         return;
       }
 
-      // Si el RPC no existe en DB, fallback al flujo en dos pasos
-      const rpcMissing =
-        rpc.error?.message?.includes("does not exist") ||
-        rpc.error?.message?.includes("function") ||
-        rpc.error?.code === "42883" ||
-        rpc.error?.code === "PGRST202";
-
-      if (!rpcMissing && rpc.error) {
-        if (rpc.error.message?.includes("slug_taken") || rpc.error.code === "23505") {
-          setOrgError("Ese nombre ya existe. Probá con otro.");
-        } else {
-          console.error("createOrganization RPC:", rpc.error);
-          setOrgError(rpc.error.message || "No se pudo crear el colegio.");
-        }
-        return;
-      }
-
-      // Fallback two-step: insert organization + insert membership owner
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const { data: row, error: insOrg } = await supabase
-          .from("organizations")
-          .insert({ name, slug, created_by: sessionUser.id })
-          .select("id")
-          .maybeSingle();
-
-        if (insOrg?.code === "23505") {
-          slug = `${baseSlug}-${Math.random().toString(36).slice(2, 8)}`;
-          continue;
-        }
-        if (insOrg || !row?.id) {
-          console.error("createOrganization insOrg:", insOrg);
-          setOrgError(insOrg?.message || "No se pudo crear el colegio.");
-          return;
-        }
-
-        // Insert idempotente: si ya existe (por re-render), upsert lo deja igual
-        const { error: insMem } = await supabase
-          .from("organization_members")
-          .upsert(
-            { org_id: row.id, user_id: sessionUser.id, role: "owner" },
-            { onConflict: "org_id,user_id", ignoreDuplicates: true },
-          );
-
-        if (insMem) {
-          console.error("createOrganization insMem:", insMem);
-          setOrgError(
-            "Colegio creado pero falló la membresía. Avisá al administrador. " + insMem.message,
-          );
-          return;
-        }
-
-        setNewOrgName("");
-        await loadOrganizations();
-        setTab("schools");
-        return;
-      }
-      setOrgError("No hay slug disponible, probá otro nombre.");
+      setNewOrgName("");
+      await loadOrganizations();
+      setTab("schools");
     } catch (ex) {
       console.error("createOrganization:", ex);
-      setOrgError(ex?.message || "Error inesperado al crear el colegio.");
+      setOrgError(ex?.message || "Error inesperado al crear la institución.");
     } finally {
       setSavingOrg(false);
     }
@@ -483,19 +448,32 @@ export default function DashboardPage() {
               {teacherPreference && !hasStaffAccess ? (
                 <form className="auth-org-form" onSubmit={createOrganization}>
                   <label className="auth-org-label" htmlFor="new-org-home">
-                    Crear colegio
+                    Crear institución
                   </label>
                   <div className="auth-org-form__row">
                     <input
                       id="new-org-home"
                       className="auth-org-input"
                       type="text"
-                      placeholder="Ej. Escuela San Martín"
+                      placeholder="Ej. St. Andrew's Scots School"
                       value={newOrgName}
                       onChange={(e) => setNewOrgName(e.target.value)}
                       maxLength={120}
                       disabled={savingOrg}
                     />
+                    <select
+                      className="auth-org-input"
+                      value={newOrgCountry}
+                      onChange={(e) => setNewOrgCountry(e.target.value)}
+                      disabled={savingOrg}
+                      aria-label="País"
+                    >
+                      {COUNTRIES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
                     <button type="submit" className="auth-btn auth-btn--primary" disabled={savingOrg}>
                       Crear
                     </button>
@@ -567,7 +545,7 @@ export default function DashboardPage() {
 
         {activeTab === "schools" && showSchoolsTab ? (
           <section className="dash-panel">
-            <h2 className="dash-panel__title">Tus colegios</h2>
+            <h2 className="dash-panel__title">Tus instituciones</h2>
             {orgError ? <p className="auth-card__notice auth-card__notice--err">{orgError}</p> : null}
             {staffOrgs.length === 0 ? (
               <p className="auth-card__muted">Todavía no administrás ningún colegio.</p>
@@ -579,6 +557,9 @@ export default function DashboardPage() {
                       <span className="auth-org-row__name">{o.name}</span>
                       <span className="auth-org-row__meta">
                         @{o.slug} · {roleLabelEs(o.organization_members?.[0]?.role)}
+                        {o.country_code
+                          ? ` · ${countryNameByCode(o.country_code) || o.country_code}`
+                          : " · País sin definir"}
                       </span>
                     </Link>
                   </li>
@@ -587,19 +568,32 @@ export default function DashboardPage() {
             )}
             <form className="auth-org-form" onSubmit={createOrganization}>
               <label className="auth-org-label" htmlFor="new-org-name">
-                Crear colegio
+                Crear institución
               </label>
               <div className="auth-org-form__row">
                 <input
                   id="new-org-name"
                   className="auth-org-input"
                   type="text"
-                  placeholder="Ej. Escuela San Martín"
+                  placeholder="Ej. St. Andrew's Scots School"
                   value={newOrgName}
                   onChange={(e) => setNewOrgName(e.target.value)}
                   maxLength={120}
                   disabled={savingOrg}
                 />
+                <select
+                  className="auth-org-input"
+                  value={newOrgCountry}
+                  onChange={(e) => setNewOrgCountry(e.target.value)}
+                  disabled={savingOrg}
+                  aria-label="País"
+                >
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
                 <button type="submit" className="auth-btn auth-btn--primary" disabled={savingOrg}>
                   Crear
                 </button>

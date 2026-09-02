@@ -8,27 +8,13 @@ export const GOOGLE_CLASSROOM_SCOPES = [
   "profile",
   "https://www.googleapis.com/auth/classroom.courses.readonly",
   "https://www.googleapis.com/auth/classroom.rosters.readonly",
-  // Necesario para profile.emailAddress en el roster (sin esto no se puede matchear a PyBot)
   "https://www.googleapis.com/auth/classroom.profile.emails",
-  // CourseWork + student submissions + grades (punto 4)
   "https://www.googleapis.com/auth/classroom.coursework.students",
   "https://www.googleapis.com/auth/classroom.student-submissions.students.readonly",
 ].join(" ");
 
-/**
- * Login docente: mismos scopes que Classroom (un solo consentimiento Google).
- * Incluye offline + consent para obtener refresh_token.
- */
-export function teacherLoginOAuthOptions(redirectTo) {
-  return {
-    redirectTo,
-    scopes: GOOGLE_CLASSROOM_SCOPES,
-    queryParams: { prompt: "consent", access_type: "offline" },
-  };
-}
-
-/** Login alumno: solo identidad (sin Classroom). */
-export function studentLoginOAuthOptions(redirectTo) {
+/** Login normal: solo identidad Google (sin Classroom). */
+export function baseLoginOAuthOptions(redirectTo) {
   return {
     redirectTo,
     scopes: GOOGLE_BASE_SCOPES,
@@ -36,16 +22,35 @@ export function studentLoginOAuthOptions(redirectTo) {
   };
 }
 
+/** @deprecated Usar baseLoginOAuthOptions para login. */
+export function studentLoginOAuthOptions(redirectTo) {
+  return baseLoginOAuthOptions(redirectTo);
+}
+
+/** OAuth con scopes Classroom (solo al conectar explícitamente). */
+export function classroomOAuthOptions(redirectTo) {
+  return {
+    redirectTo,
+    scopes: GOOGLE_CLASSROOM_SCOPES,
+    queryParams: { prompt: "consent", access_type: "offline" },
+  };
+}
+
+/** @deprecated */
+export function teacherLoginOAuthOptions(redirectTo) {
+  return classroomOAuthOptions(redirectTo);
+}
+
 /**
- * Re-autoriza Google con permisos de Classroom (si el docente revocó o expiró el refresh).
- * Tras el callback, volver a /dashboard?tab=classroom
+ * Conectar Google Classroom bajo demanda.
+ * Usá la misma cuenta Google con la que ingresaste a PyBotClass.
  */
 export async function connectGoogleClassroom() {
   const sb = getSupabase();
   if (!sb) return;
 
   try {
-    sessionStorage.setItem("pybot_oauth_next", "/dashboard?tab=classroom");
+    sessionStorage.setItem("pybot_oauth_next", "/dashboard/classes?panel=classroom");
     sessionStorage.setItem("pybot_oauth_classroom", "1");
   } catch {
     //
@@ -54,7 +59,7 @@ export async function connectGoogleClassroom() {
   const redirectTo = `${window.location.origin}/auth/callback`;
   await sb.auth.signInWithOAuth({
     provider: "google",
-    options: teacherLoginOAuthOptions(redirectTo),
+    options: classroomOAuthOptions(redirectTo),
   });
 }
 
@@ -68,7 +73,7 @@ export function wasClassroomOAuthIntent() {
   }
 }
 
-/** Marca el login docente para guardar tokens de Classroom en el callback. */
+/** @deprecated Ya no se usa en login. */
 export function markTeacherLoginOAuthIntent() {
   try {
     sessionStorage.setItem("pybot_oauth_classroom", "1");
