@@ -11,7 +11,7 @@ import {
   fmtDate,
   useCrudMessage,
 } from "../components/admin/adminUi.jsx";
-import DashboardShell from "../components/dashboard/DashboardShell.jsx";
+import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import {
   createAdminActivity,
   createAdminCourse,
@@ -141,7 +141,7 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <main className="auth-root">
+      <main className="dash-root dash-root--center">
         <p className="auth-card__lead">Cargando panel de administración…</p>
       </main>
     );
@@ -153,8 +153,8 @@ export default function AdminPage() {
         <div className="auth-card auth-card--wide">
           <h1 className="auth-card__title">Acceso denegado</h1>
           <p className="auth-card__lead">No tenés permisos de super administrador.</p>
-          <Link to="/dashboard" className="auth-btn auth-btn--ghost">
-            Volver al panel
+          <Link to="/dashboard/classes" className="auth-btn auth-btn--ghost">
+            Volver a PyBotClass
           </Link>
         </div>
       </main>
@@ -164,92 +164,95 @@ export default function AdminPage() {
   const tabs = [
     { id: "visits", label: `Visitas (${sessions.length})` },
     { id: "users", label: `Usuarios (${profiles.length})` },
-    { id: "orgs", label: `Colegios (${orgs.length})` },
+    { id: "orgs", label: `Instituciones (${orgs.length})` },
     { id: "courses", label: `Cursos (${courses.length})` },
     { id: "activities", label: `Tareas (${activities.length})` },
     { id: "members", label: `Membresías (${members.length})` },
     { id: "course_members", label: `Inscripciones (${courseMembers.length})` },
   ];
 
+  const layoutUser = {
+    id: userId,
+    email: userEmail,
+    user_metadata: {
+      full_name: userName,
+      avatar_url: userPicture,
+      picture: userPicture,
+    },
+  };
+
   return (
-    <DashboardShell
-      activeTab="admin"
-      onTabChange={() => {}}
-      showAdminTab
-      adminActive
-      wideBody
-      userName={userName}
-      userEmail={userEmail}
-      userPicture={userPicture}
-      onSignOut={signOut}
-    >
-      <div className="dash-panel dash-panel--highlight">
-        <h2 className="dash-panel__title">Super administrador</h2>
-        <p className="dash-muted">
-          Gestión global: usuarios, colegios, cursos, tareas e inscripciones. Los usuarios nuevos se
-          registran con Google; acá los editás y los asignás a colegios.
-        </p>
-      </div>
+    <PyBotClassLayout user={layoutUser} showAdmin hideSearch onSignOut={signOut}>
+      <div className="pbc-admin">
+        <header className="pbc-hero-block" style={{ marginBottom: "1rem" }}>
+          <h1 className="pbc-hero-block__title">Panel SuperAdmin</h1>
+          <p className="pbc-hero-block__subtitle">
+            Gestión global: usuarios, instituciones, cursos, tareas e inscripciones.
+          </p>
+        </header>
 
-      <nav className="admin-subnav" aria-label="Secciones admin">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={`dash-nav__tab ${activeTab === t.id ? "dash-nav__tab--active" : ""}`}
-            onClick={() => setActiveTab(t.id)}
-          >
-            {t.label}
+        <nav className="pbc-filter-tabs" aria-label="Secciones admin" style={{ marginBottom: "1rem" }}>
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`pbc-filter-tab${activeTab === t.id ? " pbc-filter-tab--active" : ""}`}
+              onClick={() => setActiveTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+          <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={() => void loadAll()}>
+            Actualizar
           </button>
-        ))}
-        <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={() => void loadAll()}>
-          Actualizar
-        </button>
-      </nav>
+        </nav>
 
-      {loadError ? <p className="dash-error">{loadError}</p> : null}
+        {loadError ? <p className="pbc-alert pbc-alert--error">{loadError}</p> : null}
 
-      {activeTab === "visits" ? (
-        <VisitsPanel sessions={sessions} profileById={profileById} onSaved={loadAll} />
-      ) : null}
+        <div className="pbc-admin__body">
+          {activeTab === "visits" ? (
+            <VisitsPanel sessions={sessions} profileById={profileById} onSaved={loadAll} />
+          ) : null}
 
-      {activeTab === "users" ? (
-        <UsersPanel profiles={profiles} onSaved={loadAll} currentUserId={userId} />
-      ) : null}
-      {activeTab === "orgs" ? (
-        <OrgsPanel orgs={orgs} createdBy={userId} onSaved={loadAll} />
-      ) : null}
-      {activeTab === "courses" ? (
-        <CoursesPanel courses={courses} orgs={orgs} orgById={orgById} createdBy={userId} onSaved={loadAll} />
-      ) : null}
-      {activeTab === "activities" ? (
-        <ActivitiesPanel
-          activities={activities}
-          courses={courses}
-          courseById={courseById}
-          createdBy={userId}
-          onSaved={loadAll}
-        />
-      ) : null}
-      {activeTab === "members" ? (
-        <MembersPanel
-          members={members}
-          orgs={orgs}
-          orgById={orgById}
-          profileById={profileById}
-          onSaved={loadAll}
-        />
-      ) : null}
-      {activeTab === "course_members" ? (
-        <CourseMembersPanel
-          rows={courseMembers}
-          courses={courses}
-          courseById={courseById}
-          profileById={profileById}
-          onSaved={loadAll}
-        />
-      ) : null}
-    </DashboardShell>
+          {activeTab === "users" ? (
+            <UsersPanel profiles={profiles} onSaved={loadAll} currentUserId={userId} />
+          ) : null}
+          {activeTab === "orgs" ? (
+            <OrgsPanel orgs={orgs} createdBy={userId} onSaved={loadAll} />
+          ) : null}
+          {activeTab === "courses" ? (
+            <CoursesPanel courses={courses} orgs={orgs} orgById={orgById} createdBy={userId} onSaved={loadAll} />
+          ) : null}
+          {activeTab === "activities" ? (
+            <ActivitiesPanel
+              activities={activities}
+              courses={courses}
+              courseById={courseById}
+              createdBy={userId}
+              onSaved={loadAll}
+            />
+          ) : null}
+          {activeTab === "members" ? (
+            <MembersPanel
+              members={members}
+              orgs={orgs}
+              orgById={orgById}
+              profileById={profileById}
+              onSaved={loadAll}
+            />
+          ) : null}
+          {activeTab === "course_members" ? (
+            <CourseMembersPanel
+              rows={courseMembers}
+              courses={courses}
+              courseById={courseById}
+              profileById={profileById}
+              onSaved={loadAll}
+            />
+          ) : null}
+        </div>
+      </div>
+    </PyBotClassLayout>
   );
 }
 

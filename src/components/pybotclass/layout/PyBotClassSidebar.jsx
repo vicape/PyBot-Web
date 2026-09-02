@@ -13,17 +13,29 @@ export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const panel = params.get("panel");
+  const tab = params.get("tab");
+  const path = location.pathname;
 
   const isActive = (item) => {
-    if (item.id === "classroom") return panel === "classroom";
-    if (item.id === "account") return panel === "account";
-    if (item.id === "institutions") return location.pathname === "/dashboard" && params.get("tab") === "schools";
+    if (item.id === "classroom") return panel === "classroom" || tab === "classroom";
+    if (item.id === "account") return panel === "account" || tab === "account";
+    if (item.id === "institutions") {
+      return (
+        (path === "/dashboard" && tab === "schools") ||
+        path.startsWith("/dashboard/org/")
+      );
+    }
     if (item.id === "courses" || item.id === "home") {
-      return location.pathname === "/dashboard/classes" && !panel && !location.pathname.includes("/classes/");
+      return (
+        (path === "/dashboard/classes" || path.startsWith("/dashboard/classes/")) &&
+        !panel
+      );
     }
     if (item.id === "ide") return false;
     return false;
   };
+
+  const adminActive = path === "/dashboard/admin" || path.startsWith("/dashboard/admin/");
 
   const renderLink = (item) => {
     const cls = `pbc-sidebar__link${isActive(item) ? " pbc-sidebar__link--active" : ""}`;
@@ -38,7 +50,15 @@ export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate
       );
     }
     return (
-      <Link key={item.id} to={item.to} className={cls} onClick={() => { onClose?.(); onNavigate?.(item); }}>
+      <Link
+        key={item.id}
+        to={item.to}
+        className={cls}
+        onClick={() => {
+          onClose?.();
+          onNavigate?.(item);
+        }}
+      >
         <span className="pbc-sidebar__icon" aria-hidden>
           {item.icon}
         </span>
@@ -66,7 +86,7 @@ export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate
           <div className="pbc-sidebar__section">Administración</div>
           <Link
             to="/dashboard/admin"
-            className="pbc-sidebar__link pbc-sidebar__link--admin"
+            className={`pbc-sidebar__link pbc-sidebar__link--admin${adminActive ? " pbc-sidebar__link--active" : ""}`}
             onClick={onClose}
           >
             <span className="pbc-sidebar__icon" aria-hidden>

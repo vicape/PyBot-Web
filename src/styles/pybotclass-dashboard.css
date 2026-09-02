@@ -755,3 +755,131 @@
     max-width: none;
   }
 }
+
+/* —— Admin + legacy panels inside PyBotClass —— */
+.pbc-admin,
+.pbc-legacy-panel {
+  max-width: 1280px;
+}
+
+.pbc-dashboard .dash-panel,
+.pbc-dashboard .admin-form,
+.pbc-dashboard .pbc-admin__body > section {
+  padding: 1rem 1.15rem;
+  margin-bottom: 1rem;
+  border-radius: var(--pbc-radius-lg);
+  background: var(--pbc-panel-solid);
+  border: 1px solid var(--pbc-border);
+  box-shadow: var(--pbc-shadow-sm);
+}
+
+.pbc-dashboard .dash-panel__title,
+.pbc-dashboard .admin-form h3,
+.pbc-dashboard h3 {
+  color: var(--pbc-text);
+}
+
+.pbc-dashboard .dash-muted,
+.pbc-dashboard .auth-card__muted {
+  color: var(--pbc-text-muted);
+}
+
+.pbc-dashboard .admin-table-wrap,
+.pbc-dashboard .dash-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--pbc-radius-md);
+  border: 1px solid var(--pbc-border);
+  background: var(--pbc-panel);
+}
+
+.pbc-dashboard .admin-table,
+.pbc-dashboard .dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  color: var(--pbc-text);
+}
+
+.pbc-dashboard .admin-table th,
+.pbc-dashboard .admin-table td,
+.pbc-dashboard .dash-table th,
+.pbc-dashboard .dash-table td {
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--pbc-border);
+  vertical-align: top;
+}
+
+.pbc-dashboard .admin-table th {
+  position: sticky;
+  top: 0;
+  background: var(--pbc-panel-solid);
+  font-weight: 700;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.pbc-dashboard .admin-table tbody tr:hover,
+.pbc-dashboard .dash-table tbody tr:hover {
+  background: var(--pbc-panel-hover);
+}
+
+.pbc-dashboard .auth-org-input,
+.pbc-dashboard .auth-org-input--block,
+.pbc-dashboard select.auth-org-input {
+  background: var(--pbc-input-bg);
+  border: 1px solid var(--pbc-border);
+  color: var(--pbc-text);
+  border-radius: var(--pbc-radius-sm);
+}
+
+.pbc-dashboard .auth-org-label {
+  color: var(--pbc-text-muted);
+}
+
+.pbc-dashboard .auth-org-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.pbc-dashboard .auth-org-row--link {
+  border: 1px solid var(--pbc-border);
+  border-radius: var(--pbc-radius-md);
+  margin-bottom: 0.5rem;
+  background: var(--pbc-panel);
+}
+
+.pbc-dashboard .auth-org-row__link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.75rem 1rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.pbc-dashboard .auth-org-row__name {
+  font-weight: 700;
+}
+
+.pbc-dashboard .auth-org-row__meta {
+  font-size: 0.75rem;
+  color: var(--pbc-text-muted);
+}
+
+.pbc-dashboard .auth-org-form__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.pbc-dashboard .dash-error {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--pbc-radius-sm);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fecaca;
+}

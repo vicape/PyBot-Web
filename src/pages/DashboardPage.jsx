@@ -1,22 +1,17 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import AccountSettings from "../components/dashboard/AccountSettings.jsx";
-import ClassroomPanel from "../components/dashboard/ClassroomPanel.jsx";
-import DashboardShell from "../components/dashboard/DashboardShell.jsx";
+import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import { getGoogleProfile } from "../authSession.js";
 import { signOutGoogleClient } from "../authGoogle.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 import {
   getDashboardNavCapabilities,
   getStaffOrganizations,
-  hasTeacherPreference,
-  resolveStaffOrgId,
   roleLabelEs,
 } from "../orgRole.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
 import { fetchMyEnrolledCourses } from "../platform/studentCoursesApi.js";
-import { signupRoleLabelEs } from "../platform/signupRole.js";
 import { isSuperAdmin } from "../platformRole.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 import { createOrganizationWithOwner } from "../platform/organizationApi.js";
@@ -76,7 +71,6 @@ export default function DashboardPage() {
   const legacyProfile = getGoogleProfile();
 
   const rawTab = searchParams.get("tab") || "home";
-  const teacherPreference = hasTeacherPreference(preferredRole);
   const staffOrgs = useMemo(() => getStaffOrganizations(orgs), [orgs]);
   const nav = useMemo(
     () =>
@@ -86,8 +80,7 @@ export default function DashboardPage() {
       }),
     [orgs, enrolledCourses.length],
   );
-  const { hasStaffAccess, hasStudentAccess, showSchoolsTab, showCoursesTab, showClassroomTab, showPyBotClassTab } =
-    nav;
+  const { showSchoolsTab, showCoursesTab, showClassroomTab } = nav;
   const activeTab = (() => {
     if (!VALID_TABS.has(rawTab)) return "home";
     if (rawTab === "schools" && !showSchoolsTab) return showCoursesTab ? "courses" : "home";
@@ -95,7 +88,6 @@ export default function DashboardPage() {
     if (rawTab === "classroom" && !showClassroomTab) return "home";
     return rawTab;
   })();
-  const staffOrgId = useMemo(() => resolveStaffOrgId(orgs), [orgs]);
 
   const setTab = (tabId) => {
     setSearchParams(tabId === "home" ? {} : { tab: tabId }, { replace: true });
@@ -239,7 +231,7 @@ export default function DashboardPage() {
         finishLoading();
         if (u) void applyProfile(u);
         if (wasClassroomOAuthIntent() && !cancelled) {
-          setSearchParams({ tab: "classroom" }, { replace: true });
+          navigate("/dashboard/classes?panel=classroom", { replace: true });
         }
       })
       .catch((ex) => {
@@ -286,6 +278,22 @@ export default function DashboardPage() {
   }, [useCloud, sessionUser, loadEnrolledCourses]);
 
   useEffect(() => {
+    if (!useCloud || !sessionUser) return;
+    // Home / Cuenta / Classroom viven en PyBotClass
+    if (rawTab === "home" || !VALID_TABS.has(rawTab)) {
+      navigate("/dashboard/classes", { replace: true });
+      return;
+    }
+    if (rawTab === "account") {
+      navigate("/dashboard/classes?panel=account", { replace: true });
+      return;
+    }
+    if (rawTab === "classroom") {
+      navigate("/dashboard/classes?panel=classroom", { replace: true });
+    }
+  }, [useCloud, sessionUser, rawTab, navigate]);
+
+  useEffect(() => {
     if (!orgsLoaded) return;
     if (rawTab === "schools" && !showSchoolsTab) {
       setSearchParams(showCoursesTab ? { tab: "courses" } : {}, { replace: true });
@@ -293,17 +301,12 @@ export default function DashboardPage() {
     }
     if (rawTab === "courses" && !showCoursesTab) {
       setSearchParams(showSchoolsTab ? { tab: "schools" } : {}, { replace: true });
-      return;
-    }
-    if (rawTab === "classroom" && !showClassroomTab) {
-      setSearchParams({}, { replace: true });
     }
   }, [
     orgsLoaded,
     rawTab,
     showSchoolsTab,
     showCoursesTab,
-    showClassroomTab,
     setSearchParams,
   ]);
 
@@ -383,233 +386,119 @@ export default function DashboardPage() {
     const picture = meta.avatar_url || meta.picture || null;
     const name = displayName || email?.split("@")[0] || "Usuario";
 
+    // Tabs que ya redirigen a PyBotClass: no renderizar shell viejo
+    if (activeTab === "home" || activeTab === "account" || activeTab === "classroom") {
+      return (
+        <main className="dash-root dash-root--center">
+          <p className="auth-card__muted">Redirigiendo a PyBotClass…</p>
+        </main>
+      );
+    }
+
     return (
-      <DashboardShell
-        activeTab={activeTab}
-        onTabChange={setTab}
-        showSchoolsTab={showSchoolsTab}
-        showCoursesTab={showCoursesTab}
-        showClassroomTab={showClassroomTab}
-        showPyBotClassTab={showPyBotClassTab}
-        showAdminTab={superAdmin}
-        userName={name}
-        userEmail={email}
-        userPicture={picture}
+      <PyBotClassLayout
+        user={sessionUser}
+        showAdmin={superAdmin}
+        hideSearch
         onSignOut={() => void signOutSupabase()}
       >
-        {activeTab === "home" ? (
-          <div className="dash-grid">
-            <section className="dash-panel dash-panel--highlight">
-              <h2 className="dash-panel__title">Bienvenido, {name}</h2>
-              <p className="auth-card__muted auth-card__muted--tight">
-                {hasStaffAccess && hasStudentAccess
-                  ? "Administrá colegios y también accedé a tus cursos como alumno. El IDE en "
-                  : hasStaffAccess
-                    ? "Gestioná colegios, cursos y actividades PyBot. El IDE en "
-                    : "Accedé a las actividades de tus cursos. El IDE en "}
-                <Link to="/">la página principal</Link> sigue libre y sin cuenta.
-              </p>
-              {profileWarn ? <p className="auth-card__notice">{profileWarn}</p> : null}
-              {teacherPreference && !hasStaffAccess ? (
-                <p className="auth-card__notice">
-                  Creá o unite a un colegio como docente para usar Classroom.
-                </p>
-              ) : null}
-              {preferredRole === "student" && orgs.length === 0 ? (
-                <p className="auth-card__notice">
-                  ¿Tenés código de invitación de tu colegio?{" "}
-                  <Link to="/join">Unite acá</Link>.
-                </p>
-              ) : null}
-              <div className="dash-stat-row">
-                {hasStaffAccess ? (
-                  <div className="dash-stat">
-                    <span className="dash-stat__value">{staffOrgs.length}</span>
-                    <span className="dash-stat__label">Colegios</span>
-                  </div>
-                ) : null}
-                {hasStudentAccess ? (
-                  <div className="dash-stat">
-                    <span className="dash-stat__value">{enrolledCourses.length}</span>
-                    <span className="dash-stat__label">Cursos</span>
-                  </div>
-                ) : null}
-                <div className="dash-stat">
-                  <span className="dash-stat__value">
-                    {hasStaffAccess && hasStudentAccess
-                      ? "Docente + alumno"
-                      : hasStaffAccess
-                        ? "Docente (colegio)"
-                        : signupRoleLabelEs(preferredRole) || "Alumno"}
-                  </span>
-                  <span className="dash-stat__label">Perfil</span>
-                </div>
-              </div>
-              {teacherPreference && !hasStaffAccess ? (
-                <form className="auth-org-form" onSubmit={createOrganization}>
-                  <label className="auth-org-label" htmlFor="new-org-home">
-                    Crear institución
-                  </label>
-                  <div className="auth-org-form__row">
-                    <input
-                      id="new-org-home"
-                      className="auth-org-input"
-                      type="text"
-                      placeholder="Ej. St. Andrew's Scots School"
-                      value={newOrgName}
-                      onChange={(e) => setNewOrgName(e.target.value)}
-                      maxLength={120}
-                      disabled={savingOrg}
-                    />
-                    <select
-                      className="auth-org-input"
-                      value={newOrgCountry}
-                      onChange={(e) => setNewOrgCountry(e.target.value)}
-                      disabled={savingOrg}
-                      aria-label="País"
-                    >
-                      {COUNTRIES.map((c) => (
-                        <option key={c.code} value={c.code}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button type="submit" className="auth-btn auth-btn--primary" disabled={savingOrg}>
-                      Crear
-                    </button>
-                  </div>
-                </form>
-              ) : null}
-              <div className="auth-org-row__actions">
-                {showPyBotClassTab ? (
-                  <Link to="/dashboard/classes" className="auth-btn auth-btn--primary">
-                    PyBotClass
-                  </Link>
-                ) : null}
-                {showSchoolsTab ? (
-                  <button type="button" className="auth-btn auth-btn--primary" onClick={() => setTab("schools")}>
-                    Ver colegios
-                  </button>
-                ) : null}
-                {showCoursesTab ? (
-                  <button
-                    type="button"
-                    className={`auth-btn ${showSchoolsTab ? "auth-btn--ghost" : "auth-btn--primary"}`}
-                    onClick={() => setTab("courses")}
-                  >
-                    Mis cursos
-                  </button>
-                ) : null}
-                <button type="button" className="auth-btn auth-btn--ghost" onClick={() => setTab("account")}>
-                  Configurar cuenta
-                </button>
-                {showClassroomTab ? (
-                  <button type="button" className="auth-btn auth-btn--ghost" onClick={() => setTab("classroom")}>
-                    Google Classroom
-                  </button>
-                ) : null}
-              </div>
-            </section>
-          </div>
-        ) : null}
+        <div className="pbc-legacy-panel">
+          {profileWarn ? <p className="pbc-alert pbc-alert--info">{profileWarn}</p> : null}
 
-        {activeTab === "courses" && showCoursesTab ? (
-          <section className="dash-panel">
-            <h2 className="dash-panel__title">Mis cursos</h2>
-            {coursesError ? <p className="auth-card__notice auth-card__notice--err">{coursesError}</p> : null}
-            {enrolledCourses.length === 0 ? (
-              <p className="auth-card__muted">
-                Todavía no estás inscripto en ningún curso. Si tu docente te dio un código,{" "}
-                <Link to="/join">unite acá</Link>.
+          {activeTab === "courses" && showCoursesTab ? (
+            <section className="pbc-panel-card">
+              <h2 className="pbc-section-head__title">Mis cursos</h2>
+              <p className="pbc-hero-block__subtitle" style={{ marginBottom: "1rem" }}>
+                También podés verlos en{" "}
+                <Link to="/dashboard/classes">PyBotClass</Link>.
               </p>
-            ) : (
-              <ul className="auth-org-list">
-                {enrolledCourses.map((c) => (
-                  <li key={c.id} className="auth-org-row auth-org-row--link">
-                    <Link
-                      className="auth-org-row__link"
-                      to={`/dashboard/org/${c.org_id}/course/${c.id}`}
-                    >
-                      <span className="auth-org-row__name">{c.title}</span>
-                      <span className="auth-org-row__meta">
-                        {c.orgName ? `${c.orgName} · ` : ""}
-                        {c.slug ? `@${c.slug}` : "Actividades"}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ) : null}
-
-        {activeTab === "schools" && showSchoolsTab ? (
-          <section className="dash-panel">
-            <h2 className="dash-panel__title">Tus instituciones</h2>
-            {orgError ? <p className="auth-card__notice auth-card__notice--err">{orgError}</p> : null}
-            {staffOrgs.length === 0 ? (
-              <p className="auth-card__muted">Todavía no administrás ningún colegio.</p>
-            ) : (
-              <ul className="auth-org-list">
-                {staffOrgs.map((o) => (
-                  <li key={o.id} className="auth-org-row auth-org-row--link">
-                    <Link className="auth-org-row__link" to={`/dashboard/org/${o.id}`}>
-                      <span className="auth-org-row__name">{o.name}</span>
-                      <span className="auth-org-row__meta">
-                        @{o.slug} · {roleLabelEs(o.organization_members?.[0]?.role)}
-                        {o.country_code
-                          ? ` · ${countryNameByCode(o.country_code) || o.country_code}`
-                          : " · País sin definir"}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <form className="auth-org-form" onSubmit={createOrganization}>
-              <label className="auth-org-label" htmlFor="new-org-name">
-                Crear institución
-              </label>
-              <div className="auth-org-form__row">
-                <input
-                  id="new-org-name"
-                  className="auth-org-input"
-                  type="text"
-                  placeholder="Ej. St. Andrew's Scots School"
-                  value={newOrgName}
-                  onChange={(e) => setNewOrgName(e.target.value)}
-                  maxLength={120}
-                  disabled={savingOrg}
-                />
-                <select
-                  className="auth-org-input"
-                  value={newOrgCountry}
-                  onChange={(e) => setNewOrgCountry(e.target.value)}
-                  disabled={savingOrg}
-                  aria-label="País"
-                >
-                  {COUNTRIES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.name}
-                    </option>
+              {coursesError ? <p className="pbc-alert pbc-alert--error">{coursesError}</p> : null}
+              {enrolledCourses.length === 0 ? (
+                <p className="auth-card__muted">
+                  Todavía no estás inscripto en ningún curso. Si tu docente te dio un código,{" "}
+                  <Link to="/join">unite acá</Link>.
+                </p>
+              ) : (
+                <ul className="auth-org-list">
+                  {enrolledCourses.map((c) => (
+                    <li key={c.id} className="auth-org-row auth-org-row--link">
+                      <Link
+                        className="auth-org-row__link"
+                        to={`/dashboard/org/${c.org_id}/course/${c.id}`}
+                      >
+                        <span className="auth-org-row__name">{c.title}</span>
+                        <span className="auth-org-row__meta">
+                          {c.orgName ? `${c.orgName} · ` : ""}
+                          {c.slug ? `@${c.slug}` : "Actividades"}
+                        </span>
+                      </Link>
+                    </li>
                   ))}
-                </select>
-                <button type="submit" className="auth-btn auth-btn--primary" disabled={savingOrg}>
-                  Crear
-                </button>
-              </div>
-            </form>
-          </section>
-        ) : null}
+                </ul>
+              )}
+            </section>
+          ) : null}
 
-        {activeTab === "account" ? (
-          <AccountSettings user={sessionUser} onProfileUpdated={setDisplayName} />
-        ) : null}
-
-        {activeTab === "classroom" && hasStaffAccess ? (
-          <ClassroomPanel user={sessionUser} staffOrgId={staffOrgId} staffOrgs={staffOrgs} />
-        ) : null}
-      </DashboardShell>
+          {activeTab === "schools" && showSchoolsTab ? (
+            <section className="pbc-panel-card">
+              <h2 className="pbc-section-head__title">Instituciones</h2>
+              {orgError ? <p className="pbc-alert pbc-alert--error">{orgError}</p> : null}
+              {staffOrgs.length === 0 ? (
+                <p className="auth-card__muted">Todavía no administrás ninguna institución.</p>
+              ) : (
+                <ul className="auth-org-list">
+                  {staffOrgs.map((o) => (
+                    <li key={o.id} className="auth-org-row auth-org-row--link">
+                      <Link className="auth-org-row__link" to={`/dashboard/org/${o.id}`}>
+                        <span className="auth-org-row__name">{o.name}</span>
+                        <span className="auth-org-row__meta">
+                          @{o.slug} · {roleLabelEs(o.organization_members?.[0]?.role)}
+                          {o.country_code
+                            ? ` · ${countryNameByCode(o.country_code) || o.country_code}`
+                            : " · País sin definir"}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <form className="auth-org-form" onSubmit={createOrganization}>
+                <label className="auth-org-label" htmlFor="new-org-name">
+                  Crear institución
+                </label>
+                <div className="auth-org-form__row">
+                  <input
+                    id="new-org-name"
+                    className="auth-org-input"
+                    type="text"
+                    placeholder="Ej. St. Andrew's Scots School"
+                    value={newOrgName}
+                    onChange={(e) => setNewOrgName(e.target.value)}
+                    maxLength={120}
+                    disabled={savingOrg}
+                  />
+                  <select
+                    className="auth-org-input"
+                    value={newOrgCountry}
+                    onChange={(e) => setNewOrgCountry(e.target.value)}
+                    disabled={savingOrg}
+                    aria-label="País"
+                  >
+                    {COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit" className="auth-btn auth-btn--primary" disabled={savingOrg}>
+                    Crear
+                  </button>
+                </div>
+              </form>
+            </section>
+          ) : null}
+        </div>
+      </PyBotClassLayout>
     );
   }
 

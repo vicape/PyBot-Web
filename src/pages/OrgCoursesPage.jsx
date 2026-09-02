@@ -33,7 +33,7 @@ export default function OrgCoursesPage() {
 
   const shell = (body) => (
     <DashboardSubpageShell user={user} myRole={myRole} onSignOut={() => void signOut()}>
-      {body}
+      <div className="pbc-legacy-panel">{body}</div>
     </DashboardSubpageShell>
   );
 
@@ -57,7 +57,7 @@ export default function OrgCoursesPage() {
       .maybeSingle();
 
     if (e0 || !org) {
-      setErr(e0?.message || "Colegio no encontrado o sin permiso.");
+      setErr(e0?.message || "Institución no encontrada o sin permiso.");
       setLoading(false);
       return;
     }
@@ -171,7 +171,7 @@ export default function OrgCoursesPage() {
           {staff ? (
             <>
               <Link to="/dashboard?tab=schools" className="auth-link">
-                Colegios
+                Instituciones
               </Link>
               <span aria-hidden> / </span>
             </>

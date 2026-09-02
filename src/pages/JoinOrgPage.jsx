@@ -7,6 +7,8 @@ import {
   joinSuccessMessage,
 } from "../platform/redeemOrgInvitePlan.js";
 
+import "../styles/dashboard-theme.css";
+
 function redeemErrorEs(code) {
   switch (code) {
     case "not_found":
@@ -80,11 +82,11 @@ export default function JoinOrgPage() {
   }, [code, navigate, supabase]);
 
   return (
-    <main className="auth-root">
-      <div className="auth-card auth-card--wide">
-        <h1 className="auth-card__title">Unirse a un colegio</h1>
+    <main className="auth-root auth-root--pbc">
+      <div className="auth-card auth-card--wide auth-card--pbc">
+        <h1 className="auth-card__title">Unirme a un curso</h1>
         <p className="auth-card__lead">
-          Pedile a tu docente el enlace o el código de invitación (alumno o docente).
+          Pedile a tu docente el enlace o el código de invitación. La institución se asigna sola.
         </p>
         <label className="auth-org-label" htmlFor="invite-code">
           Código de invitación
@@ -104,10 +106,10 @@ export default function JoinOrgPage() {
           {busy ? "Procesando…" : !code.trim() ? "Ingresá un código o abrí el enlace" : "Unirme"}
         </button>
         <p className="auth-card__muted">
-          Primera vez: si creás el colegio vos, quedás como gestión ({roleLabelEs("owner")}); no hace falta código.
+          Si creás la institución vos, quedás como gestión ({roleLabelEs("owner")}); no hace falta código.
         </p>
-        <Link to="/dashboard" className="auth-link">
-          Volver al panel
+        <Link to="/dashboard/classes" className="auth-link">
+          Volver a PyBotClass
         </Link>
       </div>
     </main>

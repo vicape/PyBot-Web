@@ -6,8 +6,9 @@ export default function PyBotClassTopbar({
   userName,
   userEmail,
   userPicture,
-  search,
+  search = "",
   onSearchChange,
+  hideSearch = false,
   appearance,
   onThemeChange,
   onSignOut,
@@ -24,18 +25,22 @@ export default function PyBotClassTopbar({
         ☰
       </button>
 
-      <div className="pbc-topbar__search">
-        <span className="pbc-topbar__search-icon" aria-hidden>
-          ⌕
-        </span>
-        <input
-          type="search"
-          placeholder="Buscar cursos…"
-          value={search}
-          onChange={(e) => onSearchChange?.(e.target.value)}
-          aria-label="Buscar cursos"
-        />
-      </div>
+      {!hideSearch ? (
+        <div className="pbc-topbar__search">
+          <span className="pbc-topbar__search-icon" aria-hidden>
+            ⌕
+          </span>
+          <input
+            type="search"
+            placeholder="Buscar cursos…"
+            value={search}
+            onChange={(e) => onSearchChange?.(e.target.value)}
+            aria-label="Buscar cursos"
+          />
+        </div>
+      ) : (
+        <div className="pbc-topbar__search" aria-hidden />
+      )}
 
       <div className="pbc-topbar__actions">
         <div className="pbc-theme-toggle" role="group" aria-label="Tema">

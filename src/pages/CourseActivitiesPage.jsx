@@ -689,7 +689,7 @@ export default function CourseActivitiesPage() {
 
   const shell = (body) => (
     <DashboardSubpageShell user={user} myRole={myRole} onSignOut={() => void signOut()}>
-      {body}
+      <div className="pbc-legacy-panel">{body}</div>
     </DashboardSubpageShell>
   );
 

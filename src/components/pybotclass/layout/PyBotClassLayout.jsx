@@ -6,9 +6,14 @@ import { AppearanceContext } from "./appearanceContext.js";
 import PyBotClassSidebar from "./PyBotClassSidebar.jsx";
 import PyBotClassTopbar from "./PyBotClassTopbar.jsx";
 
+/**
+ * Shell único de PyBotClass (todo lo que no es el IDE).
+ * @param {{ user?: object, showAdmin?: boolean, hideSearch?: boolean, search?: string, onSearchChange?: Function, onSignOut?: Function, children?: import("react").ReactNode }} props
+ */
 export default function PyBotClassLayout({
   user,
   showAdmin = false,
+  hideSearch = false,
   search = "",
   onSearchChange,
   onSignOut,
@@ -26,34 +31,35 @@ export default function PyBotClassLayout({
   return (
     <AppearanceContext.Provider value={{ appearance, updateAppearance }}>
       <div className="pbc-dashboard" ref={containerRef} data-pybot-theme="pbc">
-      <button
-        type="button"
-        className={`pbc-dashboard__overlay${sidebarOpen ? " pbc-dashboard__overlay--open" : ""}`}
-        aria-label="Cerrar menú"
-        onClick={() => setSidebarOpen(false)}
-      />
-
-      <PyBotClassSidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        showAdmin={showAdmin}
-      />
-
-      <div className="pbc-dashboard__main">
-        <PyBotClassTopbar
-          userName={name}
-          userEmail={user?.email}
-          userPicture={picture}
-          search={search}
-          onSearchChange={onSearchChange}
-          appearance={appearance}
-          onThemeChange={updateAppearance}
-          onSignOut={onSignOut}
-          onMenuOpen={() => setSidebarOpen(true)}
+        <button
+          type="button"
+          className={`pbc-dashboard__overlay${sidebarOpen ? " pbc-dashboard__overlay--open" : ""}`}
+          aria-label="Cerrar menú"
+          onClick={() => setSidebarOpen(false)}
         />
-        <div className="pbc-dashboard__content">{children}</div>
+
+        <PyBotClassSidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          showAdmin={showAdmin}
+        />
+
+        <div className="pbc-dashboard__main">
+          <PyBotClassTopbar
+            userName={name}
+            userEmail={user?.email}
+            userPicture={picture}
+            search={search}
+            onSearchChange={onSearchChange}
+            hideSearch={hideSearch}
+            appearance={appearance}
+            onThemeChange={updateAppearance}
+            onSignOut={onSignOut}
+            onMenuOpen={() => setSidebarOpen(true)}
+          />
+          <div className="pbc-dashboard__content">{children}</div>
+        </div>
       </div>
-    </div>
     </AppearanceContext.Provider>
   );
 }
