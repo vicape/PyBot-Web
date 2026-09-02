@@ -18,6 +18,7 @@ import { fetchMyOrgRole, isStaffRole, roleLabelEs } from "../orgRole.js";
 import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
+import { fetchProfile } from "../platform/profileApi.js";
 import { isSuperAdmin } from "../platformRole.js";
 import {
   fetchCourseActivities,
@@ -84,11 +85,11 @@ export default function PyBotClassCoursePage() {
     setLoading(true);
     setErr("");
 
-    const [{ course: c, error: cErr }, admin] = await Promise.all([
+    const [{ course: c, error: cErr }, { profile }] = await Promise.all([
       fetchCourseBasics(courseId),
-      isSuperAdmin(supabase, user.id),
+      fetchProfile(user.id),
     ]);
-    setSuperAdmin(admin);
+    setSuperAdmin(isSuperAdmin(profile));
 
     if (cErr || !c) {
       setErr(cErr || "Clase no encontrada.");

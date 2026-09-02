@@ -19,14 +19,16 @@ body,
 
 /* Rutas fuera del IDE: permiten scroll vertical */
 body:has(.auth-root),
-body:has(.dash-root) {
+body:has(.dash-root),
+body:has(.pbc-dashboard) {
   overflow: auto;
   height: auto;
   min-height: 100%;
 }
 
 #root:has(.auth-root),
-#root:has(.dash-root) {
+#root:has(.dash-root),
+#root:has(.pbc-dashboard) {
   overflow: visible;
   height: auto;
   min-height: 100%;

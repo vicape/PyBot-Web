@@ -16,6 +16,7 @@ import {
   listPybotclassMyCourses,
   listPybotclassOrganizations,
 } from "../platform/pybotClassApi.js";
+import { fetchProfile } from "../platform/profileApi.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 
 function PyBotClassLoading() {
@@ -69,13 +70,13 @@ export default function PyBotClassPage() {
     setLoading(true);
     setErr("");
 
-    const [{ rows: orgRows }, admin, memberOrgs] = await Promise.all([
+    const [{ rows: orgRows }, { profile }, memberOrgs] = await Promise.all([
       listPybotclassOrganizations(),
-      isSuperAdmin(supabase, user.id),
+      fetchProfile(user.id),
       fetchOrganizationsForUser(supabase, user.id),
     ]);
 
-    setSuperAdmin(admin);
+    setSuperAdmin(isSuperAdmin(profile));
 
     const mergedOrgs = orgRows.map((o) => {
       const extra = memberOrgs.find((m) => m.id === o.org_id);
