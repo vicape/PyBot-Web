@@ -183,7 +183,7 @@ export default function OrgCoursesPage() {
               <span aria-hidden> / </span>
             </>
           )}
-          <span>{orgName || "Colegio"}</span>
+          <span>{orgName || "Institución"}</span>
         </p>
 
         <h1 className="auth-card__title">
@@ -208,7 +208,7 @@ export default function OrgCoursesPage() {
           <p className="auth-card__muted">
             {staff
               ? "No hay cursos todavía. Creá uno abajo."
-              : "No estás inscripto en ningún curso de este colegio."}
+              : "No estás inscripto en ningún curso de esta institución."}
           </p>
         ) : (
           <ul className="auth-org-list">
