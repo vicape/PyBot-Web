@@ -64,7 +64,7 @@ export async function saveGoogleTokens(userId, { accessToken, refreshToken, expi
 
   const patch = {};
   if (refreshToken) patch.google_refresh_token = refreshToken;
-  if (accessToken && expiresIn) {
+  if (expiresIn) {
     patch.google_token_expires_at = new Date(Date.now() + expiresIn * 1000).toISOString();
   }
   if (Object.keys(patch).length === 0) return { ok: true };

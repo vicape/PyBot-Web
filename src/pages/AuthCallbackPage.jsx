@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSupabase } from "../supabaseClient.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
+import { clearClassroomTokenCache } from "../platform/classroomToken.js";
 import { updatePreferredRole, saveGoogleTokens, markClassroomLinked } from "../platform/profileApi.js";
 import { consumeSignupRole } from "../platform/signupRole.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
@@ -66,6 +67,7 @@ export default function AuthCallbackPage() {
         await ensureProfileForUser(session.user, signupRole);
         if (signupRole) await updatePreferredRole(session.user.id, signupRole);
         if (isClassroomIntent && (session.provider_refresh_token || session.provider_token)) {
+          clearClassroomTokenCache();
           await saveGoogleTokens(session.user.id, {
             accessToken: session.provider_token,
             refreshToken: session.provider_refresh_token,
