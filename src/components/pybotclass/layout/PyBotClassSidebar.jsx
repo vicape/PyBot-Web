@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 
 const NAV = [
   { id: "home", label: "Inicio", to: "/dashboard/classes", icon: "⌂" },
-  { id: "courses", label: "Mis cursos", to: "/dashboard/classes", icon: "▤" },
+  { id: "courses", label: "Mis cursos", to: "/dashboard/classes#mis-cursos", icon: "▤" },
   { id: "ide", label: "Abrir IDE", to: "/", icon: "</>", external: true },
   { id: "classroom", label: "Google Classroom", to: "/dashboard/classes?panel=classroom", icon: "G" },
   { id: "institutions", label: "Instituciones", to: "/dashboard?tab=schools", icon: "🏛" },
@@ -25,10 +25,13 @@ export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate
         path.startsWith("/dashboard/org/")
       );
     }
-    if (item.id === "courses" || item.id === "home") {
+    if (item.id === "home") {
+      return path === "/dashboard/classes" && !panel && location.hash !== "#mis-cursos";
+    }
+    if (item.id === "courses") {
       return (
-        (path === "/dashboard/classes" || path.startsWith("/dashboard/classes/")) &&
-        !panel
+        !panel &&
+        (location.hash === "#mis-cursos" || /^\/dashboard\/classes\/[^/]+/.test(path))
       );
     }
     if (item.id === "ide") return false;
@@ -56,6 +59,13 @@ export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate
         className={cls}
         onClick={() => {
           onClose?.();
+          const content = document.querySelector(".pbc-dashboard__content");
+          if (item.id === "home") {
+            content?.scrollTo({ top: 0, behavior: "smooth" });
+          }
+          if (item.id === "courses" && path === "/dashboard/classes" && location.hash === "#mis-cursos") {
+            document.getElementById("mis-cursos")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
           onNavigate?.(item);
         }}
       >

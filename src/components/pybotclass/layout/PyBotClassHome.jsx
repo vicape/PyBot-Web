@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { countryNameByCode } from "../../../data/countries.js";
 import { computeAccountRoleBadges, computeQuickSummary } from "../../../platform/accountRoles.js";
 import { connectGoogleClassroom } from "../../../platform/googleOAuth.js";
@@ -20,6 +20,22 @@ export default function PyBotClassHome({
 }) {
   const [roleFilter, setRoleFilter] = useState("all");
   const [orgFilter, setOrgFilter] = useState("");
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const content = document.querySelector(".pbc-dashboard__content");
+    if (location.pathname !== "/dashboard/classes") return;
+
+    if (location.hash === "#mis-cursos") {
+      requestAnimationFrame(() => {
+        document.getElementById("mis-cursos")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
+
+    content?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [location.pathname, location.hash]);
 
   const meta = user?.user_metadata || {};
   const firstName =
@@ -70,7 +86,7 @@ export default function PyBotClassHome({
           <button
             type="button"
             className="pbc-action-card pbc-action-card--courses"
-            onClick={() => document.getElementById("mis-cursos")?.scrollIntoView({ behavior: "smooth" })}
+            onClick={() => navigate("/dashboard/classes#mis-cursos", { replace: true })}
           >
             <span className="pbc-action-card__decor" aria-hidden />
             <span className="pbc-action-card__icon pbc-action-card__icon--blue" aria-hidden>
