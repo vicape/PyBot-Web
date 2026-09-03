@@ -18,6 +18,7 @@ import {
 } from "../platform/pybotClassApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
+import { isStaffRole } from "../orgRole.js";
 
 function PyBotClassLoading() {
   return (
@@ -113,11 +114,40 @@ export default function PyBotClassPage() {
     if (!authLoading && user) void load();
   }, [authLoading, user, load, navigate]);
 
+  const staffOrgs = useMemo(
+    () =>
+      orgs
+        .filter((o) => isStaffRole(o.role))
+        .map((o) => ({
+          id: o.org_id || o.id,
+          name: o.org_name || o.name || "Institución",
+          role: o.role,
+        }))
+        .filter((o) => o.id),
+    [orgs],
+  );
+  const hasStaffAccess = staffOrgs.length > 0;
+  const staffOrgId = staffOrgs[0]?.id || null;
+
   useEffect(() => {
+    if (loading || authLoading) return;
+
+    if (!hasStaffAccess) {
+      try {
+        sessionStorage.removeItem("pybot_oauth_classroom");
+      } catch {
+        //
+      }
+      if (panel === "classroom") {
+        setSearchParams({}, { replace: true });
+      }
+      return;
+    }
+
     if (wasClassroomOAuthIntent() && !panel) {
       setSearchParams({ panel: "classroom" }, { replace: true });
     }
-  }, [panel, setSearchParams]);
+  }, [loading, authLoading, hasStaffAccess, panel, setSearchParams]);
 
   const filteredCourses = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -135,18 +165,27 @@ export default function PyBotClassPage() {
   if (panel === "account") {
     content = <PyBotClassAccountPanel user={user} />;
   } else if (panel === "classroom") {
-    content = (
-      <div style={{ maxWidth: 900 }}>
-        <h1 className="pbc-hero-block__title" style={{ marginBottom: "0.5rem" }}>
-          Google Classroom
-        </h1>
-        <p className="pbc-hero-block__subtitle" style={{ marginBottom: "1rem" }}>
-          Conectá tu cuenta Google para importar cursos. Usá la misma cuenta con la que ingresaste a
-          PyBotClass.
-        </p>
-        <ClassroomPanel user={user} />
-      </div>
-    );
+    if (!hasStaffAccess) {
+      content = null;
+    } else {
+      content = (
+        <div style={{ maxWidth: 900 }}>
+          <h1 className="pbc-hero-block__title" style={{ marginBottom: "0.5rem" }}>
+            Google Classroom
+          </h1>
+          <p className="pbc-hero-block__subtitle" style={{ marginBottom: "1rem" }}>
+            Conectá tu cuenta Google para importar cursos. Usá la misma cuenta con la que ingresaste a
+            PyBotClass.
+          </p>
+          <ClassroomPanel
+            user={user}
+            staffOrgId={staffOrgId}
+            staffOrgs={staffOrgs}
+            canUseClassroom={hasStaffAccess}
+          />
+        </div>
+      );
+    }
   } else {
     content = (
       <PyBotClassHome
@@ -154,6 +193,7 @@ export default function PyBotClassPage() {
         orgs={orgs}
         courses={filteredCourses}
         isSuperAdmin={superAdmin}
+        hasStaffAccess={hasStaffAccess}
         onCreateCourse={() => setShowCreate(true)}
         onJoinCourse={() => setShowJoin(true)}
       />
@@ -165,6 +205,7 @@ export default function PyBotClassPage() {
       <PyBotClassLayout
         user={user}
         showAdmin={superAdmin}
+        hasStaffAccess={hasStaffAccess}
         search={search}
         onSearchChange={setSearch}
         onSignOut={() => void signOut()}

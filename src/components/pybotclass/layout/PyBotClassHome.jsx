@@ -27,6 +27,7 @@ export default function PyBotClassHome({
   orgs = [],
   courses = [],
   isSuperAdmin = false,
+  hasStaffAccess = false,
   onCreateCourse,
   onJoinCourse,
 }) {
@@ -225,7 +226,9 @@ export default function PyBotClassHome({
               </span>
               <h3 className="pbc-empty-state__title">Todavía no participás en cursos</h3>
               <p className="pbc-empty-state__desc">
-                Creá un curso, unite con un código o importá desde Google Classroom.
+                {hasStaffAccess
+                  ? "Creá un curso, unite con un código o importá desde Google Classroom."
+                  : "Unite a un curso con un código o enlace."}
               </p>
               <div className="pbc-empty-state__actions">
                 <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
@@ -342,22 +345,24 @@ export default function PyBotClassHome({
           </div>
         ) : null}
 
-        <div className="pbc-panel-card pbc-panel-card--quick">
-          <h3 className="pbc-panel-card__title">Acceso rápido</h3>
-          <button
-            type="button"
-            className="pbc-btn pbc-btn--classroom"
-            onClick={() => void connectGoogleClassroom()}
-          >
-            <span className="pbc-btn--classroom__icon" aria-hidden>
-              <GoogleClassroomIcon />
-            </span>
-            Conectar Google Classroom
-          </button>
-          <p className="pbc-panel-card__hint">
-            Usá la misma cuenta Google con la que ingresaste a PyBotClass.
-          </p>
-        </div>
+        {hasStaffAccess ? (
+          <div className="pbc-panel-card pbc-panel-card--quick">
+            <h3 className="pbc-panel-card__title">Acceso rápido</h3>
+            <button
+              type="button"
+              className="pbc-btn pbc-btn--classroom"
+              onClick={() => void connectGoogleClassroom()}
+            >
+              <span className="pbc-btn--classroom__icon" aria-hidden>
+                <GoogleClassroomIcon />
+              </span>
+              Conectar Google Classroom
+            </button>
+            <p className="pbc-panel-card__hint">
+              Usá la misma cuenta Google con la que ingresaste a PyBotClass.
+            </p>
+          </div>
+        ) : null}
       </aside>
     </div>
   );

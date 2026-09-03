@@ -5,10 +5,10 @@ import "../../../styles/pybotclass-dashboard.css";
 import { AppearanceContext } from "./appearanceContext.js";
 import PyBotClassSidebar from "./PyBotClassSidebar.jsx";
 import PyBotClassTopbar from "./PyBotClassTopbar.jsx";
+import { useHasStaffAccess } from "./useHasStaffAccess.js";
 
 /**
  * Shell único de PyBotClass (todo lo que no es el IDE).
- * @param {{ user?: object, showAdmin?: boolean, hideSearch?: boolean, search?: string, onSearchChange?: Function, onSignOut?: Function, children?: import("react").ReactNode }} props
  */
 export default function PyBotClassLayout({
   user,
@@ -17,11 +17,15 @@ export default function PyBotClassLayout({
   search = "",
   onSearchChange,
   onSignOut,
+  hasStaffAccess: hasStaffAccessProp,
   children,
 }) {
   const containerRef = useRef(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { appearance, updateAppearance } = useAppearance(user?.id, containerRef);
+  const hasStaffAccess = useHasStaffAccess(user, hasStaffAccessProp);
+  // Fail closed while resolving: hide teacher tools until known
+  const showTeacherTools = hasStaffAccess === true;
 
   const meta = user?.user_metadata || {};
   const name =
@@ -42,6 +46,9 @@ export default function PyBotClassLayout({
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           showAdmin={showAdmin}
+          showMyContent={showTeacherTools}
+          showClassroom={showTeacherTools}
+          showInstitutions={showTeacherTools}
         />
 
         <div className="pbc-dashboard__main">

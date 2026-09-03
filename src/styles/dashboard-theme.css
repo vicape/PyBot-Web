@@ -47,17 +47,17 @@
 /* —— Light —— */
 .dash-root[data-pbc-theme="light"],
 .pbc-dashboard[data-pbc-theme="light"] {
-  --pbc-bg: #f4f6fb;
+  --pbc-bg: #f6f8fc;
   --pbc-bg-elevated: #ffffff;
   --pbc-panel: #ffffff;
   --pbc-panel-hover: #f8fafc;
   --pbc-panel-solid: #ffffff;
-  --pbc-border: rgba(15, 23, 42, 0.08);
-  --pbc-border-strong: rgba(15, 23, 42, 0.14);
+  --pbc-border: #dbe3ee;
+  --pbc-border-strong: #cbd5e1;
   --pbc-text: #0f172a;
-  --pbc-text-muted: #64748b;
-  --pbc-text-subtle: #94a3b8;
-  --pbc-input-bg: #f8fafc;
+  --pbc-text-muted: #475569;
+  --pbc-text-subtle: #64748b;
+  --pbc-input-bg: #ffffff;
   --pbc-sidebar-bg: #ffffff;
   --pbc-topbar-bg: rgba(255, 255, 255, 0.92);
   --pbc-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
@@ -314,3 +314,208 @@
   opacity: 0.7;
   line-height: 1.45;
 }
+
+/* —— Light overrides for legacy .pbc-* / .auth-btn used inside PyBotClass —— */
+.pbc-dashboard[data-pbc-theme="light"] .pbc-tab {
+  color: #475569;
+  background: transparent;
+  border-color: transparent;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-tab:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-tab--active {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-tab__count {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-tabs {
+  border-bottom-color: var(--pbc-border);
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-subtabs {
+  background: #f1f5f9;
+  border: 1px solid #dbe3ee;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-subtab {
+  color: #475569;
+  background: transparent;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-subtab--active {
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-section,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-list-item,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-stat {
+  background: #ffffff;
+  border-color: #dbe3ee;
+  color: #0f172a;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-pill--classroom {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-pill--classroom::before {
+  background: #22c55e;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-pill--content {
+  background: #ede9fe;
+  color: #6d28d9;
+  border-color: #c4b5fd;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-pill--content::before {
+  background: #8b5cf6;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-pill--warn {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-pill--ok {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-pill--muted {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-pill--role {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .auth-btn--ghost {
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .auth-btn--ghost:hover:not(:disabled) {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .dash-table-wrap {
+  background: #ffffff;
+  border: 1px solid #dbe3ee;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .dash-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 700;
+  border-bottom-color: #e2e8f0;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .dash-table td {
+  color: #0f172a;
+  border-bottom-color: #e2e8f0;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .dash-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-form-panel {
+  background: #ffffff;
+  border: 1px solid #dbe3ee;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-form-panel__title {
+  color: #0f172a;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-icon-btn {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-icon-btn:hover {
+  background: #e2e8f0;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .auth-org-input,
+.pbc-dashboard[data-pbc-theme="light"] .auth-org-input--block,
+.pbc-dashboard[data-pbc-theme="light"] select.auth-org-input,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-input,
+.pbc-dashboard[data-pbc-theme="light"] textarea.pbc-input {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .auth-org-input::placeholder,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-input::placeholder {
+  color: #64748b;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .auth-org-input:focus-visible,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-input:focus-visible {
+  border-color: #2563eb;
+  outline: 2px solid rgba(37, 99, 235, 0.15);
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-breadcrumb a,
+.pbc-dashboard[data-pbc-theme="light"] .auth-link {
+  color: #1d4ed8;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-breadcrumb,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-breadcrumb__sep {
+  color: #64748b;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-modal,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-modal--assign-lesson,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-modal--create-content {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-modal-backdrop {
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-modal__title {
+  color: #0f172a;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .pbc-modal--assign-lesson__subtitle,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-label,
+.pbc-dashboard[data-pbc-theme="light"] .auth-org-label {
+  color: #475569;
+}
+
+.pbc-dashboard[data-pbc-theme="light"] .auth-card__muted,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-hero-block__subtitle {
+  color: #475569;
+}
+

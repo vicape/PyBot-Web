@@ -1,23 +1,53 @@
+import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { IconSuperAdmin, SidebarIcon } from "../illustrations/SidebarIcons.jsx";
 
-const NAV = [
+const ALL_NAV = [
   { id: "home", label: "Inicio", to: "/dashboard/classes" },
   { id: "courses", label: "Mis cursos", to: "/dashboard/classes#mis-cursos" },
-  { id: "content", label: "Mi Contenido", to: "/dashboard/content" },
+  { id: "content", label: "Mi Contenido", to: "/dashboard/content", teacherOnly: true },
   { id: "community", label: "Comunidad", to: "/dashboard/community" },
   { id: "ide", label: "Abrir IDE", to: "/", external: true },
-  { id: "classroom", label: "Google Classroom", to: "/dashboard/classes?panel=classroom" },
-  { id: "institutions", label: "Instituciones", to: "/dashboard?tab=schools" },
+  {
+    id: "classroom",
+    label: "Google Classroom",
+    to: "/dashboard/classes?panel=classroom",
+    teacherOnly: true,
+  },
+  {
+    id: "institutions",
+    label: "Instituciones",
+    to: "/dashboard?tab=schools",
+    teacherOnly: true,
+  },
   { id: "account", label: "Cuenta", to: "/dashboard/classes?panel=account" },
 ];
 
-export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate }) {
+export default function PyBotClassSidebar({
+  open,
+  onClose,
+  showAdmin,
+  onNavigate,
+  showMyContent = true,
+  showClassroom = true,
+  showInstitutions = true,
+}) {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const panel = params.get("panel");
   const tab = params.get("tab");
   const path = location.pathname;
+
+  const nav = useMemo(
+    () =>
+      ALL_NAV.filter((item) => {
+        if (item.id === "content") return showMyContent;
+        if (item.id === "classroom") return showClassroom;
+        if (item.id === "institutions") return showInstitutions;
+        return true;
+      }),
+    [showMyContent, showClassroom, showInstitutions],
+  );
 
   const isActive = (item) => {
     if (item.id === "classroom") return panel === "classroom" || tab === "classroom";
@@ -98,7 +128,7 @@ export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate
         </span>
       </Link>
 
-      <nav className="pbc-sidebar__nav">{NAV.map(renderLink)}</nav>
+      <nav className="pbc-sidebar__nav">{nav.map(renderLink)}</nav>
 
       {showAdmin ? (
         <>

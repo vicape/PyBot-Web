@@ -10,15 +10,35 @@ import { track } from "../../telemetry/index.js";
 
 function classroomErrorEs(err) {
   const code = err?.code;
+  const message = String(err?.message || "");
   // missing_access_token se muestra como UI vacía (no error), no como mensaje de error
   if (code === "missing_access_token") return null;
-  if (err?.status === 403) {
-    return "El token de Classroom expiró o no tiene permisos. Hacé clic en «Conectar Google Classroom» para renovarlo.";
+  if (code === "invalid_grant" || /invalid_grant/i.test(message)) {
+    return "La conexión con Google Classroom venció. Reconectá tu cuenta.";
+  }
+  if (err?.status === 401 || code === 401) {
+    return "La sesión de Google Classroom venció. Reconectá tu cuenta.";
+  }
+  if (
+    /insufficientPermissions|insufficient.?permission|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(
+      message,
+    ) ||
+    err?.reason === "insufficientPermissions"
+  ) {
+    return "Esta conexión no tiene los permisos necesarios de Google Classroom. Reconectá para autorizarlos.";
+  }
+  if (err?.status === 403 || code === 403) {
+    return "No pudimos acceder a Classroom con esta cuenta. Verificá que sea la cuenta docente correcta y que tenga los permisos de Classroom requeridos.";
   }
   return err?.message || "No se pudo comunicar con Classroom.";
 }
 
-export default function ClassroomPanel({ user, staffOrgId, staffOrgs = [] }) {
+export default function ClassroomPanel({
+  user,
+  staffOrgId,
+  staffOrgs = [],
+  canUseClassroom = true,
+}) {
   const navigate = useNavigate();
   const [selectedOrgId, setSelectedOrgId] = useState(staffOrgId || staffOrgs[0]?.id || "");
   const effectiveOrgId = selectedOrgId || staffOrgId || "";
@@ -33,10 +53,12 @@ export default function ClassroomPanel({ user, staffOrgId, staffOrgs = [] }) {
   const [okMsg, setOkMsg] = useState("");
 
   useEffect(() => {
+    if (!canUseClassroom) return;
     track("classroom_open", { feature: "classroom" });
-  }, []);
+  }, [canUseClassroom]);
 
   const refreshCourses = useCallback(async () => {
+    if (!canUseClassroom) return;
     const sb = getSupabase();
     if (!sb) return;
     setTesting(true);
@@ -83,7 +105,7 @@ export default function ClassroomPanel({ user, staffOrgId, staffOrgs = [] }) {
     } finally {
       setTesting(false);
     }
-  }, [user?.id, effectiveOrgId]);
+  }, [user?.id, effectiveOrgId, canUseClassroom]);
 
   useEffect(() => {
     if (staffOrgId && !selectedOrgId) setSelectedOrgId(staffOrgId);
@@ -96,6 +118,10 @@ export default function ClassroomPanel({ user, staffOrgId, staffOrgs = [] }) {
   }, [staffOrgs]);
 
   useEffect(() => {
+    if (!canUseClassroom) {
+      setLoading(false);
+      return;
+    }
     if (!user?.id) return;
     (async () => {
       setLoading(true);
@@ -105,7 +131,11 @@ export default function ClassroomPanel({ user, staffOrgId, staffOrgs = [] }) {
       // Intentar cargar cursos siempre — si no hay token, refreshCourses lo maneja silenciosamente
       await refreshCourses();
     })();
-  }, [user?.id, refreshCourses]);
+  }, [user?.id, refreshCourses, canUseClassroom]);
+
+  if (!canUseClassroom) {
+    return null;
+  }
 
   const importCourse = async (classroomCourse) => {
     const sb = getSupabase();
