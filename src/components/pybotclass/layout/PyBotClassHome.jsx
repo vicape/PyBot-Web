@@ -3,6 +3,18 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { countryNameByCode } from "../../../data/countries.js";
 import { computeAccountRoleBadges, computeQuickSummary } from "../../../platform/accountRoles.js";
 import { connectGoogleClassroom } from "../../../platform/googleOAuth.js";
+import {
+  CoursesActionIcon,
+  CreateCourseActionIcon,
+  IdeActionIcon,
+  JoinCourseActionIcon,
+} from "../illustrations/ActionCardIcons.jsx";
+import CoursesIllustration from "../illustrations/CoursesIllustration.jsx";
+import CreateCourseIllustration from "../illustrations/CreateCourseIllustration.jsx";
+import EmptyCoursesIllustration from "../illustrations/EmptyCoursesIllustration.jsx";
+import IdeIllustration from "../illustrations/IdeIllustration.jsx";
+import JoinCourseIllustration from "../illustrations/JoinCourseIllustration.jsx";
+import { GoogleClassroomIcon } from "../illustrations/SidebarIcons.jsx";
 import RoleBadges from "./RoleBadges.jsx";
 
 const ROLE_BADGE = {
@@ -89,15 +101,11 @@ export default function PyBotClassHome({
             onClick={() => navigate("/dashboard/classes#mis-cursos", { replace: true })}
           >
             <span className="pbc-action-card__decor" aria-hidden />
+            <span className="pbc-action-card__illus" aria-hidden>
+              <CoursesIllustration />
+            </span>
             <span className="pbc-action-card__icon pbc-action-card__icon--blue" aria-hidden>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path
-                  d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v11A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-11Z"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                />
-                <path d="M8 9h8M8 12.5h5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
+              <CoursesActionIcon />
             </span>
             <span className="pbc-action-card__body">
               <span className="pbc-action-card__title">Mis cursos</span>
@@ -107,22 +115,18 @@ export default function PyBotClassHome({
             </span>
             <span className="pbc-action-card__arrow" aria-hidden>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </span>
           </button>
 
           <button type="button" className="pbc-action-card pbc-action-card--create" onClick={onCreateCourse}>
             <span className="pbc-action-card__decor" aria-hidden />
+            <span className="pbc-action-card__illus" aria-hidden>
+              <CreateCourseIllustration />
+            </span>
             <span className="pbc-action-card__icon pbc-action-card__icon--teal" aria-hidden>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path
-                  d="M6 5.5h12A1.5 1.5 0 0 1 19.5 7v10A1.5 1.5 0 0 1 18 18.5H6A1.5 1.5 0 0 1 4.5 17V7A1.5 1.5 0 0 1 6 5.5Z"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                />
-                <path d="M12 9v6M9 12h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
+              <CreateCourseActionIcon />
             </span>
             <span className="pbc-action-card__body">
               <span className="pbc-action-card__title">Crear curso</span>
@@ -130,27 +134,18 @@ export default function PyBotClassHome({
             </span>
             <span className="pbc-action-card__arrow" aria-hidden>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </span>
           </button>
 
           <button type="button" className="pbc-action-card pbc-action-card--join" onClick={onJoinCourse}>
             <span className="pbc-action-card__decor" aria-hidden />
+            <span className="pbc-action-card__illus" aria-hidden>
+              <JoinCourseIllustration />
+            </span>
             <span className="pbc-action-card__icon pbc-action-card__icon--violet" aria-hidden>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path
-                  d="M9.5 10.5a3 3 0 1 1 0-4 3 3 0 0 1 0 4ZM16 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                />
-                <path
-                  d="M6.5 17.5c.8-2.2 2.7-3.5 5-3.5s4.2 1.3 5 3.5"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                />
-              </svg>
+              <JoinCourseActionIcon />
             </span>
             <span className="pbc-action-card__body">
               <span className="pbc-action-card__title">Unirme a un curso</span>
@@ -158,19 +153,18 @@ export default function PyBotClassHome({
             </span>
             <span className="pbc-action-card__arrow" aria-hidden>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </span>
           </button>
 
           <a href="/" className="pbc-action-card pbc-action-card--ide">
             <span className="pbc-action-card__decor" aria-hidden />
+            <span className="pbc-action-card__illus" aria-hidden>
+              <IdeIllustration />
+            </span>
             <span className="pbc-action-card__icon pbc-action-card__icon--indigo" aria-hidden>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M8 7.5 4.5 12 8 16.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M16 7.5 19.5 12 16 16.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M13.5 6.5 10.5 17.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
+              <IdeActionIcon />
             </span>
             <span className="pbc-action-card__body">
               <span className="pbc-action-card__title">Abrir IDE</span>
@@ -178,7 +172,7 @@ export default function PyBotClassHome({
             </span>
             <span className="pbc-action-card__arrow" aria-hidden>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 3.5L9 7L5 10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </span>
           </a>
@@ -226,12 +220,8 @@ export default function PyBotClassHome({
 
           {filtered.length === 0 ? (
             <div className="pbc-empty-state">
-              <span className="pbc-empty-state__icon" aria-hidden>
-                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden>
-                  <rect x="6" y="10" width="28" height="20" rx="4" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M14 18h12M14 22.5h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                  <path d="M20 6v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
+              <span className="pbc-empty-state__illus" aria-hidden>
+                <EmptyCoursesIllustration />
               </span>
               <h3 className="pbc-empty-state__title">Todavía no participás en cursos</h3>
               <p className="pbc-empty-state__desc">
@@ -297,8 +287,8 @@ export default function PyBotClassHome({
                 src={meta.avatar_url || meta.picture}
                 alt=""
                 className="pbc-account-card__avatar"
-                width={56}
-                height={56}
+                width={48}
+                height={48}
               />
             ) : (
               <div className="pbc-account-card__avatar pbc-account-card__avatar--letter" aria-hidden>
@@ -360,7 +350,7 @@ export default function PyBotClassHome({
             onClick={() => void connectGoogleClassroom()}
           >
             <span className="pbc-btn--classroom__icon" aria-hidden>
-              G
+              <GoogleClassroomIcon />
             </span>
             Conectar Google Classroom
           </button>

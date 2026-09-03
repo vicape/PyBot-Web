@@ -1,12 +1,13 @@
 import { Link, useLocation } from "react-router-dom";
+import { IconSuperAdmin, SidebarIcon } from "../illustrations/SidebarIcons.jsx";
 
 const NAV = [
-  { id: "home", label: "Inicio", to: "/dashboard/classes", icon: "⌂" },
-  { id: "courses", label: "Mis cursos", to: "/dashboard/classes#mis-cursos", icon: "▤" },
-  { id: "ide", label: "Abrir IDE", to: "/", icon: "</>", external: true },
-  { id: "classroom", label: "Google Classroom", to: "/dashboard/classes?panel=classroom", icon: "G" },
-  { id: "institutions", label: "Instituciones", to: "/dashboard?tab=schools", icon: "🏛" },
-  { id: "account", label: "Cuenta", to: "/dashboard/classes?panel=account", icon: "◎" },
+  { id: "home", label: "Inicio", to: "/dashboard/classes" },
+  { id: "courses", label: "Mis cursos", to: "/dashboard/classes#mis-cursos" },
+  { id: "ide", label: "Abrir IDE", to: "/", external: true },
+  { id: "classroom", label: "Google Classroom", to: "/dashboard/classes?panel=classroom" },
+  { id: "institutions", label: "Instituciones", to: "/dashboard?tab=schools" },
+  { id: "account", label: "Cuenta", to: "/dashboard/classes?panel=account" },
 ];
 
 export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate }) {
@@ -46,7 +47,7 @@ export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate
       return (
         <a key={item.id} href={item.to} className={cls} onClick={onClose}>
           <span className="pbc-sidebar__icon" aria-hidden>
-            {item.icon}
+            <SidebarIcon id={item.id} />
           </span>
           {item.label}
         </a>
@@ -70,7 +71,7 @@ export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate
         }}
       >
         <span className="pbc-sidebar__icon" aria-hidden>
-          {item.icon}
+          <SidebarIcon id={item.id} />
         </span>
         {item.label}
       </Link>
@@ -100,7 +101,7 @@ export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate
             onClick={onClose}
           >
             <span className="pbc-sidebar__icon" aria-hidden>
-              ★
+              <IconSuperAdmin />
             </span>
             Panel SuperAdmin
           </Link>
