@@ -1,70 +1,52 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import LessonBlockNoteEditor from "../components/content-editor/LessonBlockNoteEditor.jsx";
+import {
+  hasSavedLessonDocument,
+  legacyBlocksToDocument,
+  normalizeLessonDocument,
+} from "../components/content-editor/legacyLessonDocument.js";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import {
-  BLOCK_TYPES,
-  createLessonBlock,
-  deleteLessonBlock,
   getContent,
   getLesson,
   listLessonBlocks,
-  moveLessonBlock,
-  updateLessonBlock,
+  saveLessonDocument,
+  updateLesson,
 } from "../platform/contentApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
 import { isSuperAdmin } from "../platformRole.js";
 
-function BlockEditForm({ block, onSave, onCancel, busy }) {
-  const typeInfo = BLOCK_TYPES[block.block_type] || BLOCK_TYPES.theory;
-  const [title, setTitle] = useState(block.title || "");
-  const [content, setContent] = useState(block.content || "");
-  const [starterCode, setStarterCode] = useState(block.starter_code || "");
+const TITLE_SAVE_MS = 1000;
 
-  return (
-    <form
-      className="pbc-block-edit"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSave({ title, content, starterCode: typeInfo.hasStarterCode ? starterCode : null });
-      }}
-    >
-      <div className="pbc-modal__field">
-        <label className="pbc-label">Título (opcional)</label>
-        <input className="pbc-input" value={title} onChange={(e) => setTitle(e.target.value)} />
-      </div>
-      <div className="pbc-modal__field">
-        <label className="pbc-label">Contenido</label>
-        <textarea
-          className="pbc-input pbc-input--textarea"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          rows={6}
-        />
-      </div>
-      {typeInfo.hasStarterCode ? (
-        <div className="pbc-modal__field">
-          <label className="pbc-label">Código inicial (opcional)</label>
-          <textarea
-            className="pbc-input pbc-input--textarea pbc-input--mono"
-            value={starterCode}
-            onChange={(e) => setStarterCode(e.target.value)}
-            rows={5}
-            spellCheck={false}
-          />
-        </div>
-      ) : null}
-      <div className="pbc-modal__actions">
-        <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onCancel} disabled={busy}>
-          Cancelar
+function SaveStatus({ status, onRetry }) {
+  if (status === "saving") {
+    return (
+      <span className="pbc-lesson-save" aria-live="polite">
+        Guardando...
+      </span>
+    );
+  }
+  if (status === "saved") {
+    return (
+      <span className="pbc-lesson-save pbc-lesson-save--ok" aria-live="polite">
+        Guardado ✓
+      </span>
+    );
+  }
+  if (status === "error") {
+    return (
+      <span className="pbc-lesson-save pbc-lesson-save--err" role="alert">
+        No se pudo guardar
+        <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={onRetry}>
+          Reintentar
         </button>
-        <button type="submit" className="pbc-btn pbc-btn--primary" disabled={busy}>
-          {busy ? "Guardando…" : "Guardar"}
-        </button>
-      </div>
-    </form>
-  );
+      </span>
+    );
+  }
+  return <span className="pbc-lesson-save" aria-live="polite" />;
 }
 
 export default function LessonEditorPage() {
@@ -75,31 +57,55 @@ export default function LessonEditorPage() {
 
   const [content, setContent] = useState(null);
   const [lesson, setLesson] = useState(null);
-  const [blocks, setBlocks] = useState([]);
+  const [editorSeed, setEditorSeed] = useState(null);
+  const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [superAdmin, setSuperAdmin] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [showTypePicker, setShowTypePicker] = useState(false);
-  const [editingBlockId, setEditingBlockId] = useState(null);
+  const [preview, setPreview] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("idle");
+
+  const editorRef = useRef(null);
+  const titleTimerRef = useRef(null);
+  const titleDirtyRef = useRef(false);
+  const lastSavedTitleRef = useRef("");
+  const titleValueRef = useRef("");
+  titleValueRef.current = title;
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
     navigate("/login", { replace: true });
   }, [supabase, navigate]);
 
+  const persistTitle = useCallback(async (nextTitle) => {
+    const trimmed = String(nextTitle ?? "").trim();
+    if (!trimmed || trimmed === lastSavedTitleRef.current) {
+      titleDirtyRef.current = false;
+      return true;
+    }
+    const { error } = await updateLesson(lessonId, { title: trimmed });
+    if (error) {
+      setSaveStatus("error");
+      return false;
+    }
+    lastSavedTitleRef.current = trimmed;
+    titleDirtyRef.current = false;
+    setLesson((prev) => (prev ? { ...prev, title: trimmed } : prev));
+    return true;
+  }, [lessonId]);
+
   const load = useCallback(async () => {
     if (!user || !contentId || !lessonId) return;
     setLoading(true);
     setErr("");
+    setPreview(false);
+    setEditorSeed(null);
 
-    const [{ content: c, error: cErr }, { lesson: l, error: lErr }, { rows, error: bErr }, { profile }] =
-      await Promise.all([
-        getContent(contentId),
-        getLesson(lessonId),
-        listLessonBlocks(lessonId),
-        fetchProfile(user.id),
-      ]);
+    const [{ content: c, error: cErr }, { lesson: l, error: lErr }, { profile }] = await Promise.all([
+      getContent(contentId),
+      getLesson(lessonId),
+      fetchProfile(user.id),
+    ]);
 
     setSuperAdmin(isSuperAdmin(profile));
 
@@ -108,11 +114,41 @@ export default function LessonEditorPage() {
       setLoading(false);
       return;
     }
-    if (bErr) setErr(bErr);
+
+    let documentJson = l.document_json;
+    let documentVersion = l.document_version ?? 1;
+
+    if (!hasSavedLessonDocument(documentJson)) {
+      const { rows } = await listLessonBlocks(lessonId);
+      if (rows.length > 0) {
+        documentJson = legacyBlocksToDocument(rows);
+        const { lesson: saved, error: saveErr } = await saveLessonDocument(
+          lessonId,
+          documentJson,
+          documentVersion,
+        );
+        if (saveErr) {
+          setErr("Se pudo abrir el contenido anterior, pero no se guardó el documento nuevo.");
+        } else if (saved) {
+          documentVersion = saved.document_version;
+          l.document_version = saved.document_version;
+          l.document_json = saved.document_json;
+        }
+      } else {
+        documentJson = normalizeLessonDocument(null);
+      }
+    }
 
     setContent(c);
     setLesson(l);
-    setBlocks(rows);
+    setTitle(l.title || "");
+    lastSavedTitleRef.current = l.title || "";
+    titleDirtyRef.current = false;
+    setEditorSeed({
+      lessonId,
+      document: JSON.parse(JSON.stringify(normalizeLessonDocument(documentJson))),
+      documentVersion,
+    });
     setLoading(false);
   }, [user, contentId, lessonId]);
 
@@ -124,52 +160,27 @@ export default function LessonEditorPage() {
     if (!authLoading && user) void load();
   }, [authLoading, user, load, navigate]);
 
-  const addBlock = async (blockType) => {
-    if (busy) return;
-    setBusy(true);
-    const { block, error } = await createLessonBlock(lessonId, { blockType, content: "" });
-    setBusy(false);
-    setShowTypePicker(false);
-    if (error || !block) {
-      setErr(error || "No se pudo crear el bloque.");
-      return;
-    }
-    setEditingBlockId(block.id);
-    void load();
+  useEffect(() => {
+    return () => {
+      if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
+      if (titleDirtyRef.current) {
+        void persistTitle(titleValueRef.current);
+      }
+    };
+  }, [lessonId, persistTitle]);
+
+  const onTitleChange = (value) => {
+    setTitle(value);
+    titleDirtyRef.current = true;
+    if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
+    titleTimerRef.current = setTimeout(() => {
+      void persistTitle(value);
+    }, TITLE_SAVE_MS);
   };
 
-  const saveBlock = async (blockId, values) => {
-    if (busy) return;
-    setBusy(true);
-    const { error } = await updateLessonBlock(blockId, {
-      title: values.title,
-      content: values.content,
-      starterCode: values.starterCode,
-    });
-    setBusy(false);
-    if (error) setErr(error);
-    else {
-      setEditingBlockId(null);
-      void load();
-    }
-  };
-
-  const removeBlock = async (block) => {
-    if (!window.confirm(`¿Eliminar este bloque de ${BLOCK_TYPES[block.block_type]?.label || "contenido"}?`)) return;
-    setBusy(true);
-    const { error } = await deleteLessonBlock(block.id);
-    setBusy(false);
-    if (error) setErr(error);
-    else void load();
-  };
-
-  const moveBlock = async (blockId, direction) => {
-    if (busy) return;
-    setBusy(true);
-    const { error } = await moveLessonBlock(blockId, direction);
-    setBusy(false);
-    if (error) setErr(error);
-    else void load();
+  const retrySave = () => {
+    void persistTitle(title);
+    void editorRef.current?.flush();
   };
 
   if (authLoading || loading) {
@@ -181,154 +192,70 @@ export default function LessonEditorPage() {
   }
   if (!user || !content || !lesson) return null;
 
-  const unitTitle = lesson.content_units?.title || "Unidad";
+  const unit = lesson.content_units;
+  const unitPosition = Number.isFinite(unit?.position) ? unit.position + 1 : null;
+  const unitLabel = unit
+    ? `${unitPosition ? `Unidad ${unitPosition}` : "Unidad"} · ${unit.title || "Sin título"}`
+    : "Unidad";
 
   return (
-    <>
-      <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
-        {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
-        {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+    <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
+      {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
+      {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
 
-        <div className="pbc-lesson-editor">
-          <nav className="pbc-content-breadcrumb">
-            <Link to="/dashboard/content">Mi Contenido</Link>
-            <span aria-hidden> / </span>
-            <Link to={`/dashboard/content/${contentId}`}>{content.title}</Link>
-            <span aria-hidden> / </span>
-            <span>{lesson.title}</span>
-          </nav>
+      <div className="pbc-lesson-page">
+        <nav className="pbc-content-breadcrumb" aria-label="Ubicación">
+          <Link to="/dashboard/content">Mi Contenido</Link>
+          <span aria-hidden> › </span>
+          <Link to={`/dashboard/content/${contentId}`}>{content.title}</Link>
+          <span aria-hidden> › </span>
+          <span>{unitLabel}</span>
+          <span aria-hidden> › </span>
+          <span>{title || lesson.title}</span>
+        </nav>
 
-          <header className="pbc-lesson-editor__head">
-            <p className="pbc-lesson-editor__unit">{unitTitle}</p>
-            <h1 className="pbc-hero-block__title">{lesson.title}</h1>
-          </header>
-
-          <div className="pbc-block-list">
-            {blocks.length === 0 ? (
-              <p className="pbc-lesson-editor__empty">Todavía no hay bloques en esta lección.</p>
-            ) : (
-              blocks.map((block, index) => {
-                const typeInfo = BLOCK_TYPES[block.block_type] || BLOCK_TYPES.theory;
-                const isEditing = editingBlockId === block.id;
-
-                return (
-                  <article key={block.id} className={`pbc-block-card pbc-block-card--${block.block_type}`}>
-                    <div className="pbc-block-card__head">
-                      <span className={`pbc-block-card__type pbc-block-card__type--${block.block_type}`}>
-                        {typeInfo.label}
-                      </span>
-                      <div className="pbc-block-card__tools">
-                        <div className="pbc-order-btns">
-                          <button
-                            type="button"
-                            className="pbc-order-btn"
-                            onClick={() => void moveBlock(block.id, "up")}
-                            disabled={busy || index === 0}
-                            aria-label="Subir bloque"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="pbc-order-btn"
-                            onClick={() => void moveBlock(block.id, "down")}
-                            disabled={busy || index === blocks.length - 1}
-                            aria-label="Bajar bloque"
-                          >
-                            ↓
-                          </button>
-                        </div>
-                        {!isEditing ? (
-                          <>
-                            <button
-                              type="button"
-                              className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                              onClick={() => setEditingBlockId(block.id)}
-                            >
-                              Editar
-                            </button>
-                            <button
-                              type="button"
-                              className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                              onClick={() => void removeBlock(block)}
-                            >
-                              Eliminar
-                            </button>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    {isEditing ? (
-                      <BlockEditForm
-                        block={block}
-                        busy={busy}
-                        onCancel={() => setEditingBlockId(null)}
-                        onSave={(values) => void saveBlock(block.id, values)}
-                      />
-                    ) : (
-                      <div className="pbc-block-card__body">
-                        {block.title ? <h3 className="pbc-block-card__title">{block.title}</h3> : null}
-                        {block.content ? (
-                          <pre className="pbc-block-card__content">{block.content}</pre>
-                        ) : (
-                          <p className="pbc-block-card__placeholder">Sin contenido todavía.</p>
-                        )}
-                        {block.starter_code ? (
-                          <div className="pbc-block-card__code">
-                            <span className="pbc-block-card__code-label">Código inicial</span>
-                            <pre>{block.starter_code}</pre>
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-                  </article>
-                );
-              })
-            )}
-          </div>
-
-          <button
-            type="button"
-            className="pbc-btn pbc-btn--primary"
-            onClick={() => setShowTypePicker(true)}
-            disabled={busy}
-          >
-            + Agregar contenido
-          </button>
-        </div>
-      </PyBotClassLayout>
-
-      {showTypePicker ? (
-        <div className="pbc-modal-backdrop" role="presentation" onClick={() => setShowTypePicker(false)}>
-          <div
-            className="pbc-modal pbc-modal--picker"
-            role="dialog"
-            aria-labelledby="block-picker-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="block-picker-title" className="pbc-modal__title">
-              ¿Qué querés agregar?
-            </h2>
-            <div className="pbc-block-type-grid">
-              {Object.entries(BLOCK_TYPES).map(([key, info]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`pbc-block-type-btn pbc-block-type-btn--${key}`}
-                  onClick={() => void addBlock(key)}
-                  disabled={busy}
-                >
-                  {info.label}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="pbc-btn pbc-btn--ghost" onClick={() => setShowTypePicker(false)}>
-              Cancelar
+        <div className="pbc-lesson-editor__toolbar">
+          <Link to={`/dashboard/content/${contentId}`} className="pbc-btn pbc-btn--ghost pbc-btn--sm">
+            ← Volver
+          </Link>
+          <div className="pbc-lesson-editor__toolbar-right">
+            <SaveStatus status={saveStatus} onRetry={retrySave} />
+            <button
+              type="button"
+              className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+              onClick={() => setPreview((value) => !value)}
+              aria-pressed={preview}
+            >
+              {preview ? "Seguir editando" : "Vista previa"}
             </button>
           </div>
         </div>
-      ) : null}
-    </>
+
+        <label className="pbc-visually-hidden" htmlFor="lesson-title-input">
+          Título de la lección
+        </label>
+        <input
+          id="lesson-title-input"
+          className="pbc-lesson-title-input"
+          value={title}
+          onChange={(event) => onTitleChange(event.target.value)}
+          onBlur={() => void persistTitle(title)}
+          disabled={preview}
+        />
+
+        {editorSeed && editorSeed.lessonId === lessonId ? (
+          <LessonBlockNoteEditor
+            key={lessonId}
+            ref={editorRef}
+            lessonId={lessonId}
+            contentId={contentId}
+            initialContent={editorSeed.document}
+            documentVersion={editorSeed.documentVersion}
+            preview={preview}
+            onStatusChange={setSaveStatus}
+          />
+        ) : null}
+      </div>
+    </PyBotClassLayout>
   );
 }

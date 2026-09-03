@@ -241,12 +241,32 @@ export async function listUnitLessons(unitId) {
 export async function getLesson(lessonId) {
   const { data, error } = await sb()
     .from("content_lessons")
-    .select("id, unit_id, title, description, position, created_at, updated_at, content_units ( content_id, title )")
+    .select(
+      "id, unit_id, title, description, position, created_at, updated_at, document_json, document_version, content_units ( content_id, title, position )",
+    )
     .eq("id", lessonId)
     .maybeSingle();
 
   if (error) return { lesson: null, error: error.message };
   if (!data) return { lesson: null, error: "not_found" };
+  return { lesson: data, error: null };
+}
+
+export async function saveLessonDocument(lessonId, documentJson, documentVersion = 1) {
+  const { data, error } = await sb()
+    .from("content_lessons")
+    .update({
+      document_json: documentJson,
+      document_version: Number(documentVersion || 1) + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", lessonId)
+    .select("id, unit_id, title, document_json, document_version, updated_at")
+    .single();
+
+  if (error) return { lesson: null, error: error.message };
+  const contentId = await contentIdForUnit(data.unit_id);
+  await touchContent(contentId);
   return { lesson: data, error: null };
 }
 

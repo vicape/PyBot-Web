@@ -1,26 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import ContentCard from "../components/pybotclass/content/ContentCard.jsx";
 import CreateContentModal from "../components/pybotclass/content/CreateContentModal.jsx";
+import DeleteContentModal from "../components/pybotclass/content/DeleteContentModal.jsx";
+import EditContentModal from "../components/pybotclass/content/EditContentModal.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import MyContentEmptyIllustration from "../components/pybotclass/illustrations/MyContentEmptyIllustration.jsx";
-import { CONTENT_STATUS_LABELS, listMyContents } from "../platform/contentApi.js";
+import { listMyContents } from "../platform/contentApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
 import { isSuperAdmin } from "../platformRole.js";
-
-function formatDate(iso) {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleDateString("es-AR", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return "";
-  }
-}
 
 export default function MyContentPage() {
   const navigate = useNavigate();
@@ -30,6 +20,8 @@ export default function MyContentPage() {
   const [err, setErr] = useState("");
   const [superAdmin, setSuperAdmin] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -104,33 +96,12 @@ export default function MyContentPage() {
           ) : (
             <div className="pbc-content-grid">
               {contents.map((c) => (
-                <Link key={c.id} to={`/dashboard/content/${c.id}`} className="pbc-content-card">
-                  <div className="pbc-content-card__header">
-                    <span className="pbc-content-card__icon" aria-hidden>
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-                        <path
-                          d="M5.5 7.5h13A1.5 1.5 0 0 1 20 9v10.5A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5V9A1.5 1.5 0 0 1 5.5 7.5Z"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinejoin="round"
-                        />
-                        <path d="M8 12h8M8 15.5h5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                    <span className="pbc-badge pbc-badge--blue">
-                      {CONTENT_STATUS_LABELS[c.status] || "Borrador"}
-                    </span>
-                  </div>
-                  <h2 className="pbc-content-card__title">{c.title}</h2>
-                  {c.description ? <p className="pbc-content-card__desc">{c.description}</p> : null}
-                  <div className="pbc-content-card__meta">
-                    <span>
-                      {c.unit_count} unidad{c.unit_count === 1 ? "" : "es"}
-                    </span>
-                    <span>Modificado {formatDate(c.updated_at)}</span>
-                  </div>
-                  <span className="pbc-content-card__link">Abrir →</span>
-                </Link>
+                <ContentCard
+                  key={c.id}
+                  content={c}
+                  onEdit={setEditing}
+                  onDelete={setDeleting}
+                />
               ))}
             </div>
           )}
@@ -141,6 +112,36 @@ export default function MyContentPage() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         onCreated={(content) => navigate(`/dashboard/content/${content.id}`)}
+      />
+
+      <EditContentModal
+        open={!!editing}
+        content={editing}
+        onClose={() => setEditing(null)}
+        onSaved={(updated) => {
+          setContents((rows) =>
+            rows.map((row) =>
+              row.id === updated.id
+                ? {
+                    ...row,
+                    title: updated.title,
+                    description: updated.description,
+                    status: updated.status,
+                    updated_at: updated.updated_at,
+                  }
+                : row,
+            ),
+          );
+        }}
+      />
+
+      <DeleteContentModal
+        open={!!deleting}
+        content={deleting}
+        onClose={() => setDeleting(null)}
+        onDeleted={(id) => {
+          setContents((rows) => rows.filter((row) => row.id !== id));
+        }}
       />
     </>
   );

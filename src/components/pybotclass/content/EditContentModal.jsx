@@ -1,22 +1,21 @@
 import { useEffect, useState } from "react";
-import { createContent } from "../../../platform/contentApi.js";
+import { updateContent } from "../../../platform/contentApi.js";
 
-export default function CreateContentModal({ open, onClose, onCreated }) {
+export default function EditContentModal({ open, content, onClose, onSaved }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    if (!open) {
-      setTitle("");
-      setDescription("");
-      setErr("");
-      setBusy(false);
-    }
-  }, [open]);
+    if (!open || !content) return;
+    setTitle(content.title || "");
+    setDescription(content.description || "");
+    setErr("");
+    setBusy(false);
+  }, [open, content]);
 
-  if (!open) return null;
+  if (!open || !content) return null;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -25,15 +24,18 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
     setBusy(true);
     setErr("");
 
-    const { content, error } = await createContent({ title: trimmed, description });
+    const { content: updated, error } = await updateContent(content.id, {
+      title: trimmed,
+      description,
+    });
     setBusy(false);
 
-    if (error || !content) {
-      setErr(error || "No se pudo crear el contenido.");
+    if (error || !updated) {
+      setErr(error || "No se pudo guardar el contenido.");
       return;
     }
 
-    onCreated?.(content);
+    onSaved?.(updated);
     onClose?.();
   };
 
@@ -42,42 +44,40 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
       <form
         className="pbc-modal pbc-modal--create-content"
         role="dialog"
-        aria-labelledby="create-content-title"
+        aria-labelledby="edit-content-title"
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
       >
-        <h2 id="create-content-title" className="pbc-modal__title">
-          Crear contenido
+        <h2 id="edit-content-title" className="pbc-modal__title">
+          Editar contenido
         </h2>
         <p className="pbc-modal--create-content__subtitle">
-          Creá un contenido que después podrás organizar en unidades y lecciones.
+          Actualizá el título y la descripción de este contenido.
         </p>
 
         <div className="pbc-modal__field">
-          <label className="pbc-label" htmlFor="content-title">
+          <label className="pbc-label" htmlFor="edit-content-title-input">
             Título *
           </label>
           <input
-            id="content-title"
+            id="edit-content-title-input"
             className="pbc-input"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Introducción a Python"
             required
             autoFocus
           />
         </div>
 
         <div className="pbc-modal__field">
-          <label className="pbc-label" htmlFor="content-desc">
+          <label className="pbc-label" htmlFor="edit-content-desc">
             Descripción
           </label>
           <textarea
-            id="content-desc"
+            id="edit-content-desc"
             className="pbc-input pbc-input--textarea"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Contenido inicial de programación para alumnos sin experiencia."
             rows={3}
           />
         </div>
@@ -89,7 +89,7 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
             Cancelar
           </button>
           <button type="submit" className="pbc-btn pbc-btn--primary" disabled={busy || !title.trim()}>
-            {busy ? "Creando…" : "Crear contenido"}
+            {busy ? "Guardando…" : "Guardar cambios"}
           </button>
         </div>
       </form>

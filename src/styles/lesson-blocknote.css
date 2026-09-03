@@ -1,0 +1,280 @@
+/* Capa visual de BlockNote, acotada al editor de lecciones. */
+
+.pbc-lesson-page {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.pbc-lesson-page .pbc-content-breadcrumb {
+  margin-bottom: 0.75rem;
+}
+
+.pbc-lesson-page .pbc-content-breadcrumb span[aria-hidden] {
+  color: #94a3b8;
+}
+
+.pbc-lesson-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.pbc-lesson-editor__toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.pbc-lesson-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.pbc-lesson-save--ok {
+  color: #0f766e;
+}
+
+.pbc-lesson-save--err {
+  color: #b91c1c;
+}
+
+.pbc-lesson-title-input {
+  width: 100%;
+  margin: 0 0 1.1rem;
+  padding: 0.15rem 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: clamp(1.45rem, 2.4vw, 1.9rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.pbc-lesson-title-input:focus-visible {
+  outline: none;
+  box-shadow: 0 2px 0 0 #3b82f6;
+}
+
+.pbc-lesson-doc {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  min-height: 70vh;
+  padding: 0.5rem 0 2.5rem;
+  background: #ffffff;
+  border: 1px solid #e6ebf2;
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-lesson-doc {
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+.pbc-lesson-doc .bn-container,
+.pbc-lesson-doc .bn-mantine,
+.pbc-lesson-doc .pbc-bn {
+  background: transparent;
+}
+
+.pbc-lesson-doc .bn-editor {
+  min-height: 68vh;
+  padding-top: 2.25rem;
+  padding-bottom: 4rem;
+}
+
+.pbc-lesson-doc .bn-visual-media,
+.pbc-lesson-doc .bn-visual-media-wrapper,
+.pbc-lesson-doc video,
+.pbc-lesson-doc audio,
+.pbc-lesson-doc img {
+  max-width: 100%;
+}
+
+.pbc-lesson-doc .bn-block-content[data-content-type="table"] {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.pbc-lesson-doc pre,
+.pbc-lesson-doc code,
+.pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"] {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+.pbc-lesson-doc .bn-side-menu .bn-button,
+.pbc-lesson-doc .bn-toolbar,
+.pbc-lesson-doc .bn-suggestion-menu {
+  border-radius: 12px;
+}
+
+.pbc-lesson-doc--preview .bn-side-menu,
+.pbc-lesson-doc--preview .bn-formatting-toolbar,
+.pbc-lesson-doc--preview .bn-suggestion-menu,
+.pbc-lesson-doc--preview .bn-file-panel,
+.pbc-lesson-doc--preview .bn-table-handles,
+.pbc-lesson-doc--preview .bn-drag-handle {
+  display: none !important;
+}
+
+.pbc-safe-video {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #0f172a;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.pbc-safe-video__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.pbc-media-loading,
+.pbc-media-missing {
+  margin: 0;
+  padding: 1.25rem;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.pbc-pybot-card {
+  width: 100%;
+  padding: 0.95rem 1rem 1.05rem;
+  border-radius: 14px;
+  border: 1px solid #e6ebf2;
+  background: #fbfcff;
+}
+
+.pbc-pybot-card--exercise {
+  border-color: #ddd6fe;
+  background: linear-gradient(180deg, #faf7ff 0%, #ffffff 42%);
+}
+
+.pbc-pybot-card--task {
+  border-color: #fed7aa;
+  background: linear-gradient(180deg, #fffaf4 0%, #ffffff 42%);
+}
+
+.pbc-pybot-card__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+}
+
+.pbc-pybot-card__badge {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.22rem 0.5rem;
+  border-radius: 999px;
+}
+
+.pbc-pybot-card--exercise .pbc-pybot-card__badge {
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.pbc-pybot-card--task .pbc-pybot-card__badge {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.pbc-pybot-card__hint {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.pbc-pybot-card__label {
+  display: block;
+  margin: 0.35rem 0 0.28rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.pbc-pybot-card__input,
+.pbc-pybot-card__textarea {
+  width: 100%;
+  margin-bottom: 0.35rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.pbc-pybot-card__input:focus-visible,
+.pbc-pybot-card__textarea:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
+  border-color: #3b82f6;
+}
+
+.pbc-pybot-card__textarea--code,
+.pbc-pybot-card__code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.pbc-pybot-card__static {
+  margin: 0 0 0.45rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.pbc-pybot-card__static--pre {
+  white-space: pre-wrap;
+}
+
+.pbc-pybot-card__static--muted {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.pbc-pybot-card__code {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+@media (max-width: 720px) {
+  .pbc-lesson-doc .bn-editor {
+    padding-top: 1.25rem;
+    padding-bottom: 2.5rem;
+  }
+}
