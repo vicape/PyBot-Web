@@ -166,27 +166,29 @@ const LessonBlockNoteEditor = forwardRef(function LessonBlockNoteEditor(
   );
 
   return (
-    <div className={`pbc-lesson-doc${preview ? " pbc-lesson-doc--preview" : ""}`}>
+    <div className={`pbc-lesson-workspace${preview ? " pbc-lesson-workspace--preview" : ""}`}>
       {preview ? null : <LessonInsertToolbar editor={editor} disabled={!editor.isEditable} />}
-      <BlockNoteView
-        editor={editor}
-        theme="light"
-        editable={!preview}
-        slashMenu={false}
-        emojiPicker={false}
-        comments={false}
-        formattingToolbar={!preview}
-        sideMenu={!preview}
-        filePanel={!preview}
-        tableHandles={!preview}
-        linkToolbar={!preview}
-        onChange={handleChange}
-        className="pbc-bn"
-      >
-        {preview ? null : (
-          <SuggestionMenuController triggerCharacter="/" getItems={getSlashItems} />
-        )}
-      </BlockNoteView>
+      <div className={`pbc-lesson-doc${preview ? " pbc-lesson-doc--preview" : ""}`}>
+        <BlockNoteView
+          editor={editor}
+          theme="light"
+          editable={!preview}
+          slashMenu={false}
+          emojiPicker={false}
+          comments={false}
+          formattingToolbar={!preview}
+          sideMenu={!preview}
+          filePanel={!preview}
+          tableHandles={!preview}
+          linkToolbar={!preview}
+          onChange={handleChange}
+          className="pbc-bn"
+        >
+          {preview ? null : (
+            <SuggestionMenuController triggerCharacter="/" getItems={getSlashItems} />
+          )}
+        </BlockNoteView>
+      </div>
     </div>
   );
 });

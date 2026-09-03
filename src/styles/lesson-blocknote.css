@@ -1,218 +1,393 @@
-/* Capa visual de BlockNote, acotada al editor de lecciones. */
+/* Editor de lecciones — presentación visual PyBotClass (sin cambiar BlockNote). */
 
 .pbc-lesson-page {
   width: 100%;
-  max-width: 960px;
+  max-width: 1240px;
   margin: 0 auto;
+  --pbc-lesson-ink: #111827;
+  --pbc-lesson-muted: #64748b;
+  --pbc-lesson-blue: #3b6ef5;
+  --pbc-lesson-cyan: #0ea5c6;
+  --pbc-lesson-violet: #7c4dff;
+  --pbc-lesson-green: #159b72;
+  --pbc-lesson-border: #e6ebf2;
+  --pbc-lesson-bg: #f7f9fc;
+}
+
+.pbc-dashboard__content:has(.pbc-lesson-page) {
+  background: var(--pbc-lesson-bg, #f7f9fc);
 }
 
 .pbc-lesson-page .pbc-content-breadcrumb {
-  margin-bottom: 0.75rem;
-}
-
-.pbc-lesson-page .pbc-content-breadcrumb span[aria-hidden] {
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
   color: #94a3b8;
 }
 
-.pbc-lesson-editor__toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.85rem;
+.pbc-lesson-page .pbc-content-breadcrumb a {
+  color: #3b6ef5;
+  font-weight: 600;
 }
 
-.pbc-lesson-editor__toolbar-right {
+.pbc-lesson-page .pbc-content-breadcrumb span[aria-hidden] {
+  color: #cbd5e1;
+}
+
+/* —— Header —— */
+.pbc-lesson-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem 1.5rem;
+  margin-bottom: 1.35rem;
+}
+
+.pbc-lesson-hero__left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.pbc-lesson-hero__art {
+  flex-shrink: 0;
+  width: 100px;
+  height: 100px;
+}
+
+.pbc-lesson-hero__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.pbc-lesson-hero__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.pbc-lesson-title-input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0.1rem 0;
+  border: none;
+  background: transparent;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: clamp(2rem, 3.2vw, 2.625rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+
+.pbc-lesson-title-input:focus-visible {
+  outline: none;
+  box-shadow: 0 2px 0 0 #3b6ef5;
+}
+
+.pbc-lesson-hero__pencil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.pbc-lesson-hero__pencil:hover {
+  color: #3b6ef5;
+  background: #eff4ff;
+}
+
+.pbc-lesson-hero__subtitle {
+  margin: 0.45rem 0 0;
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.pbc-lesson-hero__back {
+  display: inline-flex;
+  margin-top: 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #64748b;
+  text-decoration: none;
+}
+
+.pbc-lesson-hero__back:hover {
+  color: #3b6ef5;
+}
+
+.pbc-lesson-hero__right {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
+  gap: 0.75rem;
 }
 
 .pbc-lesson-save {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
   min-height: 2rem;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: #64748b;
 }
 
 .pbc-lesson-save--ok {
-  color: #0f766e;
+  color: #159b72;
 }
 
 .pbc-lesson-save--err {
   color: #b91c1c;
 }
 
-.pbc-lesson-title-input {
-  width: 100%;
-  margin: 0 0 1.1rem;
-  padding: 0.15rem 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
-  font-size: clamp(1.45rem, 2.4vw, 1.9rem);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
-}
-
-.pbc-lesson-title-input:focus-visible {
-  outline: none;
-  box-shadow: 0 2px 0 0 #3b82f6;
-}
-
-.pbc-lesson-doc {
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  min-height: 70vh;
-  padding: 0 0 2.5rem;
-  background: #ffffff;
-  border: 1px solid #e6ebf2;
-  border-radius: 16px;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
-  overflow: hidden;
-}
-
-.pbc-lesson-insert {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  padding: 0.85rem 1rem 0.9rem;
-  border-bottom: 1px solid #e8eef7;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-}
-
-.pbc-lesson-insert__intro {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.65rem;
-  margin-bottom: 0.7rem;
-  font-size: 0.8125rem;
-  color: #64748b;
-}
-
-.pbc-lesson-insert__intro strong {
-  color: #0f172a;
-  font-size: 0.875rem;
-}
-
-.pbc-lesson-insert__rail {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.pbc-lesson-insert__group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.45rem 0.55rem;
-  padding: 0.45rem 0.55rem;
-  border-radius: 12px;
-  border: 1px solid transparent;
-}
-
-.pbc-lesson-insert__group--basic {
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.08), rgba(37, 99, 235, 0.02));
-  border-color: rgba(37, 99, 235, 0.12);
-}
-
-.pbc-lesson-insert__group--media {
-  background: linear-gradient(90deg, rgba(6, 182, 212, 0.1), rgba(6, 182, 212, 0.02));
-  border-color: rgba(6, 182, 212, 0.14);
-}
-
-.pbc-lesson-insert__group--code {
-  background: linear-gradient(90deg, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.02));
-  border-color: rgba(99, 102, 241, 0.14);
-}
-
-.pbc-lesson-insert__group--pybot {
-  background: linear-gradient(90deg, rgba(124, 58, 237, 0.1), rgba(249, 115, 22, 0.06));
-  border-color: rgba(124, 58, 237, 0.14);
-}
-
-.pbc-lesson-insert__group-label {
-  flex: 0 0 auto;
-  min-width: 6.5rem;
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #64748b;
-}
-
-.pbc-lesson-insert__buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.pbc-lesson-insert__btn {
+.pbc-lesson-preview-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.4rem 0.65rem;
-  border-radius: 999px;
-  border: 1px solid #dbe4f0;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 52px;
+  padding: 0.7rem 1.15rem;
+  border-radius: 14px;
+  border: 1.5px solid #3b6ef5;
   background: #ffffff;
-  color: #0f172a;
+  color: #3b6ef5;
   font-family: inherit;
-  font-size: 0.75rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.pbc-lesson-insert__btn:hover:not(:disabled) {
-  border-color: #60a5fa;
-  background: #f8fbff;
+.pbc-lesson-preview-btn:hover {
+  background: #f5f8ff;
   transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(59, 110, 245, 0.12);
 }
 
-.pbc-lesson-insert__btn:focus-visible {
-  outline: 2px solid #3b82f6;
+.pbc-lesson-preview-btn:focus-visible {
+  outline: 2px solid #3b6ef5;
   outline-offset: 2px;
 }
 
-.pbc-lesson-insert__btn:disabled {
+/* —— Workspace —— */
+.pbc-lesson-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+/* —— Visual toolbar —— */
+.pbc-vbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1.05rem 1.4rem;
+  border-radius: 22px;
+  border: 1px solid #e8edf5;
+  background: #ffffff;
+  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.06);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.pbc-vbar::-webkit-scrollbar {
+  display: none;
+}
+
+.pbc-vbar__start {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+}
+
+.pbc-vbar__grip {
+  display: inline-flex;
+  opacity: 0.75;
+}
+
+.pbc-vbar__plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #3b6ef5 0%, #7c4dff 100%);
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(59, 110, 245, 0.28);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.pbc-vbar__plus:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(59, 110, 245, 0.34);
+}
+
+.pbc-vbar__plus:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.pbc-lesson-insert__icon {
+.pbc-vbar__divider {
+  width: 1px;
+  height: 52px;
+  background: #e7ebf2;
+  flex-shrink: 0;
+}
+
+.pbc-vbar__group {
+  position: relative;
   display: inline-flex;
-  color: #2563eb;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
 }
 
-.pbc-lesson-insert__group--media .pbc-lesson-insert__icon {
-  color: #0891b2;
+.pbc-vbar__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  border: 1px solid #e5eaf2;
+  background: #ffffff;
+  color: #3b6ef5;
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, border-color 0.16s ease;
 }
 
-.pbc-lesson-insert__group--code .pbc-lesson-insert__icon {
-  color: #4f46e5;
+.pbc-vbar__icon-btn--cyan {
+  color: #0ea5c6;
 }
 
-.pbc-lesson-insert__group--pybot .pbc-lesson-insert__icon {
-  color: #7c3aed;
+.pbc-vbar__icon-btn--violet {
+  color: #7c4dff;
 }
 
-.pbc-lesson-doc--preview .pbc-lesson-insert {
+.pbc-vbar__icon-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #f5f8ff;
+  border-color: #d7e3ff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.pbc-vbar__icon-btn--cyan:hover:not(:disabled) {
+  background: #f0fcff;
+  border-color: #cff4fb;
+}
+
+.pbc-vbar__icon-btn--violet:hover:not(:disabled) {
+  background: #f7f3ff;
+  border-color: #e4d9ff;
+}
+
+.pbc-vbar__icon-btn:focus-visible,
+.pbc-vbar__more:focus-visible,
+.pbc-vbar__plus:focus-visible {
+  outline: 2px solid #3b6ef5;
+  outline-offset: 2px;
+}
+
+.pbc-vbar__icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pbc-vbar__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  height: 28px;
+  padding: 0 0.35rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.pbc-vbar__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3b6ef5;
+}
+
+.pbc-vbar__menu {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  z-index: 20;
+  min-width: 180px;
+  padding: 0.4rem;
+  border-radius: 14px;
+  border: 1px solid #e8edf5;
+  background: #ffffff;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
+}
+
+.pbc-vbar__menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pbc-vbar__menu-item:hover:not(:disabled) {
+  background: #f5f8ff;
+  color: #3b6ef5;
+}
+
+.pbc-vbar__menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* —— Document surface —— */
+.pbc-lesson-doc {
+  width: 100%;
+  margin: 0;
+  min-height: 600px;
+  padding: 2rem 2.15rem 3rem;
+  background: #ffffff;
+  border: 1px solid #e8edf5;
+  border-radius: 22px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.pbc-lesson-workspace--preview .pbc-vbar {
   display: none;
 }
 
-.pbc-dashboard[data-pbc-theme="dark"] .pbc-lesson-doc {
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-lesson-doc,
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-vbar {
   border-color: rgba(15, 23, 42, 0.08);
 }
 
@@ -223,9 +398,9 @@
 }
 
 .pbc-lesson-doc .bn-editor {
-  min-height: 68vh;
-  padding-top: 2.25rem;
-  padding-bottom: 4rem;
+  min-height: 560px;
+  padding-top: 0.35rem;
+  padding-bottom: 3rem;
 }
 
 .pbc-lesson-doc .bn-visual-media,
@@ -251,14 +426,6 @@
 .pbc-lesson-doc .bn-toolbar,
 .pbc-lesson-doc .bn-suggestion-menu {
   border-radius: 12px;
-}
-
-.pbc-lesson-doc .bn-side-menu button[data-test="dragHandleAdd"],
-.pbc-lesson-doc .bn-add-block-button,
-.pbc-lesson-doc .bn-side-menu .bn-button {
-  background: #eff6ff !important;
-  border: 1px solid #bfdbfe !important;
-  color: #1d4ed8 !important;
 }
 
 .pbc-lesson-doc--preview .bn-side-menu,
@@ -298,22 +465,20 @@
   font-size: 0.875rem;
 }
 
+/* —— PyBot custom cards —— */
 .pbc-pybot-card {
   width: 100%;
-  padding: 0.95rem 1rem 1.05rem;
-  border-radius: 14px;
-  border: 1px solid #e6ebf2;
-  background: #fbfcff;
-}
-
-.pbc-pybot-card--exercise {
-  border-color: #ddd6fe;
-  background: linear-gradient(180deg, #faf7ff 0%, #ffffff 42%);
+  padding: 1.5rem;
+  border-radius: 18px;
+  border: 1px solid #e8e4ff;
+  border-left: 4px solid #7c4dff;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
 }
 
 .pbc-pybot-card--task {
-  border-color: #fed7aa;
-  background: linear-gradient(180deg, #fffaf4 0%, #ffffff 42%);
+  border-color: #dbe7ff;
+  border-left-color: #3b6ef5;
 }
 
 .pbc-pybot-card__top {
@@ -321,62 +486,156 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.4rem;
-  margin-bottom: 0.7rem;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
 }
 
-.pbc-pybot-card__badge {
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0.22rem 0.5rem;
-  border-radius: 999px;
+.pbc-pybot-card__identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
 }
 
-.pbc-pybot-card--exercise .pbc-pybot-card__badge {
-  background: #f5f3ff;
-  color: #6d28d9;
+.pbc-pybot-card__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #7c4dff;
+  color: #ffffff;
 }
 
-.pbc-pybot-card--task .pbc-pybot-card__badge {
-  background: #fff7ed;
-  color: #c2410c;
+.pbc-pybot-card--task .pbc-pybot-card__glyph {
+  background: #3b6ef5;
+}
+
+.pbc-pybot-card__kind {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.pbc-pybot-card__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
 }
 
 .pbc-pybot-card__hint {
-  font-size: 0.75rem;
-  color: #64748b;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #7c4dff;
+}
+
+.pbc-pybot-card--task .pbc-pybot-card__hint {
+  color: #3b6ef5;
+}
+
+.pbc-pybot-card__menu {
+  position: relative;
+}
+
+.pbc-pybot-card__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.pbc-pybot-card__menu-btn:hover {
+  background: #f5f7fb;
+  color: #475569;
+}
+
+.pbc-pybot-card__menu-panel {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  z-index: 8;
+  min-width: 160px;
+  padding: 0.35rem;
+  border-radius: 12px;
+  border: 1px solid #e8edf5;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.pbc-pybot-card__menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #b91c1c;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pbc-pybot-card__menu-item:hover {
+  background: #fef2f2;
 }
 
 .pbc-pybot-card__label {
   display: block;
-  margin: 0.35rem 0 0.28rem;
-  font-size: 0.75rem;
+  margin: 0.15rem 0 0.4rem;
+  font-size: 0.8125rem;
   font-weight: 700;
-  color: #475569;
+  color: #64748b;
+}
+
+.pbc-pybot-card__label--dot::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  background: #3b6ef5;
+  vertical-align: middle;
 }
 
 .pbc-pybot-card__input,
 .pbc-pybot-card__textarea {
   width: 100%;
-  margin-bottom: 0.35rem;
-  padding: 0.5rem 0.65rem;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  margin-bottom: 0.85rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid #e5eaf2;
   background: #ffffff;
-  color: #0f172a;
+  color: #111827;
   font-family: inherit;
-  font-size: 0.875rem;
-  line-height: 1.45;
+  font-size: 0.9375rem;
+  line-height: 1.5;
   resize: vertical;
 }
 
 .pbc-pybot-card__input:focus-visible,
 .pbc-pybot-card__textarea:focus-visible {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid #3b6ef5;
   outline-offset: 1px;
-  border-color: #3b82f6;
+  border-color: #3b6ef5;
+}
+
+.pbc-pybot-card__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.pbc-pybot-card__col {
+  min-width: 0;
 }
 
 .pbc-pybot-card__textarea--code,
@@ -385,11 +644,23 @@
   font-size: 0.8125rem;
 }
 
+.pbc-pybot-card__textarea--code {
+  background: #17213a;
+  border-color: #243250;
+  color: #e2e8f0;
+  min-height: 160px;
+}
+
+.pbc-pybot-card__textarea--code:focus-visible {
+  outline-color: #7c4dff;
+  border-color: #7c4dff;
+}
+
 .pbc-pybot-card__static {
-  margin: 0 0 0.45rem;
-  font-size: 0.9rem;
+  margin: 0 0 0.55rem;
+  font-size: 0.9375rem;
   line-height: 1.5;
-  color: #0f172a;
+  color: #111827;
 }
 
 .pbc-pybot-card__static--pre {
@@ -403,17 +674,40 @@
 
 .pbc-pybot-card__code {
   margin: 0;
-  padding: 0.7rem 0.8rem;
-  border-radius: 10px;
-  background: #0f172a;
+  padding: 0.85rem 0.95rem;
+  border-radius: 14px;
+  background: #17213a;
   color: #e2e8f0;
   white-space: pre-wrap;
   overflow-x: auto;
 }
 
+@media (max-width: 860px) {
+  .pbc-lesson-hero__art {
+    width: 72px;
+    height: 72px;
+  }
+
+  .pbc-pybot-card__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pbc-lesson-doc {
+    padding: 1.25rem 1rem 2rem;
+  }
+}
+
 @media (max-width: 720px) {
   .pbc-lesson-doc .bn-editor {
-    padding-top: 1.25rem;
     padding-bottom: 2.5rem;
+  }
+
+  .pbc-vbar {
+    padding: 0.85rem 1rem;
+  }
+
+  .pbc-vbar__icon-btn {
+    width: 46px;
+    height: 46px;
   }
 }
