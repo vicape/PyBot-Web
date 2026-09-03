@@ -53,6 +53,11 @@ export default function AssignLessonModal({
       }
       setCourses(rows);
       if (rows.length === 1) setCourseId(rows[0].course_id);
+      if (rows.length === 0) {
+        setErr(
+          "No encontramos cursos donde seas docente. Abrí Mis clases y verificá que tengas al menos un curso.",
+        );
+      }
     })();
   }, [open, lessonTitle]);
 
