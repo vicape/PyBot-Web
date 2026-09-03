@@ -64,55 +64,53 @@ export default function MyContentPage() {
   if (!user) return null;
 
   return (
-    <>
-      <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
-        {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
-        {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+    <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
+      {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
+      {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
 
-        <div className="pbc-content-page">
-          <header className="pbc-content-page__head">
-            <div>
-              <h1 className="pbc-hero-block__title">Mi Contenido</h1>
-              <p className="pbc-hero-block__subtitle">
-                Creá y organizá contenidos completos para reutilizarlos en tus cursos.
-              </p>
-            </div>
-            <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
-              + Crear contenido
-            </button>
-          </header>
+      <div className="pbc-content-page">
+        <header className="pbc-content-page__head">
+          <div>
+            <h1 className="pbc-hero-block__title">Mi Contenido</h1>
+            <p className="pbc-hero-block__subtitle">
+              Creá y organizá contenidos completos para reutilizarlos en tus cursos.
+            </p>
+          </div>
+          <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
+            + Crear contenido
+          </button>
+        </header>
 
-          {contents.length === 0 ? (
-            <div className="pbc-empty-state pbc-empty-state--content">
-              <span className="pbc-empty-state__illus" aria-hidden>
-                <MyContentEmptyIllustration />
-              </span>
-              <h3 className="pbc-empty-state__title">Creá tu primer contenido</h3>
-              <p className="pbc-empty-state__desc">
-                Organizá teoría, ejemplos, ejercicios y tareas en un mismo lugar.
-              </p>
-              <div className="pbc-empty-state__actions">
-                <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
-                  Crear contenido
-                </button>
-              </div>
+        {contents.length === 0 ? (
+          <div className="pbc-empty-state pbc-empty-state--content">
+            <span className="pbc-empty-state__illus" aria-hidden>
+              <MyContentEmptyIllustration />
+            </span>
+            <h3 className="pbc-empty-state__title">Creá tu primer contenido</h3>
+            <p className="pbc-empty-state__desc">
+              Organizá teoría, ejemplos, ejercicios y tareas en un mismo lugar.
+            </p>
+            <div className="pbc-empty-state__actions">
+              <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
+                Crear contenido
+              </button>
             </div>
-          ) : (
-            <div className="pbc-content-grid">
-              {contents.map((c) => (
-                <ContentCard
-                  key={c.id}
-                  content={c}
-                  onEdit={setEditing}
-                  onDelete={setDeleting}
-                  onShare={setSharing}
-                  onAssign={setAssigning}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </PyBotClassLayout>
+          </div>
+        ) : (
+          <div className="pbc-content-grid">
+            {contents.map((c) => (
+              <ContentCard
+                key={c.id}
+                content={c}
+                onEdit={setEditing}
+                onDelete={setDeleting}
+                onShare={setSharing}
+                onAssign={setAssigning}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       <CreateContentModal
         open={showCreate}
@@ -174,6 +172,6 @@ export default function MyContentPage() {
           setContents((rows) => rows.filter((row) => row.id !== id));
         }}
       />
-    </>
+    </PyBotClassLayout>
   );
 }

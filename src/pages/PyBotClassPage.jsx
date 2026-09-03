@@ -201,20 +201,19 @@ export default function PyBotClassPage() {
   }
 
   return (
-    <>
-      <PyBotClassLayout
-        user={user}
-        showAdmin={superAdmin}
-        hasStaffAccess={hasStaffAccess}
-        search={search}
-        onSearchChange={setSearch}
-        onSignOut={() => void signOut()}
-      >
-        {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
-        {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
-        {content}
-      </PyBotClassLayout>
+    <PyBotClassLayout
+      user={user}
+      showAdmin={superAdmin}
+      hasStaffAccess={hasStaffAccess}
+      search={search}
+      onSearchChange={setSearch}
+      onSignOut={() => void signOut()}
+    >
+      {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
+      {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+      {content}
 
+      {/* Inside .pbc-dashboard so theme tokens (--pbc-panel-solid, etc.) resolve */}
       <CreateCourseModal
         open={showCreate}
         onClose={() => setShowCreate(false)}
@@ -228,6 +227,6 @@ export default function PyBotClassPage() {
         supabase={supabase}
         onJoined={load}
       />
-    </>
+    </PyBotClassLayout>
   );
 }
