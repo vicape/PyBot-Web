@@ -2,6 +2,12 @@ import { getSupabase } from "../supabaseClient.js";
 import { getContent, getLesson, updateContent } from "./contentApi.js";
 import { listPybotclassMyCourses } from "./pybotClassApi.js";
 
+function canAssignAsTeacher(row) {
+  const role = row?.my_course_role;
+  // list_pybotclass_my_courses usa el rol de org (owner|teacher) o de course_members.
+  return role === "teacher" || role === "owner";
+}
+
 /**
  * Cursos donde el usuario es docente (para asignar lecciones).
  */
@@ -9,7 +15,7 @@ export async function listTeacherCoursesForAssign() {
   const { rows, error } = await listPybotclassMyCourses(null);
   if (error) return { rows: [], error };
   return {
-    rows: (rows ?? []).filter((r) => r.my_course_role === "teacher"),
+    rows: (rows ?? []).filter(canAssignAsTeacher),
     error: null,
   };
 }
