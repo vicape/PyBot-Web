@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import LessonBlockNoteEditor from "../components/content-editor/LessonBlockNoteEditor.jsx";
 import LessonDocIllustration from "../components/content-editor/LessonDocIllustration.jsx";
+import AssignLessonModal from "../components/content-editor/AssignLessonModal.jsx";
 import {
   hasSavedLessonDocument,
   legacyBlocksToDocument,
@@ -63,6 +64,21 @@ function CheckIcon() {
   );
 }
 
+function AssignIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      <circle cx="9" cy="7" r="3.2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M19 8v6M16 11h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function SaveStatus({ status, onRetry }) {
   if (status === "saving") {
     return (
@@ -107,6 +123,7 @@ export default function LessonEditorPage() {
   const [superAdmin, setSuperAdmin] = useState(false);
   const [preview, setPreview] = useState(false);
   const [saveStatus, setSaveStatus] = useState("idle");
+  const [assignOpen, setAssignOpen] = useState(false);
 
   const editorRef = useRef(null);
   const titleInputRef = useRef(null);
@@ -303,6 +320,15 @@ export default function LessonEditorPage() {
             <SaveStatus status={saveStatus} onRetry={retrySave} />
             <button
               type="button"
+              className="pbc-lesson-assign-btn"
+              onClick={() => setAssignOpen(true)}
+              disabled={preview}
+            >
+              <AssignIcon />
+              Asignar
+            </button>
+            <button
+              type="button"
               className="pbc-lesson-preview-btn"
               onClick={() => setPreview((value) => !value)}
               aria-pressed={preview}
@@ -326,6 +352,14 @@ export default function LessonEditorPage() {
           />
         ) : null}
       </div>
+
+      <AssignLessonModal
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        lessonId={lessonId}
+        lessonTitle={title || lesson.title}
+        contentTitle={content.title}
+      />
     </PyBotClassLayout>
   );
 }

@@ -711,3 +711,142 @@
     height: 46px;
   }
 }
+
+/* —— Asignar lección —— */
+.pbc-lesson-assign-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 52px;
+  padding: 0 1.15rem;
+  border-radius: 14px;
+  border: 1px solid #3b6ef5;
+  background: #3b6ef5;
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.pbc-lesson-assign-btn:hover:not(:disabled) {
+  background: #2f5de0;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(59, 110, 245, 0.28);
+}
+
+.pbc-lesson-assign-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pbc-modal--assign-lesson {
+  width: min(560px, 100%);
+  max-height: min(90vh, 760px);
+  overflow: auto;
+}
+
+.pbc-modal--assign-lesson__subtitle {
+  margin: 0 0 1.25rem;
+  color: #64748b;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.pbc-assign-mode {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.pbc-assign-mode__option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.9375rem;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.pbc-assign-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.pbc-assign-students__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.pbc-assign-students__actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.pbc-assign-students {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 0.5rem 0.65rem;
+  background: #f8fafc;
+}
+
+.pbc-assign-students__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.4rem 0.15rem;
+  font-size: 0.875rem;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.pbc-assign-students__row small {
+  color: #64748b;
+}
+
+.pbc-assign-done__msg {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: rgba(21, 155, 114, 0.1);
+  color: #0f766e;
+  border: 1px solid rgba(21, 155, 114, 0.25);
+}
+
+.pbc-activity-lesson {
+  margin: 1.25rem 0 1.5rem;
+}
+
+.pbc-activity-lesson__title {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.pbc-assigned-lesson {
+  max-width: none;
+}
+
+.pbc-assigned-lesson .pbc-lesson-doc {
+  min-height: 280px;
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .pbc-assign-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .pbc-lesson-hero__right {
+    width: 100%;
+  }
+}

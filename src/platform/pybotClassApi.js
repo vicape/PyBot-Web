@@ -196,7 +196,7 @@ export async function fetchCourseActivities(courseId) {
   const { data, error } = await sb
     .from("activities")
     .select(
-      "id, title, description, starter_code, pybot_lesson_id, origin, due_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at",
+      "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, origin, due_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at",
     )
     .eq("course_id", courseId)
     .order("created_at", { ascending: false });
@@ -232,11 +232,14 @@ export async function createPybotclassActivity(supabase, fields) {
     due_at: fields.dueAt || null,
     max_points: fields.maxPoints != null && fields.maxPoints !== "" ? Number(fields.maxPoints) : null,
   };
+  if (fields.contentLessonId) {
+    payload.content_lesson_id = fields.contentLessonId;
+  }
 
   const { data, error } = await supabase
     .from("activities")
     .insert(payload)
-    .select("id, title, due_at, max_points, created_at")
+    .select("id, title, due_at, max_points, content_lesson_id, created_at")
     .maybeSingle();
 
   if (error) return { row: null, error: error.message };

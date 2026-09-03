@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import AssignedLessonViewer from "../components/content-editor/AssignedLessonViewer.jsx";
+import {
+  hasSavedLessonDocument,
+  legacyBlocksToDocument,
+  normalizeLessonDocument,
+} from "../components/content-editor/legacyLessonDocument.js";
 import {
   ACTIVITY_ID_QUERY,
   ACTIVITY_LAUNCH_STATE_KEY,
@@ -19,6 +25,8 @@ import {
   sendGradeToClassroom,
   syncClassroomSubmissionsForActivity,
 } from "../platform/activityClassroom.js";
+import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
+import { listLessonBlocks } from "../platform/contentApi.js";
 import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
 import { fetchMyOrgRole } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
@@ -58,6 +66,9 @@ export default function ActivityPage() {
   const [actionMsg, setActionMsg] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lessonDoc, setLessonDoc] = useState(null);
+  const [lessonMeta, setLessonMeta] = useState(null);
+  const [lessonErr, setLessonErr] = useState("");
 
   const canTeach = canTeachCourse({ orgRole, courseRole });
   const isStudent = isCourseStudent({ courseRole });
@@ -75,7 +86,9 @@ export default function ActivityPage() {
 
     let { data: act, error: eAct } = await supabase
       .from("activities")
-      .select("id, title, description, starter_code, pybot_lesson_id, course_id, created_at")
+      .select(
+        "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, course_id, due_at, max_points, created_at",
+      )
       .eq("id", activityId)
       .maybeSingle();
 
@@ -113,6 +126,26 @@ export default function ActivityPage() {
     }
 
     setActivity(act);
+    setLessonDoc(null);
+    setLessonMeta(null);
+    setLessonErr("");
+
+    if (act.content_lesson_id) {
+      const { lesson, document, error: lessonLoadErr } = await fetchAssignedLessonDocument(
+        act.content_lesson_id,
+      );
+      if (lessonLoadErr) {
+        setLessonErr(lessonLoadErr);
+      } else if (lesson) {
+        setLessonMeta(lesson);
+        if (hasSavedLessonDocument(document)) {
+          setLessonDoc(normalizeLessonDocument(document));
+        } else {
+          const { rows: blocks } = await listLessonBlocks(act.content_lesson_id);
+          setLessonDoc(normalizeLessonDocument(legacyBlocksToDocument(blocks)));
+        }
+      }
+    }
 
     let nextOrgRole = null;
     let nextCourseRole = null;
@@ -380,10 +413,32 @@ export default function ActivityPage() {
           <p className="auth-card__muted">Sin descripción.</p>
         )}
 
-        {activity?.pybot_lesson_id ? (
+        {activity?.content_lesson_id ? (
+          <p className="auth-card__codehint">
+            Contenido de Mi Contenido
+            {lessonMeta?.title ? `: ${lessonMeta.title}` : ""}
+          </p>
+        ) : activity?.pybot_lesson_id ? (
           <p className="auth-card__codehint">
             Lección PyBot (referencia): <code>{activity.pybot_lesson_id}</code>
           </p>
+        ) : null}
+
+        {lessonErr ? (
+          <p className="auth-card__notice auth-card__notice--err">
+            No se pudo cargar el documento de la lección: {lessonErr}
+          </p>
+        ) : null}
+
+        {lessonDoc && activity?.content_lesson_id ? (
+          <section className="pbc-activity-lesson" aria-label="Contenido de la lección">
+            <h2 className="pbc-activity-lesson__title">Lección</h2>
+            <AssignedLessonViewer
+              key={activity.content_lesson_id}
+              lessonId={activity.content_lesson_id}
+              initialContent={lessonDoc}
+            />
+          </section>
         ) : null}
 
         <p className="auth-card__muted">{progressHint}</p>

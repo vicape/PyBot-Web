@@ -153,13 +153,18 @@ function StudentActivityRow({ activity, userId }) {
       title={activity.title}
       meta={[statusLabel, due ? `Entrega ${due}` : null, submission?.feedback].filter(Boolean).join(" · ")}
       badges={
-        status === "graded" || status === "returned" ? (
-          <span className="pbc-pill pbc-pill--ok">Corregida</span>
-        ) : status === "submitted" ? (
-          <span className="pbc-pill pbc-pill--warn">Entregada</span>
-        ) : (
-          <span className="pbc-pill pbc-pill--muted">Pendiente</span>
-        )
+        <>
+          {activity.content_lesson_id ? (
+            <span className="pbc-pill pbc-pill--content">Mi Contenido</span>
+          ) : null}
+          {status === "graded" || status === "returned" ? (
+            <span className="pbc-pill pbc-pill--ok">Corregida</span>
+          ) : status === "submitted" ? (
+            <span className="pbc-pill pbc-pill--warn">Entregada</span>
+          ) : (
+            <span className="pbc-pill pbc-pill--muted">Pendiente</span>
+          )}
+        </>
       }
       actions={
         <Link className="auth-btn auth-btn--primary auth-btn--sm" to={`/actividad/${activity.id}`}>
@@ -278,11 +283,16 @@ export default function CourseActivitiesTab({
                   .filter(Boolean)
                   .join(" · ")}
                 badges={
-                  a.classroom_coursework_id ? (
-                    <span className="pbc-pill pbc-pill--classroom">Classroom</span>
-                  ) : (
-                    <span className="pbc-pill pbc-pill--muted">PyBotClass</span>
-                  )
+                  <>
+                    {a.content_lesson_id ? (
+                      <span className="pbc-pill pbc-pill--content">Desde Mi Contenido</span>
+                    ) : null}
+                    {a.classroom_coursework_id ? (
+                      <span className="pbc-pill pbc-pill--classroom">Classroom</span>
+                    ) : a.content_lesson_id ? null : (
+                      <span className="pbc-pill pbc-pill--muted">PyBotClass</span>
+                    )}
+                  </>
                 }
                 actions={
                   <>

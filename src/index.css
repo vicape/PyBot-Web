@@ -1212,6 +1212,20 @@ body {
   background: #4ade80;
 }
 
+.pbc-pill--content {
+  background: rgba(124, 77, 255, 0.14);
+  color: #c4b5fd;
+  border: 1px solid rgba(124, 77, 255, 0.35);
+}
+
+.pbc-pill--content::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a78bfa;
+}
+
 .pbc-pill--role {
   background: rgba(59, 130, 246, 0.18);
   color: #93c5fd;
