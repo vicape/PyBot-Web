@@ -19,6 +19,40 @@ import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
 import { isSuperAdmin } from "../platformRole.js";
 
+function PencilIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 16.5V20h3.5L17.8 9.7l-3.5-3.5L4 16.5Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M13.2 5.3l3.5 3.5 1.8-1.8a1.5 1.5 0 0 0 0-2.1l-1.4-1.4a1.5 1.5 0 0 0-2.1 0l-1.8 1.8Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DocumentIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M7 3.75h7.5L19 8.25V20a1.25 1.25 0 0 1-1.25 1.25H7A1.25 1.25 0 0 1 5.75 20V5A1.25 1.25 0 0 1 7 3.75Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M14.5 3.75V8.5H19" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M9 12.5h6M9 16h4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function ContentEditorPage() {
   const { contentId } = useParams();
   const navigate = useNavigate();
@@ -119,10 +153,13 @@ export default function ContentEditorPage() {
     const title = promptText("Título de la lección");
     if (!title || busy) return;
     setBusy(true);
-    const { error } = await createLesson(unitId, { title });
+    const { lesson, error } = await createLesson(unitId, { title });
     setBusy(false);
-    if (error) setErr(error);
-    else void load();
+    if (error || !lesson) {
+      setErr(error || "No se pudo crear la lección.");
+      return;
+    }
+    navigate(`/dashboard/content/${contentId}/lessons/${lesson.id}`);
   };
 
   const editLessonTitle = async (lesson) => {
@@ -186,6 +223,10 @@ export default function ContentEditorPage() {
         <header className="pbc-content-editor__head">
           <h1 className="pbc-hero-block__title">{content.title}</h1>
           {content.description ? <p className="pbc-hero-block__subtitle">{content.description}</p> : null}
+          <p className="pbc-content-editor__hint">
+            Primero creá unidades y lecciones. Para cargar el material, abrí una lección con{" "}
+            <strong>Escribir contenido</strong>.
+          </p>
         </header>
 
         <div className="pbc-content-editor__actions">
@@ -238,61 +279,89 @@ export default function ContentEditorPage() {
                   </div>
                 </div>
 
-                <ul className="pbc-lesson-list">
-                  {(lessonsByUnit[unit.id] ?? []).map((lesson, lessonIndex) => (
-                    <li key={lesson.id} className="pbc-lesson-row">
-                      <Link to={`/dashboard/content/${contentId}/lessons/${lesson.id}`} className="pbc-lesson-row__link">
-                        Lección {lessonIndex + 1} — {lesson.title}
-                      </Link>
-                      <div className="pbc-lesson-row__actions">
-                        <div className="pbc-order-btns">
+                {(lessonsByUnit[unit.id] ?? []).length === 0 ? (
+                  <div className="pbc-unit-card__empty">
+                    <p className="pbc-unit-card__empty-title">Todavía no hay lecciones</p>
+                    <p className="pbc-unit-card__empty-text">
+                      Creá una lección para escribir texto, agregar imágenes, videos y ejercicios.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="pbc-lesson-list">
+                    {(lessonsByUnit[unit.id] ?? []).map((lesson, lessonIndex) => (
+                      <li key={lesson.id} className="pbc-lesson-row">
+                        <Link
+                          to={`/dashboard/content/${contentId}/lessons/${lesson.id}`}
+                          className="pbc-lesson-row__main"
+                          aria-label={`Escribir contenido de la lección ${lesson.title}`}
+                        >
+                          <span className="pbc-lesson-row__icon" aria-hidden>
+                            <DocumentIcon />
+                          </span>
+                          <span className="pbc-lesson-row__copy">
+                            <span className="pbc-lesson-row__title">
+                              Lección {lessonIndex + 1} — {lesson.title}
+                            </span>
+                            <span className="pbc-lesson-row__subtitle">
+                              Tocá para escribir o editar el contenido
+                            </span>
+                          </span>
+                          <span className="pbc-lesson-row__cta">
+                            <PencilIcon size={15} />
+                            Escribir contenido
+                          </span>
+                        </Link>
+                        <div className="pbc-lesson-row__actions">
+                          <div className="pbc-order-btns">
+                            <button
+                              type="button"
+                              className="pbc-order-btn"
+                              onClick={() => void moveLessonItem(lesson.id, "up")}
+                              disabled={busy || lessonIndex === 0}
+                              aria-label="Subir lección"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              className="pbc-order-btn"
+                              onClick={() => void moveLessonItem(lesson.id, "down")}
+                              disabled={
+                                busy || lessonIndex === (lessonsByUnit[unit.id]?.length ?? 0) - 1
+                              }
+                              aria-label="Bajar lección"
+                            >
+                              ↓
+                            </button>
+                          </div>
                           <button
                             type="button"
-                            className="pbc-order-btn"
-                            onClick={() => void moveLessonItem(lesson.id, "up")}
-                            disabled={busy || lessonIndex === 0}
-                            aria-label="Subir lección"
+                            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                            onClick={() => void editLessonTitle(lesson)}
                           >
-                            ↑
+                            Renombrar
                           </button>
                           <button
                             type="button"
-                            className="pbc-order-btn"
-                            onClick={() => void moveLessonItem(lesson.id, "down")}
-                            disabled={
-                              busy || lessonIndex === (lessonsByUnit[unit.id]?.length ?? 0) - 1
-                            }
-                            aria-label="Bajar lección"
+                            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                            onClick={() => void removeLesson(lesson)}
                           >
-                            ↓
+                            Eliminar
                           </button>
                         </div>
-                        <button
-                          type="button"
-                          className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                          onClick={() => void editLessonTitle(lesson)}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                          onClick={() => void removeLesson(lesson)}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
                 <button
                   type="button"
-                  className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-unit-card__add-lesson"
+                  className="pbc-btn pbc-btn--primary pbc-btn--sm pbc-unit-card__add-lesson"
                   onClick={() => void addLesson(unit.id)}
                   disabled={busy}
                 >
-                  + Nueva lección
+                  <PencilIcon size={14} />
+                  Nueva lección
                 </button>
               </section>
             ))}

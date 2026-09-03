@@ -1685,6 +1685,179 @@
   margin-bottom: 1.25rem;
 }
 
+.pbc-content-editor__hint {
+  margin: 0.65rem 0 0;
+  max-width: 48ch;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-content-editor__hint {
+  color: var(--pbc-text-muted);
+}
+
+.pbc-unit-card__empty {
+  margin: 0 0 0.75rem;
+  padding: 0.95rem 1rem;
+  border-radius: 12px;
+  border: 1px dashed #dde4ee;
+  background: #f8fafd;
+  color: #64748b;
+}
+
+.pbc-unit-card__empty-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.pbc-unit-card__empty-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-unit-card__empty {
+  background: var(--pbc-panel);
+  border-color: var(--pbc-border);
+  color: var(--pbc-text-muted);
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-unit-card__empty-title {
+  color: var(--pbc-text);
+}
+
+.pbc-lesson-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.pbc-lesson-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.55rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-lesson-row {
+  background: transparent;
+  border: none;
+}
+
+.pbc-lesson-row__main {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid #dbe4f0;
+  background: linear-gradient(180deg, #f7faff 0%, #ffffff 100%);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.pbc-lesson-row__main:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
+  transform: translateY(-1px);
+}
+
+.pbc-lesson-row__main:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-lesson-row__main {
+  background: var(--pbc-panel);
+  border-color: var(--pbc-border);
+}
+
+.pbc-lesson-row__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #eef4ff;
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-lesson-row__icon {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+}
+
+.pbc-lesson-row__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.pbc-lesson-row__title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+
+.pbc-lesson-row__subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-lesson-row__title {
+  color: var(--pbc-text);
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-lesson-row__subtitle {
+  color: var(--pbc-text-muted);
+}
+
+.pbc-lesson-row__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pbc-lesson-row__main:hover .pbc-lesson-row__cta {
+  background: #1d4ed8;
+}
+
+.pbc-lesson-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pbc-unit-card__add-lesson {
+  margin-top: 0.75rem;
+}
+
 .pbc-content-editor__empty,
 .pbc-lesson-editor__empty {
   padding: 1.5rem;
@@ -1753,60 +1926,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-}
-
-.pbc-lesson-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.pbc-lesson-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.65rem 0.85rem;
-  border-radius: 12px;
-  background: #f8fafd;
-  border: 1px solid #eef2f7;
-}
-
-.pbc-dashboard[data-pbc-theme="dark"] .pbc-lesson-row {
-  background: var(--pbc-panel);
-  border-color: var(--pbc-border);
-}
-
-.pbc-lesson-row__link {
-  flex: 1;
-  min-width: 0;
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: #0f172a;
-  text-decoration: none;
-}
-
-.pbc-lesson-row__link:hover {
-  color: #2563eb;
-}
-
-.pbc-dashboard[data-pbc-theme="dark"] .pbc-lesson-row__link {
-  color: var(--pbc-text);
-}
-
-.pbc-lesson-row__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.pbc-unit-card__add-lesson {
-  margin-top: 0.75rem;
 }
 
 .pbc-order-btns {

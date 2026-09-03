@@ -7,6 +7,7 @@ import "@blocknote/mantine/style.css";
 import "../../styles/lesson-blocknote.css";
 import { saveLessonDocument } from "../../platform/contentApi.js";
 import { isSafeLessonLink, resolveContentMediaUrl, uploadContentMedia } from "./contentMedia.js";
+import LessonInsertToolbar from "./LessonInsertToolbar.jsx";
 import { getPybotSlashMenuItems, pybotContentSchema, pybotDictionary } from "./pybotContentSchema.jsx";
 
 const AUTOSAVE_MS = 1000;
@@ -166,6 +167,7 @@ const LessonBlockNoteEditor = forwardRef(function LessonBlockNoteEditor(
 
   return (
     <div className={`pbc-lesson-doc${preview ? " pbc-lesson-doc--preview" : ""}`}>
+      {preview ? null : <LessonInsertToolbar editor={editor} disabled={!editor.isEditable} />}
       <BlockNoteView
         editor={editor}
         theme="light"
