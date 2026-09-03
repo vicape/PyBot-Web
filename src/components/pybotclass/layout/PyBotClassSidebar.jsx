@@ -4,6 +4,7 @@ import { IconSuperAdmin, SidebarIcon } from "../illustrations/SidebarIcons.jsx";
 const NAV = [
   { id: "home", label: "Inicio", to: "/dashboard/classes" },
   { id: "courses", label: "Mis cursos", to: "/dashboard/classes#mis-cursos" },
+  { id: "content", label: "Mi Contenido", to: "/dashboard/content" },
   { id: "ide", label: "Abrir IDE", to: "/", external: true },
   { id: "classroom", label: "Google Classroom", to: "/dashboard/classes?panel=classroom" },
   { id: "institutions", label: "Instituciones", to: "/dashboard?tab=schools" },
@@ -34,6 +35,9 @@ export default function PyBotClassSidebar({ open, onClose, showAdmin, onNavigate
         !panel &&
         (location.hash === "#mis-cursos" || /^\/dashboard\/classes\/[^/]+/.test(path))
       );
+    }
+    if (item.id === "content") {
+      return path.startsWith("/dashboard/content");
     }
     if (item.id === "ide") return false;
     return false;

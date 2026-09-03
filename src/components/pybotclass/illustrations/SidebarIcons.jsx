@@ -67,6 +67,21 @@ export function IconSuperAdmin() {
   );
 }
 
+export function IconMyContent() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M5.5 7.5h13A1.5 1.5 0 0 1 20 9v10.5A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5V9A1.5 1.5 0 0 1 5.5 7.5Z"
+        stroke="currentColor"
+        strokeWidth={S}
+        strokeLinejoin="round"
+      />
+      <path d="M8 5.5h8M12 5.5V7.5" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+      <path d="M8 12h8M8 15.5h5.5" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function GoogleClassroomIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
@@ -82,6 +97,7 @@ export function GoogleClassroomIcon() {
 const SIDEBAR_ICONS = {
   home: IconHome,
   courses: IconCourses,
+  content: IconMyContent,
   ide: IconCode,
   classroom: IconClassroom,
   institutions: IconInstitution,
