@@ -14,6 +14,8 @@ import PyBotClassCoursePage from "./pages/PyBotClassCoursePage.jsx";
 import MyContentPage from "./pages/MyContentPage.jsx";
 import ContentEditorPage from "./pages/ContentEditorPage.jsx";
 import LessonEditorPage from "./pages/LessonEditorPage.jsx";
+import CommunityPage from "./pages/CommunityPage.jsx";
+import SharedContentPage from "./pages/SharedContentPage.jsx";
 import TelemetryBootstrap from "./components/TelemetryBootstrap.jsx";
 import { isSupabaseConfigured } from "./supabaseClient.js";
 
@@ -34,6 +36,8 @@ function AppRoutes() {
         <Route path="/dashboard/content" element={<MyContentPage />} />
         <Route path="/dashboard/content/:contentId" element={<ContentEditorPage />} />
         <Route path="/dashboard/content/:contentId/lessons/:lessonId" element={<LessonEditorPage />} />
+        <Route path="/dashboard/community" element={<CommunityPage />} />
+        <Route path="/dashboard/community/:contentId" element={<SharedContentPage />} />
         <Route path="/dashboard/org/:orgId" element={<OrgCoursesPage />} />
         <Route
           path="/dashboard/org/:orgId/course/:courseId"

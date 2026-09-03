@@ -4,6 +4,8 @@ import ContentCard from "../components/pybotclass/content/ContentCard.jsx";
 import CreateContentModal from "../components/pybotclass/content/CreateContentModal.jsx";
 import DeleteContentModal from "../components/pybotclass/content/DeleteContentModal.jsx";
 import EditContentModal from "../components/pybotclass/content/EditContentModal.jsx";
+import AssignLessonModal from "../components/content-editor/AssignLessonModal.jsx";
+import ShareContentModal from "../components/content-editor/ShareContentModal.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import MyContentEmptyIllustration from "../components/pybotclass/illustrations/MyContentEmptyIllustration.jsx";
 import { listMyContents } from "../platform/contentApi.js";
@@ -22,6 +24,8 @@ export default function MyContentPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [sharing, setSharing] = useState(null);
+  const [assigning, setAssigning] = useState(null);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -101,6 +105,8 @@ export default function MyContentPage() {
                   content={c}
                   onEdit={setEditing}
                   onDelete={setDeleting}
+                  onShare={setSharing}
+                  onAssign={setAssigning}
                 />
               ))}
             </div>
@@ -133,6 +139,31 @@ export default function MyContentPage() {
             ),
           );
         }}
+      />
+
+      <ShareContentModal
+        open={!!sharing}
+        content={sharing}
+        onClose={() => setSharing(null)}
+        onSaved={(saved) => {
+          setContents((rows) =>
+            rows.map((row) =>
+              row.id === saved.id
+                ? { ...row, visibility: saved.visibility, updated_at: saved.updated_at }
+                : row,
+            ),
+          );
+        }}
+      />
+
+      <AssignLessonModal
+        open={!!assigning}
+        onClose={() => setAssigning(null)}
+        sourceType="content"
+        sourceId={assigning?.id}
+        defaultTitle={assigning?.title}
+        contentTitle={assigning?.title}
+        contextLabel="contenido"
       />
 
       <DeleteContentModal

@@ -196,7 +196,7 @@ export async function fetchCourseActivities(courseId) {
   const { data, error } = await sb
     .from("activities")
     .select(
-      "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, origin, due_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at",
+      "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, activity_kind, origin, due_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at",
     )
     .eq("course_id", courseId)
     .order("created_at", { ascending: false });

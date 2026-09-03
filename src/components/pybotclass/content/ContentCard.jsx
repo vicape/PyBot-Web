@@ -15,7 +15,7 @@ function formatDate(iso) {
   }
 }
 
-export default function ContentCard({ content, onEdit, onDelete }) {
+export default function ContentCard({ content, onEdit, onDelete, onShare, onAssign }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -55,6 +55,15 @@ export default function ContentCard({ content, onEdit, onDelete }) {
           <span className="pbc-badge pbc-badge--blue">
             {CONTENT_STATUS_LABELS[content.status] || "Borrador"}
           </span>
+          {content.visibility && content.visibility !== "private" ? (
+            <span className="pbc-badge pbc-badge--blue" title="Visibilidad">
+              {content.visibility === "community"
+                ? "Comunidad"
+                : content.visibility === "courses"
+                  ? "Cursos"
+                  : "Privado"}
+            </span>
+          ) : null}
 
           <div className="pbc-content-card__menu" ref={menuRef}>
             <button
@@ -78,6 +87,32 @@ export default function ContentCard({ content, onEdit, onDelete }) {
 
             {menuOpen ? (
               <div className="pbc-content-card__menu-panel" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="pbc-content-card__menu-item"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    onShare?.(content);
+                  }}
+                >
+                  Compartir
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="pbc-content-card__menu-item"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    onAssign?.(content);
+                  }}
+                >
+                  Asignar
+                </button>
                 <button
                   type="button"
                   role="menuitem"

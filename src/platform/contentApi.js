@@ -12,6 +12,12 @@ export const CONTENT_STATUS_LABELS = {
   published: "Publicado",
 };
 
+export const CONTENT_VISIBILITY_LABELS = {
+  private: "Privado",
+  courses: "Mis cursos",
+  community: "Comunidad",
+};
+
 function sb() {
   const client = getSupabase();
   if (!client) throw new Error("no_client");
@@ -52,9 +58,15 @@ async function swapPositions(table, idA, posA, idB, posB) {
 // --- Contenidos --------------------------------------------------------------
 
 export async function listMyContents() {
-  const { data, error } = await sb()
+  const client = sb();
+  const { data: session } = await client.auth.getUser();
+  const userId = session?.user?.id;
+  if (!userId) return { rows: [], error: "no_session" };
+
+  const { data, error } = await client
     .from("learning_contents")
-    .select("id, title, description, status, created_at, updated_at, content_units ( id )")
+    .select("id, title, description, status, visibility, owner_id, created_at, updated_at, content_units ( id )")
+    .eq("owner_id", userId)
     .order("updated_at", { ascending: false });
 
   if (error) return { rows: [], error: error.message };
@@ -64,6 +76,8 @@ export async function listMyContents() {
     title: row.title,
     description: row.description,
     status: row.status,
+    visibility: row.visibility || "private",
+    owner_id: row.owner_id,
     created_at: row.created_at,
     updated_at: row.updated_at,
     unit_count: Array.isArray(row.content_units) ? row.content_units.length : 0,
@@ -75,7 +89,7 @@ export async function listMyContents() {
 export async function getContent(contentId) {
   const { data, error } = await sb()
     .from("learning_contents")
-    .select("id, title, description, status, created_at, updated_at")
+    .select("id, title, description, status, visibility, owner_id, created_at, updated_at")
     .eq("id", contentId)
     .maybeSingle();
 
@@ -109,12 +123,13 @@ export async function updateContent(contentId, patch) {
   if (patch.title !== undefined) body.title = String(patch.title).trim();
   if (patch.description !== undefined) body.description = String(patch.description).trim() || null;
   if (patch.status !== undefined) body.status = patch.status;
+  if (patch.visibility !== undefined) body.visibility = patch.visibility;
 
   const { data, error } = await sb()
     .from("learning_contents")
     .update(body)
     .eq("id", contentId)
-    .select("id, title, description, status, created_at, updated_at")
+    .select("id, title, description, status, visibility, owner_id, created_at, updated_at")
     .single();
 
   if (error) return { content: null, error: error.message };

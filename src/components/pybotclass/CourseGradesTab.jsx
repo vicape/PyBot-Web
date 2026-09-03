@@ -30,6 +30,14 @@ export default function CourseGradesTab({ courseId, canTeach }) {
     return map;
   }, [gradebook]);
 
+  const applicableSet = useMemo(() => {
+    const set = new Set();
+    for (const row of gradebook?.applicable || []) {
+      set.add(`${row.user_id}:${row.activity_id}`);
+    }
+    return set;
+  }, [gradebook]);
+
   if (loading) return <PbcLoading label="Cargando notas…" />;
   if (err) return <PbcAlert variant="error">{err}</PbcAlert>;
 
@@ -62,7 +70,16 @@ export default function CourseGradesTab({ courseId, canTeach }) {
               <tr key={s.user_id}>
                 <td>{s.name}</td>
                 {activities.map((a) => {
-                  const g = gradeMap.get(`${s.user_id}:${a.id}`);
+                  const key = `${s.user_id}:${a.id}`;
+                  const applies = !gradebook?.applicable || applicableSet.has(key);
+                  if (!applies) {
+                    return (
+                      <td key={a.id} title="No asignada a este alumno">
+                        <span className="auth-card__muted">N/A</span>
+                      </td>
+                    );
+                  }
+                  const g = gradeMap.get(key);
                   const grade = g?.grade;
                   const synced = g?.classroom_grade_synced_at;
                   const pendingSync = grade != null && a.classroom_coursework_id && !synced;

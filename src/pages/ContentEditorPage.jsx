@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import AssignLessonModal from "../components/content-editor/AssignLessonModal.jsx";
+import ShareContentModal from "../components/content-editor/ShareContentModal.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import {
   createContentUnit,
@@ -66,6 +68,8 @@ export default function ContentEditorPage() {
   const [err, setErr] = useState("");
   const [superAdmin, setSuperAdmin] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [assignTarget, setAssignTarget] = useState(null);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -233,6 +237,24 @@ export default function ContentEditorPage() {
           <button type="button" className="pbc-btn pbc-btn--primary" onClick={addUnit} disabled={busy}>
             + Nueva unidad
           </button>
+          <button type="button" className="pbc-btn pbc-btn--ghost" onClick={() => setShareOpen(true)} disabled={busy}>
+            Compartir
+          </button>
+          <button
+            type="button"
+            className="pbc-btn pbc-btn--ghost"
+            onClick={() =>
+              setAssignTarget({
+                sourceType: "content",
+                sourceId: content.id,
+                defaultTitle: content.title,
+                contextLabel: "contenido",
+              })
+            }
+            disabled={busy}
+          >
+            Asignar
+          </button>
         </div>
 
         {units.length === 0 ? (
@@ -270,6 +292,20 @@ export default function ContentEditorPage() {
                     </div>
                   </div>
                   <div className="pbc-unit-card__actions">
+                    <button
+                      type="button"
+                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                      onClick={() =>
+                        setAssignTarget({
+                          sourceType: "unit",
+                          sourceId: unit.id,
+                          defaultTitle: unit.title,
+                          contextLabel: "unidad",
+                        })
+                      }
+                    >
+                      Asignar
+                    </button>
                     <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={() => void editUnitTitle(unit)}>
                       Editar
                     </button>
@@ -337,6 +373,20 @@ export default function ContentEditorPage() {
                           <button
                             type="button"
                             className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                            onClick={() =>
+                              setAssignTarget({
+                                sourceType: "lesson",
+                                sourceId: lesson.id,
+                                defaultTitle: lesson.title,
+                                contextLabel: "lección",
+                              })
+                            }
+                          >
+                            Asignar
+                          </button>
+                          <button
+                            type="button"
+                            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                             onClick={() => void editLessonTitle(lesson)}
                           >
                             Renombrar
@@ -368,6 +418,22 @@ export default function ContentEditorPage() {
           </div>
         )}
       </div>
+
+      <ShareContentModal
+        open={shareOpen}
+        content={content}
+        onClose={() => setShareOpen(false)}
+        onSaved={(saved) => setContent((c) => ({ ...c, ...saved }))}
+      />
+      <AssignLessonModal
+        open={!!assignTarget}
+        onClose={() => setAssignTarget(null)}
+        sourceType={assignTarget?.sourceType}
+        sourceId={assignTarget?.sourceId}
+        defaultTitle={assignTarget?.defaultTitle}
+        contentTitle={content.title}
+        contextLabel={assignTarget?.contextLabel}
+      />
     </PyBotClassLayout>
   );
 }

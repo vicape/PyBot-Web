@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import AssignedContentSnapshotViewer from "../components/content-editor/AssignedContentSnapshotViewer.jsx";
 import AssignedLessonViewer from "../components/content-editor/AssignedLessonViewer.jsx";
 import {
   hasSavedLessonDocument,
@@ -69,9 +70,13 @@ export default function ActivityPage() {
   const [lessonDoc, setLessonDoc] = useState(null);
   const [lessonMeta, setLessonMeta] = useState(null);
   const [lessonErr, setLessonErr] = useState("");
+  const [snapshot, setSnapshot] = useState(null);
 
   const canTeach = canTeachCourse({ orgRole, courseRole });
   const isStudent = isCourseStudent({ courseRole });
+  const activityKind = activity?.activity_kind || (activity?.content_snapshot ? "material" : "exercise");
+  const isMaterial = activityKind === "material";
+  const isCodingActivity = activityKind === "exercise" || activityKind === "task";
 
   useEffect(() => {
     if (activityId) track("activity_open", { feature: "activity" });
@@ -87,7 +92,7 @@ export default function ActivityPage() {
     let { data: act, error: eAct } = await supabase
       .from("activities")
       .select(
-        "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, course_id, due_at, max_points, created_at",
+        "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, content_source_id, activity_kind, course_id, due_at, max_points, created_at",
       )
       .eq("id", activityId)
       .maybeSingle();
@@ -95,7 +100,7 @@ export default function ActivityPage() {
     if (eAct) {
       const fb = await supabase
         .from("activities")
-        .select("id, title, description, pybot_lesson_id, course_id, created_at, starter_code")
+        .select("id, title, description, pybot_lesson_id, course_id, created_at, starter_code, content_lesson_id")
         .eq("id", activityId)
         .maybeSingle();
       act = fb.data;
@@ -129,8 +134,9 @@ export default function ActivityPage() {
     setLessonDoc(null);
     setLessonMeta(null);
     setLessonErr("");
+    setSnapshot(act.content_snapshot || null);
 
-    if (act.content_lesson_id) {
+    if (!act.content_snapshot && act.content_lesson_id) {
       const { lesson, document, error: lessonLoadErr } = await fetchAssignedLessonDocument(
         act.content_lesson_id,
       );
@@ -413,10 +419,11 @@ export default function ActivityPage() {
           <p className="auth-card__muted">Sin descripción.</p>
         )}
 
-        {activity?.content_lesson_id ? (
+        {activity?.content_snapshot || activity?.content_lesson_id ? (
           <p className="auth-card__codehint">
-            Contenido de Mi Contenido
-            {lessonMeta?.title ? `: ${lessonMeta.title}` : ""}
+            {isMaterial ? "Material de Mi Contenido" : "Actividad desde Mi Contenido"}
+            {activity?.content_snapshot?.title ? `: ${activity.content_snapshot.title}` : ""}
+            {lessonMeta?.title && !activity?.content_snapshot ? `: ${lessonMeta.title}` : ""}
           </p>
         ) : activity?.pybot_lesson_id ? (
           <p className="auth-card__codehint">
@@ -430,7 +437,14 @@ export default function ActivityPage() {
           </p>
         ) : null}
 
-        {lessonDoc && activity?.content_lesson_id ? (
+        {snapshot ? (
+          <section className="pbc-activity-lesson" aria-label="Contenido asignado">
+            <h2 className="pbc-activity-lesson__title">
+              {isMaterial ? "Material" : activityKind === "task" ? "Tarea" : "Ejercicio"}
+            </h2>
+            <AssignedContentSnapshotViewer snapshot={snapshot} />
+          </section>
+        ) : lessonDoc && activity?.content_lesson_id ? (
           <section className="pbc-activity-lesson" aria-label="Contenido de la lección">
             <h2 className="pbc-activity-lesson__title">Lección</h2>
             <AssignedLessonViewer
@@ -441,9 +455,9 @@ export default function ActivityPage() {
           </section>
         ) : null}
 
-        <p className="auth-card__muted">{progressHint}</p>
+        {!isMaterial ? <p className="auth-card__muted">{progressHint}</p> : null}
 
-        {isStudent && mySubmission ? (
+        {isStudent && mySubmission && isCodingActivity ? (
           <div className="auth-card__muted" style={{ marginBottom: "1rem" }}>
             <p>
               Entrega: <strong>{submissionStatusLabelEs(mySubmission.status)}</strong>
@@ -459,10 +473,12 @@ export default function ActivityPage() {
         ) : null}
 
         <div className="auth-card__actions auth-card__actions--row">
-          <button type="button" className="auth-btn auth-btn--primary" onClick={openPyBot}>
-            Abrir PyBot
-          </button>
-          {isStudent ? (
+          {isCodingActivity ? (
+            <button type="button" className="auth-btn auth-btn--primary" onClick={openPyBot}>
+              Abrir PyBot
+            </button>
+          ) : null}
+          {isStudent && isCodingActivity ? (
             <button
               type="button"
               className="auth-btn auth-btn--ghost"
@@ -472,18 +488,25 @@ export default function ActivityPage() {
               {busy ? "Entregando…" : "Entregar actividad"}
             </button>
           ) : null}
-          <Link to="/dashboard" className="auth-btn auth-btn--ghost">
-            Panel
+          <Link
+            to={activity?.course_id ? `/dashboard/classes/${activity.course_id}` : "/dashboard/classes"}
+            className="auth-btn auth-btn--ghost"
+          >
+            Volver al curso
           </Link>
         </div>
 
-        <p className="auth-card__muted">
-          {savedCode
-            ? "El autosave guarda progreso; «Entregar» registra la entrega formal."
-            : activity?.starter_code
-              ? "PyBot abre con el código inicial. Usá «Entregar» cuando termines."
-              : "Trabajá en el IDE y entregá cuando estés listo."}
-        </p>
+        {isCodingActivity ? (
+          <p className="auth-card__muted">
+            {savedCode
+              ? "El autosave guarda progreso; «Entregar» registra la entrega formal."
+              : activity?.starter_code
+                ? "PyBot abre con el código inicial. Usá «Entregar» cuando termines."
+                : "Trabajá en el IDE y entregá cuando estés listo."}
+          </p>
+        ) : (
+          <p className="auth-card__muted">Este material es de solo lectura. No requiere entrega de código.</p>
+        )}
 
         {canTeach && classroomCourseId ? (
           <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.75rem" }}>

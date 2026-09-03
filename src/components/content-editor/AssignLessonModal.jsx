@@ -1,18 +1,40 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  assignLessonToCourse,
+  assignContentSourceToCourse,
   listCourseStudents,
   listTeacherCoursesForAssign,
 } from "../../platform/contentAssignApi.js";
 
+const SOURCE_LABELS = {
+  content: "contenido",
+  unit: "unidad",
+  lesson: "lección",
+  exercise: "ejercicio",
+  task: "tarea",
+};
+
+/**
+ * Modal de asignación con snapshot.
+ * Props: sourceType, sourceId, defaultTitle, contextLabel, blockId?, blockProps?
+ */
 export default function AssignLessonModal({
   open,
   onClose,
   lessonId,
   lessonTitle,
   contentTitle,
+  sourceType: sourceTypeProp,
+  sourceId: sourceIdProp,
+  defaultTitle,
+  contextLabel,
+  blockId,
+  blockProps,
 }) {
+  const sourceType = sourceTypeProp || "lesson";
+  const sourceId = sourceIdProp || lessonId;
+  const initialTitle = defaultTitle || lessonTitle || "";
+
   const [courses, setCourses] = useState([]);
   const [courseId, setCourseId] = useState("");
   const [mode, setMode] = useState("all");
@@ -41,7 +63,7 @@ export default function AssignLessonModal({
       setDone(null);
       return;
     }
-    setTitle(lessonTitle || "");
+    setTitle(initialTitle);
     setLoadingCourses(true);
     void (async () => {
       const { rows, error } = await listTeacherCoursesForAssign();
@@ -59,7 +81,7 @@ export default function AssignLessonModal({
         );
       }
     })();
-  }, [open, lessonTitle]);
+  }, [open, initialTitle]);
 
   useEffect(() => {
     if (!open || !courseId) {
@@ -99,12 +121,6 @@ export default function AssignLessonModal({
     });
   };
 
-  const selectAllStudents = () => {
-    setSelected(new Set(students.map((s) => s.userId)));
-  };
-
-  const clearStudents = () => setSelected(new Set());
-
   const submit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
@@ -112,22 +128,27 @@ export default function AssignLessonModal({
     setErr("");
     setDone(null);
 
-    const { activity, error } = await assignLessonToCourse({
-      lessonId,
+    const { activity, error } = await assignContentSourceToCourse({
+      sourceType,
+      sourceId,
       courseId,
       title: title.trim(),
       dueAt: dueAt ? new Date(dueAt).toISOString() : null,
       maxPoints,
       studentIds: mode === "selected" ? [...selected] : [],
+      blockId,
+      blockProps,
     });
 
     setBusy(false);
     if (error || !activity) {
-      setErr(error || "No se pudo asignar la lección.");
+      setErr(error || "No se pudo asignar.");
       return;
     }
     setDone(activity);
   };
+
+  const label = contextLabel || SOURCE_LABELS[sourceType] || "contenido";
 
   return (
     <div className="pbc-modal-backdrop" role="presentation" onClick={onClose}>
@@ -139,12 +160,11 @@ export default function AssignLessonModal({
         onSubmit={submit}
       >
         <h2 id="assign-lesson-title" className="pbc-modal__title">
-          Asignar lección
+          Asignar {label}
         </h2>
         <p className="pbc-modal--assign-lesson__subtitle">
-          Creá una actividad en un curso con el contenido de{" "}
-          <strong>{lessonTitle || "esta lección"}</strong>
-          {contentTitle ? ` (${contentTitle})` : ""}.
+          Se crea una actividad con una copia fija del {label}
+          {contentTitle ? ` («${contentTitle}»)` : ""}. Cambios posteriores en Mi Contenido no la modifican.
         </p>
 
         {done ? (
@@ -156,10 +176,7 @@ export default function AssignLessonModal({
               <Link className="pbc-btn pbc-btn--primary" to={`/actividad/${done.id}`}>
                 Abrir actividad
               </Link>
-              <Link
-                className="pbc-btn pbc-btn--ghost"
-                to={`/dashboard/classes/${done.course_id}`}
-              >
+              <Link className="pbc-btn pbc-btn--ghost" to={`/dashboard/classes/${done.course_id}`}>
                 Ir al curso
               </Link>
               <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose}>
@@ -195,9 +212,7 @@ export default function AssignLessonModal({
                 required
                 disabled={busy || loadingCourses}
               >
-                <option value="">
-                  {loadingCourses ? "Cargando cursos…" : "Elegí un curso"}
-                </option>
+                <option value="">{loadingCourses ? "Cargando cursos…" : "Elegí un curso"}</option>
                 {courses.map((c) => (
                   <option key={c.course_id} value={c.course_id}>
                     {c.course_title}
@@ -238,10 +253,20 @@ export default function AssignLessonModal({
                     Alumnos {loadingStudents ? "(cargando…)" : `(${selectedCount}/${students.length})`}
                   </span>
                   <div className="pbc-assign-students__actions">
-                    <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={selectAllStudents} disabled={busy || !students.length}>
+                    <button
+                      type="button"
+                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                      onClick={() => setSelected(new Set(students.map((s) => s.userId)))}
+                      disabled={busy || !students.length}
+                    >
                       Todos
                     </button>
-                    <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={clearStudents} disabled={busy || selectedCount === 0}>
+                    <button
+                      type="button"
+                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                      onClick={() => setSelected(new Set())}
+                      disabled={busy || selectedCount === 0}
+                    >
                       Ninguno
                     </button>
                   </div>

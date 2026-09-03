@@ -94,10 +94,32 @@ export function GoogleClassroomIcon() {
   );
 }
 
+export function IconCommunity() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="9" cy="9" r="3.2" stroke="currentColor" strokeWidth={S} />
+      <circle cx="16.5" cy="10.5" r="2.6" stroke="currentColor" strokeWidth={S} />
+      <path
+        d="M3.5 19c.8-3.2 2.8-4.8 5.5-4.8s4.7 1.6 5.5 4.8"
+        stroke="currentColor"
+        strokeWidth={S}
+        strokeLinecap="round"
+      />
+      <path
+        d="M13.2 19c.5-2.2 1.8-3.4 3.5-3.4 1.4 0 2.5.7 3.2 2"
+        stroke="currentColor"
+        strokeWidth={S}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 const SIDEBAR_ICONS = {
   home: IconHome,
   courses: IconCourses,
   content: IconMyContent,
+  community: IconCommunity,
   ide: IconCode,
   classroom: IconClassroom,
   institutions: IconInstitution,

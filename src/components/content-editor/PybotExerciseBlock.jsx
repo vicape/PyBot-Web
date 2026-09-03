@@ -69,6 +69,29 @@ export default function PybotExerciseBlock({ block, editor }) {
                     className="pbc-pybot-card__menu-item"
                     onClick={() => {
                       setMenuOpen(false);
+                      window.dispatchEvent(
+                        new CustomEvent("pbc-assign-source", {
+                          detail: {
+                            sourceType: "exercise",
+                            blockId: block.id,
+                            blockProps: {
+                              title: block.props.title,
+                              instructions: block.props.instructions,
+                              starterCode: block.props.starterCode,
+                            },
+                          },
+                        }),
+                      );
+                    }}
+                  >
+                    Asignar
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="pbc-pybot-card__menu-item"
+                    onClick={() => {
+                      setMenuOpen(false);
                       editor.removeBlocks([block]);
                     }}
                   >

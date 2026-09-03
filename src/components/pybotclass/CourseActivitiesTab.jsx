@@ -284,12 +284,18 @@ export default function CourseActivitiesTab({
                   .join(" · ")}
                 badges={
                   <>
-                    {a.content_lesson_id ? (
-                      <span className="pbc-pill pbc-pill--content">Desde Mi Contenido</span>
+                    {a.content_lesson_id || a.content_snapshot || a.content_source_type ? (
+                      <span className="pbc-pill pbc-pill--content">
+                        {a.activity_kind === "exercise"
+                          ? "Ejercicio"
+                          : a.activity_kind === "task"
+                            ? "Tarea"
+                            : "Desde Mi Contenido"}
+                      </span>
                     ) : null}
                     {a.classroom_coursework_id ? (
                       <span className="pbc-pill pbc-pill--classroom">Classroom</span>
-                    ) : a.content_lesson_id ? null : (
+                    ) : a.content_lesson_id || a.content_snapshot ? null : (
                       <span className="pbc-pill pbc-pill--muted">PyBotClass</span>
                     )}
                   </>

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import AssignLessonModal from "../components/content-editor/AssignLessonModal.jsx";
+import ShareContentModal from "../components/content-editor/ShareContentModal.jsx";
 import LessonBlockNoteEditor from "../components/content-editor/LessonBlockNoteEditor.jsx";
 import LessonDocIllustration from "../components/content-editor/LessonDocIllustration.jsx";
-import AssignLessonModal from "../components/content-editor/AssignLessonModal.jsx";
 import {
   hasSavedLessonDocument,
   legacyBlocksToDocument,
@@ -124,6 +125,8 @@ export default function LessonEditorPage() {
   const [preview, setPreview] = useState(false);
   const [saveStatus, setSaveStatus] = useState("idle");
   const [assignOpen, setAssignOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [assignTarget, setAssignTarget] = useState(null);
 
   const editorRef = useRef(null);
   const titleInputRef = useRef(null);
@@ -132,6 +135,23 @@ export default function LessonEditorPage() {
   const lastSavedTitleRef = useRef("");
   const titleValueRef = useRef("");
   titleValueRef.current = title;
+
+  useEffect(() => {
+    const onAssignBlock = (event) => {
+      const detail = event.detail || {};
+      setAssignTarget({
+        sourceType: detail.sourceType,
+        sourceId: lessonId,
+        blockId: detail.blockId,
+        blockProps: detail.blockProps,
+        defaultTitle: detail.blockProps?.title || detail.sourceType,
+        contextLabel: detail.sourceType === "task" ? "tarea" : "ejercicio",
+      });
+      setAssignOpen(true);
+    };
+    window.addEventListener("pbc-assign-source", onAssignBlock);
+    return () => window.removeEventListener("pbc-assign-source", onAssignBlock);
+  }, [lessonId]);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -320,8 +340,19 @@ export default function LessonEditorPage() {
             <SaveStatus status={saveStatus} onRetry={retrySave} />
             <button
               type="button"
+              className="pbc-lesson-preview-btn"
+              onClick={() => setShareOpen(true)}
+              disabled={preview}
+            >
+              Compartir
+            </button>
+            <button
+              type="button"
               className="pbc-lesson-assign-btn"
-              onClick={() => setAssignOpen(true)}
+              onClick={() => {
+                setAssignTarget(null);
+                setAssignOpen(true);
+              }}
               disabled={preview}
             >
               <AssignIcon />
@@ -353,12 +384,27 @@ export default function LessonEditorPage() {
         ) : null}
       </div>
 
+      <ShareContentModal
+        open={shareOpen}
+        content={content}
+        onClose={() => setShareOpen(false)}
+        onSaved={(saved) => setContent((c) => ({ ...c, ...saved }))}
+      />
       <AssignLessonModal
         open={assignOpen}
-        onClose={() => setAssignOpen(false)}
+        onClose={() => {
+          setAssignOpen(false);
+          setAssignTarget(null);
+        }}
+        sourceType={assignTarget?.sourceType || "lesson"}
+        sourceId={assignTarget?.sourceId || lessonId}
         lessonId={lessonId}
         lessonTitle={title || lesson.title}
         contentTitle={content.title}
+        defaultTitle={assignTarget?.defaultTitle || title || lesson.title}
+        contextLabel={assignTarget?.contextLabel || "lección"}
+        blockId={assignTarget?.blockId}
+        blockProps={assignTarget?.blockProps}
       />
     </PyBotClassLayout>
   );
