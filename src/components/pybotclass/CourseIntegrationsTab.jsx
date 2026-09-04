@@ -8,6 +8,7 @@ import {
   importClassroomActivities,
 } from "../../platform/pybotClassApi.js";
 import {
+  fetchCachedClassroomSubmissions,
   publishActivityToClassroom,
   sendGradeToClassroom,
   syncClassroomSubmissionsForActivity,
@@ -206,24 +207,38 @@ export default function CourseIntegrationsTab({
         const pySub = subs.find((s) => s.user_id === g.user_id);
         if (!pySub) continue;
 
-        const sync = await syncClassroomSubmissionsForActivity({
-          classroomCourseId,
-          courseWorkId: activity.classroom_coursework_id,
-          userId: user.id,
-        });
-        if (!sync.ok) continue;
+        let classroomSubmissionId = pySub.classroom_submission_id || null;
 
-        const match = (sync.rows || []).find((cs) =>
-          matchClassroomSubmission(cs, pySub, null, classroomUserIdByPybotUser, emailByPybotUser),
-        );
-        if (!match?.id) continue;
+        if (!classroomSubmissionId) {
+          const cached = await fetchCachedClassroomSubmissions(activity.id);
+          const fromCache = (cached.rows || []).find((cs) =>
+            matchClassroomSubmission(cs, pySub, null, classroomUserIdByPybotUser, emailByPybotUser),
+          );
+          classroomSubmissionId = fromCache?.id || null;
+        }
+
+        if (!classroomSubmissionId) {
+          const sync = await syncClassroomSubmissionsForActivity({
+            activityId: activity.id,
+            classroomCourseId,
+            courseWorkId: activity.classroom_coursework_id,
+            userId: user.id,
+          });
+          if (!sync.ok) continue;
+          const match = (sync.rows || []).find((cs) =>
+            matchClassroomSubmission(cs, pySub, null, classroomUserIdByPybotUser, emailByPybotUser),
+          );
+          classroomSubmissionId = match?.id || null;
+        }
+
+        if (!classroomSubmissionId) continue;
 
         const res = await sendGradeToClassroom({
           submission: pySub,
           activity,
           classroomCourseId,
           courseWorkId: activity.classroom_coursework_id,
-          classroomSubmissionId: match.id,
+          classroomSubmissionId,
           userId: user.id,
         });
         if (res.ok) sent += 1;

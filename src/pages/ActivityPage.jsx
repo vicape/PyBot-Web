@@ -22,6 +22,7 @@ import {
   submitActivity,
 } from "../platform/activitySubmissions.js";
 import {
+  fetchCachedClassroomSubmissions,
   publishActivityToClassroom,
   sendGradeToClassroom,
   syncClassroomSubmissionsForActivity,
@@ -53,6 +54,7 @@ export default function ActivityPage() {
   const [orgId, setOrgId] = useState(null);
   const [classroomCourseId, setClassroomCourseId] = useState(null);
   const [classroomSubs, setClassroomSubs] = useState([]);
+  const [classroomSyncedAt, setClassroomSyncedAt] = useState(null);
   const [progressHint, setProgressHint] = useState("");
   const [savedCode, setSavedCode] = useState(false);
   const [loadErr, setLoadErr] = useState("");
@@ -223,8 +225,22 @@ export default function ActivityPage() {
       } else {
         setProfilesById(new Map());
       }
+
+      // Cache persistente Classroom (sin llamar a Google en F5)
+      if (act.classroom_coursework_id) {
+        const cached = await fetchCachedClassroomSubmissions(activityId);
+        if (cached.ok) {
+          setClassroomSubs(cached.rows ?? []);
+          setClassroomSyncedAt(cached.syncedAt ?? null);
+        }
+      } else {
+        setClassroomSubs([]);
+        setClassroomSyncedAt(null);
+      }
     } else {
       setTeacherRows([]);
+      setClassroomSubs([]);
+      setClassroomSyncedAt(null);
     }
 
     setLoading(false);
@@ -274,22 +290,38 @@ export default function ActivityPage() {
     setActionErr("");
     setActionMsg("");
     const r = await syncClassroomSubmissionsForActivity({
+      activityId: activity.id,
       classroomCourseId,
       courseWorkId: activity.classroom_coursework_id,
       userId: user.id,
     });
     setBusy(false);
     if (!r.ok) {
-      setActionErr(r.error || "No se pudo sincronizar Classroom.");
+      const msg = r.error || "No se pudo sincronizar Classroom.";
+      if (/guardar|persist|forbidden|invalid_rows|missing_activity/i.test(String(msg))) {
+        setActionErr("No se pudieron guardar las entregas sincronizadas.");
+      } else {
+        setActionErr(msg);
+      }
       return;
     }
     setClassroomSubs(r.rows ?? []);
-    setActionMsg(`Classroom: ${r.rows?.length ?? 0} entrega(s) leídas (no reemplazan PyBot).`);
+    setClassroomSyncedAt(r.syncedAt ?? new Date().toISOString());
+    const n = r.persisted ?? r.rows?.length ?? 0;
+    setActionMsg(
+      `Classroom sincronizado: ${n} entrega${n === 1 ? "" : "s"} actualizada${n === 1 ? "" : "s"}. Las entregas de Classroom se registran por separado de las entregas PyBot.`,
+    );
   };
 
   const onSendGradeClassroom = async (row) => {
     if (!activity?.classroom_coursework_id || !classroomCourseId || !user || busy) return;
     let classroomSubmissionId = row.classroom_submission_id;
+
+    // 1) activity_submissions · 2) cache por user_id · 3) cache/memoria por classroom_user_id
+    if (!classroomSubmissionId) {
+      const byUserId = classroomSubs.find((cs) => cs.user_id && cs.user_id === row.user_id);
+      if (byUserId?.id) classroomSubmissionId = byUserId.id;
+    }
     if (!classroomSubmissionId) {
       const { data: cm } = await supabase
         .from("course_members")
@@ -298,8 +330,15 @@ export default function ActivityPage() {
         .eq("user_id", row.user_id)
         .maybeSingle();
       const googleUid = cm?.classroom_user_id;
-      const found = classroomSubs.find((cs) => cs.userId === googleUid);
-      classroomSubmissionId = found?.id || null;
+      if (googleUid) {
+        const cached = await fetchCachedClassroomSubmissions(activity.id);
+        const fromDb = (cached.rows || []).find((cs) => cs.userId === googleUid);
+        classroomSubmissionId = fromDb?.id || null;
+        if (!classroomSubmissionId) {
+          const found = classroomSubs.find((cs) => cs.userId === googleUid);
+          classroomSubmissionId = found?.id || null;
+        }
+      }
     }
     if (!classroomSubmissionId) {
       setActionErr("No se encontró la entrega Classroom del alumno. Primero «Sincronizar Classroom».");
@@ -531,6 +570,14 @@ export default function ActivityPage() {
                 >
                   Sincronizar Classroom
                 </button>
+                <span className="auth-card__muted" style={{ fontSize: "0.85rem" }}>
+                  {classroomSyncedAt
+                    ? `Última sincronización: ${fmtTs(classroomSyncedAt)}`
+                    : "Sin sincronizar aún"}
+                  {classroomSubs.length
+                    ? ` · ${classroomSubs.length} StudentSubmission${classroomSubs.length === 1 ? "" : "s"} registrada${classroomSubs.length === 1 ? "" : "s"}`
+                    : ""}
+                </span>
               </>
             ) : (
               <button

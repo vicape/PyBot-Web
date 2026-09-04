@@ -96,22 +96,149 @@ export async function publishActivityToClassroom({
   }
 }
 
+/** Mapea fila DB → forma compatible con la API de Classroom (userId / id). */
+export function normalizeCachedClassroomSubmission(row) {
+  if (!row) return null;
+  return {
+    id: row.classroom_submission_id,
+    userId: row.classroom_user_id,
+    courseWorkId: row.classroom_coursework_id,
+    state: row.classroom_submission_state ?? undefined,
+    late: Boolean(row.classroom_late),
+    draftGrade: row.classroom_draft_grade ?? undefined,
+    assignedGrade: row.classroom_assigned_grade ?? undefined,
+    creationTime: row.classroom_submission_created_at ?? undefined,
+    updateTime: row.classroom_submission_updated_at ?? undefined,
+    // extras útiles para UI / lookup
+    user_id: row.user_id ?? null,
+    classroom_last_synced_at: row.classroom_last_synced_at ?? null,
+  };
+}
+
 /**
- * Lee studentSubmissions de Classroom (no modifica PyBot submissions).
+ * Lee el cache persistente de StudentSubmissions (sin llamar a Google).
+ */
+export async function fetchCachedClassroomSubmissions(activityId) {
+  const sb = getSupabase();
+  if (!sb || !activityId) return { ok: false, error: "missing_args", rows: [], syncedAt: null };
+
+  const { data, error } = await sb
+    .from("activity_classroom_submissions")
+    .select(
+      "id, activity_id, user_id, classroom_user_id, classroom_submission_id, classroom_coursework_id, classroom_submission_state, classroom_late, classroom_draft_grade, classroom_assigned_grade, classroom_submission_created_at, classroom_submission_updated_at, classroom_last_synced_at, updated_at",
+    )
+    .eq("activity_id", activityId)
+    .order("classroom_user_id", { ascending: true });
+
+  if (error) return { ok: false, error: error.message, rows: [], syncedAt: null };
+
+  const dbRows = data ?? [];
+  let syncedAt = null;
+  for (const r of dbRows) {
+    const t = r.classroom_last_synced_at;
+    if (t && (!syncedAt || t > syncedAt)) syncedAt = t;
+  }
+
+  return {
+    ok: true,
+    rows: dbRows.map(normalizeCachedClassroomSubmission).filter(Boolean),
+    dbRows,
+    syncedAt,
+    error: null,
+  };
+}
+
+/**
+ * Lee studentSubmissions de Classroom y las persiste en Supabase.
+ * No crea activity_submissions PyBot.
  */
 export async function syncClassroomSubmissionsForActivity({
+  activityId,
   classroomCourseId,
   courseWorkId,
   userId,
 }) {
+  const sb = getSupabase();
   const tok = await getValidClassroomToken(userId);
-  if (!tok) return { ok: false, error: "missing_access_token", rows: [] };
+  if (!tok) return { ok: false, error: "missing_access_token", rows: [], persisted: 0, syncedAt: null };
+
+  let googleRows;
   try {
-    const rows = await listStudentSubmissions(tok, classroomCourseId, courseWorkId);
-    return { ok: true, rows, error: null };
+    googleRows = await listStudentSubmissions(tok, classroomCourseId, courseWorkId);
   } catch (ex) {
-    return { ok: false, error: ex?.message || "sync_failed", rows: [], code: ex?.code };
+    return {
+      ok: false,
+      error: ex?.message || "sync_failed",
+      rows: [],
+      persisted: 0,
+      syncedAt: null,
+      code: ex?.code,
+    };
   }
+
+  if (!activityId || !sb) {
+    return {
+      ok: false,
+      error: "missing_activity_id",
+      rows: googleRows ?? [],
+      persisted: 0,
+      syncedAt: null,
+    };
+  }
+
+  const { data: out, error } = await sb.rpc("sync_activity_classroom_submissions", {
+    p_activity_id: activityId,
+    p_rows: googleRows ?? [],
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: error.message || "No se pudieron guardar las entregas sincronizadas.",
+      rows: [],
+      persisted: 0,
+      syncedAt: null,
+    };
+  }
+  if (!out?.ok) {
+    return {
+      ok: false,
+      error: out?.error || "No se pudieron guardar las entregas sincronizadas.",
+      rows: [],
+      persisted: 0,
+      syncedAt: null,
+    };
+  }
+
+  const cached = await fetchCachedClassroomSubmissions(activityId);
+  if (!cached.ok) {
+    // Persistió OK pero no pudimos re-leer: devolver forma Google normalizada
+    return {
+      ok: true,
+      rows: (googleRows ?? []).map((r) => ({
+        id: r.id,
+        userId: r.userId,
+        courseWorkId: r.courseWorkId || courseWorkId,
+        state: r.state,
+        late: Boolean(r.late),
+        draftGrade: r.draftGrade,
+        assignedGrade: r.assignedGrade,
+        creationTime: r.creationTime,
+        updateTime: r.updateTime,
+      })),
+      persisted: out.persisted ?? (googleRows?.length ?? 0),
+      syncedAt: out.syncedAt ?? new Date().toISOString(),
+      error: null,
+    };
+  }
+
+  return {
+    ok: true,
+    rows: cached.rows,
+    persisted: out.persisted ?? cached.rows.length,
+    syncedAt: out.syncedAt || cached.syncedAt,
+    error: null,
+  };
 }
 
 /**
