@@ -16,7 +16,7 @@ export async function fetchActivityProgress(activityId, userId) {
   return { code: data?.code ?? null, updatedAt: data?.updated_at ?? null, error: null };
 }
 
-/** Guarda progreso (RPC; fallback a upsert directo). */
+/** Guarda progreso vía RPC save_activity_progress (migración 042/043). */
 export async function saveActivityProgress(activityId, userId, code) {
   const sb = getSupabase();
   if (!sb || !activityId || !userId) return { ok: false, error: "missing_args" };
@@ -25,23 +25,6 @@ export async function saveActivityProgress(activityId, userId, code) {
     p_activity_id: activityId,
     p_code: code ?? "",
   });
-
-  if (!error && data?.ok) return { ok: true, error: null };
-
-  // Fallback si la migración 042 aún no está aplicada
-  if (error && /function|does not exist|schema cache/i.test(error.message || "")) {
-    const { error: upErr } = await sb.from("activity_progress").upsert(
-      {
-        activity_id: activityId,
-        user_id: userId,
-        code: code ?? "",
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "activity_id,user_id" },
-    );
-    if (upErr) return { ok: false, error: upErr.message };
-    return { ok: true, error: null };
-  }
 
   if (error) return { ok: false, error: error.message };
   if (!data?.ok) return { ok: false, error: data?.error || "save_failed" };
