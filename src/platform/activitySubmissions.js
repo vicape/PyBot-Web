@@ -1,7 +1,6 @@
 import { getSupabase } from "../supabaseClient.js";
-import { turnInPybotActivityToClassroom } from "./activityClassroom.js";
 
-/** Entrega formal del alumno (RPC submit_activity) + turnIn Classroom best-effort. */
+/** Entrega formal del alumno (RPC submit_activity). */
 export async function submitActivity(activityId, code) {
   const sb = getSupabase();
   if (!sb || !activityId) return { ok: false, error: "missing_args" };
@@ -13,15 +12,7 @@ export async function submitActivity(activityId, code) {
 
   if (error) return { ok: false, error: error.message };
   if (!data?.ok) return { ok: false, error: data?.error || "submit_failed" };
-
-  let classroom = { ok: true, skipped: true };
-  try {
-    classroom = await turnInPybotActivityToClassroom(activityId);
-  } catch (ex) {
-    classroom = { ok: false, skipped: false, error: ex?.message || "classroom_turn_in_failed" };
-  }
-
-  return { ok: true, submission: data, classroom, error: null };
+  return { ok: true, submission: data, error: null };
 }
 
 /** Lectura de la entrega propia del alumno. */

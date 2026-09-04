@@ -26,15 +26,12 @@ import {
   publishActivityToClassroom,
   sendGradeToClassroom,
   syncClassroomSubmissionsForActivity,
-  classroomTurnInUserMessage,
 } from "../platform/activityClassroom.js";
 import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
 import { listLessonBlocks } from "../platform/contentApi.js";
 import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
 import { fetchMyOrgRole } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
-import { connectGoogleClassroom } from "../platform/googleOAuth.js";
-import { getStoredGoogleRefreshToken } from "../platform/profileApi.js";
 import { track } from "../telemetry/index.js";
 
 function fmtTs(v) {
@@ -71,8 +68,6 @@ export default function ActivityPage() {
   const [gradeDraft, setGradeDraft] = useState({});
   const [actionMsg, setActionMsg] = useState("");
   const [actionErr, setActionErr] = useState("");
-  const [needsClassroomConnect, setNeedsClassroomConnect] = useState(false);
-  const [classroomLinked, setClassroomLinked] = useState(null); // null=unknown, true/false
   const [busy, setBusy] = useState(false);
   const [lessonDoc, setLessonDoc] = useState(null);
   const [lessonMeta, setLessonMeta] = useState(null);
@@ -213,24 +208,8 @@ export default function ActivityPage() {
     if (student) {
       const sub = await fetchMySubmission(activityId, user.id);
       setMySubmission(sub.submission);
-
-      if (act.classroom_coursework_id && nextClassroomCourseId) {
-        const stored = await getStoredGoogleRefreshToken(user.id);
-        const linked = !!(
-          stored?.classroom_linked_at ||
-          stored?.google_refresh_token ||
-          stored?.google_token_expires_at
-        );
-        setClassroomLinked(linked);
-        setNeedsClassroomConnect(!linked);
-      } else {
-        setClassroomLinked(null);
-        setNeedsClassroomConnect(false);
-      }
     } else {
       setMySubmission(null);
-      setClassroomLinked(null);
-      setNeedsClassroomConnect(false);
     }
 
     if (teach) {
@@ -392,7 +371,6 @@ export default function ActivityPage() {
     setBusy(true);
     setActionErr("");
     setActionMsg("");
-    setNeedsClassroomConnect(false);
     const prog = await fetchActivityProgress(activityId, user.id);
     const code = prog.code ?? activity?.starter_code ?? "";
     const r = await submitActivity(activityId, code);
@@ -401,20 +379,7 @@ export default function ActivityPage() {
       setActionErr(r.error || "No se pudo entregar.");
       return;
     }
-    const cr = r.classroom;
-    if (!activity?.classroom_coursework_id || cr?.skipped) {
-      setActionMsg("Actividad entregada.");
-    } else if (cr?.ok) {
-      setActionMsg(
-        cr.alreadyTurnedIn
-          ? "Actividad entregada en PyBot. Ya estaba entregada en Classroom."
-          : "Actividad entregada en PyBot y marcada como entregada en Classroom.",
-      );
-    } else {
-      const msg = classroomTurnInUserMessage(cr);
-      if (cr?.needsConnect || cr?.error === "missing_access_token") setNeedsClassroomConnect(true);
-      setActionMsg(msg || "Actividad entregada en PyBot.");
-    }
+    setActionMsg("Actividad entregada.");
     await load();
   };
 
@@ -488,39 +453,6 @@ export default function ActivityPage() {
         ) : null}
         {actionErr ? <p className="auth-card__notice auth-card__notice--err">{actionErr}</p> : null}
         {actionMsg ? <p className="auth-card__notice">{actionMsg}</p> : null}
-
-        {isStudent && activity?.classroom_coursework_id && classroomCourseId ? (
-          <div
-            className="auth-card__actions auth-card__actions--row"
-            style={{ marginTop: "0.5rem", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}
-          >
-            {classroomLinked ? (
-              <span className="auth-card__muted">Google Classroom conectado · al entregar se marca también en Classroom</span>
-            ) : (
-              <>
-                <p className="auth-card__muted" style={{ flex: "1 1 100%", margin: 0 }}>
-                  Esta actividad está vinculada a Google Classroom. Conectá tu cuenta para que al entregar quede marcada allí.
-                </p>
-                <button
-                  type="button"
-                  className="auth-btn auth-btn--primary auth-btn--sm"
-                  onClick={() => void connectGoogleClassroom(`/actividad/${activityId}`)}
-                >
-                  Conectar Google Classroom
-                </button>
-              </>
-            )}
-          </div>
-        ) : needsClassroomConnect ? (
-          <button
-            type="button"
-            className="auth-btn auth-btn--ghost auth-btn--sm"
-            style={{ marginTop: "0.5rem" }}
-            onClick={() => void connectGoogleClassroom(`/actividad/${activityId}`)}
-          >
-            Conectar Google Classroom
-          </button>
-        ) : null}
 
         {activity?.description ? (
           <p className="auth-card__lead">{activity.description}</p>
