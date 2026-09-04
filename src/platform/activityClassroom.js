@@ -359,9 +359,9 @@ export function classroomTurnInUserMessage(classroomResult) {
     classroomAccessDenied(err, code)
   ) {
     return (
-      "Entregada en PyBot. Google no permitió usar Classroom con esta sesión. " +
-      "Andá a Inicio → Conectar/Reconectar Google Classroom (misma cuenta) y volvé a entregar. " +
-      "Si sigue igual, el colegio puede tener Classroom deshabilitado para alumnos."
+      "Entregada en PyBot. Para marcarla también en Google Classroom, conectá/reconectá Classroom " +
+      "desde Inicio (misma cuenta Google) y volvé a entregar. " +
+      "Si sigue fallando, el colegio puede tener Classroom deshabilitado para alumnos."
     );
   }
   if (err === "classroom_submission_not_found") {
@@ -371,6 +371,18 @@ export function classroomTurnInUserMessage(classroomResult) {
     );
   }
   return "Entregada en PyBot. No se pudo marcar también en Classroom. Podés reintentar más tarde.";
+}
+
+/** Mensaje de éxito (PyBot ± Classroom). */
+export function classroomTurnInSuccessMessage(classroomResult) {
+  if (!classroomResult || classroomResult.skipped) {
+    return "Actividad entregada.";
+  }
+  if (!classroomResult.ok) return null;
+  if (classroomResult.alreadyTurnedIn) {
+    return "Actividad entregada en PyBot. Ya estaba entregada en Google Classroom.";
+  }
+  return "Actividad entregada en PyBot y en Google Classroom.";
 }
 
 /**

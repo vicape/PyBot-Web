@@ -71,6 +71,10 @@ import { useActivityIde } from "./platform/useActivityIde.js";
 import { parseActivityId, readActivityLaunchCode, isGenericIdeTemplate } from "./platform/activityIdeSession.js";
 import { saveActivityProgress } from "./platform/activityProgress.js";
 import { submitActivity } from "./platform/activitySubmissions.js";
+import {
+  classroomTurnInSuccessMessage,
+  classroomTurnInUserMessage,
+} from "./platform/activityClassroom.js";
 import { fetchMyCourseRole, isCourseStudent } from "./platform/courseRole.js";
 import { track } from "./telemetry/index.js";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
@@ -197,7 +201,10 @@ export default function PyBotIDE() {
       return;
     }
     setActivitySubmitStatus("saved");
-    window.alert("Actividad entregada en PyBot.");
+    const cr = r.classroom;
+    const failMsg = classroomTurnInUserMessage(cr);
+    const okMsg = classroomTurnInSuccessMessage(cr);
+    window.alert(failMsg || okMsg || "Actividad entregada en PyBot.");
   }, [activityId, sessionUser, activityIsStudent, code]);
 
   useEffect(() => {
