@@ -71,6 +71,7 @@ import { useActivityIde } from "./platform/useActivityIde.js";
 import { parseActivityId, readActivityLaunchCode, isGenericIdeTemplate } from "./platform/activityIdeSession.js";
 import { saveActivityProgress } from "./platform/activityProgress.js";
 import { submitActivity } from "./platform/activitySubmissions.js";
+import { classroomTurnInUserMessage } from "./platform/activityClassroom.js";
 import { fetchMyCourseRole, isCourseStudent } from "./platform/courseRole.js";
 import { track } from "./telemetry/index.js";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
@@ -197,17 +198,8 @@ export default function PyBotIDE() {
     }
     setActivitySubmitStatus("saved");
     const cr = r.classroom;
-    if (cr && !cr.skipped && !cr.ok) {
-      if (cr.needsConnect || cr.error === "missing_access_token") {
-        window.alert(
-          "Entregada en PyBot. Para marcarla también en Classroom, conectá Google Classroom desde la página de la actividad (misma cuenta Google).",
-        );
-      } else {
-        window.alert(
-          `Entregada en PyBot. No se pudo actualizar Classroom${cr.error ? `: ${cr.error}` : "."}`,
-        );
-      }
-    }
+    const classroomMsg = classroomTurnInUserMessage(cr);
+    if (classroomMsg) window.alert(classroomMsg);
   }, [activityId, sessionUser, activityIsStudent, code]);
 
   useEffect(() => {

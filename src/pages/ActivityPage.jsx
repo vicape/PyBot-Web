@@ -26,6 +26,7 @@ import {
   publishActivityToClassroom,
   sendGradeToClassroom,
   syncClassroomSubmissionsForActivity,
+  classroomTurnInUserMessage,
 } from "../platform/activityClassroom.js";
 import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
 import { listLessonBlocks } from "../platform/contentApi.js";
@@ -409,15 +410,10 @@ export default function ActivityPage() {
           ? "Actividad entregada en PyBot. Ya estaba entregada en Classroom."
           : "Actividad entregada en PyBot y marcada como entregada en Classroom.",
       );
-    } else if (cr?.needsConnect || cr?.error === "missing_access_token") {
-      setNeedsClassroomConnect(true);
-      setActionMsg(
-        "Actividad entregada en PyBot. Para marcarla también en Classroom, conectá Google Classroom con la misma cuenta.",
-      );
     } else {
-      setActionMsg(
-        `Actividad entregada en PyBot. No se pudo actualizar Classroom${cr?.error ? `: ${cr.error}` : "."}`,
-      );
+      const msg = classroomTurnInUserMessage(cr);
+      if (cr?.needsConnect || cr?.error === "missing_access_token") setNeedsClassroomConnect(true);
+      setActionMsg(msg || "Actividad entregada en PyBot.");
     }
     await load();
   };

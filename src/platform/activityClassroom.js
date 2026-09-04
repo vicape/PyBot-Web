@@ -341,6 +341,38 @@ export function matchClassroomSubmission(
   return false;
 }
 
+function classroomAccessDenied(message, code) {
+  const s = `${code || ""} ${message || ""}`;
+  return /ClassroomApiDisabled|SERVICE_DISABLED|ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficient|scope|permission|401|403|not permitted to access the Classroom API/i.test(
+    s,
+  );
+}
+
+/** Mensaje claro post-entrega cuando falla el turnIn de Classroom. */
+export function classroomTurnInUserMessage(classroomResult) {
+  if (!classroomResult || classroomResult.skipped || classroomResult.ok) return null;
+  const err = String(classroomResult.error || "");
+  const code = String(classroomResult.code || "");
+  if (
+    classroomResult.needsConnect ||
+    err === "missing_access_token" ||
+    classroomAccessDenied(err, code)
+  ) {
+    return (
+      "Entregada en PyBot. Google no permitió usar Classroom con esta sesión. " +
+      "Andá a Inicio → Conectar/Reconectar Google Classroom (misma cuenta) y volvé a entregar. " +
+      "Si sigue igual, el colegio puede tener Classroom deshabilitado para alumnos."
+    );
+  }
+  if (err === "classroom_submission_not_found") {
+    return (
+      "Entregada en PyBot. No encontramos tu entrega en Classroom. " +
+      "Pedile al docente que sincronice Classroom en la actividad y volvé a intentar."
+    );
+  }
+  return "Entregada en PyBot. No se pudo marcar también en Classroom. Podés reintentar más tarde.";
+}
+
 /**
  * Tras entregar en PyBot: turnIn de la StudentSubmission del alumno en Classroom.
  * No bloquea la entrega PyBot — best effort.
@@ -420,7 +452,7 @@ export async function turnInPybotActivityToClassroom(activityId) {
       return {
         ok: false,
         skipped: false,
-        needsConnect: /insufficient|scope|permission|401|403/i.test(String(ex?.message || "")),
+        needsConnect: classroomAccessDenied(ex?.message, ex?.code),
         error: ex?.message || "list_submissions_failed",
         code: ex?.code,
       };
@@ -451,7 +483,7 @@ export async function turnInPybotActivityToClassroom(activityId) {
     return {
       ok: false,
       skipped: false,
-      needsConnect: /insufficient|scope|permission|401|403/i.test(msg),
+      needsConnect: classroomAccessDenied(msg, ex?.code),
       error: msg || "turn_in_failed",
       code: ex?.code,
     };
