@@ -375,6 +375,7 @@ export default function ActivityPage() {
     setActionMsg("");
     const r = await sendGradeToClassroom({
       submission: row,
+      activity,
       classroomCourseId,
       courseWorkId: activity.classroom_coursework_id,
       classroomSubmissionId,
@@ -385,7 +386,15 @@ export default function ActivityPage() {
       setActionErr(r.error || "No se pudo enviar la nota a Classroom.");
       return;
     }
-    setActionMsg("Nota enviada a Classroom.");
+    if (r.warning) {
+      setActionMsg(r.warning);
+    } else {
+      setActionMsg(
+        row.feedback
+          ? "Nota enviada a Classroom. (El feedback de texto no se puede sincronizar vía API de Google; solo la nota numérica.)"
+          : "Nota enviada a Classroom.",
+      );
+    }
     await load();
   };
 

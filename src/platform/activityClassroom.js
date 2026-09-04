@@ -49,7 +49,7 @@ export async function publishActivityToClassroom({
     return { ok: false, error: "missing_args" };
   }
 
-  const tok = await getValidClassroomToken(userId);
+  const tok = await tryGetClassroomToken(userId);
   if (!tok) return { ok: false, error: "missing_access_token" };
 
   const activityUrl = `${window.location.origin}/actividad/${encodeURIComponent(activity.id)}`;
@@ -167,7 +167,19 @@ export async function syncClassroomSubmissionsForActivity({
   userId,
 }) {
   const sb = getSupabase();
-  const tok = await getValidClassroomToken(userId);
+  let tok;
+  try {
+    tok = await getValidClassroomToken(userId);
+  } catch (ex) {
+    return {
+      ok: false,
+      error: ex?.message || "missing_access_token",
+      rows: [],
+      persisted: 0,
+      syncedAt: null,
+      code: ex?.code,
+    };
+  }
   if (!tok) return { ok: false, error: "missing_access_token", rows: [], persisted: 0, syncedAt: null };
 
   let googleRows;
@@ -278,7 +290,12 @@ export async function sendGradeToClassroom({
     };
   }
 
-  const tok = await getValidClassroomToken(userId);
+  let tok;
+  try {
+    tok = await getValidClassroomToken(userId);
+  } catch (ex) {
+    return { ok: false, error: ex?.message || "missing_access_token", code: ex?.code };
+  }
   if (!tok) return { ok: false, error: "missing_access_token" };
 
   try {
@@ -292,7 +309,25 @@ export async function sendGradeToClassroom({
     try {
       await returnStudentSubmission(tok, classroomCourseId, courseWorkId, classroomSubmissionId);
     } catch (retEx) {
-      // return puede fallar si ya está returned; no abortar si la nota se asignó
+      const retMsg = String(retEx?.message || "");
+      // Sin turnIn del alumno, return suele fallar
+      if (/FAILED_PRECONDITION|not.?turned.?in|TURNED_IN|state/i.test(retMsg)) {
+        await sb
+          .from("activity_submissions")
+          .update({
+            classroom_grade_synced_at: new Date().toISOString(),
+            classroom_grade_sync_error: null,
+            classroom_submission_id: classroomSubmissionId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", submission.id);
+        return {
+          ok: true,
+          warning:
+            "Nota asignada en Classroom, pero no se pudo «devolver» porque el alumno aún no entregó en Classroom (turnIn).",
+          error: null,
+        };
+      }
       console.warn("returnStudentSubmission:", retEx);
     }
 
@@ -310,14 +345,17 @@ export async function sendGradeToClassroom({
     return { ok: true, error: null };
   } catch (ex) {
     const msg = ex?.message || "grade_sync_failed";
+    const friendly = /FAILED_PRECONDITION|not.?turned.?in/i.test(msg)
+      ? "Classroom exige que el alumno entregue primero (turnIn). Pedile que conecte Classroom y vuelva a entregar en PyBot."
+      : msg;
     await sb
       .from("activity_submissions")
       .update({
-        classroom_grade_sync_error: msg,
+        classroom_grade_sync_error: friendly,
         updated_at: new Date().toISOString(),
       })
       .eq("id", submission.id);
-    return { ok: false, error: msg, code: ex?.code };
+    return { ok: false, error: friendly, code: ex?.code };
   }
 }
 
