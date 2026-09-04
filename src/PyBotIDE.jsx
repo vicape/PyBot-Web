@@ -74,7 +74,14 @@ import { submitActivity } from "./platform/activitySubmissions.js";
 import {
   classroomTurnInSuccessMessage,
   classroomTurnInUserMessage,
+  turnInPybotActivityToClassroom,
 } from "./platform/activityClassroom.js";
+import {
+  connectGoogleClassroom,
+  getPendingClassroomTurnIn,
+  setPendingClassroomTurnIn,
+  clearPendingClassroomTurnIn,
+} from "./platform/googleOAuth.js";
 import { fetchMyCourseRole, isCourseStudent } from "./platform/courseRole.js";
 import { track } from "./telemetry/index.js";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
@@ -202,12 +209,64 @@ export default function PyBotIDE() {
       window.alert(r.error || "No se pudo entregar la actividad.");
       return;
     }
-    setActivitySubmitStatus("saved");
     const cr = r.classroom;
+    if (cr?.ok === false && cr?.needsConnect && !cr?.needsAdmin) {
+      setPendingClassroomTurnIn({
+        activityId,
+        userId: sessionUser.id,
+        returnPath: `${window.location.pathname}${window.location.search}`,
+      });
+      setActivitySubmitStatus("saved");
+      window.alert(
+        classroomTurnInUserMessage(cr) ||
+          "Actividad entregada en PyBot. Autorizá Google Classroom para completar la entrega.",
+      );
+      void connectGoogleClassroom(`${window.location.pathname}${window.location.search}`, {
+        mode: "student",
+      });
+      return;
+    }
+    setActivitySubmitStatus("saved");
     const failMsg = classroomTurnInUserMessage(cr);
     const okMsg = classroomTurnInSuccessMessage(cr);
     window.alert(failMsg || okMsg || "Actividad entregada en PyBot.");
   }, [activityId, sessionUser, activityIsStudent, code]);
+
+  // Resume turnIn post-OAuth (sin re-submit)
+  useEffect(() => {
+    if (!activityId || !sessionUser || sessionUser._legacy || !activityIsStudent) return;
+    const pending = getPendingClassroomTurnIn();
+    if (!pending) return;
+    if (pending.activityId !== activityId || pending.userId !== sessionUser.id) return;
+
+    let cancelled = false;
+    (async () => {
+      clearPendingClassroomTurnIn();
+      setActivitySubmitStatus("saving");
+      try {
+        const cr = await turnInPybotActivityToClassroom(activityId);
+        if (cancelled) return;
+        if (cr?.needsConnect && !cr?.needsAdmin) {
+          // Una sola reauth por click original — no loop
+          setActivitySubmitStatus("saved");
+          window.alert(classroomTurnInUserMessage(cr) || "No se pudo completar Classroom.");
+          return;
+        }
+        setActivitySubmitStatus("saved");
+        const failMsg = classroomTurnInUserMessage(cr);
+        const okMsg = classroomTurnInSuccessMessage(cr);
+        window.alert(failMsg || okMsg || "Actividad entregada en PyBot.");
+      } catch (ex) {
+        if (cancelled) return;
+        setActivitySubmitStatus("error");
+        window.alert(ex?.message || "No se pudo completar la entrega en Classroom.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activityId, sessionUser, activityIsStudent]);
 
   useEffect(() => {
     if (!activityId || activityLoading || activityInitialCode === null) return;

@@ -261,7 +261,7 @@ export default function ClassroomPanel({
             type="button"
             className="auth-link"
             style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
-            onClick={() => void connectGoogleClassroom()}
+            onClick={() => void connectGoogleClassroom(undefined, { mode: "teacher" })}
           >
             Reconectar →
           </button>
@@ -277,7 +277,7 @@ export default function ClassroomPanel({
         <button
           type="button"
           className="auth-btn auth-btn--primary"
-          onClick={() => void connectGoogleClassroom()}
+          onClick={() => void connectGoogleClassroom(undefined, { mode: "teacher" })}
         >
           Conectar Google Classroom
         </button>

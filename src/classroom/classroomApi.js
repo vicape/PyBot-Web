@@ -1,6 +1,25 @@
 const CLASSROOM_ROOT = "https://classroom.googleapis.com/v1";
 const MAX_PAGES = 50;
 
+/** Extrae reason de error.details de Google (p.ej. ClassroomApiDisabled). */
+function extractGoogleReason(json) {
+  const details = json?.error?.details;
+  if (!Array.isArray(details)) return null;
+  for (const d of details) {
+    const reason = d?.reason || d?.metadata?.reason;
+    if (reason) return String(reason);
+  }
+  return null;
+}
+
+function attachClassroomErrorMeta(err, json, status) {
+  err.code = json?.error?.status || err.code || "classroom_error";
+  err.status = status;
+  const reason = extractGoogleReason(json);
+  if (reason) err.googleReason = reason;
+  return err;
+}
+
 async function classroomFetch(path, accessToken) {
   if (!accessToken) {
     const err = new Error("missing_access_token");
@@ -13,9 +32,7 @@ async function classroomFetch(path, accessToken) {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(json?.error?.message || `Classroom HTTP ${res.status}`);
-    err.code = json?.error?.status || "classroom_error";
-    err.status = res.status;
-    throw err;
+    throw attachClassroomErrorMeta(err, json, res.status);
   }
   return json;
 }
@@ -111,11 +128,25 @@ async function classroomMutate(path, accessToken, { method = "POST", body } = {}
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(json?.error?.message || `Classroom HTTP ${res.status}`);
-    err.code = json?.error?.status || "classroom_error";
-    err.status = res.status;
-    throw err;
+    throw attachClassroomErrorMeta(err, json, res.status);
   }
   return json;
+}
+
+/**
+ * GET courseWork concreto.
+ * Scope alumno: classroom.coursework.me
+ */
+export async function getCourseWork(accessToken, classroomCourseId, courseWorkId) {
+  if (!classroomCourseId || !courseWorkId) {
+    const err = new Error("missing_coursework_ids");
+    err.code = "missing_coursework_ids";
+    throw err;
+  }
+  return classroomFetch(
+    `/courses/${encodeURIComponent(classroomCourseId)}/courseWork/${encodeURIComponent(courseWorkId)}`,
+    accessToken,
+  );
 }
 
 /**

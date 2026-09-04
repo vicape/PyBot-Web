@@ -2,10 +2,25 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSupabase } from "../supabaseClient.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
-import { clearClassroomTokenCache } from "../platform/classroomToken.js";
-import { updatePreferredRole, saveGoogleTokens, markClassroomLinked } from "../platform/profileApi.js";
+import {
+  clearClassroomTokenCache,
+  primeClassroomAccessToken,
+} from "../platform/classroomToken.js";
+import {
+  updatePreferredRole,
+  saveGoogleTokens,
+  saveStudentGoogleTokens,
+  markClassroomLinked,
+  markStudentClassroomLinked,
+} from "../platform/profileApi.js";
 import { consumeSignupRole } from "../platform/signupRole.js";
-import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
+import {
+  wasClassroomOAuthIntent,
+  consumeClassroomOAuthMode,
+  peekClassroomOAuthExpected,
+  clearClassroomOAuthExpected,
+  clearPendingClassroomTurnIn,
+} from "../platform/googleOAuth.js";
 
 function safeInternalNext(raw) {
   if (typeof raw !== "string") return null;
@@ -27,7 +42,6 @@ export default function AuthCallbackPage() {
   const [errorMsg, setErrorMsg] = useState(null);
 
   useEffect(() => {
-    // Si Supabase/Google devolvieron un error en la URL, mostrarlo inmediatamente
     const urlError = getUrlError();
     if (urlError) {
       setErrorMsg(
@@ -40,7 +54,6 @@ export default function AuthCallbackPage() {
 
     const sb = getSupabase();
     if (!sb) {
-      // Las variables de entorno Supabase no están disponibles en este build
       setErrorMsg(
         "El proyecto Supabase no está configurado en este entorno. " +
           "Verificá las variables VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en Vercel.",
@@ -63,17 +76,70 @@ export default function AuthCallbackPage() {
 
       const signupRole = consumeSignupRole();
       const isClassroomIntent = wasClassroomOAuthIntent();
+      const expected = peekClassroomOAuthExpected();
+      const classroomMode = isClassroomIntent ? consumeClassroomOAuthMode() : "teacher";
+
       try {
         await ensureProfileForUser(session.user, signupRole);
         if (signupRole) await updatePreferredRole(session.user.id, signupRole);
-        if (isClassroomIntent && (session.provider_refresh_token || session.provider_token)) {
-          clearClassroomTokenCache();
-          await saveGoogleTokens(session.user.id, {
-            accessToken: session.provider_token,
-            refreshToken: session.provider_refresh_token,
-            expiresIn: 3600,
-          });
-          await markClassroomLinked(session.user.id);
+
+        if (isClassroomIntent) {
+          const expectedId = expected.userId;
+          const sessionEmail = String(session.user.email || "").toLowerCase();
+          const expectedEmail = expected.email ? String(expected.email).toLowerCase() : null;
+
+          const idMismatch = expectedId && expectedId !== session.user.id;
+          const emailMismatch =
+            !idMismatch && expectedEmail && sessionEmail && expectedEmail !== sessionEmail;
+
+          if (idMismatch || emailMismatch) {
+            clearClassroomTokenCache();
+            clearPendingClassroomTurnIn();
+            clearClassroomOAuthExpected();
+            setErrorMsg(
+              "Conectaste una cuenta Google diferente de la cuenta con la que ingresaste a PyBotClass.",
+            );
+            return;
+          }
+
+          const expiresIn = 3600;
+          if (session.provider_token) {
+            primeClassroomAccessToken(
+              session.user.id,
+              classroomMode,
+              session.provider_token,
+              expiresIn,
+            );
+          }
+
+          if (classroomMode === "student") {
+            if (session.provider_refresh_token) {
+              await saveStudentGoogleTokens(session.user.id, {
+                refreshToken: session.provider_refresh_token,
+                expiresIn,
+              });
+              await markStudentClassroomLinked(session.user.id);
+            }
+          } else if (session.provider_refresh_token || session.provider_token) {
+            clearClassroomTokenCache(session.user.id, "teacher");
+            if (session.provider_token) {
+              primeClassroomAccessToken(
+                session.user.id,
+                "teacher",
+                session.provider_token,
+                expiresIn,
+              );
+            }
+            await saveGoogleTokens(session.user.id, {
+              refreshToken: session.provider_refresh_token,
+              expiresIn,
+            });
+            if (session.provider_refresh_token) {
+              await markClassroomLinked(session.user.id);
+            }
+          }
+
+          clearClassroomOAuthExpected();
         }
       } catch {
         // No bloquear la navegación si falla la sincronización del perfil
@@ -89,12 +155,10 @@ export default function AuthCallbackPage() {
       }
     });
 
-    // getSession por si la sesión ya estaba lista antes de montar el componente
     sb.auth.getSession().then(({ data }) => {
       if (data.session) void go(data.session);
     });
 
-    // Si después de 8s todavía no hay sesión, mostrar error en pantalla (NO redirigir)
     const timeout = window.setTimeout(async () => {
       if (finished.current) return;
       const { data } = await sb.auth.getSession();

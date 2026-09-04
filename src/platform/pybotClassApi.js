@@ -350,6 +350,10 @@ export function mapClassroomCourseWorkToActivity(courseWork) {
     max_points: courseWork?.maxPoints != null ? Number(courseWork.maxPoints) : null,
     due_at: dueAt,
     classroom_last_synced_at: new Date().toISOString(),
+    classroom_associated_with_developer:
+      typeof courseWork?.associatedWithDeveloper === "boolean"
+        ? courseWork.associatedWithDeveloper
+        : null,
   };
 }
 
@@ -385,6 +389,9 @@ export async function importClassroomActivities(supabase, { courseId, courseWork
           max_points: mapped.max_points,
           due_at: mapped.due_at,
           classroom_last_synced_at: mapped.classroom_last_synced_at,
+          ...(typeof mapped.classroom_associated_with_developer === "boolean"
+            ? { classroom_associated_with_developer: mapped.classroom_associated_with_developer }
+            : {}),
         })
         .eq("id", existing.id);
       if (!error) updated += 1;

@@ -18,6 +18,7 @@ import {
 } from "../platform/pybotClassApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
+import { clearClassroomTokenCache } from "../platform/classroomToken.js";
 import { isStaffRole } from "../orgRole.js";
 
 function PyBotClassLoading() {
@@ -62,6 +63,7 @@ export default function PyBotClassPage() {
   const [showJoin, setShowJoin] = useState(false);
 
   const signOut = useCallback(async () => {
+    clearClassroomTokenCache();
     if (supabase) await supabase.auth.signOut();
     navigate("/login", { replace: true });
   }, [supabase, navigate]);

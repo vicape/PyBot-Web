@@ -2,6 +2,7 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import { getGoogleProfile } from "../authSession.js";
+import { clearClassroomTokenCache } from "../platform/classroomToken.js";
 import { signOutGoogleClient } from "../authGoogle.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 import {
@@ -311,11 +312,13 @@ export default function DashboardPage() {
   ]);
 
   const signOutLegacy = () => {
+    clearClassroomTokenCache();
     signOutGoogleClient();
     navigate("/login", { replace: true });
   };
 
   const signOutSupabase = async () => {
+    clearClassroomTokenCache();
     if (supabase) {
       const { error } = await supabase.auth.signOut();
       if (error) console.error("signOut:", error);

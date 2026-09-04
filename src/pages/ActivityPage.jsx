@@ -21,6 +21,8 @@ import {
   submissionStatusLabelEs,
   submitActivity,
 } from "../platform/activitySubmissions.js";
+import { connectGoogleClassroom, getPendingClassroomTurnIn, setPendingClassroomTurnIn, clearPendingClassroomTurnIn } from "../platform/googleOAuth.js";
+import { getStoredStudentClassroomLink } from "../platform/profileApi.js";
 import {
   fetchCachedClassroomSubmissions,
   publishActivityToClassroom,
@@ -28,14 +30,13 @@ import {
   syncClassroomSubmissionsForActivity,
   classroomTurnInUserMessage,
   classroomTurnInSuccessMessage,
+  turnInPybotActivityToClassroom,
 } from "../platform/activityClassroom.js";
 import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
 import { listLessonBlocks } from "../platform/contentApi.js";
 import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
 import { fetchMyOrgRole } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
-import { connectGoogleClassroom } from "../platform/googleOAuth.js";
-import { getStoredGoogleRefreshToken } from "../platform/profileApi.js";
 import { track } from "../telemetry/index.js";
 
 function fmtTs(v) {
@@ -218,14 +219,13 @@ export default function ActivityPage() {
       setMySubmission(sub.submission);
 
       if (act.classroom_coursework_id && nextClassroomCourseId) {
-        const stored = await getStoredGoogleRefreshToken(user.id);
+        const stored = await getStoredStudentClassroomLink(user.id);
         const linked = !!(
-          stored?.classroom_linked_at ||
-          stored?.google_refresh_token ||
-          stored?.google_token_expires_at
+          stored?.classroom_student_linked_at ||
+          stored?.google_student_refresh_token
         );
         setClassroomLinked(linked);
-        setNeedsClassroomConnect(!linked);
+        setNeedsClassroomConnect(false);
       } else {
         setClassroomLinked(null);
         setNeedsClassroomConnect(false);
@@ -275,6 +275,44 @@ export default function ActivityPage() {
   useEffect(() => {
     if (!authLoading && user) void load();
   }, [authLoading, user, load]);
+
+  // Resume turnIn post-OAuth (sin re-submit)
+  useEffect(() => {
+    if (authLoading || loading || !user || !activityId || !isStudent) return;
+    const pending = getPendingClassroomTurnIn();
+    if (!pending) return;
+    if (pending.activityId !== activityId || pending.userId !== user.id) return;
+
+    let cancelled = false;
+    (async () => {
+      clearPendingClassroomTurnIn();
+      setBusy(true);
+      setActionErr("");
+      setActionMsg("Completando entrega en Google Classroom…");
+      try {
+        const cr = await turnInPybotActivityToClassroom(activityId);
+        if (cancelled) return;
+        await load({ preserveActionMsg: true });
+        if (cr?.needsConnect && !cr?.needsAdmin) {
+          setActionMsg(classroomTurnInUserMessage(cr) || "No se pudo completar Classroom.");
+          return;
+        }
+        const okMsg = classroomTurnInSuccessMessage(cr);
+        const failMsg = classroomTurnInUserMessage(cr);
+        setActionMsg(failMsg || okMsg || "Actividad entregada.");
+      } catch (ex) {
+        if (cancelled) return;
+        setActionErr(ex?.message || "No se pudo completar la entrega en Classroom.");
+        setActionMsg("");
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, loading, user, activityId, isStudent, load]);
 
   const openPyBot = () => {
     if (!activityId || !activity || !user) return;
@@ -408,21 +446,31 @@ export default function ActivityPage() {
     const prog = await fetchActivityProgress(activityId, user.id);
     const code = prog.code ?? activity?.starter_code ?? "";
     const r = await submitActivity(activityId, code);
-    setBusy(false);
     if (!r.ok) {
+      setBusy(false);
       setActionErr(r.error || "No se pudo entregar.");
       return;
     }
     await load({ preserveActionMsg: true });
     const cr = r.classroom;
+    if (cr?.ok === false && cr?.needsConnect && !cr?.needsAdmin) {
+      setPendingClassroomTurnIn({
+        activityId,
+        userId: user.id,
+        returnPath: `/actividad/${activityId}`,
+      });
+      setActionMsg(
+        classroomTurnInUserMessage(cr) ||
+          "Actividad entregada en PyBot. Autorizá Google Classroom para completar la entrega.",
+      );
+      setBusy(false);
+      void connectGoogleClassroom(`/actividad/${activityId}`, { mode: "student" });
+      return;
+    }
+    setBusy(false);
     const okMsg = classroomTurnInSuccessMessage(cr);
     const failMsg = classroomTurnInUserMessage(cr);
-    if (failMsg) {
-      if (cr?.needsConnect || cr?.error === "missing_access_token") setNeedsClassroomConnect(true);
-      setActionMsg(failMsg);
-    } else {
-      setActionMsg(okMsg || "Actividad entregada.");
-    }
+    setActionMsg(failMsg || okMsg || "Actividad entregada.");
   };
 
   const onGrade = async (submissionId) => {
@@ -501,23 +549,13 @@ export default function ActivityPage() {
             className="auth-card__actions auth-card__actions--row"
             style={{ marginTop: "0.5rem", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}
           >
-            {classroomLinked && !needsClassroomConnect ? (
-              <span className="auth-card__muted">
-                Google Classroom conectado · al entregar se marca también en Classroom
-              </span>
+            {classroomLinked ? (
+              <span className="auth-card__muted">Cuenta Google Classroom vinculada</span>
             ) : (
-              <>
-                <p className="auth-card__muted" style={{ flex: "1 1 100%", margin: 0 }}>
-                  Esta actividad está en Google Classroom. Conectá tu cuenta para entregar también allí.
-                </p>
-                <button
-                  type="button"
-                  className="auth-btn auth-btn--primary auth-btn--sm"
-                  onClick={() => void connectGoogleClassroom(`/actividad/${activityId}`)}
-                >
-                  Conectar Google Classroom
-                </button>
-              </>
+              <p className="auth-card__muted" style={{ flex: "1 1 100%", margin: 0 }}>
+                Esta actividad está vinculada a Google Classroom. Al entregar, PyBot intentará marcarla
+                también allí (puede pedirte autorización de Google).
+              </p>
             )}
           </div>
         ) : null}

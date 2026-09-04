@@ -1,111 +1,149 @@
+/**
+ * Access tokens Classroom en memoria, aislados por usuario + modo.
+ * Nunca reutilizar entre alumnos ni entre teacher/student.
+ */
+
 import { getSupabase } from "../supabaseClient.js";
-import { getStoredGoogleRefreshToken, saveGoogleTokens } from "./profileApi.js";
+import {
+  getStoredGoogleRefreshToken,
+  getStoredStudentGoogleRefreshToken,
+} from "./profileApi.js";
 
-let cachedAccessToken = null;
-let cachedAccessTokenExpiresAt = 0;
+const TOKEN_URL = "https://oauth2.googleapis.com/token";
+const CLIENT_ID = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+const CLIENT_SECRET = String(import.meta.env.VITE_GOOGLE_CLIENT_SECRET || "").trim();
 
-const CACHE_BUFFER_MS = 120_000;
+/** @type {Map<string, { accessToken: string, expiresAt: number }>} */
+const tokenCache = new Map();
+let authListenerBound = false;
 
-/** Limpia el access_token renovado en memoria (p. ej. al reconectar Classroom). */
-export function clearClassroomTokenCache() {
-  cachedAccessToken = null;
-  cachedAccessTokenExpiresAt = 0;
+function ensureAuthListener() {
+  if (authListenerBound || typeof window === "undefined") return;
+  const sb = getSupabase();
+  if (!sb) return;
+  authListenerBound = true;
+  sb.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") tokenCache.clear();
+  });
+}
+
+function cacheKey(userId, mode) {
+  return `${String(userId || "").trim()}:${mode === "student" ? "student" : "teacher"}`;
+}
+
+function normalizeMode(mode) {
+  return mode === "student" ? "student" : "teacher";
 }
 
 /**
- * Obtiene un access_token de Google Classroom válido para el usuario actual.
- *
- * Preferimos SIEMPRE el refresh_token guardado al conectar Classroom, porque
- * session.provider_token puede venir de un login normal (sin scopes Classroom)
- * y provoca ClassroomApiDisabled / permission denied.
+ * @param {string} [userId]
+ * @param {"teacher"|"student"} [mode]
  */
-export async function getValidClassroomToken(userId) {
-  const sb = getSupabase();
-  if (!sb || !userId) throw Object.assign(new Error("no_session"), { code: "no_session" });
+export function clearClassroomTokenCache(userId, mode) {
+  ensureAuthListener();
+  if (!userId) {
+    tokenCache.clear();
+    return;
+  }
+  const uid = String(userId).trim();
+  if (mode) {
+    tokenCache.delete(cacheKey(uid, normalizeMode(mode)));
+    return;
+  }
+  tokenCache.delete(cacheKey(uid, "teacher"));
+  tokenCache.delete(cacheKey(uid, "student"));
+}
 
-  const stored = await getStoredGoogleRefreshToken(userId);
+/**
+ * Primar access token en memoria (p.ej. tras OAuth Classroom). No persiste.
+ * @param {string} userId
+ * @param {"teacher"|"student"} mode
+ * @param {string} accessToken
+ * @param {number} [expiresInSec]
+ */
+export function primeClassroomAccessToken(userId, mode, accessToken, expiresInSec) {
+  const uid = String(userId || "").trim();
+  const tok = String(accessToken || "").trim();
+  if (!uid || !tok) return;
+  const m = normalizeMode(mode);
+  const expSec = Number(expiresInSec);
+  const expiresAt =
+    Number.isFinite(expSec) && expSec > 0
+      ? Date.now() + Math.max(30, expSec - 60) * 1000
+      : Date.now() + 50 * 60 * 1000;
+  tokenCache.set(cacheKey(uid, m), { accessToken: tok, expiresAt });
+}
 
-  const hasConnected = !!(
-    stored?.google_refresh_token ||
-    stored?.google_token_expires_at ||
-    stored?.classroom_linked_at
-  );
-  if (!hasConnected) {
-    throw Object.assign(
-      new Error("No hay token de Classroom. Hacé clic en «Conectar Google Classroom»."),
-      { code: "missing_access_token" },
-    );
+async function refreshAccessToken(refreshToken) {
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    const err = new Error("Faltan VITE_GOOGLE_CLIENT_ID / VITE_GOOGLE_CLIENT_SECRET");
+    err.code = "missing_oauth_client";
+    throw err;
+  }
+  const body = new URLSearchParams({
+    client_id: CLIENT_ID,
+    client_secret: CLIENT_SECRET,
+    refresh_token: String(refreshToken),
+    grant_type: "refresh_token",
+  });
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(json.error_description || json.error || `token_refresh_${res.status}`);
+    err.code = json.error || "token_refresh_failed";
+    err.status = res.status;
+    throw err;
+  }
+  return {
+    accessToken: String(json.access_token || ""),
+    expiresIn: Number(json.expires_in) || 3600,
+  };
+}
+
+/**
+ * @param {string} userId
+ * @param {{ mode?: "teacher"|"student" }} [opts]
+ * @returns {Promise<string|null>}
+ */
+export async function getValidClassroomToken(userId, opts = {}) {
+  ensureAuthListener();
+  const uid = String(userId || "").trim();
+  if (!uid) return null;
+  const mode = normalizeMode(opts?.mode);
+
+  const key = cacheKey(uid, mode);
+  const cached = tokenCache.get(key);
+  if (cached?.accessToken && cached.expiresAt > Date.now()) {
+    return cached.accessToken;
   }
 
-  if (cachedAccessToken && cachedAccessTokenExpiresAt > Date.now() + CACHE_BUFFER_MS) {
-    return cachedAccessToken;
+  let refreshToken = null;
+  if (mode === "student") {
+    refreshToken = await getStoredStudentGoogleRefreshToken(uid);
+  } else {
+    const stored = await getStoredGoogleRefreshToken(uid);
+    refreshToken =
+      typeof stored === "string" ? stored : stored?.google_refresh_token || null;
   }
+  refreshToken = refreshToken ? String(refreshToken).trim() : null;
 
-  const {
-    data: { session },
-  } = await sb.auth.getSession();
-
-  // 1) Preferir refresh_token de la conexión Classroom (scopes correctos)
-  if (stored?.google_refresh_token) {
-    const supabaseToken = session?.access_token;
-    if (!supabaseToken) {
-      throw Object.assign(new Error("Sesión expirada. Volvé a iniciar sesión."), {
-        code: "no_session",
-      });
-    }
-
-    const res = await fetch("/api/refresh-classroom-token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${supabaseToken}`,
-      },
-      body: JSON.stringify({ refresh_token: stored.google_refresh_token }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (res.ok && data.access_token) {
-      const expiresIn = data.expires_in ?? 3600;
-      cachedAccessToken = data.access_token;
-      cachedAccessTokenExpiresAt = Date.now() + expiresIn * 1000;
-      await saveGoogleTokens(userId, { expiresIn });
-      return cachedAccessToken;
-    }
-
-    if (data.error === "invalid_grant") {
-      clearClassroomTokenCache();
-      throw Object.assign(
-        new Error("La conexión con Google Classroom venció. Reconectá desde Inicio → Classroom."),
-        { code: "invalid_grant", status: res.status },
-      );
-    }
-
-    // Si Google no está configurado en el server, caer al provider_token
-    if (data.error !== "google_not_configured") {
-      throw Object.assign(
-        new Error(
-          data.error
-            ? `Error al renovar token de Classroom: ${data.error}`
-            : "Token de Classroom expirado. Reconectá desde Inicio → Classroom.",
-        ),
-        { code: "token_refresh_failed", status: res.status, googleError: data.error },
-      );
+  if (refreshToken) {
+    try {
+      const { accessToken, expiresIn } = await refreshAccessToken(refreshToken);
+      if (accessToken) {
+        primeClassroomAccessToken(uid, mode, accessToken, expiresIn);
+        return accessToken;
+      }
+    } catch (e) {
+      clearClassroomTokenCache(uid, mode);
+      throw e;
     }
   }
 
-  // 2) Fallback: provider_token solo si la conexión Classroom está vigente en DB
-  const expiresAt = stored?.google_token_expires_at
-    ? new Date(stored.google_token_expires_at)
-    : null;
-  const isExpired = expiresAt ? expiresAt.getTime() <= Date.now() + CACHE_BUFFER_MS : true;
-
-  if (!isExpired && session?.provider_token) {
-    return session.provider_token;
-  }
-
-  throw Object.assign(
-    new Error("Token de Classroom expirado. Reconectá Google Classroom desde Inicio."),
-    { code: "missing_access_token" },
-  );
+  // No usar session.provider_token del login normal (scopes openid/email/profile).
+  return null;
 }

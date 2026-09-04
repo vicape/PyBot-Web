@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getGoogleProfile } from "../authSession.js";
 import { signOutGoogleClient } from "../authGoogle.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
+import { clearClassroomTokenCache } from "./classroomToken.js";
 
 /** @param {import("@supabase/supabase-js").User | { _legacy: true, name?: string, email?: string, picture?: string } | null} user */
 export function sessionUserDisplay(user) {
@@ -66,11 +67,13 @@ export function useOptionalSession() {
 
   const signOut = useCallback(async () => {
     if (user?._legacy) {
+      clearClassroomTokenCache();
       signOutGoogleClient();
       setUser(null);
       return;
     }
     if (supabase) {
+      clearClassroomTokenCache(user?.id);
       const { error } = await supabase.auth.signOut();
       if (error) console.error("useOptionalSession.signOut:", error);
     }

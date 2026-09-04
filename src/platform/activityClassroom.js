@@ -2,6 +2,7 @@ import { getSupabase } from "../supabaseClient.js";
 import { getValidClassroomToken } from "./classroomToken.js";
 import {
   createCourseWork,
+  getCourseWork,
   patchCourseWork,
   listStudentSubmissions,
   patchStudentSubmissionGrade,
@@ -9,12 +10,53 @@ import {
   turnInStudentSubmission,
 } from "../classroom/classroomApi.js";
 
-async function tryGetClassroomToken(userId) {
+async function tryGetClassroomToken(userId, opts = {}) {
   try {
-    return await getValidClassroomToken(userId);
-  } catch (ex) {
+    return await getValidClassroomToken(userId, opts);
+  } catch {
     return null;
   }
+}
+
+function isClassroomApiDisabled(ex) {
+  const reason = String(ex?.googleReason || "");
+  const msg = String(ex?.message || "");
+  if (reason === "ClassroomApiDisabled") return true;
+  return /ClassroomApiDisabled|not permitted to access the Classroom API|SERVICE_DISABLED/i.test(
+    `${reason} ${msg}`,
+  );
+}
+
+function isReconnectableTokenError(ex) {
+  if (isClassroomApiDisabled(ex)) return false;
+  const code = String(ex?.code || "");
+  const msg = String(ex?.message || "");
+  const s = `${code} ${msg}`;
+  return /missing_access_token|invalid_grant|ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficient.?authentication.?scopes|insufficient.?scope/i.test(
+    s,
+  );
+}
+
+function logTurnInDiag(stage, extra = {}) {
+  const parts = [`[Classroom turnIn] stage=${stage}`];
+  if (extra.status != null) parts.push(`status=${extra.status}`);
+  if (extra.code) parts.push(`code=${extra.code}`);
+  if (extra.googleReason) parts.push(`reason=${extra.googleReason}`);
+  if (extra.error) parts.push(`error=${String(extra.error).slice(0, 160)}`);
+  console.warn(parts.join(" "));
+}
+
+async function recordMyClassroomSubmission(activityId, googleRow, turnedIn) {
+  const sb = getSupabase();
+  if (!sb) return { ok: false, error: "no_client" };
+  const { data, error } = await sb.rpc("record_my_classroom_submission", {
+    p_activity_id: activityId,
+    p_row: googleRow || {},
+    p_turned_in: !!turnedIn,
+  });
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "persist_failed" };
+  return { ok: true, result: data };
 }
 function activityDueParts(activity) {
   if (!activity?.due_at) return { dueDate: null, dueTime: null };
@@ -77,28 +119,44 @@ export async function publishActivityToClassroom({
     let courseWorkUrl = activity.classroom_coursework_url || null;
     let alreadyPublished = false;
 
+    let associatedWithDeveloper = activity.classroom_associated_with_developer;
+    let cwResult = null;
+
     if (courseWorkId) {
-      await patchCourseWork(tok, classroomCourseId, courseWorkId, payload);
+      cwResult = await patchCourseWork(tok, classroomCourseId, courseWorkId, payload);
       alreadyPublished = true;
     } else {
-      const cw = await createCourseWork(tok, classroomCourseId, payload);
-      courseWorkId = cw.id;
+      cwResult = await createCourseWork(tok, classroomCourseId, payload);
+      courseWorkId = cwResult.id;
       courseWorkUrl =
-        cw.alternateLink ||
+        cwResult.alternateLink ||
         `https://classroom.google.com/c/${classroomCourseId}/a/${courseWorkId}`;
     }
 
-    const { error } = await sb
-      .from("activities")
-      .update({
-        classroom_coursework_id: courseWorkId,
-        classroom_coursework_url: courseWorkUrl,
-        classroom_last_synced_at: new Date().toISOString(),
-      })
-      .eq("id", activity.id);
+    if (cwResult && typeof cwResult.associatedWithDeveloper === "boolean") {
+      associatedWithDeveloper = cwResult.associatedWithDeveloper;
+    }
+
+    const patch = {
+      classroom_coursework_id: courseWorkId,
+      classroom_coursework_url: courseWorkUrl,
+      classroom_last_synced_at: new Date().toISOString(),
+    };
+    if (typeof associatedWithDeveloper === "boolean") {
+      patch.classroom_associated_with_developer = associatedWithDeveloper;
+    }
+
+    const { error } = await sb.from("activities").update(patch).eq("id", activity.id);
 
     if (error) return { ok: false, error: error.message };
-    return { ok: true, courseWorkId, url: courseWorkUrl, alreadyPublished };
+    return {
+      ok: true,
+      courseWorkId,
+      url: courseWorkUrl,
+      alreadyPublished,
+      associatedWithDeveloper:
+        typeof associatedWithDeveloper === "boolean" ? associatedWithDeveloper : null,
+    };
   } catch (ex) {
     return { ok: false, error: ex?.message || "classroom_publish_failed", code: ex?.code };
   }
@@ -379,36 +437,43 @@ export function matchClassroomSubmission(
   return false;
 }
 
-function classroomAccessDenied(message, code) {
-  const s = `${code || ""} ${message || ""}`;
-  return /ClassroomApiDisabled|SERVICE_DISABLED|ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficient|scope|permission|401|403|not permitted to access the Classroom API/i.test(
-    s,
-  );
-}
-
 /** Mensaje claro post-entrega cuando falla el turnIn de Classroom. */
 export function classroomTurnInUserMessage(classroomResult) {
   if (!classroomResult || classroomResult.skipped || classroomResult.ok) return null;
+
+  if (classroomResult.needsAdmin || classroomResult.googleReason === "ClassroomApiDisabled") {
+    return (
+      "Actividad entregada en PyBot. Google Workspace no permite a esta cuenta usar la API de Classroom. " +
+      "El administrador del colegio debe habilitar Classroom API para los alumnos."
+    );
+  }
+
   const err = String(classroomResult.error || "");
-  const code = String(classroomResult.code || "");
-  if (
-    classroomResult.needsConnect ||
-    err === "missing_access_token" ||
-    classroomAccessDenied(err, code)
-  ) {
+  if (err === "coursework_not_associated_with_developer") {
     return (
-      "Entregada en PyBot. Para marcarla también en Google Classroom, conectá/reconectá Classroom " +
-      "desde Inicio (misma cuenta Google) y volvé a entregar. " +
-      "Si sigue fallando, el colegio puede tener Classroom deshabilitado para alumnos."
+      "Actividad entregada en PyBot. Esta tarea de Classroom no fue creada por el proyecto de PyBot " +
+      "y Google no permite que PyBot marque automáticamente la entrega."
     );
   }
-  if (err === "classroom_submission_not_found") {
+
+  if (err === "classroom_submission_not_found" || err === "submission_not_found") {
     return (
-      "Entregada en PyBot. No encontramos tu entrega en Classroom. " +
-      "Pedile al docente que sincronice Classroom en la actividad y volvé a intentar."
+      "Actividad entregada en PyBot. No se pudo actualizar Google Classroom en este momento."
     );
   }
-  return "Entregada en PyBot. No se pudo marcar también en Classroom. Podés reintentar más tarde.";
+
+  // needsConnect: la UI inicia OAuth automático; mensaje breve mientras tanto
+  if (classroomResult.needsConnect) {
+    return (
+      "Actividad entregada en PyBot. Para marcarla también en Google Classroom necesitamos autorizar tu cuenta."
+    );
+  }
+
+  const stageHint =
+    classroomResult.stage && classroomResult.code
+      ? ` (${classroomResult.stage}/${classroomResult.code})`
+      : "";
+  return `Actividad entregada en PyBot. No se pudo actualizar Google Classroom en este momento.${stageHint}`;
 }
 
 /** Mensaje de éxito (PyBot ± Classroom). */
@@ -423,30 +488,54 @@ export function classroomTurnInSuccessMessage(classroomResult) {
   return "Actividad entregada en PyBot y en Google Classroom.";
 }
 
+function failTurnIn({ stage, error, code, googleReason, status, needsConnect, needsAdmin }) {
+  logTurnInDiag(stage, { status, code, googleReason, error });
+  return {
+    ok: false,
+    skipped: false,
+    stage,
+    error: error || "turn_in_failed",
+    code: code || null,
+    googleReason: googleReason || null,
+    status: status ?? null,
+    needsConnect: !!needsConnect,
+    needsAdmin: !!needsAdmin,
+  };
+}
+
 /**
  * Tras entregar en PyBot: turnIn de la StudentSubmission del alumno en Classroom.
- * No bloquea la entrega PyBot — best effort.
- * Requiere que el alumno haya conectado Classroom (scope coursework.me)
- * y que el courseWork lo haya creado este mismo proyecto OAuth.
+ * Usa EXCLUSIVAMENTE token mode=student. No revierte la entrega PyBot.
  */
 export async function turnInPybotActivityToClassroom(activityId) {
   const sb = getSupabase();
-  if (!sb || !activityId) return { ok: false, skipped: true, error: "missing_args" };
+  if (!sb || !activityId) {
+    return { ok: false, skipped: true, stage: "precheck", error: "missing_args" };
+  }
 
   const {
     data: { user },
   } = await sb.auth.getUser();
-  if (!user?.id) return { ok: false, skipped: true, error: "no_session" };
+  if (!user?.id) {
+    return { ok: false, skipped: true, stage: "precheck", error: "no_session" };
+  }
 
   const { data: act, error: actErr } = await sb
     .from("activities")
-    .select("id, course_id, classroom_coursework_id")
+    .select("id, course_id, classroom_coursework_id, classroom_associated_with_developer")
     .eq("id", activityId)
     .maybeSingle();
 
-  if (actErr || !act) return { ok: false, skipped: true, error: actErr?.message || "activity_not_found" };
+  if (actErr || !act) {
+    return {
+      ok: false,
+      skipped: true,
+      stage: "precheck",
+      error: actErr?.message || "activity_not_found",
+    };
+  }
   if (!act.classroom_coursework_id) {
-    return { ok: true, skipped: true, error: null };
+    return { ok: true, skipped: true, stage: "precheck", error: null };
   }
 
   const { data: course } = await sb
@@ -457,27 +546,140 @@ export async function turnInPybotActivityToClassroom(activityId) {
 
   const classroomCourseId = course?.classroom_course_id;
   if (!classroomCourseId) {
-    return { ok: true, skipped: true, error: null };
+    return { ok: true, skipped: true, stage: "precheck", error: null };
   }
 
-  const tok = await tryGetClassroomToken(user.id);
+  // --- token (student) ---
+  let tok = null;
+  try {
+    tok = await getValidClassroomToken(user.id, { mode: "student" });
+  } catch (ex) {
+    if (isClassroomApiDisabled(ex)) {
+      return failTurnIn({
+        stage: "token",
+        error: ex?.message || "ClassroomApiDisabled",
+        code: ex?.code,
+        googleReason: ex?.googleReason || "ClassroomApiDisabled",
+        status: ex?.status,
+        needsAdmin: true,
+        needsConnect: false,
+      });
+    }
+    if (isReconnectableTokenError(ex) || ex?.code === "invalid_grant") {
+      return failTurnIn({
+        stage: "token",
+        error: ex?.message || "invalid_grant",
+        code: ex?.code || "invalid_grant",
+        googleReason: ex?.googleReason,
+        status: ex?.status,
+        needsConnect: true,
+      });
+    }
+    return failTurnIn({
+      stage: "token",
+      error: ex?.message || "token_failed",
+      code: ex?.code,
+      googleReason: ex?.googleReason,
+      status: ex?.status,
+      needsConnect: isReconnectableTokenError(ex),
+    });
+  }
+
   if (!tok) {
-    return {
-      ok: false,
-      skipped: false,
-      needsConnect: true,
+    return failTurnIn({
+      stage: "token",
       error: "missing_access_token",
+      code: "missing_access_token",
+      needsConnect: true,
+    });
+  }
+
+  // --- precheck associatedWithDeveloper ---
+  let associated = act.classroom_associated_with_developer;
+  if (associated === false) {
+    return failTurnIn({
+      stage: "precheck",
+      error: "coursework_not_associated_with_developer",
+      code: "coursework_not_associated_with_developer",
+      needsConnect: false,
+    });
+  }
+
+  if (associated == null) {
+    try {
+      const cw = await getCourseWork(tok, classroomCourseId, act.classroom_coursework_id);
+      if (typeof cw?.associatedWithDeveloper === "boolean") {
+        associated = cw.associatedWithDeveloper;
+        await sb
+          .from("activities")
+          .update({ classroom_associated_with_developer: associated })
+          .eq("id", activityId);
+      }
+    } catch (ex) {
+      if (isClassroomApiDisabled(ex)) {
+        return failTurnIn({
+          stage: "coursework",
+          error: ex?.message || "ClassroomApiDisabled",
+          code: ex?.code,
+          googleReason: ex?.googleReason || "ClassroomApiDisabled",
+          status: ex?.status,
+          needsAdmin: true,
+        });
+      }
+      if (isReconnectableTokenError(ex)) {
+        return failTurnIn({
+          stage: "coursework",
+          error: ex?.message || "coursework_fetch_failed",
+          code: ex?.code,
+          googleReason: ex?.googleReason,
+          status: ex?.status,
+          needsConnect: true,
+        });
+      }
+      // Si no pudimos leer associated, no inventamos: fallar sin loop OAuth
+      return failTurnIn({
+        stage: "coursework",
+        error: ex?.message || "coursework_fetch_failed",
+        code: ex?.code,
+        googleReason: ex?.googleReason,
+        status: ex?.status,
+        needsConnect: false,
+      });
+    }
+
+    if (associated === false) {
+      return failTurnIn({
+        stage: "precheck",
+        error: "coursework_not_associated_with_developer",
+        code: "coursework_not_associated_with_developer",
+        needsConnect: false,
+      });
+    }
+  }
+
+  // --- localizar StudentSubmission ---
+  let classroomSubmissionId = null;
+  let googleRow = null;
+  let priorState = null;
+
+  const cached = await fetchCachedClassroomSubmissions(activityId);
+  const mine = (cached.rows || []).find((r) => r.user_id === user.id);
+  if (mine?.id) {
+    classroomSubmissionId = mine.id;
+    priorState = mine.state || null;
+    googleRow = {
+      id: mine.id,
+      userId: mine.userId,
+      courseWorkId: mine.courseWorkId || act.classroom_coursework_id,
+      state: mine.state,
+      late: mine.late,
+      draftGrade: mine.draftGrade,
+      assignedGrade: mine.assignedGrade,
+      creationTime: mine.creationTime,
+      updateTime: mine.updateTime,
     };
   }
 
-  let classroomSubmissionId = null;
-
-  // 1) cache persistente (fila del alumno)
-  const cached = await fetchCachedClassroomSubmissions(activityId);
-  const mine = (cached.rows || []).find((r) => r.user_id === user.id);
-  if (mine?.id) classroomSubmissionId = mine.id;
-
-  // 2) activity_submissions.classroom_submission_id
   if (!classroomSubmissionId) {
     const { data: sub } = await sb
       .from("activity_submissions")
@@ -488,8 +690,7 @@ export async function turnInPybotActivityToClassroom(activityId) {
     classroomSubmissionId = sub?.classroom_submission_id || null;
   }
 
-  // 3) Google: mi StudentSubmission (userId=me)
-  if (!classroomSubmissionId) {
+  if (!classroomSubmissionId || !googleRow) {
     try {
       const mineRows = await listStudentSubmissions(
         tok,
@@ -497,26 +698,69 @@ export async function turnInPybotActivityToClassroom(activityId) {
         act.classroom_coursework_id,
         "me",
       );
-      classroomSubmissionId = mineRows?.[0]?.id || null;
+      googleRow = mineRows?.[0] || null;
+      if (googleRow?.id) {
+        classroomSubmissionId = googleRow.id;
+        priorState = googleRow.state || priorState;
+        const persistList = await recordMyClassroomSubmission(activityId, googleRow, false);
+        if (!persistList.ok) {
+          console.warn("[Classroom turnIn] stage=list_submission persist warning:", persistList.error);
+        }
+      }
     } catch (ex) {
-      return {
-        ok: false,
-        skipped: false,
-        needsConnect: classroomAccessDenied(ex?.message, ex?.code),
+      if (isClassroomApiDisabled(ex)) {
+        return failTurnIn({
+          stage: "list_submission",
+          error: ex?.message || "ClassroomApiDisabled",
+          code: ex?.code,
+          googleReason: ex?.googleReason || "ClassroomApiDisabled",
+          status: ex?.status,
+          needsAdmin: true,
+        });
+      }
+      if (isReconnectableTokenError(ex)) {
+        return failTurnIn({
+          stage: "list_submission",
+          error: ex?.message || "list_submissions_failed",
+          code: ex?.code,
+          googleReason: ex?.googleReason,
+          status: ex?.status,
+          needsConnect: true,
+        });
+      }
+      return failTurnIn({
+        stage: "list_submission",
         error: ex?.message || "list_submissions_failed",
         code: ex?.code,
-      };
+        googleReason: ex?.googleReason,
+        status: ex?.status,
+        needsConnect: false,
+      });
     }
   }
 
   if (!classroomSubmissionId) {
-    return {
-      ok: false,
-      skipped: false,
+    return failTurnIn({
+      stage: "list_submission",
       error: "classroom_submission_not_found",
+      code: "submission_not_found",
+      needsConnect: false,
+    });
+  }
+
+  // Ya entregada / devuelta: no llamar turnIn
+  if (priorState === "TURNED_IN" || priorState === "RETURNED") {
+    return {
+      ok: true,
+      skipped: false,
+      alreadyTurnedIn: true,
+      classroomSubmissionId,
+      stage: "list_submission",
+      error: null,
     };
   }
 
+  // --- turnIn ---
   try {
     await turnInStudentSubmission(
       tok,
@@ -526,39 +770,75 @@ export async function turnInPybotActivityToClassroom(activityId) {
     );
   } catch (ex) {
     const msg = String(ex?.message || "");
-    // Ya entregada en Classroom → éxito idempotente
-    if (/already.?turned.?in|FAILED_PRECONDITION|ALREADY_EXISTS/i.test(msg) || ex?.status === 409) {
-      return { ok: true, skipped: false, alreadyTurnedIn: true, classroomSubmissionId, error: null };
+    const unequivocalAlready =
+      /already.?turned.?in/i.test(msg) ||
+      (ex?.code === "FAILED_PRECONDITION" && /already.?turned.?in/i.test(msg));
+
+    if (unequivocalAlready || priorState === "TURNED_IN") {
+      return {
+        ok: true,
+        skipped: false,
+        alreadyTurnedIn: true,
+        classroomSubmissionId,
+        stage: "turn_in",
+        error: null,
+      };
     }
-    return {
-      ok: false,
-      skipped: false,
-      needsConnect: classroomAccessDenied(msg, ex?.code),
+
+    if (isClassroomApiDisabled(ex)) {
+      return failTurnIn({
+        stage: "turn_in",
+        error: msg || "ClassroomApiDisabled",
+        code: ex?.code,
+        googleReason: ex?.googleReason || "ClassroomApiDisabled",
+        status: ex?.status,
+        needsAdmin: true,
+      });
+    }
+    if (isReconnectableTokenError(ex)) {
+      return failTurnIn({
+        stage: "turn_in",
+        error: msg || "turn_in_failed",
+        code: ex?.code,
+        googleReason: ex?.googleReason,
+        status: ex?.status,
+        needsConnect: true,
+      });
+    }
+    return failTurnIn({
+      stage: "turn_in",
       error: msg || "turn_in_failed",
       code: ex?.code,
+      googleReason: ex?.googleReason,
+      status: ex?.status,
+      needsConnect: false,
+    });
+  }
+
+  // --- persist TURNED_IN via RPC (no UPDATE directo) ---
+  const persistRow = googleRow || {
+    id: classroomSubmissionId,
+    courseWorkId: act.classroom_coursework_id,
+    state: "TURNED_IN",
+  };
+  const persist = await recordMyClassroomSubmission(activityId, persistRow, true);
+  if (!persist.ok) {
+    logTurnInDiag("persist", { error: persist.error });
+    return {
+      ok: true,
+      skipped: false,
+      classroomSubmissionId,
+      stage: "persist",
+      warning: "cache_persist_failed",
+      error: null,
     };
   }
 
-  // Best-effort: guardar id en entrega PyBot (puede fallar por RLS; no crítico)
-  await sb
-    .from("activity_submissions")
-    .update({
-      classroom_submission_id: classroomSubmissionId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("activity_id", activityId)
-    .eq("user_id", user.id);
-
-  // Best-effort: estado TURNED_IN en cache (solo si hay política que lo permita)
-  await sb
-    .from("activity_classroom_submissions")
-    .update({
-      classroom_submission_state: "TURNED_IN",
-      classroom_submission_id: classroomSubmissionId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("activity_id", activityId)
-    .eq("user_id", user.id);
-
-  return { ok: true, skipped: false, classroomSubmissionId, error: null };
+  return {
+    ok: true,
+    skipped: false,
+    classroomSubmissionId,
+    stage: "persist",
+    error: null,
+  };
 }

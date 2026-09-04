@@ -107,7 +107,7 @@ export default function PyBotClassHome({
   const primaryCountry = orgMemberships.find((o) => o.country_code)?.country_code;
 
   const onClassroomConnect = () => {
-    void connectGoogleClassroom("/dashboard/classes");
+    void connectGoogleClassroom("/dashboard/classes", { mode: "teacher" });
   };
 
   const classroomStatusLabel =
