@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { countryNameByCode } from "../../../data/countries.js";
 import { computeAccountRoleBadges, computeQuickSummary } from "../../../platform/accountRoles.js";
 import { connectGoogleClassroom } from "../../../platform/googleOAuth.js";
+import { getStoredGoogleRefreshToken } from "../../../platform/profileApi.js";
 import {
   CoursesActionIcon,
   CreateCourseActionIcon,
@@ -33,8 +34,26 @@ export default function PyBotClassHome({
 }) {
   const [roleFilter, setRoleFilter] = useState("all");
   const [orgFilter, setOrgFilter] = useState("");
+  const [classroomLinked, setClassroomLinked] = useState(null); // null loading
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) {
+      setClassroomLinked(false);
+      return undefined;
+    }
+    void getStoredGoogleRefreshToken(user.id).then((stored) => {
+      if (cancelled) return;
+      setClassroomLinked(
+        !!(stored?.classroom_linked_at || stored?.google_refresh_token || stored?.google_token_expires_at),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     const content = document.querySelector(".pbc-dashboard__content");
@@ -87,12 +106,49 @@ export default function PyBotClassHome({
 
   const primaryCountry = orgMemberships.find((o) => o.country_code)?.country_code;
 
+  const onClassroomConnect = () => {
+    void connectGoogleClassroom("/dashboard/classes");
+  };
+
+  const classroomStatusLabel =
+    classroomLinked == null ? "…" : classroomLinked ? "Conectado" : "No conectado";
+
   return (
     <div className="pbc-home">
       <div className="pbc-home__main">
-        <header className="pbc-hero-block">
-          <h1 className="pbc-hero-block__title">Hola, {firstName} 👋</h1>
-          <p className="pbc-hero-block__subtitle">Elegí cómo querés trabajar hoy</p>
+        <header className="pbc-hero-block pbc-hero-block--with-classroom">
+          <div className="pbc-hero-block__text">
+            <h1 className="pbc-hero-block__title">Hola, {firstName} 👋</h1>
+            <p className="pbc-hero-block__subtitle">Elegí cómo querés trabajar hoy</p>
+          </div>
+          <button
+            type="button"
+            className={`pbc-classroom-status${
+              classroomLinked ? " pbc-classroom-status--on" : " pbc-classroom-status--off"
+            }`}
+            onClick={onClassroomConnect}
+            title={
+              classroomLinked
+                ? "Google Classroom conectado. Clic para reconectar."
+                : "Google Classroom no conectado. Clic para conectar."
+            }
+            aria-label={
+              classroomLinked
+                ? "Google Classroom conectado. Reconectar."
+                : "Conectar Google Classroom"
+            }
+          >
+            <span className="pbc-classroom-status__icon" aria-hidden>
+              <GoogleClassroomIcon />
+            </span>
+            <span className="pbc-classroom-status__meta">
+              <span className="pbc-classroom-status__name">Classroom</span>
+              <span className="pbc-classroom-status__state">
+                <span className="pbc-classroom-status__dot" aria-hidden />
+                {classroomStatusLabel}
+              </span>
+            </span>
+          </button>
         </header>
 
         <div className="pbc-action-grid">
@@ -345,24 +401,36 @@ export default function PyBotClassHome({
           </div>
         ) : null}
 
-        {hasStaffAccess ? (
-          <div className="pbc-panel-card pbc-panel-card--quick">
-            <h3 className="pbc-panel-card__title">Acceso rápido</h3>
-            <button
-              type="button"
-              className="pbc-btn pbc-btn--classroom"
-              onClick={() => void connectGoogleClassroom()}
-            >
-              <span className="pbc-btn--classroom__icon" aria-hidden>
-                <GoogleClassroomIcon />
+        <div className="pbc-panel-card pbc-panel-card--quick">
+          <h3 className="pbc-panel-card__title">Google Classroom</h3>
+          <div
+            className={`pbc-classroom-status pbc-classroom-status--panel${
+              classroomLinked ? " pbc-classroom-status--on" : " pbc-classroom-status--off"
+            }`}
+          >
+            <span className="pbc-classroom-status__icon" aria-hidden>
+              <GoogleClassroomIcon />
+            </span>
+            <span className="pbc-classroom-status__meta">
+              <span className="pbc-classroom-status__name">Estado</span>
+              <span className="pbc-classroom-status__state">
+                <span className="pbc-classroom-status__dot" aria-hidden />
+                {classroomStatusLabel}
               </span>
-              Conectar Google Classroom
-            </button>
-            <p className="pbc-panel-card__hint">
-              Usá la misma cuenta Google con la que ingresaste a PyBotClass.
-            </p>
+            </span>
           </div>
-        ) : null}
+          <button type="button" className="pbc-btn pbc-btn--classroom" onClick={onClassroomConnect}>
+            <span className="pbc-btn--classroom__icon" aria-hidden>
+              <GoogleClassroomIcon />
+            </span>
+            {classroomLinked ? "Reconectar Google Classroom" : "Conectar Google Classroom"}
+          </button>
+          <p className="pbc-panel-card__hint">
+            {hasStaffAccess
+              ? "Usá la misma cuenta Google con la que ingresaste a PyBotClass."
+              : "Necesario para marcar entregas también en Classroom. Usá la misma cuenta Google."}
+          </p>
+        </div>
       </aside>
     </div>
   );

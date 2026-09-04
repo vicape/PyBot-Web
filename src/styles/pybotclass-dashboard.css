@@ -369,6 +369,117 @@
   color: var(--pbc-text-muted);
 }
 
+.pbc-hero-block--with-classroom {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.pbc-hero-block__text {
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.pbc-classroom-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.7rem 0.45rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid #dbe3ee;
+  background: #fff;
+  color: #0f172a;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.pbc-classroom-status:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.12);
+}
+
+.pbc-classroom-status--panel {
+  width: 100%;
+  border-radius: 12px;
+  margin-bottom: 0.65rem;
+  cursor: default;
+  pointer-events: none;
+}
+
+.pbc-classroom-status__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: #eef4ff;
+  flex-shrink: 0;
+}
+
+.pbc-classroom-status__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.pbc-classroom-status__name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.1;
+}
+
+.pbc-classroom-status__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.pbc-classroom-status__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex-shrink: 0;
+}
+
+.pbc-classroom-status--on .pbc-classroom-status__dot {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+}
+
+.pbc-classroom-status--off .pbc-classroom-status__dot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-classroom-status {
+  background: var(--pbc-panel-solid);
+  border-color: var(--pbc-border);
+  color: var(--pbc-text);
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-classroom-status__name {
+  color: var(--pbc-text-muted);
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-classroom-status__state {
+  color: var(--pbc-text);
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-classroom-status__icon {
+  background: rgba(59, 130, 246, 0.15);
+}
+
 /* Action cards */
 .pbc-action-grid {
   display: grid;
