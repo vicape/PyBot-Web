@@ -84,13 +84,15 @@ export default function ActivityPage() {
     if (activityId) track("activity_open", { feature: "activity" });
   }, [activityId]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts = {}) => {
     if (!supabase || !activityId || !user) return;
+    const preserveActionMsg = Boolean(opts.preserveActionMsg);
     setLoadErr("");
     setLoading(true);
-    setActionMsg("");
-    setActionErr("");
-
+    if (!preserveActionMsg) {
+      setActionMsg("");
+      setActionErr("");
+    }
     let { data: act, error: eAct } = await supabase
       .from("activities")
       .select(
@@ -379,8 +381,9 @@ export default function ActivityPage() {
       setActionErr(r.error || "No se pudo entregar.");
       return;
     }
+    // Recargar sin borrar el mensaje de éxito (load() limpia actionMsg al inicio)
+    await load({ preserveActionMsg: true });
     setActionMsg("Actividad entregada.");
-    await load();
   };
 
   const onGrade = async (submissionId) => {
