@@ -32,6 +32,7 @@ import { listLessonBlocks } from "../platform/contentApi.js";
 import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
 import { fetchMyOrgRole } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
+import { connectGoogleClassroom } from "../platform/googleOAuth.js";
 import { track } from "../telemetry/index.js";
 
 function fmtTs(v) {
@@ -68,6 +69,7 @@ export default function ActivityPage() {
   const [gradeDraft, setGradeDraft] = useState({});
   const [actionMsg, setActionMsg] = useState("");
   const [actionErr, setActionErr] = useState("");
+  const [needsClassroomConnect, setNeedsClassroomConnect] = useState(false);
   const [busy, setBusy] = useState(false);
   const [lessonDoc, setLessonDoc] = useState(null);
   const [lessonMeta, setLessonMeta] = useState(null);
@@ -369,6 +371,7 @@ export default function ActivityPage() {
     setBusy(true);
     setActionErr("");
     setActionMsg("");
+    setNeedsClassroomConnect(false);
     const prog = await fetchActivityProgress(activityId, user.id);
     const code = prog.code ?? activity?.starter_code ?? "";
     const r = await submitActivity(activityId, code);
@@ -377,7 +380,25 @@ export default function ActivityPage() {
       setActionErr(r.error || "No se pudo entregar.");
       return;
     }
-    setActionMsg("Actividad entregada.");
+    const cr = r.classroom;
+    if (!activity?.classroom_coursework_id || cr?.skipped) {
+      setActionMsg("Actividad entregada.");
+    } else if (cr?.ok) {
+      setActionMsg(
+        cr.alreadyTurnedIn
+          ? "Actividad entregada en PyBot. Ya estaba entregada en Classroom."
+          : "Actividad entregada en PyBot y marcada como entregada en Classroom.",
+      );
+    } else if (cr?.needsConnect || cr?.error === "missing_access_token") {
+      setNeedsClassroomConnect(true);
+      setActionMsg(
+        "Actividad entregada en PyBot. Para marcarla también en Classroom, conectá Google Classroom con la misma cuenta.",
+      );
+    } else {
+      setActionMsg(
+        `Actividad entregada en PyBot. No se pudo actualizar Classroom${cr?.error ? `: ${cr.error}` : "."}`,
+      );
+    }
     await load();
   };
 
@@ -451,6 +472,16 @@ export default function ActivityPage() {
         ) : null}
         {actionErr ? <p className="auth-card__notice auth-card__notice--err">{actionErr}</p> : null}
         {actionMsg ? <p className="auth-card__notice">{actionMsg}</p> : null}
+        {needsClassroomConnect ? (
+          <button
+            type="button"
+            className="auth-btn auth-btn--ghost auth-btn--sm"
+            style={{ marginTop: "0.5rem" }}
+            onClick={() => void connectGoogleClassroom(`/actividad/${activityId}`)}
+          >
+            Conectar Google Classroom
+          </button>
+        ) : null}
 
         {activity?.description ? (
           <p className="auth-card__lead">{activity.description}</p>

@@ -11,6 +11,8 @@ export const GOOGLE_CLASSROOM_SCOPES = [
   "https://www.googleapis.com/auth/classroom.profile.emails",
   "https://www.googleapis.com/auth/classroom.coursework.students",
   "https://www.googleapis.com/auth/classroom.student-submissions.students.readonly",
+  // Alumno: entregar (turnIn) y leer su propia StudentSubmission
+  "https://www.googleapis.com/auth/classroom.coursework.me",
 ].join(" ");
 
 /** Login normal: solo identidad Google (sin Classroom). */
@@ -44,13 +46,19 @@ export function teacherLoginOAuthOptions(redirectTo) {
 /**
  * Conectar Google Classroom bajo demanda.
  * Usá la misma cuenta Google con la que ingresaste a PyBotClass.
+ * @param {string} [nextPath] ruta post-OAuth (default panel Classroom)
  */
-export async function connectGoogleClassroom() {
+export async function connectGoogleClassroom(nextPath) {
   const sb = getSupabase();
   if (!sb) return;
 
+  const next =
+    typeof nextPath === "string" && nextPath.startsWith("/")
+      ? nextPath
+      : "/dashboard/classes?panel=classroom";
+
   try {
-    sessionStorage.setItem("pybot_oauth_next", "/dashboard/classes?panel=classroom");
+    sessionStorage.setItem("pybot_oauth_next", next);
     sessionStorage.setItem("pybot_oauth_classroom", "1");
   } catch {
     //

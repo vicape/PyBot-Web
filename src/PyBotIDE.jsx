@@ -191,8 +191,23 @@ export default function PyBotIDE() {
     if (!window.confirm("¿Entregar esta actividad?")) return;
     setActivitySubmitStatus("saving");
     const r = await submitActivity(activityId, code);
-    if (r.ok) setActivitySubmitStatus("saved");
-    else setActivitySubmitStatus("error");
+    if (!r.ok) {
+      setActivitySubmitStatus("error");
+      return;
+    }
+    setActivitySubmitStatus("saved");
+    const cr = r.classroom;
+    if (cr && !cr.skipped && !cr.ok) {
+      if (cr.needsConnect || cr.error === "missing_access_token") {
+        window.alert(
+          "Entregada en PyBot. Para marcarla también en Classroom, conectá Google Classroom desde la página de la actividad (misma cuenta Google).",
+        );
+      } else {
+        window.alert(
+          `Entregada en PyBot. No se pudo actualizar Classroom${cr.error ? `: ${cr.error}` : "."}`,
+        );
+      }
+    }
   }, [activityId, sessionUser, activityIsStudent, code]);
 
   useEffect(() => {

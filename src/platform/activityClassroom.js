@@ -6,8 +6,16 @@ import {
   listStudentSubmissions,
   patchStudentSubmissionGrade,
   returnStudentSubmission,
+  turnInStudentSubmission,
 } from "../classroom/classroomApi.js";
 
+async function tryGetClassroomToken(userId) {
+  try {
+    return await getValidClassroomToken(userId);
+  } catch (ex) {
+    return null;
+  }
+}
 function activityDueParts(activity) {
   if (!activity?.due_at) return { dueDate: null, dueTime: null };
   const d = new Date(activity.due_at);
@@ -331,4 +339,144 @@ export function matchClassroomSubmission(
     return email.trim().toLowerCase() === classroomSub.profile.emailAddress.trim().toLowerCase();
   }
   return false;
+}
+
+/**
+ * Tras entregar en PyBot: turnIn de la StudentSubmission del alumno en Classroom.
+ * No bloquea la entrega PyBot — best effort.
+ * Requiere que el alumno haya conectado Classroom (scope coursework.me)
+ * y que el courseWork lo haya creado este mismo proyecto OAuth.
+ */
+export async function turnInPybotActivityToClassroom(activityId) {
+  const sb = getSupabase();
+  if (!sb || !activityId) return { ok: false, skipped: true, error: "missing_args" };
+
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user?.id) return { ok: false, skipped: true, error: "no_session" };
+
+  const { data: act, error: actErr } = await sb
+    .from("activities")
+    .select("id, course_id, classroom_coursework_id")
+    .eq("id", activityId)
+    .maybeSingle();
+
+  if (actErr || !act) return { ok: false, skipped: true, error: actErr?.message || "activity_not_found" };
+  if (!act.classroom_coursework_id) {
+    return { ok: true, skipped: true, error: null };
+  }
+
+  const { data: course } = await sb
+    .from("courses")
+    .select("classroom_course_id")
+    .eq("id", act.course_id)
+    .maybeSingle();
+
+  const classroomCourseId = course?.classroom_course_id;
+  if (!classroomCourseId) {
+    return { ok: true, skipped: true, error: null };
+  }
+
+  const tok = await tryGetClassroomToken(user.id);
+  if (!tok) {
+    return {
+      ok: false,
+      skipped: false,
+      needsConnect: true,
+      error: "missing_access_token",
+    };
+  }
+
+  let classroomSubmissionId = null;
+
+  // 1) cache persistente (fila del alumno)
+  const cached = await fetchCachedClassroomSubmissions(activityId);
+  const mine = (cached.rows || []).find((r) => r.user_id === user.id);
+  if (mine?.id) classroomSubmissionId = mine.id;
+
+  // 2) activity_submissions.classroom_submission_id
+  if (!classroomSubmissionId) {
+    const { data: sub } = await sb
+      .from("activity_submissions")
+      .select("classroom_submission_id")
+      .eq("activity_id", activityId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    classroomSubmissionId = sub?.classroom_submission_id || null;
+  }
+
+  // 3) Google: mi StudentSubmission (userId=me)
+  if (!classroomSubmissionId) {
+    try {
+      const mineRows = await listStudentSubmissions(
+        tok,
+        classroomCourseId,
+        act.classroom_coursework_id,
+        "me",
+      );
+      classroomSubmissionId = mineRows?.[0]?.id || null;
+    } catch (ex) {
+      return {
+        ok: false,
+        skipped: false,
+        needsConnect: /insufficient|scope|permission|401|403/i.test(String(ex?.message || "")),
+        error: ex?.message || "list_submissions_failed",
+        code: ex?.code,
+      };
+    }
+  }
+
+  if (!classroomSubmissionId) {
+    return {
+      ok: false,
+      skipped: false,
+      error: "classroom_submission_not_found",
+    };
+  }
+
+  try {
+    await turnInStudentSubmission(
+      tok,
+      classroomCourseId,
+      act.classroom_coursework_id,
+      classroomSubmissionId,
+    );
+  } catch (ex) {
+    const msg = String(ex?.message || "");
+    // Ya entregada en Classroom → éxito idempotente
+    if (/already.?turned.?in|FAILED_PRECONDITION|ALREADY_EXISTS/i.test(msg) || ex?.status === 409) {
+      return { ok: true, skipped: false, alreadyTurnedIn: true, classroomSubmissionId, error: null };
+    }
+    return {
+      ok: false,
+      skipped: false,
+      needsConnect: /insufficient|scope|permission|401|403/i.test(msg),
+      error: msg || "turn_in_failed",
+      code: ex?.code,
+    };
+  }
+
+  // Best-effort: guardar id en entrega PyBot (puede fallar por RLS; no crítico)
+  await sb
+    .from("activity_submissions")
+    .update({
+      classroom_submission_id: classroomSubmissionId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("activity_id", activityId)
+    .eq("user_id", user.id);
+
+  // Best-effort: estado TURNED_IN en cache (solo si hay política que lo permita)
+  await sb
+    .from("activity_classroom_submissions")
+    .update({
+      classroom_submission_state: "TURNED_IN",
+      classroom_submission_id: classroomSubmissionId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("activity_id", activityId)
+    .eq("user_id", user.id);
+
+  return { ok: true, skipped: false, classroomSubmissionId, error: null };
 }

@@ -206,12 +206,14 @@ export async function listCourseWork(accessToken, classroomCourseId) {
 
 /**
  * Lista studentSubmissions de un courseWork.
+ * @param {string} [userId] filtro Google userId (p. ej. "me" para el alumno actual)
  */
-export async function listStudentSubmissions(accessToken, classroomCourseId, courseWorkId) {
+export async function listStudentSubmissions(accessToken, classroomCourseId, courseWorkId, userId) {
   if (!classroomCourseId || !courseWorkId) return [];
   return fetchAllClassroomPages(async (pageToken) => {
     const qs = new URLSearchParams({ pageSize: "100" });
     if (pageToken) qs.set("pageToken", pageToken);
+    if (userId) qs.set("userId", userId);
     const json = await classroomFetch(
       `/courses/${encodeURIComponent(classroomCourseId)}/courseWork/${encodeURIComponent(courseWorkId)}/studentSubmissions?${qs}`,
       accessToken,
@@ -258,6 +260,24 @@ export async function returnStudentSubmission(
 ) {
   return classroomMutate(
     `/courses/${encodeURIComponent(classroomCourseId)}/courseWork/${encodeURIComponent(courseWorkId)}/studentSubmissions/${encodeURIComponent(submissionId)}:return`,
+    accessToken,
+    { method: "POST", body: {} },
+  );
+}
+
+/**
+ * Alumno entrega la StudentSubmission en Classroom (turnIn).
+ * Requiere scope classroom.coursework.me y que el courseWork
+ * haya sido creado por el mismo proyecto OAuth.
+ */
+export async function turnInStudentSubmission(
+  accessToken,
+  classroomCourseId,
+  courseWorkId,
+  submissionId,
+) {
+  return classroomMutate(
+    `/courses/${encodeURIComponent(classroomCourseId)}/courseWork/${encodeURIComponent(courseWorkId)}/studentSubmissions/${encodeURIComponent(submissionId)}:turnIn`,
     accessToken,
     { method: "POST", body: {} },
   );
