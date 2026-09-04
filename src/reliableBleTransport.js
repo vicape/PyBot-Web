@@ -160,13 +160,14 @@ export class ReliableBleTransport {
     this._txNext = 0;
     this._txBase = 0;
     this._rxExpected = 0;
-    this._window = []; // { seq, frame, notified, retries, sentAt }
+    this._window = [];
     this._epoch = 0;
     this._peerEpoch = -1;
     this._synced = false;
     this._handshakePending = false;
     this._closed = false;
     this._txQueue = [];
+    this._txGeneration = 0;
     this._ackWaiters = [];
     this._syncWaiters = [];
     this._timer = null;
@@ -225,8 +226,32 @@ export class ReliableBleTransport {
     return () => this._cbs.delete(cb);
   }
 
+  /**
+   * Control urgente fuera de la cola de writes del programa. Primero invalida
+   * cualquier write REPL todavía no iniciado y descarta payloads aún no asignados
+   * a una secuencia. La ventana ya secuenciada (máximo RBLE_WINDOW frames) conserva
+   * su ACK normal para no crear huecos; después STOP viaja por ADMIN.
+   */
+  async interruptUrgent() {
+    if (!this.isConnected()) throw new Error("BLE_REPL_NOT_CONNECTED");
+    if (typeof this._bt?.send !== "function") throw new Error("BLE_REPL_URGENT_UNSUPPORTED");
+    this._txGeneration += 1;
+    this._txQueue = [];
+    this._wakeAck();
+    try {
+      await this._waitWindowUntilIdle();
+    } catch {
+      /* Aunque el plano REPL haya fallado, intentar igualmente el ADMIN STOP. */
+    }
+    await this._bt.send("STOP");
+  }
+
   async writeRepl(data) {
-    const run = this._writeTail.then(() => this._writeNow(data));
+    const generation = this._txGeneration;
+    const run = this._writeTail.then(() => {
+      if (generation !== this._txGeneration) return undefined;
+      return this._writeNow(data, generation);
+    });
     this._writeTail = run.then(
       () => {},
       () => {},
@@ -234,17 +259,19 @@ export class ReliableBleTransport {
     return run;
   }
 
-  async _writeNow(data) {
+  async _writeNow(data, generation = this._txGeneration) {
     await this._ready;
+    if (generation !== this._txGeneration) return;
     if (!this.isConnected()) throw new Error("BLE_REPL_NOT_CONNECTED");
     const bytes =
       data instanceof Uint8Array ? data : typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data);
     if (!bytes.length) return;
     const chunk = this._maxPayload;
     for (let i = 0; i < bytes.length; i += chunk) {
+      if (generation !== this._txGeneration) break;
       this._txQueue.push(bytes.subarray(i, i + chunk));
     }
-    await this._pump();
+    await this._pump(generation);
   }
 
   async _resync() {
@@ -321,6 +348,7 @@ export class ReliableBleTransport {
   reset(reason = "reset") {
     this._clearTimer();
     this._clearSyncTimer();
+    this._txGeneration += 1;
     this._window = [];
     this._txNext = 0;
     this._txBase = 0;
@@ -413,8 +441,6 @@ export class ReliableBleTransport {
     const same = epoch === this._peerEpoch;
     this._peerEpoch = epoch;
     if (this._handshakePending) {
-      // Initiator already reset locally and sent RESET. The peer reply only
-      // completes sync — never rewind seq (that drops in-flight raw REPL bytes).
       this._handshakePending = false;
       this._synced = true;
       this._wakeSync();
@@ -477,8 +503,12 @@ export class ReliableBleTransport {
     });
   }
 
-  async _pump() {
-    while (this._txQueue.length && this._window.length < RBLE_WINDOW) {
+  async _pump(generation = this._txGeneration) {
+    while (
+      generation === this._txGeneration &&
+      this._txQueue.length &&
+      this._window.length < RBLE_WINDOW
+    ) {
       const payload = this._txQueue.shift();
       const seq = this._txNext;
       this._txNext = seqMasked(seq + 1);
@@ -486,10 +516,15 @@ export class ReliableBleTransport {
       this._window.push({ seq, frame, notified: false, retries: 0, sentAt: 0 });
     }
     await this._flushWindow();
-    while (this._txQueue.length) {
+    while (generation === this._txGeneration && this._txQueue.length) {
       await this._waitWindow();
       if (this._closed) throw new Error("BLE_REPL_NOT_CONNECTED");
-      while (this._txQueue.length && this._window.length < RBLE_WINDOW) {
+      if (generation !== this._txGeneration) break;
+      while (
+        generation === this._txGeneration &&
+        this._txQueue.length &&
+        this._window.length < RBLE_WINDOW
+      ) {
         const payload = this._txQueue.shift();
         const seq = this._txNext;
         this._txNext = seqMasked(seq + 1);

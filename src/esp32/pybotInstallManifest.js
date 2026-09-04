@@ -76,26 +76,31 @@ function selftestFileTuple() {
 /**
  * Script MicroPython ejecutado por USB tras install/reinstall.
  * Debe imprimir una línea `PYBOT_SELFTEST:OK` + JSON con runtime, protocol, files, etc.
+ *
+ * La ESP32 tiene memoria acotada: se colecta GC entre archivos y se liberan
+ * explícitamente los buffers grandes después de hash+compile. La verificación no
+ * se relaja: siguen siendo obligatorios tamaño, hash, compilación e imports.
  */
 export const PYBOT_USB_SELFTEST_SCRIPT = [
   "import json",
   "try:",
   "    import os",
+  "    import gc",
   "    import binascii",
   "    try:",
   "        import hashlib",
   "    except ImportError:",
   "        import uhashlib as hashlib",
-    "    import pybot_ble",
-    "    import pybot_repl",
-    "    import pybot_rble",
-    "    r = {",
-    '        "runtime": pybot_ble.PYBOT_RUNTIME_VERSION,',
-    '        "protocol": pybot_ble.PYBOT_PROTOCOL_VERSION,',
-    '        "repl_import": True,',
-    '        "rble_import": True,',
-    '        "rble_version": getattr(pybot_rble, "RBLE_VERSION", 0),',
-    '        "dupterm_available": hasattr(os, "dupterm"),',
+  "    import pybot_ble",
+  "    import pybot_repl",
+  "    import pybot_rble",
+  "    r = {",
+  '        "runtime": pybot_ble.PYBOT_RUNTIME_VERSION,',
+  '        "protocol": pybot_ble.PYBOT_PROTOCOL_VERSION,',
+  '        "repl_import": True,',
+  '        "rble_import": True,',
+  '        "rble_version": getattr(pybot_rble, "RBLE_VERSION", 0),',
+  '        "dupterm_available": hasattr(os, "dupterm"),',
   '        "eda6": False,',
   '        "pybot_mpy": False,',
   '        "files": True,',
@@ -103,18 +108,11 @@ export const PYBOT_USB_SELFTEST_SCRIPT = [
   '        "main": False,',
   '        "hashes": {},',
   '        "sizes": {},',
+  '        "missing": [],',
+  '        "file_errors": {},',
   "    }",
-  "    try:",
-  "        import EDA6",
-  '        r["eda6"] = True',
-  "    except Exception:",
-  "        pass",
-  "    try:",
-  "        import pybot_mpy",
-  '        r["pybot_mpy"] = True',
-  "    except Exception:",
-  "        pass",
   `    for fn in (${selftestFileTuple()}):`,
+  "        gc.collect()",
   "        try:",
   "            f = open(fn, 'rb')",
   "            raw = f.read()",
@@ -122,23 +120,41 @@ export const PYBOT_USB_SELFTEST_SCRIPT = [
   "            r['sizes'][fn] = len(raw)",
   "            if len(raw) < 8:",
   '                r["files"] = False',
+  "                r['file_errors'][fn] = 'too_small'",
   "            else:",
-  "                try:",
-  "                    h = hashlib.sha256(raw)",
-  "                    r['hashes'][fn] = binascii.hexlify(h.digest()).decode()",
-  "                except Exception:",
-  "                    r['hashes'][fn] = ''",
+  "                h = hashlib.sha256(raw)",
+  "                r['hashes'][fn] = binascii.hexlify(h.digest()).decode()",
   "                src = raw.decode()",
   "                compile(src, fn, 'exec')",
+  "                del src",
+  "                del h",
   "            if fn == 'boot.py':",
   "                r['boot'] = len(raw) >= 8",
   "            if fn == 'main.py':",
   "                r['main'] = len(raw) >= 8",
-  "        except Exception:",
+  "            del raw",
+  "        except OSError as e:",
   '            r["files"] = False',
+  "            r['missing'].append(fn)",
+  "            r['file_errors'][fn] = 'os:' + str(e)",
+  "        except Exception as e:",
+  '            r["files"] = False',
+  "            r['file_errors'][fn] = type(e).__name__ + ':' + str(e)",
+  "        gc.collect()",
+  "    try:",
+  "        import EDA6",
+  '        r["eda6"] = True',
+  "    except Exception as e:",
+  "        r['file_errors']['EDA6:import'] = type(e).__name__ + ':' + str(e)",
+  "    gc.collect()",
+  "    try:",
+  "        import pybot_mpy",
+  '        r["pybot_mpy"] = True',
+  "    except Exception as e:",
+  "        r['file_errors']['pybot_mpy:import'] = type(e).__name__ + ':' + str(e)",
   "    print('PYBOT_SELFTEST:OK', json.dumps(r))",
   "except Exception as e:",
-  "    print('PYBOT_SELFTEST:FAIL', str(e))",
+  "    print('PYBOT_SELFTEST:FAIL', type(e).__name__ + ':' + str(e))",
 ].join("\n");
 
 /**
@@ -196,8 +212,34 @@ export function parseSelftestOutput(text, publishedVersion = PYBOT_RUNTIME_VERSI
     mainOk &&
     sizesOk &&
     hashesOk;
+
+  let reason = null;
+  if (!ok) {
+    const parts = [];
+    const missing = Array.isArray(data.missing) ? data.missing.filter(Boolean) : [];
+    if (missing.length) parts.push("missing=" + missing.join(","));
+    if (!runtimeOk) parts.push("runtime=" + String(data.runtime ?? "missing"));
+    if (!protocolOk) parts.push("protocol=" + String(data.protocol ?? "missing"));
+    if (!replOk) parts.push("repl_import");
+    if (!rbleOk) parts.push("rble_import/version");
+    if (!duptermOk) parts.push("dupterm");
+    if (!eda6Ok) parts.push("EDA6_import");
+    if (!mpyOk) parts.push("pybot_mpy_import");
+    if (!bootOk) parts.push("boot.py");
+    if (!mainOk) parts.push("main.py");
+    if (!sizesOk) parts.push("sizes");
+    if (!hashesOk) parts.push("hashes");
+    const fileErrors = data.file_errors && typeof data.file_errors === "object" ? data.file_errors : {};
+    const errorKeys = Object.keys(fileErrors);
+    if (errorKeys.length) {
+      parts.push("errors=" + errorKeys.map((k) => k + ":" + String(fileErrors[k])).join("|"));
+    }
+    reason = parts.join("; ") || "selftest_failed";
+  }
+
   return {
     ok,
+    reason,
     data,
     runtimeOk,
     protocolOk,

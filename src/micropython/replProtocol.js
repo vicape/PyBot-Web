@@ -44,6 +44,15 @@ function u8eq(a, b) {
   return true;
 }
 
+function abortChecker(opts) {
+  const shouldAbort = typeof opts?.shouldAbort === "function" ? opts.shouldAbort : null;
+  return () => {
+    if (shouldAbort?.() === true) {
+      throw protocolError(PROTOCOL_ERROR.RAW_REPL_CANCELLED);
+    }
+  };
+}
+
 export class MicroPythonReplProtocol {
   /**
    * @param {{ write: Function, onData: Function, close?: Function, isOpen?: Function }} transport
@@ -84,14 +93,19 @@ export class MicroPythonReplProtocol {
   /**
    * Raw REPL clásico: chunks + Ctrl+D + leer exactamente OK (0x4F 0x4B).
    * Conserva bytes posteriores en la cola para followExecution.
+   * `shouldAbort` es opcional y no altera la semántica normal del protocolo.
    * @param {Uint8Array|string} program
    */
   async executeRawClassic(program, opts = {}) {
     const bytes = toBytes(program);
     const chunk = opts.chunkSize ?? RAW_REPL_CLASSIC_CHUNK;
+    const abortIfRequested = abortChecker(opts);
+    abortIfRequested();
     for (let i = 0; i < bytes.length; i += chunk) {
+      abortIfRequested();
       await this.write(bytes.subarray(i, i + Math.min(chunk, bytes.length - i)));
     }
+    abortIfRequested();
     await this.write(new Uint8Array([BYTE_CTRL_D]));
     const ack = await this.queue.readExact(
       2,
@@ -108,11 +122,15 @@ export class MicroPythonReplProtocol {
 
   /**
    * Raw-paste oficial.
+   * `shouldAbort` se consulta entre ventanas/writes para que Stop durante SENDING
+   * no continúe transmitiendo el resto del programa.
    * @param {Uint8Array|string} program
    * @returns {Promise<{ supported: boolean }>}
    */
   async executeRawPaste(program, opts = {}) {
     const bytes = toBytes(program);
+    const abortIfRequested = abortChecker(opts);
+    abortIfRequested();
     await this.write(RAW_PASTE_HELLO);
     let header;
     try {
@@ -125,6 +143,7 @@ export class MicroPythonReplProtocol {
       if (e?.code === PROTOCOL_ERROR.RAW_PASTE_HEADER_TIMEOUT) throw e;
       throw protocolError(PROTOCOL_ERROR.RAW_PASTE_HEADER_TIMEOUT, { cause: e });
     }
+    abortIfRequested();
     if (header[0] === 0x52 && header[1] === 0x00) {
       return { supported: false };
     }
@@ -140,6 +159,7 @@ export class MicroPythonReplProtocol {
       opts.headerTimeout ?? RAW_PASTE_HEADER_TIMEOUT_MS,
       PROTOCOL_ERROR.RAW_PASTE_HEADER_TIMEOUT,
     );
+    abortIfRequested();
     const windowSize = winBytes[0] | (winBytes[1] << 8);
     let windowRemaining = windowSize;
     const windowTimeout = opts.windowTimeout ?? RAW_PASTE_WINDOW_TIMEOUT_MS;
@@ -147,15 +167,19 @@ export class MicroPythonReplProtocol {
 
     const consumeFlow = async (block) => {
       while (windowRemaining === 0 || this.queue.length > 0) {
+        abortIfRequested();
         if (this.queue.length === 0) {
           if (!block) break;
           await this.queue.waitForByte(windowTimeout, PROTOCOL_ERROR.RAW_PASTE_WINDOW_TIMEOUT);
+          abortIfRequested();
         }
         const b = await this.queue.readExact(1, windowTimeout, PROTOCOL_ERROR.RAW_PASTE_WINDOW_TIMEOUT);
         if (b[0] === BYTE_CTRL_A) {
           windowRemaining += windowSize;
         } else if (b[0] === BYTE_CTRL_D) {
-          await this.write(new Uint8Array([BYTE_CTRL_D]));
+          if (!opts.shouldAbort?.()) {
+            await this.write(new Uint8Array([BYTE_CTRL_D]));
+          }
           throw protocolError(PROTOCOL_ERROR.RAW_PASTE_ABORTED);
         } else {
           throw protocolError(PROTOCOL_ERROR.RAW_PASTE_HEADER_BAD, {
@@ -166,7 +190,9 @@ export class MicroPythonReplProtocol {
     };
 
     while (offset < bytes.length) {
+      abortIfRequested();
       await consumeFlow(windowRemaining === 0);
+      abortIfRequested();
       if (windowRemaining === 0) {
         throw protocolError(PROTOCOL_ERROR.RAW_PASTE_WINDOW_TIMEOUT);
       }
@@ -176,6 +202,7 @@ export class MicroPythonReplProtocol {
       offset += n;
     }
 
+    abortIfRequested();
     await this.write(new Uint8Array([BYTE_CTRL_D]));
     const eofTimeout = opts.eofTimeout ?? RAW_PASTE_EOF_TIMEOUT_MS;
     for (;;) {

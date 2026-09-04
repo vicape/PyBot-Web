@@ -1,6 +1,7 @@
 /**
  * Transporte BLE REPL: ByteTransport (write / onData / close / isOpen).
  * No interpreta raw REPL. Cola de escritura: un solo write a la vez sobre REPL_RX.
+ * El Stop urgente usa el plano ADMIN independiente y cancela writes aún no iniciados.
  */
 
 import { REPL_RX_UUID, REPL_TX_UUID } from "../bleProtocol.js";
@@ -19,6 +20,7 @@ export class BleReplTransport {
     this._off = null;
     this._enc = new TextEncoder();
     this._writeTail = Promise.resolve();
+    this._writeGeneration = 0;
     if (typeof bluetooth.onReplData === "function") {
       this._off = bluetooth.onReplData((bytes) => {
         const chunk = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -47,8 +49,32 @@ export class BleReplTransport {
     return () => this._cbs.delete(cb);
   }
 
+  /**
+   * Stop de control: invalida writes normales todavía encolados y NO se encadena
+   * a _writeTail. ReliableBleTransport completa solo su ventana ya secuenciada y
+   * luego manda STOP por ADMIN.
+   */
+  async interruptUrgent() {
+    if (!this.isOpen()) {
+      throw protocolError(PROTOCOL_ERROR.BLE_REPL_NOT_CONNECTED);
+    }
+    if (typeof this._bt.interruptUrgent !== "function") {
+      throw protocolError(PROTOCOL_ERROR.BLE_REPL_TX_FAIL, { detail: "urgent-stop-unsupported" });
+    }
+    this._writeGeneration += 1;
+    try {
+      await this._bt.interruptUrgent();
+    } catch (e) {
+      throw protocolError(PROTOCOL_ERROR.BLE_REPL_TX_FAIL, { cause: e });
+    }
+  }
+
   async write(data) {
-    const run = this._writeTail.then(() => this._writeNow(data));
+    const generation = this._writeGeneration;
+    const run = this._writeTail.then(() => {
+      if (generation !== this._writeGeneration) return undefined;
+      return this._writeNow(data);
+    });
     this._writeTail = run.then(
       () => {},
       () => {},
@@ -77,6 +103,7 @@ export class BleReplTransport {
   }
 
   async close() {
+    this._writeGeneration += 1;
     if (this._off) {
       try {
         this._off();
