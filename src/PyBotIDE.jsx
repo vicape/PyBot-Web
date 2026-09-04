@@ -153,6 +153,7 @@ export default function PyBotIDE() {
     launchCode: activityLaunchCode,
   });
   const [activitySaveStatus, setActivitySaveStatus] = useState("idle");
+  const [activitySaveError, setActivitySaveError] = useState("");
   const [activityEditorKey, setActivityEditorKey] = useState(0);
   const [activityCodeReady, setActivityCodeReady] = useState(!activityId);
   const [activityIsStudent, setActivityIsStudent] = useState(false);
@@ -171,6 +172,7 @@ export default function PyBotIDE() {
     activityLastSavedRef.current = "";
     pendingActivityCodeRef.current = null;
     setActivitySaveStatus("idle");
+    setActivitySaveError("");
     setActivityCodeReady(!activityId);
     setActivityIsStudent(false);
     setActivitySubmitStatus("idle");
@@ -257,6 +259,7 @@ export default function PyBotIDE() {
     if (isGenericIdeTemplate(code)) return;
 
     setActivitySaveStatus("pending");
+    setActivitySaveError("");
     const timer = window.setTimeout(() => {
       void (async () => {
         setActivitySaveStatus("saving");
@@ -264,8 +267,11 @@ export default function PyBotIDE() {
         if (result.ok) {
           activityLastSavedRef.current = code;
           setActivitySaveStatus("saved");
+          setActivitySaveError("");
         } else {
           setActivitySaveStatus("error");
+          setActivitySaveError(result.error || "No se pudo guardar");
+          console.warn("saveActivityProgress:", result.error);
         }
       })();
     }, 2000);
@@ -1972,7 +1978,13 @@ export default function PyBotIDE() {
                               ? " · Guardando…"
                               : null}
                             {activitySaveStatus === "saved" ? " · Guardado" : null}
-                            {activitySaveStatus === "error" ? " · Error al guardar" : null}
+                            {activitySaveStatus === "error" ? (
+                              <span className="brand-activity--warn" title={activitySaveError || ""}>
+                                {" "}
+                                · Error al guardar
+                                {activitySaveError ? `: ${activitySaveError}` : ""}
+                              </span>
+                            ) : null}
                           </span>
                         ) : null}
                         {activityIsStudent ? (
