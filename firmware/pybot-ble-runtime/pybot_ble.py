@@ -607,9 +607,15 @@ def _maybe_autostart(manager):
 
 def _exec_student_app():
     """Autostart nativo: exec del archivo del alumno. Stop = KeyboardInterrupt."""
+    meta = _load_app_meta()
+    profile = "ESP32" if meta and meta.get("profile") == "ESP32" else "WEMOS"
     ns = {"__name__": "__main__"}
     try:
         mod_eda6 = __import__(_EDA6_LIB)
+        try:
+            mod_eda6.PLACA_ACTUAL = profile
+        except Exception:
+            pass
         for k in dir(mod_eda6):
             if not k.startswith("_"):
                 ns[k] = getattr(mod_eda6, k)

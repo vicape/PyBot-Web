@@ -539,6 +539,49 @@ test("native main returns to REPL; legacy loop is opt-in", () => {
   assert.match(ble, /def _exec_student_app/);
 });
 
+/** Mirror of native autostart profile selection (same rule as ProgramManager). */
+function nativeAutostartProfileFromMeta(meta) {
+  return meta && meta.profile === "ESP32" ? "ESP32" : "WEMOS";
+}
+
+test("native _exec_student_app applies app meta profile to EDA6 before student code", () => {
+  const ble = readFw("pybot_ble.py");
+  const fn = ble.slice(
+    ble.indexOf("def _exec_student_app"),
+    ble.indexOf("\ndef main("),
+  );
+  assert.match(fn, /meta = _load_app_meta\(\)/);
+  assert.match(
+    fn,
+    /profile = "ESP32" if meta and meta\.get\("profile"\) == "ESP32" else "WEMOS"/,
+  );
+  const placaIdx = fn.indexOf("mod_eda6.PLACA_ACTUAL = profile");
+  const execIdx = fn.indexOf("exec(code, ns)");
+  assert.ok(placaIdx >= 0, "sets EDA6.PLACA_ACTUAL");
+  assert.ok(execIdx >= 0, "executes student code");
+  assert.ok(placaIdx < execIdx, "profile applied before student exec");
+  const importIdx = fn.indexOf('mod_eda6 = __import__(_EDA6_LIB)');
+  const copyIdx = fn.indexOf("for k in dir(mod_eda6)");
+  assert.ok(importIdx >= 0 && placaIdx > importIdx && placaIdx < copyIdx);
+});
+
+test("native autostart profile mirror: ESP32 / WEMOS / fallback", () => {
+  assert.equal(nativeAutostartProfileFromMeta({ profile: "ESP32" }), "ESP32");
+  assert.equal(nativeAutostartProfileFromMeta({ profile: "WEMOS" }), "WEMOS");
+  assert.equal(nativeAutostartProfileFromMeta({}), "WEMOS");
+  assert.equal(nativeAutostartProfileFromMeta(null), "WEMOS");
+  assert.equal(nativeAutostartProfileFromMeta({ profile: "OTHER" }), "WEMOS");
+});
+
+test("ProgramManager still sets EDA6.PLACA_ACTUAL from its profile", () => {
+  const run = readFw("pybot_run.py");
+  assert.match(run, /mod_eda6\.PLACA_ACTUAL = self\._profile/);
+  assert.match(
+    run,
+    /self\._profile = "ESP32" if meta\.get\("profile"\) == "ESP32" else "WEMOS"/,
+  );
+});
+
 test("pybot_repl.attach reports real dupterm success or raises", () => {
   const src = readFw("pybot_repl.py");
   const attach = src.slice(src.indexOf("def attach("), src.indexOf("\ndef detach("));
