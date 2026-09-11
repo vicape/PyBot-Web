@@ -173,7 +173,7 @@ export function parseMemoryDiagnostic(text) {
 
   if (result.runtimeImport === "MEMORYERROR" || result.ble === "MEMORYERROR") {
     result.conclusion = "memory";
-  } else if (result.done && result.runtimeImport === "OK" && (result.ble === "OK" || !result.bleTested)) {
+  } else if (result.done && result.runtimeImport === "OK" && result.ble === "OK") {
     result.conclusion = "ok";
   } else {
     result.conclusion = "unknown";

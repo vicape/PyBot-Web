@@ -84,6 +84,14 @@ test("parser import OK + BLE OK + DIAG_DONE → conclusion ok", () => {
   assert.equal(r.conclusion, "ok");
 });
 
+test("parser import OK without BLE test → conclusion unknown", () => {
+  const out = ["RUNTIME_IMPORT OK", "DIAG_DONE"].join("\n");
+  const r = parseMemoryDiagnostic(out);
+  assert.equal(r.runtimeImport, "OK");
+  assert.equal(r.ble, null);
+  assert.equal(r.conclusion, "unknown");
+});
+
 test("a normal ERR is not classified as MemoryError", () => {
   const out = [
     "MEMFREE_BEFORE 40000",
