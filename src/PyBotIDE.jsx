@@ -1283,37 +1283,47 @@ export default function PyBotIDE() {
     try {
       const r = await runMemoryDiagnostic();
       const fmt = (n) => (typeof n === "number" ? n.toLocaleString("es-AR") : "?");
-      const compileTxt =
-        r.compile === "OK"
+      const statusTxt = (status, err) =>
+        status === "OK"
           ? "OK"
-          : r.compile === "MEMORYERROR"
+          : status === "MEMORYERROR"
             ? "MemoryError"
-            : r.compile === "ERR"
-              ? t("memDiagError") + (r.compileError ? " (" + r.compileError + ")" : "")
-              : "?";
-      const bleTxt =
-        r.ble === "OK"
-          ? "OK"
-          : r.ble === "MEMORYERROR"
-            ? "MemoryError"
-            : r.ble === "ERR"
-              ? t("memDiagError") + (r.bleError ? " (" + r.bleError + ")" : "")
+            : status === "ERR"
+              ? t("memDiagError") + (err ? " (" + err + ")" : "")
               : t("memDiagNotTested");
       appendConsole(
-        t("memDiagResult")
-          .replace("{mem}", fmt(r.memFree))
-          .replace("{main}", r.mainSize == null ? t("memDiagNA") : fmt(r.mainSize))
-          .replace("{compile}", compileTxt)
-          .replace("{ble}", bleTxt) + "\n",
+        t("memDiagRamBefore").replace("{mem}", fmt(r.memFreeBefore)) +
+          "\n" +
+          t("memDiagMainSize").replace("{main}", r.mainSize == null ? t("memDiagNA") : fmt(r.mainSize)) +
+          "\n" +
+          t("memDiagCoreSize").replace("{core}", r.coreSize == null ? t("memDiagNA") : fmt(r.coreSize)) +
+          "\n" +
+          t("memDiagRuntimeImport").replace("{status}", statusTxt(r.runtimeImport, r.runtimeImportError)) +
+          "\n" +
+          t("memDiagRamAfterImport").replace("{mem}", fmt(r.memFreePostImport)) +
+          "\n" +
+          t("memDiagBle").replace("{status}", statusTxt(r.ble, r.bleError)) +
+          "\n" +
+          t("memDiagRamAfterBle").replace("{mem}", fmt(r.memFreeAfterBle)) +
+          "\n",
         "info",
       );
       const conclusionKey =
-        r.conclusion === "memory"
-          ? "memDiagConclusionMemory"
-          : r.conclusion === "ok"
-            ? "memDiagConclusionOk"
-            : "memDiagConclusionUnknown";
-      appendConsole(t(conclusionKey) + "\n", r.conclusion === "memory" ? "err" : "info");
+        r.runtimeImport === "MEMORYERROR"
+          ? "memDiagConclusionImportMemory"
+          : r.ble === "MEMORYERROR"
+            ? "memDiagConclusionBleMemory"
+            : r.conclusion === "ok"
+              ? "memDiagConclusionOk"
+              : "memDiagConclusionUnknown";
+      const extraErr =
+        conclusionKey === "memDiagConclusionUnknown"
+          ? r.runtimeImportError || r.bleError
+          : null;
+      appendConsole(
+        t(conclusionKey) + (extraErr ? " " + extraErr : "") + "\n",
+        r.conclusion === "memory" ? "err" : "info",
+      );
     } catch (e) {
       appendConsole(formatPythonError(e?.message) + "\n", "err");
     } finally {

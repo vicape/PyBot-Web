@@ -257,17 +257,24 @@ const STRINGS = {
       "Programa persistente borrado. El runtime Bluetooth sigue. Reconectá por Bluetooth si hace falta.",
     memDiagBtn: "Diagnóstico de memoria (USB)",
     memDiagMenuHint:
-      "Revisa por USB si la ESP32 se queda sin memoria al preparar el runtime o activar Bluetooth. Solo lectura: no borra nada ni reinicia.",
+      "Revisa por USB si la ESP32 se queda sin memoria al importar el runtime o activar Bluetooth. Solo lectura: no borra nada ni reinicia.",
     memDiagStart: "Ejecutando diagnóstico de memoria por USB (solo lectura)…",
-    memDiagResult:
-      "RAM libre: {mem} bytes · main.py: {main} bytes · Compilación del runtime: {compile} · BLE activa: {ble}",
+    memDiagRamBefore: "RAM antes del runtime: {mem} bytes",
+    memDiagMainSize: "main.py: {main} bytes",
+    memDiagCoreSize: "pybot_ble.py: {core} bytes",
+    memDiagRuntimeImport: "Importación del runtime: {status}",
+    memDiagRamAfterImport: "RAM después del import: {mem} bytes",
+    memDiagBle: "Activación BLE: {status}",
+    memDiagRamAfterBle: "RAM después de BLE: {mem} bytes",
     memDiagNA: "no existe",
     memDiagError: "Error",
     memDiagNotTested: "no probado",
-    memDiagConclusionMemory:
-      "Confirmado: la placa se queda sin memoria al preparar el runtime (por eso no aparece por Bluetooth).",
+    memDiagConclusionImportMemory:
+      "Se produjo un MemoryError al importar pybot_ble. El runtime no puede cargarse con la memoria disponible en este estado.",
+    memDiagConclusionBleMemory:
+      "El runtime puede importarse, pero la activación de Bluetooth produce un MemoryError.",
     memDiagConclusionOk:
-      "La memoria no parece ser el problema; el runtime compila y BLE activa correctamente.",
+      "La importación del runtime y la activación básica de Bluetooth funcionan. Si la placa no aparece por Bluetooth, el problema ocurre después de estas etapas.",
     memDiagConclusionUnknown:
       "Diagnóstico incompleto: no se pudo determinar si es un problema de memoria. Revisá la conexión USB e intentá de nuevo.",
     bleConnectMenuBtn: "Conectar por Bluetooth (BLE)",
@@ -854,17 +861,24 @@ Creado por VIC.`,
       "Persistent program cleared. Bluetooth runtime remains. Reconnect over Bluetooth if needed.",
     memDiagBtn: "Memory diagnostic (USB)",
     memDiagMenuHint:
-      "Checks over USB whether the ESP32 runs out of memory while preparing the runtime or activating Bluetooth. Read-only: it does not delete anything or restart.",
+      "Checks over USB whether the ESP32 runs out of memory while importing the runtime or activating Bluetooth. Read-only: it does not delete anything or restart.",
     memDiagStart: "Running memory diagnostic over USB (read-only)…",
-    memDiagResult:
-      "Free RAM: {mem} bytes · main.py: {main} bytes · Runtime compilation: {compile} · BLE activation: {ble}",
+    memDiagRamBefore: "RAM before runtime: {mem} bytes",
+    memDiagMainSize: "main.py: {main} bytes",
+    memDiagCoreSize: "pybot_ble.py: {core} bytes",
+    memDiagRuntimeImport: "Runtime import: {status}",
+    memDiagRamAfterImport: "RAM after import: {mem} bytes",
+    memDiagBle: "BLE activation: {status}",
+    memDiagRamAfterBle: "RAM after BLE: {mem} bytes",
     memDiagNA: "not found",
     memDiagError: "Error",
     memDiagNotTested: "not tested",
-    memDiagConclusionMemory:
-      "Confirmed: the board runs out of memory while preparing the runtime (that is why it does not show up over Bluetooth).",
+    memDiagConclusionImportMemory:
+      "A MemoryError occurred while importing pybot_ble. The runtime cannot be loaded with the memory available in the current state.",
+    memDiagConclusionBleMemory:
+      "The runtime can be imported, but Bluetooth activation produces a MemoryError.",
     memDiagConclusionOk:
-      "Memory does not seem to be the problem; the runtime compiles and BLE activates correctly.",
+      "Runtime import and basic Bluetooth activation work. If the board does not appear over Bluetooth, the problem occurs after these stages.",
     memDiagConclusionUnknown:
       "Incomplete diagnostic: could not determine whether it is a memory problem. Check the USB connection and try again.",
     bleConnectMenuBtn: "Connect over Bluetooth (BLE)",
