@@ -72,10 +72,12 @@ test("EDA6 registers servo vs motorRC and keeps positional PWM on normal cleanup
 
 test("BLE prelude imports EDA6, applies profile, and does not call bare _pins()", () => {
   const profile = readFileSync(join(root, "src", "eda6Profile.js"), "utf8");
-  assert.match(profile, /export function buildEda6ImportedPrelude/);
+  const preludeMod = readFileSync(join(root, "src", "eda6Ensure.js"), "utf8");
+  assert.match(profile, /buildEda6ImportedPrelude/);
   assert.match(profile, /export function buildEda6ModuleProbe/);
-  assert.match(profile, /EDA6\.PLACA_ACTUAL = "\$\{placa\}"/);
-  assert.match(profile, /_pybot_cleanup_normal = EDA6\._pybot_cleanup_normal/);
+  assert.match(preludeMod, /export function buildEda6ImportedPrelude/);
+  assert.match(preludeMod, /EDA6\.PLACA_ACTUAL = "\$\{placa\}"/);
+  assert.match(preludeMod, /_pybot_cleanup_normal = EDA6\._pybot_cleanup_normal/);
   assert.match(profile, /EDA6\._pins\(\)/);
   assert.match(profile, /servo_pins/);
 

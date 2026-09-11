@@ -2,6 +2,7 @@
 # Perfil de placa: WEMOS (default) o ESP32
 
 PLACA_ACTUAL = "WEMOS"
+EDA6_VERSION = "1.1.0"
 
 PIN_MAPS = {
     "WEMOS": {

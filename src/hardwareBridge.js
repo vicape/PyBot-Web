@@ -32,13 +32,13 @@ import { PROTOCOL_ERROR, errorCode } from "./micropython/errors.js";
 import {
   getEda6Profile,
   getEda6LibrarySource,
-  getEda6ExecPrelude,
   buildEda6ImportedPrelude,
   buildEda6ModuleProbe,
   prepareUserCodeForExec,
   prepareMainPyForFlash,
   detectPybotGpioUsage,
 } from "./eda6Profile.js";
+import { ensureEda6OnSession } from "./eda6Ensure.js";
 import {
   getPybotHwLibrarySource,
   prepareMainPyForGpioFlash,
@@ -204,10 +204,9 @@ export function isMicroPythonOnBoard() {
   return _mode === "esp32-micropython" || _mode === "esp32-eda6";
 }
 
-/** Prelude EDA6 para Run en vivo: siempre inyecta la librería con el perfil del menú.
- *  No depende de EDA6.py en la placa (evita archivos viejos / perfil incorrecto). */
+/** Prelude EDA6 para Run en vivo: import del módulo instalado + perfil del menú. */
 function buildEda6RunPrelude(code, profile) {
-  let prelude = getEda6ExecPrelude(profile);
+  let prelude = buildEda6ImportedPrelude(profile);
   if (detectPybotGpioUsage(prepareUserCodeForExec(code))) {
     prelude = prelude + "\n" + MPY_PRELUDE;
   }
@@ -657,9 +656,11 @@ export async function runOnBoard(code, cb = {}) {
     }
     if (_mode === "esp32-eda6") {
       const profile = getEda6Profile();
+      await ensureEda6OnSession(_mpSession, {
+        getSource: () => getEda6LibrarySource(profile),
+      });
       const body = prepareUserCodeForExec(code);
-      const probe =
-        'print("EDA6", PLACA_ACTUAL, "salida 1 -> GPIO", _pins()["digital_outputs"][0])\n';
+      const probe = buildEda6ModuleProbe();
       const userCode = probe + "detenerTodo()\n" + wrapEda6UserCodeForRun(body);
       const prelude = buildEda6RunPrelude(code, profile);
       return _mpSession.runProgram(userCode, { ...cb, prelude });

@@ -5,6 +5,11 @@
 
 import eda6LibraryRaw from "./assets/EDA6.py?raw";
 
+export {
+  buildEda6ImportedPrelude,
+  EDA6_LIBRARY_VERSION,
+} from "./eda6Ensure.js";
+
 export const PIN_MAPS = {
   WEMOS: {
     digital_outputs: [26, 17, 27, 12],
@@ -72,24 +77,6 @@ export function getEda6LibrarySource(profile = getEda6Profile()) {
 /** Prelude inyectado en ejecución rápida (sin import EDA6). */
 export function getEda6ExecPrelude(profile = getEda6Profile()) {
   return getEda6LibrarySource(profile);
-}
-
-/**
- * Prelude BLE nativo: importa el módulo instalado, aplica el perfil del menú
- * sobre EDA6.PLACA_ACTUAL (no sobre una copia local) y expone helpers privados.
- */
-export function buildEda6ImportedPrelude(profile = getEda6Profile()) {
-  const placa = profile === "ESP32" ? "ESP32" : "WEMOS";
-  return [
-    "import EDA6",
-    `EDA6.PLACA_ACTUAL = "${placa}"`,
-    "from EDA6 import *",
-    "try:",
-    "    _pybot_cleanup_normal = EDA6._pybot_cleanup_normal",
-    "except Exception:",
-    "    pass",
-    "",
-  ].join("\n");
 }
 
 /** Diagnóstico que no depende de `from EDA6 import *` (nombres privados). */
