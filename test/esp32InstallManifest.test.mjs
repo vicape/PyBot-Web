@@ -132,6 +132,26 @@ test("selftest script references every manifest .py", () => {
   }
 });
 
+test("selftest verifies files by streaming hash, not full read/compile", () => {
+  assert.doesNotMatch(PYBOT_USB_SELFTEST_SCRIPT, /raw\s*=\s*f\.read\(\)/);
+  assert.doesNotMatch(PYBOT_USB_SELFTEST_SCRIPT, /raw\.decode\(\)/);
+  assert.doesNotMatch(PYBOT_USB_SELFTEST_SCRIPT, /compile\(/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /f\.read\(256\)/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /os\.stat\(fn\)\[6\]/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /h\.update\(chunk\)/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /import pybot_ble/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /import pybot_repl/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /import pybot_rble/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /import EDA6/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /import pybot_mpy/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /"hashes"/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /"sizes"/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /r\['boot'\]/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /r\['main'\]/);
+  assert.match(PYBOT_USB_SELFTEST_SCRIPT, /r\["files"\]/);
+  assert.doesNotMatch(PYBOT_USB_SELFTEST_SCRIPT, /pybot_ble\.main\(/);
+});
+
 test("parseSelftestOutput accepts OK payload with published runtime", () => {
   const text = `noise\nPYBOT_SELFTEST:OK ${JSON.stringify(okSelftestPayload())}\n`;
   const parsed = parseSelftestOutput(text, PYBOT_RUNTIME_VERSION);
