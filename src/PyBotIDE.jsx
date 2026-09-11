@@ -1588,8 +1588,8 @@ export default function PyBotIDE() {
     const onBoard =
       (boardType === "esp32-micropython" || boardType === "esp32-eda6") &&
       (hardwareIsConnected() || bleConnected);
-    const bleAppRunning = !!(bleAppStatus && bleAppStatus.running);
-    if (onBoard && (running || stopping || bleConnected || bleAppRunning)) {
+    // USB/BLE WEMOS: Stop libera hardware aunque running ya sea false (fin normal).
+    if (onBoard) {
       const expectRunCleanup = running;
       setStopping(true);
       appendConsole("\n" + t("stoppingMsg") + "\n", "info");

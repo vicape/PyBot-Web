@@ -33,6 +33,8 @@ import {
   getEda6Profile,
   getEda6LibrarySource,
   getEda6ExecPrelude,
+  buildEda6ImportedPrelude,
+  buildEda6ModuleProbe,
   prepareUserCodeForExec,
   prepareMainPyForFlash,
   detectPybotGpioUsage,
@@ -220,7 +222,11 @@ function wrapEda6UserCodeForRun(userCode) {
     .split("\n")
     .map((line) => "    " + line)
     .join("\n");
-  return "try:\n" + indented + "\nexcept Exception as e:\n    import sys\n    sys.print_exception(e)\n";
+  return (
+    "try:\n" +
+    indented +
+    "\nexcept Exception as e:\n    import sys\n    sys.print_exception(e)\n    raise\n"
+  );
 }
 
 /**
@@ -667,11 +673,11 @@ export async function runOnBoard(code, cb = {}) {
       /* ignore */
     }
     if (getBoardType() === "esp32-eda6") {
+      const profile = getEda6Profile();
       const body = prepareUserCodeForExec(code);
-      const probe =
-        'print("EDA6", PLACA_ACTUAL, "salida 1 -> GPIO", _pins()["digital_outputs"][0])\n';
+      const probe = buildEda6ModuleProbe();
       const userCode = probe + wrapEda6UserCodeForRun(body);
-      const prelude = BLE_NATIVE_PRELUDE + "from EDA6 import *\n";
+      const prelude = BLE_NATIVE_PRELUDE + buildEda6ImportedPrelude(profile);
       return _bleMpSession.runProgram(userCode, { ...cb, prelude });
     }
     return _bleMpSession.runProgram(code, { ...cb, prelude: BLE_NATIVE_PRELUDE });
@@ -1033,6 +1039,15 @@ async function waitArmedBleStopAck(armed, timeoutMs) {
   }
 }
 
+async function releaseHeldHardwareIfIdle(session) {
+  if (!session || typeof session.releaseHeldHardware !== "function") return;
+  try {
+    await session.releaseHeldHardware();
+  } catch {
+    /* REPL ocupado o placa ausente: el wrap de error/Stop ya limpia */
+  }
+}
+
 /**
  * Operación UNIFICADA de STOP del programa en la placa (P0-5 / P1-4). Una sola
  * abstracción para todos los transportes, con el ESP32 como fuente de verdad:
@@ -1049,6 +1064,7 @@ export async function stopBoardExecution() {
     } catch {
       /* ignore */
     }
+    await releaseHeldHardwareIfIdle(_mpSession);
     return { transport: "serial" };
   }
   if (isNativeBleEnabled() && _bleMpSession) {
@@ -1057,6 +1073,7 @@ export async function stopBoardExecution() {
     } catch {
       /* ignore */
     }
+    await releaseHeldHardwareIfIdle(_bleMpSession);
     return { transport: "ble-native" };
   }
   // Runtime nativo esperado: no hay sesión REPL. NO escalar a STOP:FORCE.

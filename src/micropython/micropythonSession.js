@@ -6,7 +6,7 @@
 
 import { SerialByteTransport } from "./serialByteTransport.js";
 import { MicroPythonReplProtocol } from "./replProtocol.js";
-import { buildRunnableProgram } from "./programWrap.js";
+import { buildRunnableProgram, HELD_HARDWARE_RELEASE_SCRIPT } from "./programWrap.js";
 import { MPY_PRELUDE } from "./usbPrelude.js";
 import { protocolError, PROTOCOL_ERROR, errorCode } from "./errors.js";
 import {
@@ -48,6 +48,7 @@ export class MicroPythonSession {
     this.protocol = new MicroPythonReplProtocol(this.transport);
     this._running = true;
     this._interrupted = false;
+    this._programActive = false;
     this._useRawPaste = true;
   }
 
@@ -84,6 +85,19 @@ export class MicroPythonSession {
     }
   }
 
+  isProgramActive() {
+    return this._programActive === true;
+  }
+
+  /**
+   * Libera PWM/salidas que quedaron activas tras un fin normal.
+   * No interfiere con un runProgram en curso (el wrap de error ya limpia).
+   */
+  async releaseHeldHardware() {
+    if (this._programActive || !this._running) return { skipped: true };
+    return this.execRaw(HELD_HARDWARE_RELEASE_SCRIPT, { timeout: 8000 });
+  }
+
   /**
    * Ejecuta el código del alumno en la placa y transmite stdout/stderr.
    * @param {string} userCode
@@ -93,59 +107,64 @@ export class MicroPythonSession {
     const { onOut, onErr, prelude, onStarted } = cb;
     if (!this._running) throw protocolError(PROTOCOL_ERROR.CLOSED);
     this._interrupted = false;
-    const prefix = prelude != null ? prelude : MPY_PRELUDE;
-    const wrap = cb.wrap !== false;
-    const program = wrap
-      ? buildRunnableProgram(prefix, userCode)
-      : prefix + "\n" + String(userCode ?? "") + "\n";
-
-    await this.protocol.enterRawRepl();
-    await this._execProgramBytes(program);
-    if (onStarted) onStarted();
-
-    const followOpts = {};
-    if (onOut) followOpts.onStdout = onOut;
-    if (this._interrupted) {
-      followOpts.stdoutTimeout = RAW_REPL_FOLLOW_AFTER_INTERRUPT_MS;
-      followOpts.stderrTimeout = RAW_REPL_FOLLOW_AFTER_INTERRUPT_MS;
-    }
-
-    let result;
+    this._programActive = true;
     try {
-      result = await this.protocol.followExecution(followOpts);
-    } catch (e) {
-      if (this._interrupted && errorCode(e) === PROTOCOL_ERROR.RAW_REPL_STDOUT_TIMEOUT) {
-        if (onOut) onOut("\n[Detenido]\n");
+      const prefix = prelude != null ? prelude : MPY_PRELUDE;
+      const wrap = cb.wrap !== false;
+      const program = wrap
+        ? buildRunnableProgram(prefix, userCode)
+        : prefix + "\n" + String(userCode ?? "") + "\n";
+
+      await this.protocol.enterRawRepl();
+      await this._execProgramBytes(program);
+      if (onStarted) onStarted();
+
+      const followOpts = {};
+      if (onOut) followOpts.onStdout = onOut;
+      if (this._interrupted) {
+        followOpts.stdoutTimeout = RAW_REPL_FOLLOW_AFTER_INTERRUPT_MS;
+        followOpts.stderrTimeout = RAW_REPL_FOLLOW_AFTER_INTERRUPT_MS;
+      }
+
+      let result;
+      try {
+        result = await this.protocol.followExecution(followOpts);
+      } catch (e) {
+        if (this._interrupted && errorCode(e) === PROTOCOL_ERROR.RAW_REPL_STDOUT_TIMEOUT) {
+          if (onOut) onOut("\n[Detenido]\n");
+          try {
+            await this.protocol.exitRawRepl();
+          } catch {
+            /* cleanup */
+          }
+          return { stdout: "", stderr: "", interrupted: true };
+        }
         try {
           await this.protocol.exitRawRepl();
         } catch {
           /* cleanup */
         }
-        return { stdout: "", stderr: "", interrupted: true };
+        throw e;
       }
+
+      const stderr = result.stderr || "";
+      const interrupted =
+        this._interrupted && /KeyboardInterrupt/.test(stderr);
+      if (interrupted) {
+        if (onOut) onOut("\n[Detenido]\n");
+      } else if (stderr.trim()) {
+        if (onErr) onErr(stderr);
+      }
+
       try {
         await this.protocol.exitRawRepl();
       } catch {
         /* cleanup */
       }
-      throw e;
+      return { stdout: result.stdout, stderr, interrupted };
+    } finally {
+      this._programActive = false;
     }
-
-    const stderr = result.stderr || "";
-    const interrupted =
-      this._interrupted && /KeyboardInterrupt/.test(stderr);
-    if (interrupted) {
-      if (onOut) onOut("\n[Detenido]\n");
-    } else if (stderr.trim()) {
-      if (onErr) onErr(stderr);
-    }
-
-    try {
-      await this.protocol.exitRawRepl();
-    } catch {
-      /* cleanup */
-    }
-    return { stdout: result.stdout, stderr, interrupted };
   }
 
   /**

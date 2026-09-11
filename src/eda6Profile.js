@@ -74,6 +74,32 @@ export function getEda6ExecPrelude(profile = getEda6Profile()) {
   return getEda6LibrarySource(profile);
 }
 
+/**
+ * Prelude BLE nativo: importa el módulo instalado, aplica el perfil del menú
+ * sobre EDA6.PLACA_ACTUAL (no sobre una copia local) y expone helpers privados.
+ */
+export function buildEda6ImportedPrelude(profile = getEda6Profile()) {
+  const placa = profile === "ESP32" ? "ESP32" : "WEMOS";
+  return [
+    "import EDA6",
+    `EDA6.PLACA_ACTUAL = "${placa}"`,
+    "from EDA6 import *",
+    "try:",
+    "    _pybot_cleanup_normal = EDA6._pybot_cleanup_normal",
+    "except Exception:",
+    "    pass",
+    "",
+  ].join("\n");
+}
+
+/** Diagnóstico que no depende de `from EDA6 import *` (nombres privados). */
+export function buildEda6ModuleProbe() {
+  return (
+    'print("EDA6", EDA6.PLACA_ACTUAL, "salida 1 -> GPIO", EDA6._pins()["digital_outputs"][0]' +
+    ', "servo 1 -> GPIO", EDA6._pins()["servo_pins"][0])\n'
+  );
+}
+
 export function isEda6ImportLine(line) {
   return /^\s*from\s+EDA6\s+import\s+/i.test(String(line ?? ""));
 }

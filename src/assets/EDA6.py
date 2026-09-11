@@ -30,7 +30,14 @@ CAL_REAL_PIN2_RAW = [
 import machine
 import time
 
-_pwm_cache = {}
+try:
+    _pwm_cache
+except NameError:
+    _pwm_cache = {}
+try:
+    _pwm_role
+except NameError:
+    _pwm_role = {}
 _out_pins = {}
 _adc_cache = {}
 _lcd = None
@@ -162,6 +169,7 @@ def servomotor(nsalida, angulo):
     gpio = _pins()["servo_pins"][nsalida - 1]
     duty = _map_val(a, 0, 180, 31, 120)
     _set_pwm_duty(gpio, duty)
+    _pwm_role[gpio] = "servo"
 
 
 def motorRC(n_salida, valor):
@@ -174,6 +182,7 @@ def motorRC(n_salida, valor):
     gpio = _pins()["servo_pins"][n_salida - 1]
     duty = _map_val(v, -100, 100, 31, 120)
     _set_pwm_duty(gpio, duty)
+    _pwm_role[gpio] = "motor"
 
 
 def sensorDistancia(n_entrada):
@@ -201,17 +210,25 @@ def sensorDistancia(n_entrada):
     return round(elapsed * 0.034 / 2, 1)
 
 
-def _stop_pwm():
+def _stop_pwm(keep_positional=False):
     for gpio, p in list(_pwm_cache.items()):
+        if keep_positional and _pwm_role.get(gpio) == "servo":
+            continue
         try:
             p.deinit()
         except Exception:
             pass
-    _pwm_cache.clear()
+        try:
+            del _pwm_cache[gpio]
+        except Exception:
+            pass
+        _pwm_role.pop(gpio, None)
+    if not keep_positional:
+        _pwm_cache.clear()
+        _pwm_role.clear()
 
 
-def detenerTodo():
-    _stop_pwm()
+def _clear_digital_outputs():
     pins = _pins()
     for gpio in pins["digital_outputs"]:
         try:
@@ -219,6 +236,17 @@ def detenerTodo():
         except Exception:
             pass
     _out_pins.clear()
+
+
+def _pybot_cleanup_normal():
+    # Fin normal WEMOS/EDA6: apaga motorRC y salidas digitales; conserva PWM de servos.
+    _stop_pwm(True)
+    _clear_digital_outputs()
+
+
+def detenerTodo():
+    _stop_pwm(False)
+    _clear_digital_outputs()
     if _lcd_available:
         try:
             limpiarLCD()

@@ -244,11 +244,26 @@ class ProgramManager:
             self._emit_err_exc(e)
             return False
 
-    def _cleanup(self, ns):
+    def _cleanup(self, ns, keep_servos=False):
         try:
-            fn = ns.get("detenerTodo")
-            if fn:
-                fn()
+            if keep_servos:
+                try:
+                    mod_eda6 = __import__(_EDA6_LIB)
+                    fn = getattr(mod_eda6, "_pybot_cleanup_normal", None)
+                    if fn:
+                        fn()
+                    else:
+                        fn2 = ns.get("detenerTodo")
+                        if fn2:
+                            fn2()
+                except Exception:
+                    fn2 = ns.get("detenerTodo")
+                    if fn2:
+                        fn2()
+            else:
+                fn = ns.get("detenerTodo")
+                if fn:
+                    fn()
         except Exception:
             pass
         try:
@@ -367,7 +382,7 @@ class ProgramManager:
                         time.sleep_us = orig_sleep_us
                 except Exception:
                     pass
-            self._cleanup(ns)
+            self._cleanup(ns, keep_servos=(outcome == "done"))
             self.running = False
             self._force = False
             # Limpiar _stop ANTES de notify: send() usa sleep_ms; si el patch

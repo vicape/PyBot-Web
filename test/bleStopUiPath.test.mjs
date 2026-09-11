@@ -31,8 +31,9 @@ test("UI onStop attempts BLE stop without requiring local running", () => {
   assert.ok(start >= 0);
   const body = ide.slice(start, start + 1800);
   // Regresión aula: Stop con app autostart y running=false no hacía nada.
+  // USB WEMOS: Stop también con running=false (sesión conectada / onBoard).
   assert.match(body, /bleConnected/);
-  assert.match(body, /bleAppRunning|bleAppStatus/);
+  assert.match(body, /if \(onBoard\)/);
   assert.match(body, /stopBoardExecution/);
   assert.match(body, /expectRunCleanup/);
   assert.match(ide, /bleStopRuntimeOld/);
