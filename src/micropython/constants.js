@@ -39,7 +39,11 @@ export const RAW_REPL_STDOUT_TIMEOUT_MS = 300000;
 export const RAW_REPL_STDERR_TIMEOUT_MS = 8000;
 export const RAW_REPL_FOLLOW_AFTER_INTERRUPT_MS = 4000;
 
-export const BLE_NATIVE_PRELUDE = "from pybot_mpy import *\n";
+/** `import *` no trae `_pybot_cleanup`; alias explícito para programWrap. */
+export const BLE_NATIVE_PRELUDE =
+  "import pybot_mpy\n" +
+  "from pybot_mpy import *\n" +
+  "_pybot_cleanup = pybot_mpy._pybot_cleanup\n";
 
 export const BLE_LINK_STATE = Object.freeze({
   GATT_CONNECTED: "GATT_CONNECTED",

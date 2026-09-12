@@ -9,6 +9,9 @@ import {
   buildRunnableProgram,
   HELD_HARDWARE_RELEASE_SCRIPT,
 } from "../src/micropython/programWrap.js";
+import { BLE_NATIVE_PRELUDE } from "../src/micropython/constants.js";
+import { MPY_PRELUDE } from "../src/micropython/usbPrelude.js";
+import { buildEda6ImportedPrelude } from "../src/eda6Ensure.js";
 import { MicroPythonSession } from "../src/micropythonEsp32Session.js";
 import { FakeMicroPythonTransport } from "./helpers/fakeMicroPython.mjs";
 
@@ -68,6 +71,31 @@ test("EDA6 registers servo vs motorRC and keeps positional PWM on normal cleanup
   assert.match(src, /def _stop_pwm\(keep_positional=False\)/);
   assert.match(src, /_map_val\(a, 0, 180, 31, 120\)/);
   assert.doesNotMatch(src, /sleep\((0\.[1-9]|[1-9])/);
+});
+
+test("BLE_NATIVE_PRELUDE aliases _pybot_cleanup (star-import skips private names)", () => {
+  assert.match(BLE_NATIVE_PRELUDE, /import pybot_mpy/);
+  assert.match(BLE_NATIVE_PRELUDE, /from pybot_mpy import \*/);
+  assert.match(
+    BLE_NATIVE_PRELUDE,
+    /_pybot_cleanup = pybot_mpy\._pybot_cleanup/,
+  );
+  // Cleanup privado se obtiene por alias explícito, no por star-import.
+  assert.ok(
+    BLE_NATIVE_PRELUDE.includes("_pybot_cleanup = pybot_mpy._pybot_cleanup"),
+  );
+  assert.equal(
+    BLE_NATIVE_PRELUDE.includes("from pybot_mpy import _pybot_cleanup"),
+    false,
+  );
+  const wrap = read("src/micropython/programWrap.js");
+  const cleanupCalls = wrap.match(/_pybot_cleanup\(\)/g) || [];
+  assert.ok(cleanupCalls.length >= 2, "wrapper calls cleanup before run and on exit");
+  const composed = BLE_NATIVE_PRELUDE + buildEda6ImportedPrelude("WEMOS");
+  assert.match(composed, /_pybot_cleanup = pybot_mpy\._pybot_cleanup/);
+  assert.match(composed, /_pybot_cleanup_normal = EDA6\._pybot_cleanup_normal/);
+  assert.match(MPY_PRELUDE, /def _pybot_cleanup\(\):/);
+  assert.doesNotMatch(MPY_PRELUDE, /import pybot_mpy/);
 });
 
 test("BLE prelude imports EDA6, applies profile, and does not call bare _pins()", () => {
