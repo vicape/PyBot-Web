@@ -15,7 +15,7 @@ import {
   missingProvisionFiles,
   isCompatibleMicroPython,
 } from "../src/esp32/pybotInstallManifest.js";
-import { PYBOT_RUNTIME_VERSION, PYBOT_PROTOCOL_VERSION } from "../src/bleProtocol.js";
+import { PYBOT_RUNTIME_VERSION, PYBOT_PROTOCOL_VERSION, sha256HexUtf8 } from "../src/bleProtocol.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -23,6 +23,21 @@ const firmwareDir = join(root, "firmware/pybot-ble-runtime");
 
 function read(rel) {
   return readFileSync(join(root, rel), "utf8");
+}
+
+/** Mismo contenido que Vite `?raw` / getBleRuntimeInstallFiles (sin importar módulos Vite). */
+function getBleRuntimeInstallFilesFromDisk() {
+  return PYBOT_RUNTIME_FILES.map((name) => ({
+    name,
+    source: readFileSync(join(firmwareDir, name), "utf8"),
+  }));
+}
+
+/** Misma transformación que getEda6LibrarySource(profile). */
+function getEda6LibrarySourceFromDisk(profile = "WEMOS") {
+  const placa = profile === "ESP32" ? "ESP32" : "WEMOS";
+  const raw = read("src/assets/EDA6.py");
+  return raw.replace(/PLACA_ACTUAL\s*=\s*"[^"]*"/, `PLACA_ACTUAL = "${placa}"`);
 }
 
 test("manifest lists all mandatory runtime modules on disk", () => {
@@ -171,6 +186,190 @@ test("failed self-test (missing hashes or EDA6) is not OK", () => {
   const noHashes = okSelftestPayload({ hashes: {} });
   assert.equal(parseSelftestOutput(`PYBOT_SELFTEST:OK ${JSON.stringify(noHashes)}`).ok, false);
   assert.equal(parseSelftestOutput("PYBOT_SELFTEST:FAIL boom").ok, false);
+});
+
+function buildExpectedFromSources(profile = "WEMOS") {
+  const expectedHashes = {};
+  for (const { name, source } of getBleRuntimeInstallFilesFromDisk()) {
+    expectedHashes[name] = sha256HexUtf8(String(source ?? ""));
+  }
+  expectedHashes["EDA6.py"] = sha256HexUtf8(getEda6LibrarySourceFromDisk(profile));
+  return expectedHashes;
+}
+
+function payloadMatchingExpected(expectedHashes, overrides = {}) {
+  const files = expectedProvisionFiles().filter((n) => n.endsWith(".py"));
+  const hashes = {};
+  const sizes = {};
+  for (const n of files) {
+    hashes[n] = expectedHashes[n];
+    sizes[n] = 64;
+  }
+  return okSelftestPayload({ hashes, sizes, ...overrides });
+}
+
+test("CASO1: all expected hashes match → hashesOk true", () => {
+  const expectedHashes = buildExpectedFromSources("WEMOS");
+  const parsed = parseSelftestOutput(
+    `PYBOT_SELFTEST:OK ${JSON.stringify(payloadMatchingExpected(expectedHashes))}`,
+    PYBOT_RUNTIME_VERSION,
+    expectedHashes,
+  );
+  assert.equal(parsed.hashesOk, true);
+  assert.equal(parsed.ok, true);
+  assert.deepEqual(parsed.hashMismatches, []);
+});
+
+test("CASO2/regression: non-empty wrong hash fails (bug punto 10)", () => {
+  const expectedHashes = buildExpectedFromSources("WEMOS");
+  const payload = payloadMatchingExpected(expectedHashes);
+  // Antes: cualquier string no vacío pasaba. Ahora debe fallar.
+  payload.hashes["pybot_rble.py"] = "bb".repeat(32);
+  const parsed = parseSelftestOutput(
+    `PYBOT_SELFTEST:OK ${JSON.stringify(payload)}`,
+    PYBOT_RUNTIME_VERSION,
+    expectedHashes,
+  );
+  assert.equal(parsed.hashesOk, false);
+  assert.equal(parsed.ok, false);
+  assert.equal(parsed.reason, "hash_mismatch");
+  assert.ok(parsed.hashMismatches.some((m) => m.name === "pybot_rble.py"));
+});
+
+test("CASO3: empty actual hash fails", () => {
+  const expectedHashes = buildExpectedFromSources();
+  const payload = payloadMatchingExpected(expectedHashes);
+  payload.hashes["boot.py"] = "";
+  const parsed = parseSelftestOutput(
+    `PYBOT_SELFTEST:OK ${JSON.stringify(payload)}`,
+    PYBOT_RUNTIME_VERSION,
+    expectedHashes,
+  );
+  assert.equal(parsed.hashesOk, false);
+  assert.equal(parsed.ok, false);
+});
+
+test("CASO4: invalid actual hash fails", () => {
+  const expectedHashes = buildExpectedFromSources();
+  const payload = payloadMatchingExpected(expectedHashes);
+  payload.hashes["main.py"] = "xyz";
+  const parsed = parseSelftestOutput(
+    `PYBOT_SELFTEST:OK ${JSON.stringify(payload)}`,
+    PYBOT_RUNTIME_VERSION,
+    expectedHashes,
+  );
+  assert.equal(parsed.hashesOk, false);
+});
+
+test("CASO5: missing expected hash entry fails", () => {
+  const expectedHashes = buildExpectedFromSources();
+  const incomplete = { ...expectedHashes };
+  delete incomplete["pybot_ble.py"];
+  const parsed = parseSelftestOutput(
+    `PYBOT_SELFTEST:OK ${JSON.stringify(payloadMatchingExpected(expectedHashes))}`,
+    PYBOT_RUNTIME_VERSION,
+    incomplete,
+  );
+  assert.equal(parsed.hashesOk, false);
+  assert.ok(parsed.hashMismatches.some((m) => m.name === "pybot_ble.py"));
+});
+
+test("CASO6: invalid expected hash fails", () => {
+  const expectedHashes = buildExpectedFromSources();
+  const bad = { ...expectedHashes, "boot.py": "not-a-hash" };
+  const parsed = parseSelftestOutput(
+    `PYBOT_SELFTEST:OK ${JSON.stringify(payloadMatchingExpected(expectedHashes))}`,
+    PYBOT_RUNTIME_VERSION,
+    bad,
+  );
+  assert.equal(parsed.hashesOk, false);
+});
+
+test("CASO7: case-normalized hashes match", () => {
+  const expectedHashes = buildExpectedFromSources();
+  const payload = payloadMatchingExpected(expectedHashes);
+  for (const name of Object.keys(payload.hashes)) {
+    payload.hashes[name] = payload.hashes[name].toUpperCase();
+  }
+  const parsed = parseSelftestOutput(
+    `PYBOT_SELFTEST:OK ${JSON.stringify(payload)}`,
+    PYBOT_RUNTIME_VERSION,
+    expectedHashes,
+  );
+  assert.equal(parsed.hashesOk, true);
+  assert.equal(parsed.ok, true);
+});
+
+test("CASO8: one-byte source change changes sha and is detected", () => {
+  const a = "print(1)\n";
+  const b = "print(2)\n";
+  const ha = sha256HexUtf8(a);
+  const hb = sha256HexUtf8(b);
+  assert.notEqual(ha, hb);
+  const expectedHashes = buildExpectedFromSources();
+  expectedHashes["pybot_mpy.py"] = ha;
+  const payload = payloadMatchingExpected(expectedHashes);
+  payload.hashes["pybot_mpy.py"] = hb;
+  const parsed = parseSelftestOutput(
+    `PYBOT_SELFTEST:OK ${JSON.stringify(payload)}`,
+    PYBOT_RUNTIME_VERSION,
+    expectedHashes,
+  );
+  assert.equal(parsed.hashesOk, false);
+  assert.ok(parsed.hashMismatches.some((m) => m.name === "pybot_mpy.py"));
+});
+
+test("CASO9: UTF-8 multibyte uses sha256HexUtf8 bytes", () => {
+  const src = "áéñ — ESP32";
+  const h = sha256HexUtf8(src);
+  assert.match(h, /^[0-9a-f]{64}$/);
+  assert.notEqual(h.length, src.length);
+});
+
+test("CASO10: EDA6 WEMOS vs ESP32 expected hashes differ when sources differ", () => {
+  const w = sha256HexUtf8(getEda6LibrarySourceFromDisk("WEMOS"));
+  const e = sha256HexUtf8(getEda6LibrarySourceFromDisk("ESP32"));
+  assert.notEqual(w, e);
+  const expW = buildExpectedFromSources("WEMOS");
+  const expE = buildExpectedFromSources("ESP32");
+  assert.notEqual(expW["EDA6.py"], expE["EDA6.py"]);
+});
+
+test("CASO11: runtime 4.0.6 with old file content fails by hash", () => {
+  const expectedHashes = buildExpectedFromSources();
+  const payload = payloadMatchingExpected(expectedHashes, {
+    runtime: "4.0.6",
+    protocol: "3.2",
+  });
+  payload.hashes["pybot_ble.py"] = "11".repeat(32);
+  const parsed = parseSelftestOutput(
+    `PYBOT_SELFTEST:OK ${JSON.stringify(payload)}`,
+    PYBOT_RUNTIME_VERSION,
+    expectedHashes,
+  );
+  assert.equal(parsed.runtimeOk, true);
+  assert.equal(parsed.protocolOk, true);
+  assert.equal(parsed.hashesOk, false);
+  assert.equal(parsed.ok, false);
+});
+
+test("CASO12: hardwareBridge verifyPybotFiles passes expectedHashes", () => {
+  const bridge = read("src/hardwareBridge.js");
+  assert.match(bridge, /buildProvisionExpectedHashes/);
+  assert.match(bridge, /getBleRuntimeInstallFiles\(\)/);
+  assert.match(bridge, /getEda6LibrarySource\(profile\)/);
+  assert.match(bridge, /sha256HexUtf8/);
+  assert.match(
+    bridge,
+    /parseSelftestOutput\(\s*stdout,\s*PYBOT_RUNTIME_VERSION,\s*buildProvisionExpectedHashes/,
+  );
+});
+
+test("expected hashes cover every provision .py file", () => {
+  const expectedHashes = buildExpectedFromSources("ESP32");
+  for (const name of expectedProvisionFiles().filter((n) => n.endsWith(".py"))) {
+    assert.match(expectedHashes[name], /^[0-9a-f]{64}$/, name);
+  }
 });
 
 test("compatible MicroPython 1.27.0 is kept; other versions are not", () => {

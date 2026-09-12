@@ -149,12 +149,22 @@ export const PYBOT_USB_SELFTEST_SCRIPT = [
   "    print('PYBOT_SELFTEST:FAIL', str(e))",
 ].join("\n");
 
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+
 /**
  * Parsea stdout de PYBOT_USB_SELFTEST_SCRIPT.
  * @param {string} text
  * @param {string} [publishedVersion]
+ * @param {Record<string, string>|null|undefined} [expectedHashes]
+ *   Si se pasa (flujo USB real), cada archivo obligatorio debe coincidir
+ *   byte-for-byte con el SHA-256 del source instalado. Si se omite, solo se
+ *   exige hash no vacío (compat tests unitarios históricos).
  */
-export function parseSelftestOutput(text, publishedVersion = PYBOT_RUNTIME_VERSION) {
+export function parseSelftestOutput(
+  text,
+  publishedVersion = PYBOT_RUNTIME_VERSION,
+  expectedHashes = undefined,
+) {
   const raw = String(text ?? "");
   const idx = raw.indexOf("PYBOT_SELFTEST:OK");
   if (idx < 0) {
@@ -186,10 +196,29 @@ export function parseSelftestOutput(text, publishedVersion = PYBOT_RUNTIME_VERSI
   const hashes = data.hashes && typeof data.hashes === "object" ? data.hashes : {};
   let sizesOk = true;
   let hashesOk = true;
+  const hashMismatches = [];
+  const requireExpected = expectedHashes != null && typeof expectedHashes === "object";
   for (const name of expected) {
     const size = sizes[name];
     if (!(typeof size === "number" && size >= 8)) sizesOk = false;
-    if (typeof hashes[name] !== "string" || hashes[name].length === 0) hashesOk = false;
+    const actualRaw = hashes[name];
+    const actual = String(actualRaw ?? "").trim().toLowerCase();
+    if (!requireExpected) {
+      if (typeof actualRaw !== "string" || actualRaw.length === 0) hashesOk = false;
+      continue;
+    }
+    const expectedRaw = expectedHashes[name];
+    const expectedNorm = String(expectedRaw ?? "").trim().toLowerCase();
+    const actualValid = SHA256_HEX_RE.test(actual);
+    const expectedValid = SHA256_HEX_RE.test(expectedNorm);
+    if (!actualValid || !expectedValid || actual !== expectedNorm) {
+      hashesOk = false;
+      hashMismatches.push({
+        name,
+        expected: expectedValid ? expectedNorm : "",
+        actual: actualValid ? actual : String(actualRaw ?? ""),
+      });
+    }
   }
   const ok =
     runtimeOk &&
@@ -204,7 +233,7 @@ export function parseSelftestOutput(text, publishedVersion = PYBOT_RUNTIME_VERSI
     mainOk &&
     sizesOk &&
     hashesOk;
-  return {
+  const out = {
     ok,
     data,
     runtimeOk,
@@ -219,5 +248,10 @@ export function parseSelftestOutput(text, publishedVersion = PYBOT_RUNTIME_VERSI
     mainOk,
     sizesOk,
     hashesOk,
+    hashMismatches,
   };
+  if (!ok && requireExpected && hashMismatches.length > 0) {
+    out.reason = "hash_mismatch";
+  }
+  return out;
 }

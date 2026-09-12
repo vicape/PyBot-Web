@@ -89,6 +89,7 @@ import {
   compareRuntimeVersions,
   PYBOT_STOP_RELIABLE_MIN,
   PYBOT_RUNTIME_VERSION,
+  sha256HexUtf8,
 } from "./bleProtocol.js";
 import { isNativeBleEnabled } from "./micropython/featureFlags.js";
 import { BleReplTransport } from "./micropython/bleReplTransport.js";
@@ -124,6 +125,16 @@ const BLE_COOP_STOP_GRACE_MS = 20000;
 
 function sleepMs(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** SHA-256 esperado de los sources que PyBot instala por USB (sin hardcode). */
+function buildProvisionExpectedHashes(profile = getEda6Profile()) {
+  const expectedHashes = {};
+  for (const { name, source } of getBleRuntimeInstallFiles()) {
+    expectedHashes[name] = sha256HexUtf8(String(source ?? ""));
+  }
+  expectedHashes["EDA6.py"] = sha256HexUtf8(getEda6LibrarySource(profile));
+  return expectedHashes;
 }
 
 let _adapter = null;       // Arduino / JSON experimental (comandos por Pyodide)
@@ -603,7 +614,11 @@ export async function prepareEsp32(hooks = {}) {
       try {
         await _mpSession.interruptAndRecoverRepl();
         const { stdout } = await _mpSession.execRaw(PYBOT_USB_SELFTEST_SCRIPT, { timeout: 30000 });
-        const selftest = parseSelftestOutput(stdout, PYBOT_RUNTIME_VERSION);
+        const selftest = parseSelftestOutput(
+          stdout,
+          PYBOT_RUNTIME_VERSION,
+          buildProvisionExpectedHashes(getEda6Profile()),
+        );
         if (!selftest.ok) {
           return {
             ok: false,
