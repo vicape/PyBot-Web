@@ -10,22 +10,7 @@ export {
   EDA6_LIBRARY_VERSION,
 } from "./eda6Ensure.js";
 
-export const PIN_MAPS = {
-  WEMOS: {
-    digital_outputs: [26, 17, 27, 12],
-    adc_inputs: [2, 4, 35, 34],
-    digital_inputs: [5, 23, 19, 18],
-    servo_pins: [25, 16, 14, 13],
-    I2C: [22, 21],
-  },
-  ESP32: {
-    digital_outputs: [32, 25, 27, 12],
-    adc_inputs: [35, 34, 39, 36],
-    digital_inputs: [4, 2, 15, 0],
-    servo_pins: [33, 26, 14, 13],
-    I2C: [22, 21],
-  },
-};
+export { PIN_MAPS, detectEda6Adc2Risk } from "./eda6PinMaps.js";
 
 export const EDA6_PUBLIC_FUNCS = [
   "entradaDigital",

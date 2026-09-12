@@ -57,6 +57,7 @@ import {
 import {
   filterExamplesForBoard,
   setEda6Profile,
+  detectEda6Adc2Risk,
 } from "./eda6Profile.js";
 import { runPythonAsync, signalStop } from "./pyodideRunner.js";
 import { checkPythonSyntax } from "./pythonSyntaxDiagnostics.js";
@@ -1071,6 +1072,9 @@ export default function PyBotIDE() {
         if (hardwareIsConnected()) {
           appendConsole(t("eda6RunUploading") + "\n", "info");
         }
+        if (detectEda6Adc2Risk(activeCode, eda6Profile)) {
+          appendConsole(t("eda6Adc2WifiWarning") + "\n", "info");
+        }
       }
       const msg = boardType === "esp32-eda6" ? t("eda6Running") : t("mpyRunning");
       await runBoardProgram(msg, activeCode);
@@ -1165,6 +1169,9 @@ export default function PyBotIDE() {
       appendConsole(t("boardNoCanvas") + "\n", "err");
       return;
     }
+    if (boardType === "esp32-eda6" && detectEda6Adc2Risk(activeCode, eda6Profile)) {
+      appendConsole(t("eda6Adc2WifiWarning") + "\n", "info");
+    }
     appendConsole(
       (boardType === "esp32-eda6" ? t("eda6Installing") : t("esp32FlashHint")) + "\n",
       "info",
@@ -1183,7 +1190,7 @@ export default function PyBotIDE() {
     } catch (e) {
       appendConsole(formatPythonError(e?.message) + "\n", "err");
     }
-  }, [connected, code, editorMode, pyblockCode, currentPythonCode, appendConsole, boardType]);
+  }, [connected, code, editorMode, pyblockCode, currentPythonCode, appendConsole, boardType, eda6Profile]);
 
   const onDownloadToArduino = useCallback(async () => {
     if (boardType !== "arduino-firmata") return;

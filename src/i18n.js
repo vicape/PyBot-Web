@@ -57,6 +57,8 @@ const STRINGS = {
       "Perfil ESP32 activo: puerto 1 servo = GPIO 33. Si tu placa es WEMOS, elegí perfil WEMOS (GPIO 25).",
     eda6ProfileWarnWemos:
       "Perfil WEMOS activo: puerto 1 servo = GPIO 25.",
+    eda6Adc2WifiWarning:
+      "Aviso WEMOS: las entradas analógicas 1 y 2 usan ADC2 (GPIO2/GPIO4). Si Wi-Fi está activo, la lectura puede fallar. Con Wi-Fi usá entradaAnalogica(3) o entradaAnalogica(4).",
     statusConnEsp32: "ESP32 conectada",
     eda6ConnectedWemos: "Perfil EDA6/WEMOS conectado. Puertos 1–4 listos.",
     eda6ConnectedEsp32: "Perfil EDA6/ESP32 conectado. Puertos 1–4 listos.",
@@ -661,6 +663,8 @@ Creado por VIC.`,
       "ESP32 profile active: servo port 1 = GPIO 33. If your board is WEMOS, choose WEMOS profile (GPIO 25).",
     eda6ProfileWarnWemos:
       "WEMOS profile active: servo port 1 = GPIO 25.",
+    eda6Adc2WifiWarning:
+      "WEMOS warning: analog inputs 1 and 2 use ADC2 (GPIO2/GPIO4). If Wi-Fi is active, the reading may fail. With Wi-Fi, use entradaAnalogica(3) or entradaAnalogica(4).",
     statusConnEsp32: "ESP32 connected",
     eda6ConnectedWemos: "EDA6/WEMOS profile connected. Ports 1–4 ready.",
     eda6ConnectedEsp32: "EDA6/ESP32 profile connected. Ports 1–4 ready.",
