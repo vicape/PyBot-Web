@@ -42,7 +42,20 @@ const RUNTIME_FILES = [
   "pybot_mpy.py",
 ];
 const RTBAK = ".rtbak";
+const RTBAK_READY = "pybot_runtime.rtbak_ready";
 const COPY_CHUNK = 256;
+
+/** Power loss: corta el proceso SIN ejecutar catch/restore. */
+class PowerCutError extends Error {
+  constructor(message = "power cut") {
+    super(message);
+    this.name = "PowerCutError";
+  }
+}
+
+function isPowerCut(e) {
+  return e instanceof PowerCutError || e?.name === "PowerCutError";
+}
 
 function byteLen(s) {
   return new TextEncoder().encode(String(s ?? "")).length;
@@ -177,6 +190,7 @@ function _validatePack(fs, stats) {
 
 /**
  * Pasada 2: copia bodies por chunks al destino.
+ * Power cut: deja el FS a mitad de escritura y lanza PowerCutError (sin cleanup).
  */
 function _installPackFiles(fs, meta, stats, opts = {}) {
   const raw = fs.getBytes(NEW);
@@ -186,6 +200,7 @@ function _installPackFiles(fs, meta, stats, opts = {}) {
   const dec = new TextDecoder();
   for (let i = 0; i < meta.length; i++) {
     if (opts.failCopyAt === i) throw new Error("copy fail");
+    if (opts.cutBeforeCopyAt === i) throw new PowerCutError("cut before copy " + i);
     const [expectedName, expectedSz] = meta[i];
     let nl = raw.indexOf(0x0a, off);
     const name = dec.decode(raw.subarray(off, nl)).replace(/\r$/, "");
@@ -196,17 +211,45 @@ function _installPackFiles(fs, meta, stats, opts = {}) {
     if (name !== expectedName || sz !== expectedSz) throw new Error("pack mismatch");
     const data = raw.subarray(off, off + sz);
     _consumeBodyBytes(stats, sz);
-    // Guardar bytes exactos (fidelidad UTF-8 / binaria).
+    if (opts.cutDuringCopyAt === i) {
+      const keep = opts.cutAfterBytes ?? Math.max(1, Math.floor(sz / 2));
+      fs.files.set(name, Uint8Array.from(data.subarray(0, Math.min(keep, sz))));
+      throw new PowerCutError("cut during copy " + i);
+    }
     fs.files.set(name, Uint8Array.from(data));
     off += sz;
+    if (opts.cutAfterCopyAt === i) throw new PowerCutError("cut after copy " + i);
   }
 }
 
-function _backupRuntime(fs, names) {
-  for (const name of names) {
+function _clearRtbakReady(fs) {
+  fs.remove(RTBAK_READY);
+}
+
+function _isRtbakReady(fs, hash) {
+  if (!fs.exists(RTBAK_READY)) return false;
+  const want = String(hash || "").toLowerCase();
+  if (!want) return false;
+  return String(fs.get(RTBAK_READY) || "").trim().toLowerCase() === want;
+}
+
+function _markRtbakReady(fs, hash, opts = {}) {
+  if (opts.cutBeforeMarker) throw new PowerCutError("cut before marker");
+  fs.files.set(RTBAK_READY, String(hash || "").toLowerCase());
+  if (opts.cutAfterMarker) throw new PowerCutError("cut after marker");
+}
+
+/** Backup idempotente: nunca borra/reemplaza un .rtbak existente. */
+function _backupRuntime(fs, names, opts = {}) {
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
     const bak = name + RTBAK;
-    fs.remove(bak);
+    if (fs.exists(bak)) {
+      if (opts.cutAfterBackupIndex === i) throw new PowerCutError("cut after backup " + i);
+      continue;
+    }
     if (fs.exists(name) && !fs.rename(name, bak)) return false;
+    if (opts.cutAfterBackupIndex === i) throw new PowerCutError("cut after backup " + i);
   }
   return true;
 }
@@ -225,6 +268,13 @@ function _clearRtbaks(fs) {
   for (const name of RUNTIME_FILES) fs.remove(name + RTBAK);
 }
 
+function _abortPack(fs) {
+  _restoreRuntime(fs);
+  fs.remove(NEW);
+  fs.remove(STATE);
+  _clearRtbakReady(fs);
+}
+
 function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
   const stats = opts.stats ?? null;
   if (stats) {
@@ -239,6 +289,7 @@ function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
       if (fs.exists(BAK) && !fs.exists(MAIN)) fs.rename(BAK, MAIN);
       fs.remove(STATE);
     }
+    _clearRtbakReady(fs);
     return;
   }
   if (stats) stats.order.push("validate");
@@ -246,29 +297,32 @@ function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
   if (!meta) {
     fs.remove(NEW);
     fs.remove(STATE);
+    _clearRtbakReady(fs);
     return;
   }
   const names = meta.map(([n]) => n);
-  if (stats) stats.order.push("backup");
-  if (!_backupRuntime(fs, names)) {
-    _restoreRuntime(fs);
-    fs.remove(NEW);
-    fs.remove(STATE);
-    return;
+  if (!_isRtbakReady(fs, hash)) {
+    if (stats) stats.order.push("backup");
+    if (!_backupRuntime(fs, names, opts)) {
+      _abortPack(fs);
+      return;
+    }
+    if (stats) stats.order.push("mark");
+    _markRtbakReady(fs, hash, opts);
   }
   try {
     if (stats) stats.order.push("write");
     _installPackFiles(fs, meta, stats, opts);
-  } catch {
-    _restoreRuntime(fs);
-    fs.remove(NEW);
-    fs.remove(STATE);
+  } catch (e) {
+    if (isPowerCut(e)) throw e;
+    _abortPack(fs);
     return;
   }
   st.state = "applied";
   st.pack = 1;
   fs.writeJson(STATE, st);
   fs.remove(NEW);
+  _clearRtbakReady(fs);
 }
 
 function _doApplyLegacy(fs, st, size, hash, hasHashlib) {
@@ -319,18 +373,21 @@ function _doRollback(fs, st) {
     _clearRtbaks(fs);
     fs.remove(NEW);
     fs.remove(STATE);
+    _clearRtbakReady(fs);
     return;
   }
   if (fs.exists(BAK)) {
     fs.remove(MAIN);
     if (fs.rename(BAK, MAIN)) {
       fs.remove(STATE);
+      _clearRtbakReady(fs);
       return;
     }
   }
   fs.remove(NEW);
   st.state = "rollback_failed";
   fs.writeJson(STATE, st);
+  _clearRtbakReady(fs);
 }
 
 /** Mirror de boot.py `_boot_apply_update` (corre ANTES de main.py en cada boot). */
@@ -338,6 +395,7 @@ function boot(fs, { hasHashlib = true, ...opts } = {}) {
   const st = fs.readJson(STATE);
   if (!st || typeof st !== "object") {
     fs.remove(NEW); // limpiar .new huérfano de una descarga cortada
+    _clearRtbakReady(fs);
     return;
   }
   const state = st.state;
@@ -355,6 +413,23 @@ function confirmBoot(fs) {
     _clearRtbaks(fs);
     fs.remove(STATE);
   }
+}
+
+/** Ejecuta boot; si hay power cut, deja el FS congelado (sin cleanup). */
+function bootMaybeCut(fs, opts = {}) {
+  try {
+    boot(fs, opts);
+    return false; // no cut
+  } catch (e) {
+    if (isPowerCut(e)) return true;
+    throw e;
+  }
+}
+
+function bakHash(fs, name) {
+  const p = name + RTBAK;
+  if (!fs.exists(p)) return null;
+  return sha256Hex(fs.getBytes(p));
 }
 
 function buildPack(files) {
@@ -718,6 +793,7 @@ test("#17 pack truncado: falla antes de backup; runtime intacto", () => {
   assert.equal(fs.exists(MAIN + RTBAK), false);
   assert.equal(fs.exists(STATE), false);
   assert.deepEqual(stats.order, ["validate"]); // sin backup/write
+  assert.equal(fs.exists(RTBAK_READY), false);
 });
 
 test("#17 nombre inválido evil.py: rechazo antes de modificar runtime", () => {
@@ -737,6 +813,7 @@ test("#17 nombre inválido evil.py: rechazo antes de modificar runtime", () => {
   assert.equal(fs.exists(MAIN + RTBAK), false);
   assert.equal(fs.exists(STATE), false);
   assert.deepEqual(stats.order, ["validate"]);
+  assert.equal(fs.exists(RTBAK_READY), false);
 });
 
 test("#17 size inválido: no numérico / negativo / >200000", () => {
@@ -896,7 +973,7 @@ test("#17 orden: validate completo BEFORE backup BEFORE write", () => {
   const fs = new Fs({ [MAIN]: OLD, "pybot_ble.py": "B\n", [NEW]: pack });
   webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
   boot(fs, { stats });
-  assert.deepEqual(stats.order, ["validate", "backup", "write"]);
+  assert.deepEqual(stats.order, ["validate", "backup", "mark", "write"]);
 });
 
 test("#17 SHA exterior incorrecto aborta antes de parse/apply", () => {
@@ -909,6 +986,7 @@ test("#17 SHA exterior incorrecto aborta antes de parse/apply", () => {
   assert.equal(fs.exists(STATE), false);
   // SHA exterior falla antes de validate/backup/write.
   assert.deepEqual(stats.order, []);
+  assert.equal(fs.exists(RTBAK_READY), false);
 });
 
 test("#17 legacy apply intacto (casos base siguen pasando vía NEWR)", () => {
@@ -917,4 +995,313 @@ test("#17 legacy apply intacto (casos base siguen pasando vía NEWR)", () => {
   boot(fs);
   assert.equal(fs.get(MAIN), NEWR);
   assert.equal(fs.get(BAK), OLD);
+  assert.equal(fs.exists(RTBAK_READY), false); // legacy no usa marker
+});
+
+// ---------------------------------------------------------------------------
+// #27 — reentrada pending: preservar .rtbak originales (power loss)
+// ---------------------------------------------------------------------------
+
+function packThree() {
+  return buildPack([
+    ["main.py", "NEW_MAIN_CONTENT_AAAA\n"],
+    ["pybot_ble.py", "NEW_BLE_" + "B".repeat(400) + "\n"],
+    ["pybot_run.py", "NEW_RUN_CONTENT_CCCC\n"],
+  ]);
+}
+
+function boardForPack27(pack, extra = {}) {
+  return new Fs({
+    [MAIN]: "OLD_MAIN\n",
+    "pybot_ble.py": "OLD_BLE\n",
+    "pybot_run.py": "OLD_RUN\n",
+    [APP]: APP_CODE,
+    [APP_META]: JSON.stringify(APP_METADATA),
+    [NEW]: pack,
+    ...extra,
+  });
+}
+
+test("#27 reproducción: power loss mid-copy NO destruye .rtbak OLD (fallaba en 3e37cff)", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  const h = packHash(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: h });
+
+  // Boot 1: backup + marker + corte a mitad de pybot_ble.py (índice 1)
+  assert.equal(bootMaybeCut(fs, { cutDuringCopyAt: 1, cutAfterBytes: 20 }), true);
+  assert.equal(fs.readJson(STATE).state, "pending");
+  assert.equal(fs.exists(RTBAK_READY), true);
+  assert.equal(fs.get(MAIN + RTBAK), "OLD_MAIN\n");
+  assert.equal(fs.get("pybot_ble.py" + RTBAK), "OLD_BLE\n");
+  assert.equal(fs.get("pybot_run.py" + RTBAK), "OLD_RUN\n");
+  const oldBleBak = bakHash(fs, "pybot_ble.py");
+  const oldMainBak = bakHash(fs, MAIN);
+  // Destino parcial NEW (no OLD)
+  assert.ok(fs.size("pybot_ble.py") > 0);
+  assert.notEqual(fs.get("pybot_ble.py"), "OLD_BLE\n");
+
+  // Boot 2: reentrada — en 3e37cff _remove(bak) destruía OLD; aquí se preserva.
+  boot(fs);
+  assert.equal(bakHash(fs, "pybot_ble.py"), oldBleBak);
+  assert.equal(bakHash(fs, MAIN), oldMainBak);
+  assert.equal(fs.get(MAIN + RTBAK), "OLD_MAIN\n");
+  assert.equal(fs.get("pybot_ble.py" + RTBAK), "OLD_BLE\n");
+  assert.equal(fs.get("pybot_run.py" + RTBAK), "OLD_RUN\n");
+  assert.equal(fs.get(MAIN), "NEW_MAIN_CONTENT_AAAA\n");
+  assert.equal(fs.get("pybot_run.py"), "NEW_RUN_CONTENT_CCCC\n");
+  assert.equal(fs.readJson(STATE).state, "applied");
+});
+
+test("#27 power loss durante primer módulo; reentrada completa", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutDuringCopyAt: 0, cutAfterBytes: 5 }), true);
+  const hMain = bakHash(fs, MAIN);
+  const hBle = bakHash(fs, "pybot_ble.py");
+  boot(fs);
+  assert.equal(bakHash(fs, MAIN), hMain);
+  assert.equal(bakHash(fs, "pybot_ble.py"), hBle);
+  assert.equal(fs.get(MAIN), "NEW_MAIN_CONTENT_AAAA\n");
+  assert.equal(fs.readJson(STATE).state, "applied");
+});
+
+test("#27 power loss en módulo intermedio: no re-backup de NEW", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  // Completa main+ble, corta durante run
+  assert.equal(bootMaybeCut(fs, { cutDuringCopyAt: 2, cutAfterBytes: 4 }), true);
+  assert.equal(fs.get(MAIN), "NEW_MAIN_CONTENT_AAAA\n"); // ya NEW en destino
+  assert.equal(fs.get(MAIN + RTBAK), "OLD_MAIN\n");
+  const hashes = {
+    main: bakHash(fs, MAIN),
+    ble: bakHash(fs, "pybot_ble.py"),
+    run: bakHash(fs, "pybot_run.py"),
+  };
+  boot(fs);
+  assert.equal(bakHash(fs, MAIN), hashes.main);
+  assert.equal(bakHash(fs, "pybot_ble.py"), hashes.ble);
+  assert.equal(bakHash(fs, "pybot_run.py"), hashes.run);
+  assert.equal(fs.get(MAIN + RTBAK), "OLD_MAIN\n");
+  assert.equal(fs.readJson(STATE).state, "applied");
+});
+
+test("#27 power loss entre módulos (después de cerrar uno)", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutAfterCopyAt: 0 }), true);
+  const h = bakHash(fs, MAIN);
+  boot(fs);
+  assert.equal(bakHash(fs, MAIN), h);
+  assert.equal(fs.readJson(STATE).state, "applied");
+  assert.equal(fs.get("pybot_run.py"), "NEW_RUN_CONTENT_CCCC\n");
+});
+
+test("#27 power loss durante fase de backup", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  // Tras backup índice 0 (main), cortar antes de completar el resto / marker
+  assert.equal(bootMaybeCut(fs, { cutAfterBackupIndex: 0 }), true);
+  assert.equal(fs.exists(RTBAK_READY), false);
+  assert.equal(fs.get(MAIN + RTBAK), "OLD_MAIN\n");
+  assert.equal(fs.exists("pybot_ble.py" + RTBAK), false);
+  assert.equal(fs.get("pybot_ble.py"), "OLD_BLE\n"); // aún original
+  const h0 = bakHash(fs, MAIN);
+  boot(fs);
+  assert.equal(bakHash(fs, MAIN), h0);
+  assert.equal(fs.get("pybot_ble.py" + RTBAK), "OLD_BLE\n");
+  assert.equal(fs.readJson(STATE).state, "applied");
+});
+
+test("#27 múltiples power losses: .rtbak byte-idénticos", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutDuringCopyAt: 0, cutAfterBytes: 3 }), true);
+  const snap = {
+    main: bakHash(fs, MAIN),
+    ble: bakHash(fs, "pybot_ble.py"),
+    run: bakHash(fs, "pybot_run.py"),
+    mainBytes: fs.getBytes(MAIN + RTBAK),
+    bleBytes: fs.getBytes("pybot_ble.py" + RTBAK),
+  };
+  assert.equal(bootMaybeCut(fs, { cutDuringCopyAt: 1, cutAfterBytes: 10 }), true);
+  assert.equal(bakHash(fs, MAIN), snap.main);
+  assert.equal(bakHash(fs, "pybot_ble.py"), snap.ble);
+  assert.equal(bakHash(fs, "pybot_run.py"), snap.run);
+  boot(fs);
+  assert.equal(bakHash(fs, MAIN), snap.main);
+  assert.equal(bakHash(fs, "pybot_ble.py"), snap.ble);
+  assert.deepEqual(Array.from(fs.getBytes(MAIN + RTBAK)), Array.from(snap.mainBytes));
+  assert.deepEqual(Array.from(fs.getBytes("pybot_ble.py" + RTBAK)), Array.from(snap.bleBytes));
+  assert.equal(fs.readJson(STATE).state, "applied");
+});
+
+test("#27 marker: corte justo antes y justo después", () => {
+  const pack = packThree();
+  // Antes de marker
+  {
+    const fs = boardForPack27(pack);
+    webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+    assert.equal(bootMaybeCut(fs, { cutBeforeMarker: true }), true);
+    assert.equal(fs.exists(RTBAK_READY), false);
+    assert.equal(fs.get(MAIN + RTBAK), "OLD_MAIN\n");
+    const h = bakHash(fs, MAIN);
+    boot(fs);
+    assert.equal(bakHash(fs, MAIN), h);
+    assert.equal(fs.readJson(STATE).state, "applied");
+  }
+  // Después de marker
+  {
+    const fs = boardForPack27(pack);
+    webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+    assert.equal(bootMaybeCut(fs, { cutAfterMarker: true }), true);
+    assert.equal(fs.exists(RTBAK_READY), true);
+    assert.equal(fs.get(MAIN + RTBAK), "OLD_MAIN\n");
+    const h = bakHash(fs, MAIN);
+    boot(fs);
+    assert.equal(bakHash(fs, MAIN), h);
+    assert.equal(fs.readJson(STATE).state, "applied");
+  }
+});
+
+test("#27 backup hash idéntico tras todos los reboots", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutDuringCopyAt: 1, cutAfterBytes: 8 }), true);
+  const before = {
+    main: bakHash(fs, MAIN),
+    ble: bakHash(fs, "pybot_ble.py"),
+    run: bakHash(fs, "pybot_run.py"),
+  };
+  assert.equal(bootMaybeCut(fs, { cutAfterCopyAt: 0 }), true);
+  boot(fs);
+  assert.equal(bakHash(fs, MAIN), before.main);
+  assert.equal(bakHash(fs, "pybot_ble.py"), before.ble);
+  assert.equal(bakHash(fs, "pybot_run.py"), before.run);
+});
+
+test("#27 rollback tras reentrada restaura OLD", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutDuringCopyAt: 1, cutAfterBytes: 12 }), true);
+  boot(fs);
+  assert.equal(fs.readJson(STATE).state, "applied");
+  // Sin confirm → rollback
+  boot(fs);
+  assert.equal(fs.get(MAIN), "OLD_MAIN\n");
+  assert.equal(fs.get("pybot_ble.py"), "OLD_BLE\n");
+  assert.equal(fs.get("pybot_run.py"), "OLD_RUN\n");
+  assert.equal(fs.exists(STATE), false);
+  assert.equal(fs.exists(RTBAK_READY), false);
+});
+
+test("#27 confirm tras reentrada: NEW, sin backups ni marker", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutDuringCopyAt: 0, cutAfterBytes: 2 }), true);
+  boot(fs);
+  confirmBoot(fs);
+  assert.equal(fs.get(MAIN), "NEW_MAIN_CONTENT_AAAA\n");
+  assert.equal(fs.exists(MAIN + RTBAK), false);
+  assert.equal(fs.exists(STATE), false);
+  assert.equal(fs.exists(RTBAK_READY), false);
+});
+
+test("#27 marker no queda stale para update posterior", () => {
+  const pack1 = buildPack([
+    ["main.py", "V1\n"],
+    ["pybot_ble.py", "V1B\n"],
+  ]);
+  const fs = new Fs({
+    [MAIN]: "O\n",
+    "pybot_ble.py": "OB\n",
+    [NEW]: pack1,
+  });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack1), hash: packHash(pack1) });
+  boot(fs);
+  confirmBoot(fs);
+  assert.equal(fs.exists(RTBAK_READY), false);
+
+  const pack2 = buildPack([
+    ["main.py", "V2\n"],
+    ["pybot_ble.py", "V2B\n"],
+  ]);
+  fs.files.set(NEW, pack2);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack2), hash: packHash(pack2) });
+  const stats = {};
+  boot(fs, { stats });
+  // Debe volver a hacer backup (no saltar por marker stale)
+  assert.ok(stats.order.includes("backup"));
+  assert.equal(fs.get(MAIN + RTBAK), "V1\n");
+  assert.equal(fs.get(MAIN), "V2\n");
+});
+
+test("#27 copy failure normal (excepción) sigue haciendo restore", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs, { failCopyAt: 1 });
+  assert.equal(fs.get(MAIN), "OLD_MAIN\n");
+  assert.equal(fs.get("pybot_ble.py"), "OLD_BLE\n");
+  assert.equal(fs.exists(STATE), false);
+  assert.equal(fs.exists(NEW), false);
+  assert.equal(fs.exists(RTBAK_READY), false);
+});
+
+test("#27 #17 streaming intacto + marker en firmware", () => {
+  const src = readFileSync(FW_BOOT_UPDATE, "utf8");
+  assert.match(src, /_COPY_CHUNK\s*=\s*256/);
+  assert.match(src, /_RTBAK_READY\s*=\s*"pybot_runtime\.rtbak_ready"/);
+  assert.match(src, /def _is_rtbak_ready/);
+  assert.match(src, /def _mark_rtbak_ready/);
+  assert.doesNotMatch(src, /data\s*=\s*f\.read\(sz\)/);
+  assert.doesNotMatch(src, /_remove\(bak\)/);
+});
+
+test("#27 pack inválido / SHA: sin marker ni backup", () => {
+  const enc = new TextEncoder();
+  const bad = new Uint8Array([...enc.encode(PACK_MAGIC), ...enc.encode("main.py\n100\n"), ...enc.encode("x")]);
+  const fs = new Fs({ [MAIN]: OLD, [NEW]: bad });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: bad.length, hash: sha256Hex(bad) });
+  boot(fs);
+  assert.equal(fs.get(MAIN), OLD);
+  assert.equal(fs.exists(RTBAK_READY), false);
+  assert.equal(fs.exists(MAIN + RTBAK), false);
+
+  const pack = packThree();
+  const fs2 = boardForPack27(pack);
+  webApply(fs2, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: "11".repeat(32) });
+  boot(fs2);
+  assert.equal(fs2.get(MAIN), "OLD_MAIN\n");
+  assert.equal(fs2.exists(RTBAK_READY), false);
+});
+
+test("#27 UTF-8 + student app + state contract + versiones", () => {
+  const text = "— á º\n";
+  const pack = buildPack([
+    ["main.py", "ok\n"],
+    ["pybot_net.py", text],
+  ]);
+  const fs = boardWithApp({ [NEW]: pack });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutDuringCopyAt: 1, cutAfterBytes: 2 }), true);
+  boot(fs);
+  assert.equal(fs.readJson(STATE).state, "applied");
+  assert.equal(fs.readJson(STATE).pack, 1);
+  assert.deepEqual(Array.from(fs.getBytes("pybot_net.py")), Array.from(new TextEncoder().encode(text)));
+  assert.equal(fs.get(APP), APP_CODE);
+  confirmBoot(fs);
+  assert.equal(fs.exists(STATE), false);
+
+  const ble = readFileSync(join(__dirname, "..", "firmware/pybot-ble-runtime/pybot_ble.py"), "utf8");
+  assert.match(ble, /PYBOT_RUNTIME_VERSION = "4\.0\.6"/);
+  assert.match(ble, /PYBOT_PROTOCOL_VERSION = "3\.2"/);
 });

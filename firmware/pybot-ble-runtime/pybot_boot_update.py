@@ -19,6 +19,8 @@ _RUNTIME_FILES = (
     "pybot_mpy.py",
 )
 _RTBAK = ".rtbak"
+# Marcador: fase de backup del pack actual completada (contenido = hash OTA).
+_RTBAK_READY = "pybot_runtime.rtbak_ready"
 # Lectura/escritura de bodies OTA acotada (no cargar módulos enteros en RAM).
 _COPY_CHUNK = 256
 
@@ -184,10 +186,39 @@ def _install_pack_files(meta):
                 if not _copy_bytes(src, dst, sz):
                     raise OSError("pack truncated")
 
+def _clear_rtbak_ready():
+    _remove(_RTBAK_READY)
+
+def _is_rtbak_ready(hexhash):
+    """True si el marker pertenece al mismo update (mismo hash)."""
+    if not _exists(_RTBAK_READY):
+        return False
+    want = (hexhash or "").lower()
+    try:
+        with open(_RTBAK_READY, "r") as f:
+            got = (f.read() or "").strip().lower()
+        return got == want and want != ""
+    except Exception:
+        return False
+
+def _mark_rtbak_ready(hexhash):
+    try:
+        with open(_RTBAK_READY, "w") as f:
+            f.write((hexhash or "").lower())
+        return True
+    except Exception:
+        return False
+
 def _backup_runtime_files(names):
+    """
+    Backup idempotente: si name.rtbak ya existe, NO se toca.
+    Si no hay bak y el target existe, target -> bak.
+    Si ambos faltan, el archivo no existía en el runtime anterior.
+    """
     for name in names:
         bak = name + _RTBAK
-        _remove(bak)
+        if _exists(bak):
+            continue
         if _exists(name):
             if not _rename(name, bak):
                 return False
@@ -204,6 +235,12 @@ def _clear_rtbaks():
     for name in _RUNTIME_FILES:
         _remove(name + _RTBAK)
 
+def _abort_pack_update():
+    _restore_runtime_files()
+    _remove(_NEW)
+    _clear_state()
+    _clear_rtbak_ready()
+
 def _apply_pack(st, size, hexhash):
     if not _new_is_valid(size, hexhash):
         if _exists(_MAIN):
@@ -214,30 +251,35 @@ def _apply_pack(st, size, hexhash):
             if _exists(_BAK) and not _exists(_MAIN):
                 _rename(_BAK, _MAIN)
             _clear_state()
+        _clear_rtbak_ready()
         return
     # Validar pack COMPLETO antes de cualquier backup/escritura.
     meta = _validate_pack()
     if not meta:
         _remove(_NEW)
         _clear_state()
+        _clear_rtbak_ready()
         return
     names = [n for n, _ in meta]
-    if not _backup_runtime_files(names):
-        _restore_runtime_files()
-        _remove(_NEW)
-        _clear_state()
-        return
+    # Marker listo => backups del ORIGINAL ya hechos; no re-respaldar.
+    if not _is_rtbak_ready(hexhash):
+        if not _backup_runtime_files(names):
+            _abort_pack_update()
+            return
+        if not _mark_rtbak_ready(hexhash):
+            _abort_pack_update()
+            return
     try:
         _install_pack_files(meta)
     except Exception:
-        _restore_runtime_files()
-        _remove(_NEW)
-        _clear_state()
+        _abort_pack_update()
         return
     st["state"] = "applied"
     st["pack"] = 1
     _write_json(_STATE, st)
     _remove(_NEW)
+    # Tras applied durable: marker ya no hace falta (confirm no lo conoce).
+    _clear_rtbak_ready()
 
 def _do_apply_legacy(st, size, hexhash):
     if hexhash and _exists(_MAIN) and _sha256_file(_MAIN) == hexhash:
@@ -281,20 +323,24 @@ def _do_rollback(st):
         _clear_rtbaks()
         _remove(_NEW)
         _clear_state()
+        _clear_rtbak_ready()
         return
     if _exists(_BAK):
         _remove(_MAIN)
         if _rename(_BAK, _MAIN):
             _clear_state()
+            _clear_rtbak_ready()
             return
     _remove(_NEW)
     st["state"] = "rollback_failed"
     _write_json(_STATE, st)
+    _clear_rtbak_ready()
 
 def apply():
     st = _read_json(_STATE)
     if not isinstance(st, dict):
         _remove(_NEW)
+        _clear_rtbak_ready()
         return
     state = st.get("state")
     size = st.get("size")
