@@ -50,42 +50,35 @@ export async function inspectPybotOnSession(session, options = {}) {
   }
   let mpVersion = null;
   if (typeof session.execRaw === "function") {
-    try {
-      const code = [
-        "try:",
-        "    import sys",
-        "    v = sys.implementation.version",
-        "    print('PYBOT_MP', str(v[0]) + '.' + str(v[1]) + '.' + str(v[2]))",
-        "except Exception:",
-        "    print('PYBOT_MP')",
-      ].join("\n");
-      const { stdout } = await session.execRaw(code, { timeout: 5000 });
-      const m = String(stdout ?? "").match(/PYBOT_MP\s+([\d.]+)/);
-      mpVersion = m ? m[1] : null;
-    } catch {
-      mpVersion = null;
-    }
+    // execRaw reject/timeout = fallo de comunicación → propagar (no confundir con null).
+    const code = [
+      "try:",
+      "    import sys",
+      "    v = sys.implementation.version",
+      "    print('PYBOT_MP', str(v[0]) + '.' + str(v[1]) + '.' + str(v[2]))",
+      "except Exception:",
+      "    print('PYBOT_MP')",
+    ].join("\n");
+    const { stdout } = await session.execRaw(code, { timeout: 5000 });
+    const m = String(stdout ?? "").match(/PYBOT_MP\s+([\d.]+)/);
+    mpVersion = m ? m[1] : null;
   }
   let runtimeVersion = null;
   if (present.includes(PYBOT_MARKER_FILE) && typeof session.execRaw === "function") {
-    try {
-      const code = [
-        "try:",
-        "    f = open('pybot_ble.py')",
-        "    t = f.read(900)",
-        "    f.close()",
-        "    print('PYBOT_SRC', t)",
-        "except Exception:",
-        "    print('PYBOT_SRC')",
-      ].join("\n");
-      const { stdout } = await session.execRaw(code, { timeout: 8000 });
-      const text = String(stdout ?? "");
-      const idx = text.indexOf("PYBOT_SRC");
-      const src = idx >= 0 ? text.slice(idx + "PYBOT_SRC".length) : text;
-      runtimeVersion = parseRuntimeVersionFromSource(src);
-    } catch {
-      runtimeVersion = null;
-    }
+    const code = [
+      "try:",
+      "    f = open('pybot_ble.py')",
+      "    t = f.read(900)",
+      "    f.close()",
+      "    print('PYBOT_SRC', t)",
+      "except Exception:",
+      "    print('PYBOT_SRC')",
+    ].join("\n");
+    const { stdout } = await session.execRaw(code, { timeout: 8000 });
+    const text = String(stdout ?? "");
+    const idx = text.indexOf("PYBOT_SRC");
+    const src = idx >= 0 ? text.slice(idx + "PYBOT_SRC".length) : text;
+    runtimeVersion = parseRuntimeVersionFromSource(src);
   }
   const boardState = classifyBoard({
     hasMicroPython: true,

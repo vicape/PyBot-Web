@@ -187,3 +187,54 @@ test("wiring: hardwareBridge maps inspect reject to UNKNOWN/REPL, not INCOMPLETE
   const probeFn = bridge.slice(bridge.indexOf("async probeBoard"), bridge.indexOf("connectBootloader"));
   assert.doesNotMatch(probeFn, /boardState:\s*BOARD_STATE\.INCOMPLETE/);
 });
+
+// ---------------------------------------------------------------------------
+// #26 — version probes: execRaw reject ≠ version null
+// ---------------------------------------------------------------------------
+
+test("#26 mpVersion execRaw reject → reject (no null silencioso)", async () => {
+  const session = makeSession({ existsMap: allPresentMap() });
+  session.execRaw = async () => {
+    throw new Error("mp probe timeout");
+  };
+  await assert.rejects(() => inspectPybotOnSession(session), /mp probe timeout/);
+});
+
+test("#26 runtimeVersion execRaw reject → reject", async () => {
+  const session = makeSession({ existsMap: allPresentMap() });
+  let n = 0;
+  session.execRaw = async () => {
+    n += 1;
+    if (n === 1) return { stdout: "PYBOT_MP 1.27.0\n" };
+    throw new Error("runtime probe disconnected");
+  };
+  await assert.rejects(() => inspectPybotOnSession(session), /runtime probe disconnected/);
+});
+
+test("#26 stdout válido sin versión → null permitido (no reject)", async () => {
+  const session = makeSession({ existsMap: allPresentMap() });
+  session.execRaw = async () => ({ stdout: "PYBOT_MP\nPYBOT_SRC\n" });
+  const result = await inspectPybotOnSession(session);
+  assert.equal(result.mpVersion, null);
+  assert.equal(result.runtimeVersion, null);
+  // null runtime con marker presente → OLD_PYBOT (no UNKNOWN)
+  assert.equal(result.boardState, BOARD_STATE.OLD_PYBOT);
+});
+
+test("#26 runtime source válido → versión correcta", async () => {
+  const session = makeSession({ existsMap: allPresentMap() });
+  session.execRaw = async () => ({
+    stdout: `PYBOT_MP 1.27.0\nPYBOT_SRC PYBOT_RUNTIME_VERSION = "${PYBOT_RUNTIME_VERSION}"\n`,
+  });
+  const result = await inspectPybotOnSession(session);
+  assert.equal(result.mpVersion, "1.27.0");
+  assert.equal(result.runtimeVersion, PYBOT_RUNTIME_VERSION);
+  assert.equal(result.boardState, BOARD_STATE.READY);
+});
+
+test("#26 no catch silencioso en boardProbe version probes", () => {
+  const src = readFileSync(join(root, "src/esp32/boardProbe.js"), "utf8");
+  const fn = src.slice(src.indexOf("export async function inspectPybotOnSession"));
+  assert.doesNotMatch(fn, /catch\s*\{\s*mpVersion = null/);
+  assert.doesNotMatch(fn, /catch\s*\{\s*runtimeVersion = null/);
+});
