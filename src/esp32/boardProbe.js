@@ -44,12 +44,9 @@ export function classifyBoard(info) {
 export async function inspectPybotOnSession(session, options = {}) {
   const names = options.files ?? expectedProvisionFiles();
   const present = [];
+  // fileExists(false) = ausente real; reject = fallo de comunicación (no tratar como missing).
   for (const name of names) {
-    try {
-      if (await session.fileExists(name)) present.push(name);
-    } catch {
-      /* ignore individual stat failures */
-    }
+    if (await session.fileExists(name)) present.push(name);
   }
   let mpVersion = null;
   if (typeof session.execRaw === "function") {
