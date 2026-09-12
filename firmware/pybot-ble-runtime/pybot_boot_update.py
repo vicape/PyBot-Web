@@ -5,6 +5,8 @@ _MAIN = "main.py"
 _NEW = "pybot_runtime.new"
 _BAK = "pybot_runtime.bak"
 _STATE = "pybot_update.json"
+# Sidecar durable del commit applied (antes de reescribir pybot_update.json).
+_APPLIED = "pybot_update.applied"
 _PACK_MAGIC = b"PYBOTRT1\n"
 _RUNTIME_FILES = (
     "main.py",
@@ -91,6 +93,82 @@ def _sha256_file(path):
 
 def _clear_state():
     _remove(_STATE)
+
+def _clear_applied_sidecar():
+    _remove(_APPLIED)
+
+def _read_rtbak_ready_hash():
+    if not _exists(_RTBAK_READY):
+        return ""
+    try:
+        with open(_RTBAK_READY, "r") as f:
+            return (f.read() or "").strip().lower()
+    except Exception:
+        return ""
+
+def _commit_pack_applied(st):
+    """
+    Commit pending→applied tolerante a power-loss.
+    1) sidecar applied verificado
+    2) state principal
+    3) limpiar .new / markers
+    Si el state queda corrupto, el sidecar permite recuperar en el próximo boot.
+    """
+    st["state"] = "applied"
+    st["pack"] = 1
+    if not _write_json(_APPLIED, st):
+        return False
+    if _read_json(_APPLIED) is None:
+        _clear_applied_sidecar()
+        return False
+    if not _write_json(_STATE, st):
+        return False
+    if _read_json(_STATE) is None:
+        # State ilegible; sidecar intacto → recuperación en próximo boot.
+        return False
+    _remove(_NEW)
+    _clear_rtbak_ready()
+    _clear_applied_sidecar()
+    return True
+
+def _finish_applied_from_sidecar(side):
+    """Restaura state=applied desde sidecar sin rollback en el mismo boot."""
+    if not _write_json(_STATE, side):
+        return False
+    if _read_json(_STATE) is None:
+        return False
+    _remove(_NEW)
+    _clear_rtbak_ready()
+    _clear_applied_sidecar()
+    return True
+
+def _try_recover_missing_state():
+    """
+    state ilegible/ausente:
+      - sidecar applied válido → completar commit (NEW queda, confirm posible)
+      - rtbak_ready + .new → reconstruir pending y reintentar apply
+      - si no → limpiar huérfanos
+    Devuelve st dict o None (ya manejado / nada que hacer).
+    """
+    side = _read_json(_APPLIED)
+    if isinstance(side, dict) and side.get("state") == "applied":
+        if _finish_applied_from_sidecar(side):
+            return None  # applied durable; main puede confirmar
+        return None
+    ready_hash = _read_rtbak_ready_hash()
+    if ready_hash and _exists(_NEW):
+        st = {
+            "state": "pending",
+            "size": _size(_NEW),
+            "hash": ready_hash,
+            "pack": 1,
+        }
+        _write_json(_STATE, st)
+        return st
+    _remove(_NEW)
+    _clear_rtbak_ready()
+    _clear_applied_sidecar()
+    return None
 
 def _new_is_valid(size, hexhash):
     if not _exists(_NEW):
@@ -240,6 +318,7 @@ def _abort_pack_update():
     _remove(_NEW)
     _clear_state()
     _clear_rtbak_ready()
+    _clear_applied_sidecar()
 
 def _apply_pack(st, size, hexhash):
     if not _new_is_valid(size, hexhash):
@@ -252,6 +331,7 @@ def _apply_pack(st, size, hexhash):
                 _rename(_BAK, _MAIN)
             _clear_state()
         _clear_rtbak_ready()
+        _clear_applied_sidecar()
         return
     # Validar pack COMPLETO antes de cualquier backup/escritura.
     meta = _validate_pack()
@@ -259,6 +339,7 @@ def _apply_pack(st, size, hexhash):
         _remove(_NEW)
         _clear_state()
         _clear_rtbak_ready()
+        _clear_applied_sidecar()
         return
     names = [n for n, _ in meta]
     # Marker listo => backups del ORIGINAL ya hechos; no re-respaldar.
@@ -274,12 +355,7 @@ def _apply_pack(st, size, hexhash):
     except Exception:
         _abort_pack_update()
         return
-    st["state"] = "applied"
-    st["pack"] = 1
-    _write_json(_STATE, st)
-    _remove(_NEW)
-    # Tras applied durable: marker ya no hace falta (confirm no lo conoce).
-    _clear_rtbak_ready()
+    _commit_pack_applied(st)
 
 def _do_apply_legacy(st, size, hexhash):
     if hexhash and _exists(_MAIN) and _sha256_file(_MAIN) == hexhash:
@@ -324,28 +400,36 @@ def _do_rollback(st):
         _remove(_NEW)
         _clear_state()
         _clear_rtbak_ready()
+        _clear_applied_sidecar()
         return
     if _exists(_BAK):
         _remove(_MAIN)
         if _rename(_BAK, _MAIN):
             _clear_state()
             _clear_rtbak_ready()
+            _clear_applied_sidecar()
             return
     _remove(_NEW)
     st["state"] = "rollback_failed"
     _write_json(_STATE, st)
     _clear_rtbak_ready()
+    _clear_applied_sidecar()
 
 def apply():
     st = _read_json(_STATE)
     if not isinstance(st, dict):
-        _remove(_NEW)
-        _clear_rtbak_ready()
-        return
+        st = _try_recover_missing_state()
+        if not isinstance(st, dict):
+            return
     state = st.get("state")
     size = st.get("size")
     hexhash = (st.get("hash") or "").lower()
     if state == "pending":
+        # Sidecar applied ya durable: completar commit sin re-instalar.
+        side = _read_json(_APPLIED)
+        if isinstance(side, dict) and side.get("state") == "applied":
+            _finish_applied_from_sidecar(side)
+            return
         _do_apply(st, size, hexhash)
     elif state == "applied":
         _do_rollback(st)

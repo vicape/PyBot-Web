@@ -26,6 +26,7 @@ const MAIN = "main.py";
 const NEW = "pybot_runtime.new";
 const BAK = "pybot_runtime.bak";
 const STATE = "pybot_update.json";
+const APPLIED = "pybot_update.applied";
 const APP = "pybot_app.py";
 const APP_META = "pybot_app.json";
 const PACK_MAGIC = "PYBOTRT1\n";
@@ -222,10 +223,6 @@ function _installPackFiles(fs, meta, stats, opts = {}) {
   }
 }
 
-function _clearRtbakReady(fs) {
-  fs.remove(RTBAK_READY);
-}
-
 function _isRtbakReady(fs, hash) {
   if (!fs.exists(RTBAK_READY)) return false;
   const want = String(hash || "").toLowerCase();
@@ -268,11 +265,68 @@ function _clearRtbaks(fs) {
   for (const name of RUNTIME_FILES) fs.remove(name + RTBAK);
 }
 
+function _clearRtbakReady(fs) {
+  fs.remove(RTBAK_READY);
+}
+
+function _clearApplied(fs) {
+  fs.remove(APPLIED);
+}
+
 function _abortPack(fs) {
   _restoreRuntime(fs);
   fs.remove(NEW);
   fs.remove(STATE);
   _clearRtbakReady(fs);
+  _clearApplied(fs);
+}
+
+function _commitPackApplied(fs, st, opts = {}) {
+  st.state = "applied";
+  st.pack = 1;
+  if (opts.cutBeforeAppliedSidecar) throw new PowerCutError("cut before applied sidecar");
+  fs.writeJson(APPLIED, st);
+  if (opts.cutAfterAppliedSidecar) throw new PowerCutError("cut after applied sidecar");
+  if (opts.corruptStateWrite) {
+    // Simula power-loss a mitad del write del state principal.
+    fs.files.set(STATE, '{"state":"appl');
+    throw new PowerCutError("cut during state write");
+  }
+  fs.writeJson(STATE, st);
+  if (opts.cutAfterStateWrite) throw new PowerCutError("cut after state write");
+  fs.remove(NEW);
+  if (opts.cutAfterRemoveNew) throw new PowerCutError("cut after remove new");
+  _clearRtbakReady(fs);
+  if (opts.cutAfterClearReady) throw new PowerCutError("cut after clear ready");
+  _clearApplied(fs);
+}
+
+function _finishAppliedFromSidecar(fs, side) {
+  fs.writeJson(STATE, side);
+  fs.remove(NEW);
+  _clearRtbakReady(fs);
+  _clearApplied(fs);
+  return true;
+}
+
+function _tryRecoverMissingState(fs) {
+  const side = fs.readJson(APPLIED);
+  if (side && side.state === "applied") {
+    _finishAppliedFromSidecar(fs, side);
+    return null;
+  }
+  if (fs.exists(RTBAK_READY) && fs.exists(NEW)) {
+    const readyHash = String(fs.get(RTBAK_READY) || "").trim().toLowerCase();
+    if (readyHash) {
+      const st = { state: "pending", size: fs.size(NEW), hash: readyHash, pack: 1 };
+      fs.writeJson(STATE, st);
+      return st;
+    }
+  }
+  fs.remove(NEW);
+  _clearRtbakReady(fs);
+  _clearApplied(fs);
+  return null;
 }
 
 function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
@@ -290,6 +344,7 @@ function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
       fs.remove(STATE);
     }
     _clearRtbakReady(fs);
+    _clearApplied(fs);
     return;
   }
   if (stats) stats.order.push("validate");
@@ -298,6 +353,7 @@ function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
     fs.remove(NEW);
     fs.remove(STATE);
     _clearRtbakReady(fs);
+    _clearApplied(fs);
     return;
   }
   const names = meta.map(([n]) => n);
@@ -318,11 +374,8 @@ function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
     _abortPack(fs);
     return;
   }
-  st.state = "applied";
-  st.pack = 1;
-  fs.writeJson(STATE, st);
-  fs.remove(NEW);
-  _clearRtbakReady(fs);
+  if (stats) stats.order.push("commit");
+  _commitPackApplied(fs, st, opts);
 }
 
 function _doApplyLegacy(fs, st, size, hash, hasHashlib) {
@@ -374,6 +427,7 @@ function _doRollback(fs, st) {
     fs.remove(NEW);
     fs.remove(STATE);
     _clearRtbakReady(fs);
+    _clearApplied(fs);
     return;
   }
   if (fs.exists(BAK)) {
@@ -381,6 +435,7 @@ function _doRollback(fs, st) {
     if (fs.rename(BAK, MAIN)) {
       fs.remove(STATE);
       _clearRtbakReady(fs);
+      _clearApplied(fs);
       return;
     }
   }
@@ -388,21 +443,29 @@ function _doRollback(fs, st) {
   st.state = "rollback_failed";
   fs.writeJson(STATE, st);
   _clearRtbakReady(fs);
+  _clearApplied(fs);
 }
 
 /** Mirror de boot.py `_boot_apply_update` (corre ANTES de main.py en cada boot). */
 function boot(fs, { hasHashlib = true, ...opts } = {}) {
-  const st = fs.readJson(STATE);
+  let st = fs.readJson(STATE);
   if (!st || typeof st !== "object") {
-    fs.remove(NEW); // limpiar .new huérfano de una descarga cortada
-    _clearRtbakReady(fs);
-    return;
+    st = _tryRecoverMissingState(fs);
+    if (!st || typeof st !== "object") return;
   }
   const state = st.state;
   const size = st.size ?? null;
   const hash = (st.hash || "").toLowerCase();
-  if (state === "pending") _doApply(fs, st, size, hash, hasHashlib, opts);
-  else if (state === "applied") _doRollback(fs, st);
+  if (state === "pending") {
+    const side = fs.readJson(APPLIED);
+    if (side && side.state === "applied") {
+      _finishAppliedFromSidecar(fs, side);
+      return;
+    }
+    _doApply(fs, st, size, hash, hasHashlib, opts);
+  } else if (state === "applied") {
+    _doRollback(fs, st);
+  }
 }
 
 /** Mirror de `_confirm_update_if_pending` (tras BLE+GATT operacionales). */
@@ -973,7 +1036,7 @@ test("#17 orden: validate completo BEFORE backup BEFORE write", () => {
   const fs = new Fs({ [MAIN]: OLD, "pybot_ble.py": "B\n", [NEW]: pack });
   webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
   boot(fs, { stats });
-  assert.deepEqual(stats.order, ["validate", "backup", "mark", "write"]);
+  assert.deepEqual(stats.order, ["validate", "backup", "mark", "write", "commit"]);
 });
 
 test("#17 SHA exterior incorrecto aborta antes de parse/apply", () => {
@@ -1304,4 +1367,108 @@ test("#27 UTF-8 + student app + state contract + versiones", () => {
   const ble = readFileSync(join(__dirname, "..", "firmware/pybot-ble-runtime/pybot_ble.py"), "utf8");
   assert.match(ble, /PYBOT_RUNTIME_VERSION = "4\.0\.6"/);
   assert.match(ble, /PYBOT_PROTOCOL_VERSION = "3\.2"/);
+});
+
+// ---------------------------------------------------------------------------
+// #28 — commit pending→applied power-loss safe
+// ---------------------------------------------------------------------------
+
+test("#28 corte antes de sidecar applied: reentrada completa; .rtbak OLD intactos", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutBeforeAppliedSidecar: true }), true);
+  assert.equal(fs.readJson(STATE).state, "pending");
+  assert.equal(fs.exists(APPLIED), false);
+  const h = { main: bakHash(fs, MAIN), ble: bakHash(fs, "pybot_ble.py") };
+  boot(fs);
+  assert.equal(bakHash(fs, MAIN), h.main);
+  assert.equal(bakHash(fs, "pybot_ble.py"), h.ble);
+  assert.equal(fs.readJson(STATE).state, "applied");
+  assert.equal(fs.exists(APPLIED), false);
+});
+
+test("#28 corte a mitad del write de state: sidecar recupera applied (fallaba en 83e780e)", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { corruptStateWrite: true }), true);
+  // State corrupto; sidecar applied válido; backups OLD.
+  assert.equal(fs.readJson(STATE), null);
+  assert.equal(fs.readJson(APPLIED).state, "applied");
+  assert.equal(fs.get(MAIN + RTBAK), "OLD_MAIN\n");
+  const h = bakHash(fs, MAIN);
+  // En 83e780e: boot limpiaba .new/marker y perdía rollback. Ahora recupera applied.
+  boot(fs);
+  assert.equal(fs.readJson(STATE).state, "applied");
+  assert.equal(fs.exists(APPLIED), false);
+  assert.equal(bakHash(fs, MAIN), h);
+  assert.equal(fs.get(MAIN), "NEW_MAIN_CONTENT_AAAA\n");
+  // Confirm funciona
+  confirmBoot(fs);
+  assert.equal(fs.exists(STATE), false);
+  assert.equal(fs.exists(MAIN + RTBAK), false);
+  assert.equal(fs.get(MAIN), "NEW_MAIN_CONTENT_AAAA\n");
+});
+
+test("#28 corte después de state durable: applied + rollback sin confirm", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutAfterStateWrite: true }), true);
+  assert.equal(fs.readJson(STATE).state, "applied");
+  assert.equal(fs.get(MAIN + RTBAK), "OLD_MAIN\n");
+  const h = bakHash(fs, MAIN);
+  boot(fs); // applied → rollback
+  assert.equal(fs.get(MAIN), "OLD_MAIN\n");
+  assert.equal(bakHash(fs, MAIN), null);
+  assert.equal(fs.exists(STATE), false);
+  assert.equal(fs.exists(APPLIED), false);
+  assert.equal(h, sha256Hex(new TextEncoder().encode("OLD_MAIN\n")));
+});
+
+test("#28 corte después de quitar .new / clear ready: markers no stale", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutAfterRemoveNew: true }), true);
+  assert.equal(fs.exists(NEW), false);
+  assert.equal(fs.readJson(STATE).state, "applied");
+  boot(fs);
+  assert.equal(fs.get(MAIN), "OLD_MAIN\n");
+  assert.equal(fs.exists(RTBAK_READY), false);
+  assert.equal(fs.exists(APPLIED), false);
+
+  const fs2 = boardForPack27(pack);
+  webApply(fs2, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs2, { cutAfterClearReady: true }), true);
+  assert.equal(fs2.exists(RTBAK_READY), false);
+  assert.equal(fs2.exists(APPLIED), true);
+  boot(fs2);
+  assert.equal(fs2.get(MAIN), "OLD_MAIN\n");
+  assert.equal(fs2.exists(APPLIED), false);
+});
+
+test("#28 pending+sidecar: completa commit sin re-backup", () => {
+  const pack = packThree();
+  const fs = boardForPack27(pack);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutAfterAppliedSidecar: true }), true);
+  assert.equal(fs.readJson(STATE).state, "pending");
+  assert.equal(fs.readJson(APPLIED).state, "applied");
+  const h = bakHash(fs, MAIN);
+  const stats = {};
+  boot(fs, { stats });
+  assert.equal(fs.readJson(STATE).state, "applied");
+  assert.equal(bakHash(fs, MAIN), h);
+  // No reinstaló (finish from sidecar) — order vacío o sin backup
+  assert.ok(!stats.order || !stats.order.includes("backup"));
+});
+
+test("#28 firmware expone sidecar applied", () => {
+  const src = readFileSync(FW_BOOT_UPDATE, "utf8");
+  assert.match(src, /_APPLIED\s*=\s*"pybot_update\.applied"/);
+  assert.match(src, /def _commit_pack_applied/);
+  assert.match(src, /def _try_recover_missing_state/);
+  assert.match(src, /_COPY_CHUNK\s*=\s*256/);
 });
