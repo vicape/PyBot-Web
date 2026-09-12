@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { MicroPythonSession } from "../src/micropythonEsp32Session.js";
 import { BYTE_CTRL_C } from "../src/micropython/constants.js";
 import { FakeMicroPythonTransport } from "./helpers/fakeMicroPython.mjs";
@@ -158,4 +159,288 @@ test("wrap includes _pybot_cleanup in the program sent to the board", async () =
   const sent = board.writes.map((w) => new TextDecoder().decode(w)).join("");
   assert.match(sent, /_pybot_cleanup/);
   await s.close();
+});
+
+/* ------------------------------------------------------------------ */
+/* Punto 9: installFile atómico (temp → verify → commit / rollback)   */
+/* ------------------------------------------------------------------ */
+
+const ENC = new TextEncoder();
+const DEC = new TextDecoder();
+
+function b64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/**
+ * Simula el subset de scripts que installFile envía al REPL.
+ * @param {Map<string, Uint8Array>} fs
+ * @param {string} code
+ * @param {{ failMode?: string, chunkCount?: { n: number }, onChunk?: Function }} hooks
+ */
+function simulateInstallScript(fs, code, hooks = {}) {
+  const scripts = hooks.scripts;
+  if (scripts) scripts.push(code);
+
+  if (/open\('([^']+)', 'wb'\)/.test(code) && /__pybot_tmp/.test(code) && !/os\.rename/.test(code)) {
+    const m = code.match(/open\('([^']+)', 'wb'\)/);
+    const temp = m[1];
+    fs.set(temp, new Uint8Array(0));
+    return { stdout: "PYBOT_INSTALL_OK\n", stderr: "" };
+  }
+
+  if (/a2b_base64\('([^']*)'\)/.test(code)) {
+    hooks.chunkCount.n = (hooks.chunkCount.n || 0) + 1;
+    if (hooks.failMode === "chunk1" && hooks.chunkCount.n === 1) {
+      throw new Error("REPL_TIMEOUT");
+    }
+    if (hooks.failMode === "chunkMid" && hooks.chunkCount.n === 2) {
+      throw new Error("REPL_TIMEOUT");
+    }
+    const temp = code.match(/open\('([^']+)', 'ab'\)/)[1];
+    const b64 = code.match(/a2b_base64\('([^']*)'\)/)[1];
+    const piece = b64ToBytes(b64);
+    const prev = fs.get(temp) || new Uint8Array(0);
+    const next = new Uint8Array(prev.length + piece.length);
+    next.set(prev);
+    next.set(piece, prev.length);
+    fs.set(temp, next);
+    if (hooks.onChunk) hooks.onChunk(hooks.chunkCount.n, temp, fs);
+    return { stdout: "PYBOT_INSTALL_OK\n", stderr: "" };
+  }
+
+  if (/os\.rename/.test(code) && /PYBOT_INSTALL_/.test(code)) {
+    const T = code.match(/T='([^']+)'/)[1];
+    const F = code.match(/F='([^']+)'/)[1];
+    const B = code.match(/B='([^']+)'/)[1];
+    const E = Number(code.match(/E=(\d+)/)[1]);
+    const sz = (p) => (fs.has(p) ? fs.get(p).length : -1);
+    const rm = (p) => fs.delete(p);
+
+    if (hooks.failMode === "verifySize") {
+      // Corrupt temp size without touching final.
+      fs.set(T, new Uint8Array(Math.max(0, E - 1)));
+    }
+
+    if (sz(T) !== E) {
+      rm(T);
+      return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
+    }
+
+    const had = fs.has(F);
+    if (!had) {
+      if (hooks.failMode === "renameFinal") {
+        return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
+      }
+      fs.set(F, fs.get(T));
+      rm(T);
+      if (hooks.failMode === "verifyFinal" || sz(F) !== E) {
+        rm(F);
+        return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
+      }
+      return { stdout: "PYBOT_INSTALL_OK\n", stderr: "" };
+    }
+
+    rm(B);
+    fs.set(B, fs.get(F));
+    rm(F);
+    if (hooks.failMode === "renameFinal") {
+      // Restore backup like firmware script.
+      fs.set(F, fs.get(B));
+      rm(B);
+      rm(T);
+      return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
+    }
+    fs.set(F, fs.get(T));
+    rm(T);
+    if (hooks.failMode === "verifyFinal") {
+      fs.set(F, new Uint8Array(E > 0 ? E - 1 : 1));
+    }
+    if (sz(F) !== E) {
+      rm(F);
+      if (fs.has(B)) {
+        fs.set(F, fs.get(B));
+        rm(B);
+      }
+      return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
+    }
+    rm(B);
+    return { stdout: "PYBOT_INSTALL_OK\n", stderr: "" };
+  }
+
+  if (/os\.remove\('([^']+__pybot_tmp)'\)/.test(code) && !/os\.rename/.test(code)) {
+    const m = code.match(/os\.remove\('([^']+__pybot_tmp)'\)/);
+    if (m) fs.delete(m[1]);
+    return { stdout: "PYBOT_INSTALL_OK\n", stderr: "" };
+  }
+
+  return { stdout: "PYBOT_INSTALL_OK\n", stderr: "" };
+}
+
+async function installSession(initialFiles = {}, hooks = {}) {
+  const fs = new Map();
+  for (const [k, v] of Object.entries(initialFiles)) {
+    fs.set(k, typeof v === "string" ? ENC.encode(v) : v);
+  }
+  hooks.chunkCount = hooks.chunkCount || { n: 0 };
+  hooks.scripts = hooks.scripts || [];
+  const board = new FakeMicroPythonTransport();
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  s.execRaw = async (code) => simulateInstallScript(fs, code, hooks);
+  return { s, fs, hooks, board };
+}
+
+function fsText(fs, path) {
+  const b = fs.get(path);
+  return b ? DEC.decode(b) : null;
+}
+
+test("installFile: replaces existing via temp without truncating final early", async () => {
+  const { s, fs, hooks } = await installSession({ "EDA6.py": "OLD" });
+  const progress = [];
+  await s.installFile("EDA6.py", "NEW CONTENT", {
+    onProgress: (info) => progress.push(info),
+  });
+  assert.equal(fsText(fs, "EDA6.py"), "NEW CONTENT");
+  assert.equal(fs.has("EDA6.py.__pybot_tmp"), false);
+  assert.equal(fs.has("EDA6.py.__pybot_bak"), false);
+  assert.ok(hooks.scripts.some((c) => /__pybot_tmp/.test(c) && /'wb'/.test(c)));
+  assert.ok(hooks.scripts.every((c) => !/open\('EDA6\.py', 'wb'\)/.test(c)));
+  assert.ok(hooks.scripts.every((c) => !/open\('EDA6\.py', 'ab'\)/.test(c)));
+  assert.ok(progress.length >= 1);
+  assert.equal(typeof progress[0].done, "number");
+  assert.equal(typeof progress[0].total, "number");
+  assert.equal(typeof progress[0].pct, "number");
+  assert.equal(progress[0].total, progress.length || progress[0].total);
+  await s.close();
+});
+
+test("installFile: chunk failure leaves previous final intact", async () => {
+  const { s, fs } = await installSession({ "main.py": "KEEP" }, { failMode: "chunk1" });
+  await assert.rejects(() => s.installFile("main.py", "x".repeat(2000)), /REPL_TIMEOUT|INSTALL_FAIL/);
+  assert.equal(fsText(fs, "main.py"), "KEEP");
+  assert.ok(!fs.has("main.py") || fsText(fs, "main.py") === "KEEP");
+  await s.close();
+});
+
+test("installFile: mid-transfer failure leaves previous final intact", async () => {
+  const big = "Z".repeat(2000);
+  const { s, fs } = await installSession({ "pybot_ble.py": "KEEP_BLE" }, { failMode: "chunkMid" });
+  await assert.rejects(() => s.installFile("pybot_ble.py", big), /REPL_TIMEOUT|INSTALL_FAIL/);
+  assert.equal(fsText(fs, "pybot_ble.py"), "KEEP_BLE");
+  await s.close();
+});
+
+test("installFile: bad temp size does not commit", async () => {
+  const { s, fs } = await installSession({ "EDA6.py": "OLD" }, { failMode: "verifySize" });
+  await assert.rejects(() => s.installFile("EDA6.py", "NEW"), /INSTALL_FAIL/);
+  assert.equal(fsText(fs, "EDA6.py"), "OLD");
+  assert.equal(fs.has("EDA6.py.__pybot_tmp"), false);
+  await s.close();
+});
+
+test("installFile: rename temp->final failure restores backup", async () => {
+  const { s, fs } = await installSession({ "EDA6.py": "OLD" }, { failMode: "renameFinal" });
+  await assert.rejects(() => s.installFile("EDA6.py", "NEW"), /INSTALL_FAIL/);
+  assert.equal(fsText(fs, "EDA6.py"), "OLD");
+  await s.close();
+});
+
+test("installFile: final verify failure restores backup", async () => {
+  const { s, fs } = await installSession({ "EDA6.py": "OLD" }, { failMode: "verifyFinal" });
+  await assert.rejects(() => s.installFile("EDA6.py", "NEW"), /INSTALL_FAIL/);
+  assert.equal(fsText(fs, "EDA6.py"), "OLD");
+  await s.close();
+});
+
+test("installFile: new file without prior final", async () => {
+  const { s, fs } = await installSession();
+  await s.installFile("fresh.py", "hello");
+  assert.equal(fsText(fs, "fresh.py"), "hello");
+  assert.equal(fs.has("fresh.py.__pybot_tmp"), false);
+  await s.close();
+});
+
+test("installFile: empty content installs size 0", async () => {
+  const { s, fs } = await installSession();
+  await s.installFile("empty.py", "");
+  assert.ok(fs.has("empty.py"));
+  assert.equal(fs.get("empty.py").length, 0);
+  await s.close();
+});
+
+test("installFile: UTF-8 multibyte uses byte length not string length", async () => {
+  const content = "áéñ — ESP32";
+  const expected = ENC.encode(content).length;
+  assert.notEqual(expected, content.length);
+  const { s, fs, hooks } = await installSession();
+  await s.installFile("utf8.py", content);
+  assert.equal(fs.get("utf8.py").length, expected);
+  assert.equal(fsText(fs, "utf8.py"), content);
+  const commit = hooks.scripts.find((c) => /E=\d+/.test(c) && /os\.rename/.test(c));
+  assert.ok(commit);
+  assert.match(commit, new RegExp(`E=${expected}`));
+  await s.close();
+});
+
+test("installFile: obsolete temp is cleared without touching final", async () => {
+  const { s, fs, hooks } = await installSession({
+    "EDA6.py": "OLD",
+    "EDA6.py.__pybot_tmp": "STALE",
+  });
+  await s.installFile("EDA6.py", "NEW");
+  assert.equal(fsText(fs, "EDA6.py"), "NEW");
+  assert.ok(hooks.scripts[0].includes("os.remove('EDA6.py.__pybot_tmp')"));
+  assert.ok(hooks.scripts.every((c) => !/open\('EDA6\.py', 'wb'\)/.test(c)));
+  await s.close();
+});
+
+test("installFile: progress remains chunk-based", async () => {
+  const content = "A".repeat(1500); // enough for >1 b64 chunk of 1024
+  const { s } = await installSession();
+  const progress = [];
+  await s.installFile("big.py", content, { onProgress: (p) => progress.push({ ...p }) });
+  assert.ok(progress.length >= 2);
+  assert.equal(progress[0].done, 1);
+  assert.equal(progress[progress.length - 1].done, progress[0].total);
+  assert.equal(progress[0].total, progress[progress.length - 1].total);
+  for (const p of progress) {
+    assert.equal(p.pct, Math.round((p.done / p.total) * 100));
+  }
+  await s.close();
+});
+
+test("installFile: structural guards (no full read, temp suffixes, no version/firmware touch)", async () => {
+  const src = readFileSync(
+    new URL("../src/micropython/micropythonSession.js", import.meta.url),
+    "utf8",
+  );
+  const fn = src.slice(src.indexOf("async installFile("), src.indexOf("async syncFilesystem("));
+  assert.match(fn, /\.__pybot_tmp/);
+  assert.match(fn, /\.__pybot_bak/);
+  assert.match(fn, /os\.stat\(p\)\[6\]/);
+  assert.doesNotMatch(fn, /open\([^)]+\)\.read\(/);
+  assert.doesNotMatch(fn, /\.read\(\)/);
+  assert.match(fn, /CHUNK = 1024/);
+  assert.match(fn, /bytes\.length/);
+
+  const { s, hooks } = await installSession({ "x.py": "1" });
+  await s.installFile("x.py", "22");
+  const joined = hooks.scripts.join("\n");
+  assert.doesNotMatch(joined, /open\([^)]*\)\.read\(/);
+  assert.match(joined, /__pybot_tmp/);
+  assert.match(joined, /__pybot_bak/);
+  await s.close();
+
+  // No tocar fixes recientes de firmware/version en este cambio.
+  const ble = readFileSync(
+    new URL("../firmware/pybot-ble-runtime/pybot_ble.py", import.meta.url),
+    "utf8",
+  );
+  assert.match(ble, /PYBOT_RUNTIME_VERSION = "4\.0\.6"/);
+  assert.match(ble, /BUILTIN_LED_PIN = None/);
 });

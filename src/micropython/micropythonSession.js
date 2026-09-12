@@ -236,31 +236,134 @@ export class MicroPythonSession {
     for (let i = 0; i < b64.length; i += CHUNK) {
       chunks.push(b64.slice(i, i + CHUNK));
     }
-    const safePath = String(path).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const esc = (p) => String(p).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const safeFinal = esc(path);
+    const safeTemp = esc(path + ".__pybot_tmp");
+    const safeBak = esc(path + ".__pybot_bak");
+    const expected = bytes.length;
 
+    // Transferencia SOLO a temp; el final no se toca hasta el commit.
     await this.execRaw(
-      `with open('${safePath}', 'wb') as f:\n    pass\nprint('PYBOT_INSTALL_OK')`,
+      [
+        "import os",
+        "try:",
+        `    os.remove('${safeTemp}')`,
+        "except OSError:",
+        "    pass",
+        `with open('${safeTemp}', 'wb') as f:`,
+        "    pass",
+        "print('PYBOT_INSTALL_OK')",
+      ].join("\n"),
       { timeout: 8000 },
     );
 
     const total = chunks.length || 1;
     let done = 0;
-    for (const chunk of chunks) {
-      const safeChunk = chunk.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-      const code = [
-        "import ubinascii",
-        `with open('${safePath}', 'ab') as f:`,
-        `    f.write(ubinascii.a2b_base64('${safeChunk}'))`,
-        "print('PYBOT_INSTALL_OK')",
-      ].join("\n");
-      const { stdout } = await this.execRaw(code, { timeout: 15000 });
-      if (!stdout.includes("PYBOT_INSTALL_OK")) {
-        throw new Error("INSTALL_FAIL");
+    try {
+      for (const chunk of chunks) {
+        const safeChunk = chunk.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+        const code = [
+          "import ubinascii",
+          `with open('${safeTemp}', 'ab') as f:`,
+          `    f.write(ubinascii.a2b_base64('${safeChunk}'))`,
+          "print('PYBOT_INSTALL_OK')",
+        ].join("\n");
+        const { stdout } = await this.execRaw(code, { timeout: 15000 });
+        if (!stdout.includes("PYBOT_INSTALL_OK")) {
+          throw new Error("INSTALL_FAIL");
+        }
+        done += 1;
+        if (onProgress) {
+          onProgress({ done, total, pct: Math.round((done / total) * 100) });
+        }
       }
-      done += 1;
-      if (onProgress) {
-        onProgress({ done, total, pct: Math.round((done / total) * 100) });
+    } catch (e) {
+      try {
+        await this.execRaw(
+          [
+            "import os",
+            "try:",
+            `    os.remove('${safeTemp}')`,
+            "except OSError:",
+            "    pass",
+            "print('PYBOT_INSTALL_OK')",
+          ].join("\n"),
+          { timeout: 8000 },
+        );
+      } catch {
+        /* best-effort temp cleanup; final intacto */
       }
+      throw e;
+    }
+
+    // Verify temp size + safe commit (backup/rollback si final existia).
+    const commit = [
+      "import os",
+      `T='${safeTemp}'`,
+      `F='${safeFinal}'`,
+      `B='${safeBak}'`,
+      `E=${expected}`,
+      "def _sz(p):",
+      "    return os.stat(p)[6]",
+      "def _sync():",
+      "    try:",
+      "        os.sync()",
+      "    except (AttributeError, ImportError):",
+      "        pass",
+      "def _rm(p):",
+      "    try:",
+      "        os.remove(p)",
+      "    except OSError:",
+      "        pass",
+      "try:",
+      "    if _sz(T) != E:",
+      "        _rm(T)",
+      "        print('PYBOT_INSTALL_FAIL')",
+      "    else:",
+      "        _sync()",
+      "        had = True",
+      "        try:",
+      "            os.stat(F)",
+      "        except OSError:",
+      "            had = False",
+      "        if not had:",
+      "            os.rename(T, F)",
+      "            if _sz(F) != E:",
+      "                _rm(F)",
+      "                print('PYBOT_INSTALL_FAIL')",
+      "            else:",
+      "                _sync()",
+      "                print('PYBOT_INSTALL_OK')",
+      "        else:",
+      "            _rm(B)",
+      "            os.rename(F, B)",
+      "            try:",
+      "                os.rename(T, F)",
+      "            except Exception:",
+      "                try:",
+      "                    os.rename(B, F)",
+      "                except OSError:",
+      "                    pass",
+      "                _rm(T)",
+      "                print('PYBOT_INSTALL_FAIL')",
+      "            else:",
+      "                if _sz(F) != E:",
+      "                    _rm(F)",
+      "                    try:",
+      "                        os.rename(B, F)",
+      "                    except OSError:",
+      "                        pass",
+      "                    print('PYBOT_INSTALL_FAIL')",
+      "                else:",
+      "                    _sync()",
+      "                    _rm(B)",
+      "                    print('PYBOT_INSTALL_OK')",
+      "except Exception:",
+      "    print('PYBOT_INSTALL_FAIL')",
+    ].join("\n");
+    const { stdout } = await this.execRaw(commit, { timeout: 15000 });
+    if (!stdout.includes("PYBOT_INSTALL_OK")) {
+      throw new Error("INSTALL_FAIL");
     }
   }
 
