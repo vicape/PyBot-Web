@@ -136,14 +136,39 @@ export class Esp32SerialAdapter {
     return res;
   }
 
-  _gpio(pinId) {
+  /**
+   * Valida GPIO para ESP32 clásico (adaptador experimental sin detección de chip).
+   * Restricciones universalmente seguras:
+   *   - sin pines de flash SPI (6–11) ni huecos inexistentes (20,24,28–31)
+   *   - 34/35/36/39 solo input (no PWM/servo/salida)
+   *   - ADC solo en pines con canal ADC real
+   * @param {string|number} pinId
+   * @param {"any"|"output"|"pwm"|"servo"|"adc"} [mode]
+   */
+  _gpio(pinId, mode = "any") {
     const n = parseInt(String(pinId), 10);
     if (Number.isNaN(n) || n < 0 || n > 39) throw new Error("INVALID_PIN");
+    // Flash SPI / no bonding en ESP32-WROOM clásico.
+    if ([6, 7, 8, 9, 10, 11, 20, 24, 28, 29, 30, 31].includes(n)) {
+      throw new Error("INVALID_PIN");
+    }
+    if (
+      (mode === "output" || mode === "pwm" || mode === "servo") &&
+      [34, 35, 36, 39].includes(n)
+    ) {
+      throw new Error("INVALID_PIN");
+    }
+    if (
+      mode === "adc" &&
+      ![0, 2, 4, 12, 13, 14, 15, 25, 26, 27, 32, 33, 34, 35, 36, 37, 38, 39].includes(n)
+    ) {
+      throw new Error("INVALID_PIN");
+    }
     return n;
   }
 
   async pinWrite(pinId, value) {
-    const pin = this._gpio(pinId);
+    const pin = this._gpio(pinId, "output");
     const v = parseInt(String(value), 10);
     if (Number.isNaN(v) || v < 0 || v > 255) throw new Error("invalid_value");
     if (v > 1) {
@@ -154,7 +179,7 @@ export class Esp32SerialAdapter {
   }
 
   async pwmWrite(pinId, value) {
-    const pin = this._gpio(pinId);
+    const pin = this._gpio(pinId, "pwm");
     const v = clampInt(value, 0, 255);
     await this._cmd({ cmd: "pwm_write", pin, value: v });
   }
@@ -162,25 +187,24 @@ export class Esp32SerialAdapter {
   async pinRead(pinId) {
     const sid = String(pinId ?? "");
     if (sid.toUpperCase().startsWith("A")) {
-      const gpio = parseInt(sid.slice(1), 10);
-      if (Number.isNaN(gpio) || gpio < 0 || gpio > 39) throw new Error("INVALID_PIN");
+      const gpio = this._gpio(sid.slice(1), "adc");
       const res = await this._cmd({ cmd: "analog_read", pin: gpio });
       // El firmware ya escala la ADC (12 bits) a 0–1023 para igualar a Arduino.
       return Number(res?.value ?? 0);
     }
-    const gpio = this._gpio(sid);
+    const gpio = this._gpio(sid, "any");
     const res = await this._cmd({ cmd: "pin_read", pin: gpio });
     return Number(res?.value ?? 0) === 1;
   }
 
   async servoWrite(pinId, angle) {
-    const pin = this._gpio(pinId);
+    const pin = this._gpio(pinId, "servo");
     const a = clampInt(angle, 0, 180);
     await this._cmd({ cmd: "servo_write", pin, angle: a });
   }
 
   async motorWrite(pinId, speed) {
-    const pin = this._gpio(pinId);
+    const pin = this._gpio(pinId, "servo");
     // Misma semántica que escritorio/Arduino: -100..100 como servo de rotación
     // continua (la conversión a ángulo y el "stop" en 90 los hace el firmware).
     const s = clampInt(speed, -100, 100);
