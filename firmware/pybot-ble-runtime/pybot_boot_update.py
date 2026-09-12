@@ -19,6 +19,8 @@ _RUNTIME_FILES = (
     "pybot_mpy.py",
 )
 _RTBAK = ".rtbak"
+# Lectura/escritura de bodies OTA acotada (no cargar módulos enteros en RAM).
+_COPY_CHUNK = 256
 
 try:
     import uhashlib
@@ -106,8 +108,33 @@ def _is_pack():
     except Exception:
         return False
 
-def _parse_pack():
-    files = []
+def _skip_bytes(f, n):
+    """Avanza n bytes leyendo en chunks; False si hay truncamiento."""
+    remaining = n
+    while remaining > 0:
+        chunk = f.read(min(_COPY_CHUNK, remaining))
+        if not chunk:
+            return False
+        remaining -= len(chunk)
+    return True
+
+def _copy_bytes(src, dst, n):
+    """Copia exactamente n bytes src→dst en chunks; False si truncamiento."""
+    remaining = n
+    while remaining > 0:
+        chunk = src.read(min(_COPY_CHUNK, remaining))
+        if not chunk:
+            return False
+        dst.write(chunk)
+        remaining -= len(chunk)
+    return True
+
+def _validate_pack():
+    """
+    Pasada 1: valida estructura PYBOTRT1 completa SIN conservar bodies en RAM.
+    Devuelve [(name, size), ...] o None.
+    """
+    meta = []
     with open(_NEW, "rb") as f:
         magic = f.readline()
         if magic != _PACK_MAGIC:
@@ -126,13 +153,36 @@ def _parse_pack():
                 return None
             if sz < 0 or sz > 200000:
                 return None
-            data = f.read(sz)
-            if len(data) != sz:
-                return None
             if name not in _RUNTIME_FILES:
                 return None
-            files.append((name, data))
-    return files if files else None
+            if not _skip_bytes(f, sz):
+                return None
+            meta.append((name, sz))
+    return meta if meta else None
+
+def _install_pack_files(meta):
+    """
+    Pasada 2: vuelve a recorrer el pack y copia cada body por chunks al destino.
+    Asume meta ya validada y backups hechos.
+    """
+    with open(_NEW, "rb") as src:
+        magic = src.readline()
+        if magic != _PACK_MAGIC:
+            raise OSError("pack magic")
+        for expected_name, expected_sz in meta:
+            name_b = src.readline()
+            if not name_b:
+                raise OSError("pack truncated")
+            name = name_b.strip().decode()
+            size_b = src.readline()
+            if not size_b:
+                raise OSError("pack truncated")
+            sz = int(size_b.strip())
+            if name != expected_name or sz != expected_sz:
+                raise OSError("pack mismatch")
+            with open(name, "wb") as dst:
+                if not _copy_bytes(src, dst, sz):
+                    raise OSError("pack truncated")
 
 def _backup_runtime_files(names):
     for name in names:
@@ -165,21 +215,20 @@ def _apply_pack(st, size, hexhash):
                 _rename(_BAK, _MAIN)
             _clear_state()
         return
-    files = _parse_pack()
-    if not files:
+    # Validar pack COMPLETO antes de cualquier backup/escritura.
+    meta = _validate_pack()
+    if not meta:
         _remove(_NEW)
         _clear_state()
         return
-    names = [n for n, _ in files]
+    names = [n for n, _ in meta]
     if not _backup_runtime_files(names):
         _restore_runtime_files()
         _remove(_NEW)
         _clear_state()
         return
     try:
-        for name, data in files:
-            with open(name, "wb") as f:
-                f.write(data)
+        _install_pack_files(meta)
     except Exception:
         _restore_runtime_files()
         _remove(_NEW)

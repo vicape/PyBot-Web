@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { sha256HexUtf8 } from "../src/bleProtocol.js";
+import { sha256Hex, sha256HexUtf8 } from "../src/bleProtocol.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FW_BOOT_UPDATE = join(__dirname, "..", "firmware/pybot-ble-runtime/pybot_boot_update.py");
 
 /**
  * MODELO FIEL del boot/update manager del firmware para validar en Node lo que NO
@@ -36,9 +42,19 @@ const RUNTIME_FILES = [
   "pybot_mpy.py",
 ];
 const RTBAK = ".rtbak";
+const COPY_CHUNK = 256;
 
 function byteLen(s) {
   return new TextEncoder().encode(String(s ?? "")).length;
+}
+
+function asBytes(v) {
+  if (v instanceof Uint8Array) return v;
+  return new TextEncoder().encode(String(v ?? ""));
+}
+
+function bytesToUtf8(u8) {
+  return new TextDecoder().decode(u8);
 }
 
 class Fs {
@@ -50,10 +66,16 @@ class Fs {
     return this.files.has(p);
   }
   get(p) {
-    return this.files.get(p);
+    const v = this.files.get(p);
+    if (v instanceof Uint8Array) return bytesToUtf8(v);
+    return v;
+  }
+  getBytes(p) {
+    return asBytes(this.files.get(p));
   }
   size(p) {
-    return this.files.has(p) ? byteLen(this.files.get(p)) : -1;
+    if (!this.files.has(p)) return -1;
+    return asBytes(this.files.get(p)).length;
   }
   remove(p) {
     if (!this.files.has(p)) return false;
@@ -70,7 +92,8 @@ class Fs {
   readJson(p) {
     if (!this.files.has(p)) return null;
     try {
-      const obj = JSON.parse(this.files.get(p));
+      const raw = this.get(p);
+      const obj = JSON.parse(raw);
       return obj && typeof obj === "object" ? obj : null;
     } catch {
       return null;
@@ -86,7 +109,7 @@ class Fs {
 
 function _shaFile(fs, path, hasHashlib) {
   if (!hasHashlib || !fs.exists(path)) return null;
-  return sha256HexUtf8(fs.get(path));
+  return sha256Hex(fs.getBytes(path));
 }
 
 function _newValid(fs, size, hash, hasHashlib) {
@@ -101,29 +124,82 @@ function _newValid(fs, size, hash, hasHashlib) {
 
 function _isPack(fs) {
   if (!fs.exists(NEW)) return false;
-  return String(fs.get(NEW) ?? "").startsWith(PACK_MAGIC);
+  const b = fs.getBytes(NEW);
+  const magic = new TextEncoder().encode(PACK_MAGIC);
+  if (b.length < magic.length) return false;
+  for (let i = 0; i < magic.length; i++) if (b[i] !== magic[i]) return false;
+  return true;
 }
 
-function _parsePack(fs) {
-  const raw = String(fs.get(NEW) ?? "");
-  if (!raw.startsWith(PACK_MAGIC)) return null;
-  let rest = raw.slice(PACK_MAGIC.length);
-  const files = [];
-  while (rest.length) {
-    const nli = rest.indexOf("\n");
-    if (nli < 0) return null;
-    const name = rest.slice(0, nli);
-    rest = rest.slice(nli + 1);
-    const sli = rest.indexOf("\n");
-    if (sli < 0) return null;
-    const sz = parseInt(rest.slice(0, sli), 10);
-    rest = rest.slice(sli + 1);
-    if (!Number.isFinite(sz) || sz < 0 || rest.length < sz) return null;
-    if (!RUNTIME_FILES.includes(name)) return null;
-    files.push([name, rest.slice(0, sz)]);
-    rest = rest.slice(sz);
+/** Simula lectura de body en chunks; actualiza stats.maxBodyRead. */
+function _consumeBodyBytes(stats, sz) {
+  let remaining = sz;
+  while (remaining > 0) {
+    const n = Math.min(COPY_CHUNK, remaining);
+    if (stats) {
+      stats.maxBodyRead = Math.max(stats.maxBodyRead ?? 0, n);
+      stats.bodyReads = (stats.bodyReads ?? 0) + 1;
+    }
+    remaining -= n;
   }
-  return files.length ? files : null;
+}
+
+/**
+ * Pasada 1: metadata [(name,size)] sin bodies. Orden: validate antes de backup.
+ */
+function _validatePack(fs, stats) {
+  const raw = fs.getBytes(NEW);
+  const enc = new TextEncoder();
+  const magic = enc.encode(PACK_MAGIC);
+  if (raw.length < magic.length) return null;
+  for (let i = 0; i < magic.length; i++) if (raw[i] !== magic[i]) return null;
+  let off = magic.length;
+  const meta = [];
+  const dec = new TextDecoder();
+  while (off < raw.length) {
+    let nl = raw.indexOf(0x0a, off);
+    if (nl < 0) return null;
+    const name = dec.decode(raw.subarray(off, nl)).replace(/\r$/, "");
+    off = nl + 1;
+    nl = raw.indexOf(0x0a, off);
+    if (nl < 0) return null;
+    const sz = parseInt(dec.decode(raw.subarray(off, nl)).trim(), 10);
+    off = nl + 1;
+    if (!Number.isFinite(sz) || sz < 0 || sz > 200000) return null;
+    if (!RUNTIME_FILES.includes(name)) return null;
+    if (off + sz > raw.length) return null;
+    _consumeBodyBytes(stats, sz);
+    off += sz;
+    meta.push([name, sz]);
+  }
+  return meta.length ? meta : null;
+}
+
+/**
+ * Pasada 2: copia bodies por chunks al destino.
+ */
+function _installPackFiles(fs, meta, stats, opts = {}) {
+  const raw = fs.getBytes(NEW);
+  const enc = new TextEncoder();
+  const magic = enc.encode(PACK_MAGIC);
+  let off = magic.length;
+  const dec = new TextDecoder();
+  for (let i = 0; i < meta.length; i++) {
+    if (opts.failCopyAt === i) throw new Error("copy fail");
+    const [expectedName, expectedSz] = meta[i];
+    let nl = raw.indexOf(0x0a, off);
+    const name = dec.decode(raw.subarray(off, nl)).replace(/\r$/, "");
+    off = nl + 1;
+    nl = raw.indexOf(0x0a, off);
+    const sz = parseInt(dec.decode(raw.subarray(off, nl)).trim(), 10);
+    off = nl + 1;
+    if (name !== expectedName || sz !== expectedSz) throw new Error("pack mismatch");
+    const data = raw.subarray(off, off + sz);
+    _consumeBodyBytes(stats, sz);
+    // Guardar bytes exactos (fidelidad UTF-8 / binaria).
+    fs.files.set(name, Uint8Array.from(data));
+    off += sz;
+  }
 }
 
 function _backupRuntime(fs, names) {
@@ -149,7 +225,11 @@ function _clearRtbaks(fs) {
   for (const name of RUNTIME_FILES) fs.remove(name + RTBAK);
 }
 
-function _applyPack(fs, st, size, hash, hasHashlib) {
+function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
+  const stats = opts.stats ?? null;
+  if (stats) {
+    stats.order = [];
+  }
   if (!_newValid(fs, size, hash, hasHashlib)) {
     if (fs.exists(MAIN)) {
       fs.remove(NEW);
@@ -161,20 +241,30 @@ function _applyPack(fs, st, size, hash, hasHashlib) {
     }
     return;
   }
-  const files = _parsePack(fs);
-  if (!files) {
+  if (stats) stats.order.push("validate");
+  const meta = _validatePack(fs, stats);
+  if (!meta) {
     fs.remove(NEW);
     fs.remove(STATE);
     return;
   }
-  const names = files.map(([n]) => n);
+  const names = meta.map(([n]) => n);
+  if (stats) stats.order.push("backup");
   if (!_backupRuntime(fs, names)) {
     _restoreRuntime(fs);
     fs.remove(NEW);
     fs.remove(STATE);
     return;
   }
-  for (const [name, data] of files) fs.files.set(name, data);
+  try {
+    if (stats) stats.order.push("write");
+    _installPackFiles(fs, meta, stats, opts);
+  } catch {
+    _restoreRuntime(fs);
+    fs.remove(NEW);
+    fs.remove(STATE);
+    return;
+  }
   st.state = "applied";
   st.pack = 1;
   fs.writeJson(STATE, st);
@@ -218,8 +308,8 @@ function _doApplyLegacy(fs, st, size, hash, hasHashlib) {
   fs.remove(NEW);
 }
 
-function _doApply(fs, st, size, hash, hasHashlib) {
-  if (fs.exists(NEW) && _isPack(fs)) _applyPack(fs, st, size, hash, hasHashlib);
+function _doApply(fs, st, size, hash, hasHashlib, opts = {}) {
+  if (fs.exists(NEW) && _isPack(fs)) _applyPack(fs, st, size, hash, hasHashlib, opts);
   else _doApplyLegacy(fs, st, size, hash, hasHashlib);
 }
 
@@ -244,7 +334,7 @@ function _doRollback(fs, st) {
 }
 
 /** Mirror de boot.py `_boot_apply_update` (corre ANTES de main.py en cada boot). */
-function boot(fs, { hasHashlib = true } = {}) {
+function boot(fs, { hasHashlib = true, ...opts } = {}) {
   const st = fs.readJson(STATE);
   if (!st || typeof st !== "object") {
     fs.remove(NEW); // limpiar .new huérfano de una descarga cortada
@@ -253,7 +343,7 @@ function boot(fs, { hasHashlib = true } = {}) {
   const state = st.state;
   const size = st.size ?? null;
   const hash = (st.hash || "").toLowerCase();
-  if (state === "pending") _doApply(fs, st, size, hash, hasHashlib);
+  if (state === "pending") _doApply(fs, st, size, hash, hasHashlib, opts);
   else if (state === "applied") _doRollback(fs, st);
 }
 
@@ -268,11 +358,30 @@ function confirmBoot(fs) {
 }
 
 function buildPack(files) {
-  let out = PACK_MAGIC;
+  const enc = new TextEncoder();
+  const parts = [enc.encode(PACK_MAGIC)];
   for (const [name, data] of files) {
-    out += name + "\n" + byteLen(data) + "\n" + data;
+    const body = asBytes(data);
+    parts.push(enc.encode(name + "\n" + body.length + "\n"));
+    parts.push(body);
+  }
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    out.set(p, off);
+    off += p.length;
   }
   return out;
+}
+
+function packHash(pack) {
+  return sha256Hex(asBytes(pack));
+}
+
+function packSize(pack) {
+  return asBytes(pack).length;
 }
 
 /** Mirror de RuntimeUpdateReceiver.apply(): escribe el estado pending y "resetea". */
@@ -482,7 +591,7 @@ test("successful OTA pack: installs modules, confirms, preserves student app", (
     "pybot_run.py": "OLD_RUN\n",
   });
   fs.files.set(NEW, pack);
-  webApply(fs, { from: "3.2.0", to: "3.2.1", size: byteLen(pack), hash: sha256HexUtf8(pack) });
+  webApply(fs, { from: "3.2.0", to: "3.2.1", size: packSize(pack), hash: packHash(pack) });
   boot(fs);
   assert.equal(fs.get(MAIN), "import pybot_ble\npybot_ble.main()\n");
   assert.equal(fs.get("pybot_ble.py"), "PYBOT_RUNTIME_VERSION='3.2.1'\n");
@@ -510,7 +619,7 @@ test("pack OTA without confirm rolls back modules from .rtbak", () => {
     "pybot_run.py": "OLD_RUN\n",
     [NEW]: full,
   });
-  webApply(fs, { from: "3.2.0", to: "3.2.1", size: byteLen(full), hash: sha256HexUtf8(full) });
+  webApply(fs, { from: "3.2.0", to: "3.2.1", size: packSize(full), hash: packHash(full) });
   boot(fs);
   assert.equal(fs.get(MAIN), "NEW_MAIN\n");
   assert.equal(fs.readJson(STATE).state, "applied");
@@ -520,4 +629,292 @@ test("pack OTA without confirm rolls back modules from .rtbak", () => {
   assert.equal(fs.get("pybot_ble.py"), "OLD_CORE\n");
   assert.equal(fs.get("pybot_run.py"), "OLD_RUN\n");
   assert.equal(fs.exists(STATE), false);
+});
+
+// ---------------------------------------------------------------------------
+// #17 — boot updater: streaming de bodies (sin cargar pack completo en RAM)
+// ---------------------------------------------------------------------------
+
+test("#17 pack exitoso: módulos, state applied, rtbak, confirm limpia", () => {
+  const pack = buildPack([
+    ["main.py", "M1\n"],
+    ["pybot_ble.py", "B1\n"],
+    ["pybot_run.py", "R1\n"],
+    ["pybot_deploy.py", "D1\n"],
+    ["pybot_update.py", "U1\n"],
+    ["pybot_boot_update.py", "BU1\n"],
+  ]);
+  const fs = boardWithApp({
+    "pybot_ble.py": "OLD_B\n",
+    "pybot_run.py": "OLD_R\n",
+    [NEW]: pack,
+  });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs);
+  assert.equal(fs.get(MAIN), "M1\n");
+  assert.equal(fs.get("pybot_ble.py"), "B1\n");
+  assert.equal(fs.get("pybot_run.py"), "R1\n");
+  assert.equal(fs.readJson(STATE).state, "applied");
+  assert.equal(fs.readJson(STATE).pack, 1);
+  assert.equal(fs.exists(MAIN + RTBAK), true);
+  assert.equal(fs.exists("pybot_ble.py" + RTBAK), true);
+  confirmBoot(fs);
+  assert.equal(fs.exists(STATE), false);
+  assert.equal(fs.exists(MAIN + RTBAK), false);
+  assert.equal(fs.exists("pybot_ble.py" + RTBAK), false);
+});
+
+test("#17 módulo grande (>=80KB): maxBodyRead <= COPY_CHUNK", () => {
+  const big = "X".repeat(80 * 1024);
+  const pack = buildPack([
+    ["main.py", "tiny\n"],
+    ["pybot_ble.py", big],
+    ["pybot_run.py", "end\n"],
+  ]);
+  const stats = {};
+  const fs = new Fs({
+    [MAIN]: "OLD\n",
+    "pybot_ble.py": "OLD_B\n",
+    "pybot_run.py": "OLD_R\n",
+    [NEW]: pack,
+  });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs, { stats });
+  assert.equal(fs.get("pybot_ble.py"), big);
+  assert.ok((stats.maxBodyRead ?? 0) <= COPY_CHUNK);
+  assert.equal(stats.maxBodyRead, COPY_CHUNK);
+  assert.ok((stats.bodyReads ?? 0) >= Math.ceil((80 * 1024) / COPY_CHUNK));
+});
+
+test("#17 firmware: no f.read(sz) ni lista de bodies en camino pack", () => {
+  const src = readFileSync(FW_BOOT_UPDATE, "utf8");
+  assert.match(src, /_COPY_CHUNK\s*=\s*256/);
+  assert.match(src, /def _validate_pack\(/);
+  assert.match(src, /def _install_pack_files\(/);
+  assert.match(src, /def _skip_bytes\(/);
+  assert.match(src, /def _copy_bytes\(/);
+  assert.doesNotMatch(src, /files\.append\(\(name,\s*data\)\)/);
+  assert.doesNotMatch(src, /data\s*=\s*f\.read\(sz\)/);
+  assert.doesNotMatch(src, /data\s*=\s*src\.read\(sz\)/);
+  assert.doesNotMatch(src, /def _parse_pack\(/);
+  // Bodies solo vía min(_COPY_CHUNK, remaining)
+  assert.match(src, /\.read\(min\(_COPY_CHUNK,\s*remaining\)\)/);
+});
+
+test("#17 pack truncado: falla antes de backup; runtime intacto", () => {
+  const enc = new TextEncoder();
+  const body = enc.encode("hello");
+  // Declara size=1000 pero solo entrega 5 bytes.
+  const bad = new Uint8Array([
+    ...enc.encode(PACK_MAGIC),
+    ...enc.encode("main.py\n1000\n"),
+    ...body,
+  ]);
+  const stats = {};
+  const fs = new Fs({ [MAIN]: OLD, [NEW]: bad });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: bad.length, hash: sha256Hex(bad) });
+  boot(fs, { stats });
+  assert.equal(fs.get(MAIN), OLD);
+  assert.equal(fs.exists(MAIN + RTBAK), false);
+  assert.equal(fs.exists(STATE), false);
+  assert.deepEqual(stats.order, ["validate"]); // sin backup/write
+});
+
+test("#17 nombre inválido evil.py: rechazo antes de modificar runtime", () => {
+  const enc = new TextEncoder();
+  const body = enc.encode("x");
+  const evil = new Uint8Array([
+    ...enc.encode(PACK_MAGIC),
+    ...enc.encode("evil.py\n1\n"),
+    ...body,
+  ]);
+  const stats = {};
+  const fs = new Fs({ [MAIN]: OLD, "pybot_ble.py": "B\n", [NEW]: evil });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: evil.length, hash: sha256Hex(evil) });
+  boot(fs, { stats });
+  assert.equal(fs.get(MAIN), OLD);
+  assert.equal(fs.get("pybot_ble.py"), "B\n");
+  assert.equal(fs.exists(MAIN + RTBAK), false);
+  assert.equal(fs.exists(STATE), false);
+  assert.deepEqual(stats.order, ["validate"]);
+});
+
+test("#17 size inválido: no numérico / negativo / >200000", () => {
+  const enc = new TextEncoder();
+  function packWithSizeLine(sizeLine, body = "x") {
+    const b = enc.encode(body);
+    return new Uint8Array([
+      ...enc.encode(PACK_MAGIC),
+      ...enc.encode("main.py\n" + sizeLine + "\n"),
+      ...b,
+    ]);
+  }
+  for (const sizeLine of ["abc", "-1", "200001"]) {
+    const bad = packWithSizeLine(sizeLine, sizeLine === "abc" || sizeLine === "-1" ? "x" : "x");
+    // Para >200000 el body no importa (falla en parse de size).
+    const payload =
+      sizeLine === "200001"
+        ? new Uint8Array([...enc.encode(PACK_MAGIC), ...enc.encode("main.py\n200001\n"), ...enc.encode("x")])
+        : bad;
+    const fs = new Fs({ [MAIN]: OLD, [NEW]: payload });
+    webApply(fs, { from: "4.0.6", to: "4.0.6", size: payload.length, hash: sha256Hex(payload) });
+    boot(fs);
+    assert.equal(fs.get(MAIN), OLD, `sizeLine=${sizeLine}`);
+    assert.equal(fs.exists(STATE), false, `sizeLine=${sizeLine}`);
+  }
+});
+
+test("#17 magic incorrecto: no se trata como pack (camino legacy)", () => {
+  const fake = "NOTAPACK\nmain.py\n3\nabc";
+  const fs = new Fs({ [MAIN]: OLD, [NEW]: fake });
+  webApply(fs, { from: "3.1.0", to: "3.2.0", size: byteLen(fake), hash: sha256HexUtf8(fake) });
+  boot(fs);
+  // Legacy: renombra .new -> main.py
+  assert.equal(fs.get(MAIN), fake);
+  assert.equal(fs.get(BAK), OLD);
+  assert.equal(fs.readJson(STATE).pack, undefined);
+});
+
+test("#17 fallo en backup: ningún runtime nuevo instalado", () => {
+  const pack = buildPack([
+    ["main.py", "NEW_M\n"],
+    ["pybot_ble.py", "NEW_B\n"],
+  ]);
+  const fs = new Fs({
+    [MAIN]: "OLD_M\n",
+    "pybot_ble.py": "OLD_B\n",
+    [NEW]: pack,
+  });
+  fs.failRename.add(MAIN + "->" + MAIN + RTBAK);
+  const stats = {};
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs, { stats });
+  assert.equal(fs.get(MAIN), "OLD_M\n");
+  assert.equal(fs.get("pybot_ble.py"), "OLD_B\n");
+  assert.equal(fs.exists(STATE), false);
+  assert.deepEqual(stats.order, ["validate", "backup"]);
+});
+
+test("#17 fallo durante copia del primer archivo: restore + abort", () => {
+  const pack = buildPack([
+    ["main.py", "NEW_M\n"],
+    ["pybot_ble.py", "NEW_B\n"],
+  ]);
+  const fs = new Fs({
+    [MAIN]: "OLD_M\n",
+    "pybot_ble.py": "OLD_B\n",
+    [NEW]: pack,
+  });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs, { failCopyAt: 0 });
+  assert.equal(fs.get(MAIN), "OLD_M\n");
+  assert.equal(fs.get("pybot_ble.py"), "OLD_B\n");
+  assert.equal(fs.exists(STATE), false);
+  assert.equal(fs.exists(NEW), false);
+});
+
+test("#17 fallo durante módulo posterior: rollback restaura previos", () => {
+  const pack = buildPack([
+    ["main.py", "NEW_M\n"],
+    ["pybot_ble.py", "NEW_B\n"],
+    ["pybot_run.py", "NEW_R\n"],
+  ]);
+  const fs = new Fs({
+    [MAIN]: "OLD_M\n",
+    "pybot_ble.py": "OLD_B\n",
+    "pybot_run.py": "OLD_R\n",
+    [NEW]: pack,
+  });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs, { failCopyAt: 1 }); // falla en segundo módulo
+  assert.equal(fs.get(MAIN), "OLD_M\n");
+  assert.equal(fs.get("pybot_ble.py"), "OLD_B\n");
+  assert.equal(fs.get("pybot_run.py"), "OLD_R\n");
+  assert.equal(fs.exists(STATE), false);
+});
+
+test("#17 bytes UTF-8 idénticos (—, á, º)", () => {
+  const text = "# net — café á º\n";
+  const pack = buildPack([
+    ["main.py", "ok\n"],
+    ["pybot_net.py", text],
+  ]);
+  const fs = new Fs({ [MAIN]: OLD, [NEW]: pack });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs);
+  const got = fs.getBytes("pybot_net.py");
+  const expect = new TextEncoder().encode(text);
+  assert.equal(got.length, expect.length);
+  for (let i = 0; i < expect.length; i++) assert.equal(got[i], expect[i]);
+});
+
+test("#17 archivo vacío size=0 permitido", () => {
+  const pack = buildPack([
+    ["main.py", ""],
+    ["pybot_ble.py", "x\n"],
+  ]);
+  const fs = new Fs({ [MAIN]: OLD, "pybot_ble.py": "old\n", [NEW]: pack });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs);
+  assert.equal(fs.size(MAIN), 0);
+  assert.equal(fs.get("pybot_ble.py"), "x\n");
+});
+
+test("#17 múltiples módulos: límites exactos, sin consumir bytes del siguiente", () => {
+  const pack = buildPack([
+    ["main.py", "AAA"],
+    ["pybot_ble.py", "BBBB"],
+    ["pybot_run.py", "C"],
+  ]);
+  const fs = new Fs({ [MAIN]: "o", "pybot_ble.py": "o", "pybot_run.py": "o", [NEW]: pack });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs);
+  assert.equal(fs.get(MAIN), "AAA");
+  assert.equal(fs.get("pybot_ble.py"), "BBBB");
+  assert.equal(fs.get("pybot_run.py"), "C");
+});
+
+test("#17 student app intacta durante pack OTA", () => {
+  const pack = buildPack([
+    ["main.py", "N\n"],
+    ["pybot_ble.py", "N\n"],
+  ]);
+  const fs = boardWithApp({ [NEW]: pack });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs);
+  confirmBoot(fs);
+  assert.equal(fs.get(APP), APP_CODE);
+  assert.deepEqual(fs.readJson(APP_META), APP_METADATA);
+});
+
+test("#17 orden: validate completo BEFORE backup BEFORE write", () => {
+  const pack = buildPack([
+    ["main.py", "N\n"],
+    ["pybot_ble.py", "N\n"],
+  ]);
+  const stats = {};
+  const fs = new Fs({ [MAIN]: OLD, "pybot_ble.py": "B\n", [NEW]: pack });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs, { stats });
+  assert.deepEqual(stats.order, ["validate", "backup", "write"]);
+});
+
+test("#17 SHA exterior incorrecto aborta antes de parse/apply", () => {
+  const pack = buildPack([["main.py", "N\n"]]);
+  const stats = {};
+  const fs = new Fs({ [MAIN]: OLD, [NEW]: pack });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: "00".repeat(32) });
+  boot(fs, { stats });
+  assert.equal(fs.get(MAIN), OLD);
+  assert.equal(fs.exists(STATE), false);
+  // SHA exterior falla antes de validate/backup/write.
+  assert.deepEqual(stats.order, []);
+});
+
+test("#17 legacy apply intacto (casos base siguen pasando vía NEWR)", () => {
+  const fs = new Fs({ [MAIN]: OLD, [NEW]: NEWR });
+  webApply(fs, { from: "3.1.0", to: "3.2.0", size: byteLen(NEWR), hash: sha256HexUtf8(NEWR) });
+  boot(fs);
+  assert.equal(fs.get(MAIN), NEWR);
+  assert.equal(fs.get(BAK), OLD);
 });

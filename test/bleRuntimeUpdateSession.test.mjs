@@ -561,12 +561,14 @@ test("TEST19: ASCII string path still works", async () => {
   assert.deepEqual(asBytes(mock._state.mainRuntime), ENC.encode(ascii));
 });
 
-test("TEST20: pybot_boot_update.py unchanged in working tree for #16", () => {
-  // Structural guard: production path for #16 must not edit boot updater.
-  // Content sanity: still has pack parser / full read (punto 17 pendiente).
+test("TEST20: pybot_boot_update.py streams pack bodies (#17)", () => {
+  // #16 dejó el boot updater intacto; #17 lo convierte a 2 pasadas + chunks.
   const boot = readFileSync(join(root, "firmware/pybot-ble-runtime/pybot_boot_update.py"), "utf8");
-  assert.match(boot, /def _parse_pack/);
-  assert.match(boot, /f\.read\(sz\)/);
+  assert.match(boot, /_COPY_CHUNK\s*=\s*256/);
+  assert.match(boot, /def _validate_pack/);
+  assert.match(boot, /def _install_pack_files/);
+  assert.doesNotMatch(boot, /def _parse_pack/);
+  assert.doesNotMatch(boot, /f\.read\(sz\)/);
 });
 
 test("buildBleRuntimePackText removed from production", () => {
