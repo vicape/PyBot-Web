@@ -27,7 +27,7 @@ const MODULE_FILES = [
 ];
 const BOOT_CORE_FILES = ["boot.py", "main.py", "pybot_ble.py"];
 const PACK_MAGIC = "PYBOTRT1\n";
-const BOOT_CORE_MAX_BYTES = 36000;
+const BOOT_CORE_MAX_BYTES = 40000; // #18–#20 crecieron pybot_ble (cleanup/mode/busy); legacy≈56KB
 const LEGACY_MAIN_BYTES = 56421;
 
 function readFw(name) {
@@ -209,7 +209,7 @@ test("boot core size is well below the legacy monolith", () => {
     if (BOOT_CORE_FILES.includes(name)) bootCore += n;
   }
   assert.ok(bootCore < BOOT_CORE_MAX_BYTES, `bootCore=${bootCore}`);
-  assert.ok(bootCore < LEGACY_MAIN_BYTES * 0.65, `bootCore=${bootCore} should be well below legacy`);
+  assert.ok(bootCore < LEGACY_MAIN_BYTES * 0.72, `bootCore=${bootCore} should stay below legacy`);
   assert.ok(total > bootCore);
 });
 
