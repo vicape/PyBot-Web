@@ -252,7 +252,9 @@ export class ReliableBleTransport {
     this._epoch = (this._epoch + 1) & 0xff;
     this._synced = false;
     this._handshakePending = true;
-    await this._sendCtrl(encodeFrame(RBLE_TYPE_RESET, 0, this._resetPayload()));
+    await this._sendCtrl(encodeFrame(RBLE_TYPE_RESET, 0, this._resetPayload()), {
+      critical: true,
+    });
     if (this._synced) {
       this._handshakePending = false;
       return;
@@ -528,12 +530,20 @@ export class ReliableBleTransport {
     this._armTimer();
   }
 
-  async _sendCtrl(frame) {
-    if (typeof this._bt.writeRepl !== "function") return;
+  async _sendCtrl(frame, opts = {}) {
+    const critical = !!opts.critical;
+    if (typeof this._bt.writeRepl !== "function") {
+      if (critical) throw new Error("BLE_REPL_TX_FAIL");
+      return;
+    }
     try {
       await this._bt.writeRepl(frame, RBLE_FRAME_MAX);
-    } catch {
-      /* control frames retry on next DATA/timeout path */
+    } catch (e) {
+      if (!critical) return;
+      const msg = String(e?.message ?? e ?? "");
+      if (msg.includes("BLE_REPL_NOT_CONNECTED")) throw new Error("BLE_REPL_NOT_CONNECTED");
+      if (msg.includes("BLE_REPL_TX_FAIL")) throw new Error("BLE_REPL_TX_FAIL");
+      throw e instanceof Error ? e : new Error("BLE_REPL_TX_FAIL");
     }
   }
 

@@ -670,6 +670,18 @@ test("firmware RESET 2-byte stays at 14; 3-byte + MTU 247 negotiates 50", () => 
   assert.equal(py, "ok");
 });
 
+test("firmware on_reset always queues RESET reply even for same peer epoch", () => {
+  const py = execSync(
+    `python -c "import sys; sys.path.insert(0, r'${FW.replace(/\\/g, "\\\\")}'); import pybot_rble as r; r.reset_session(False); r.on_reset(2,1,14); assert r.has_pending(); f1=r.next_to_send(); assert f1; r.mark_sent(f1); r.on_reset(2,1,50); assert r.has_pending(); f2=r.next_to_send(); assert f2; assert r.decode_frame(f2)[0]==r.TYPE_RESET; print('ok')"`,
+    { encoding: "utf8" },
+  ).trim();
+  assert.equal(py, "ok");
+  const src = readFw("pybot_rble.py");
+  const onReset = src.slice(src.indexOf("def on_reset"), src.indexOf("def feed_rx"));
+  assert.match(onReset, /_queue_ctrl\(encode_frame\(TYPE_RESET/);
+  assert.doesNotMatch(onReset, /if same:\s*\n\s*return/m);
+});
+
 test("encode/decode accepts compiled ceiling payload", () => {
   const payload = new Uint8Array(RBLE_MAX_PAYLOAD);
   payload.fill(0x7a);
@@ -810,5 +822,98 @@ test("throughput: timeout retransmits at payload 50 without duplicating", async 
   await esp.writeRepl(original);
   assert.ok(link.stats.dropped >= 1);
   assert.deepEqual([...got()], [...original]);
+});
+
+test("CASO1: lost firmware RESET then browser RESET still syncs", async () => {
+  // Firmware already sent RESET before browser listened; only browser→fw→browser path.
+  let browserHandler = null;
+  const fwWrites = [];
+  const btBrowser = {
+    isConnected: () => true,
+    hasRepl: () => true,
+    onReplData(cb) {
+      browserHandler = cb;
+      return () => {
+        browserHandler = null;
+      };
+    },
+    async writeRepl(data) {
+      const parsed = decodeFrame(data);
+      fwWrites.push(parsed);
+      if (parsed?.type === RBLE_TYPE_RESET) {
+        // Mirror firmware on_reset: always reply RESET (even if epoch collided).
+        const reply = encodeFrame(RBLE_TYPE_RESET, 0, u8(RBLE_WINDOW, 9, RBLE_MIN_PAYLOAD));
+        queueMicrotask(() => browserHandler?.(reply));
+      }
+    },
+  };
+  const browser = new ReliableBleTransport(btBrowser, {
+    autoStart: false,
+    syncTimeoutMs: 500,
+  });
+  await browser.start();
+  assert.equal(browser._synced, true);
+  assert.ok(fwWrites.some((w) => w && w.type === RBLE_TYPE_RESET));
+});
+
+test("CASO2: browser initiates first and syncs on firmware RESET reply", async () => {
+  const { esp, browser } = await pair();
+  assert.equal(esp._synced, true);
+  assert.equal(browser._synced, true);
+});
+
+test("CASO3: duplicate RESET does not break synced session", async () => {
+  const { esp, browser } = await pair();
+  const seq = browser._txNext;
+  browser._onRaw(encodeFrame(RBLE_TYPE_RESET, 0, u8(RBLE_WINDOW, browser._peerEpoch, RBLE_MIN_PAYLOAD)));
+  assert.equal(browser._synced, true);
+  assert.equal(browser._txNext, seq);
+  await esp.writeRepl(u8(0xab));
+});
+
+test("CASO4: reconnect resync reaches synced without old state", async () => {
+  const { esp, browser, received } = await pair();
+  await esp.writeRepl(u8(1, 2, 3));
+  received.length = 0;
+  browser.reset("disconnect");
+  await browser.start();
+  assert.equal(browser._synced, true);
+  assert.equal(concat(received).length, 0);
+  await esp.writeRepl(u8(9));
+  assert.deepEqual([...concat(received)], [9]);
+});
+
+test("CASO5: handshake write failure is not RBLE_SYNC_TIMEOUT", async () => {
+  const bt = {
+    isConnected: () => true,
+    hasRepl: () => true,
+    onReplData() {
+      return () => {};
+    },
+    async writeRepl() {
+      throw new Error("BLE_REPL_TX_FAIL");
+    },
+  };
+  const t = new ReliableBleTransport(bt, { autoStart: false, syncTimeoutMs: 2000 });
+  await assert.rejects(() => t.start(), (err) => {
+    assert.match(String(err?.message ?? err), /BLE_REPL_TX_FAIL|BLE_REPL_NOT_CONNECTED/);
+    assert.doesNotMatch(String(err?.message ?? err), /RBLE_SYNC_TIMEOUT/);
+    return true;
+  });
+});
+
+test("CASO6: real missing RESET reply still times out as RBLE_SYNC_TIMEOUT", async () => {
+  const bt = {
+    isConnected: () => true,
+    hasRepl: () => true,
+    onReplData() {
+      return () => {};
+    },
+    async writeRepl() {
+      /* RESET sent, no peer reply */
+    },
+  };
+  const t = new ReliableBleTransport(bt, { autoStart: false, syncTimeoutMs: 30 });
+  await assert.rejects(() => t.start(), /RBLE_SYNC_TIMEOUT/);
 });
 

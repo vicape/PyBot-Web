@@ -272,6 +272,7 @@ def reset_session(send_reset=True):
     _ctrl = []
     _ctrl_off = 0
     _synced = False
+    _peer_epoch = -1
     _peer_max_payload = _PAYLOAD_FLOOR
     _recompute_payload()
     _epoch = (_epoch + 1) & 0xFF
@@ -431,6 +432,9 @@ def _queue_nack(seq):
 
 
 def on_reset(window, epoch, peer_max=None):
+    # Siempre reply RESET: el browser iniciador puede haber perdido el nuestro
+    # (notify pre-startNotifications) o reutilizar epoch tras reconectar.
+    # `same` solo evita rebobinar seq; no suprime la respuesta.
     global _peer_epoch, _synced, _tx_next, _tx_base, _rx_expected
     global _ctrl, _ctrl_off, _need_reset, _peer_max_payload
     if peer_max is None:
@@ -441,13 +445,12 @@ def on_reset(window, epoch, peer_max=None):
     same = epoch == _peer_epoch
     _peer_epoch = epoch
     _synced = True
-    if same:
-        return
-    _cancel_timer()
-    _clear_window()
-    _tx_next = 0
-    _tx_base = 0
-    _rx_expected = 0
+    if not same:
+        _cancel_timer()
+        _clear_window()
+        _tx_next = 0
+        _tx_base = 0
+        _rx_expected = 0
     _ctrl = []
     _ctrl_off = 0
     _queue_ctrl(encode_frame(TYPE_RESET, 0, _reset_payload_bytes()))
