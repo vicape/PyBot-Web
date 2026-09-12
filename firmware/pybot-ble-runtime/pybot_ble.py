@@ -734,13 +734,23 @@ def main():
 
     def _ensure_deploy():
         if ctx["deploy"] is None:
-            ctx["deploy"] = _load_deploy().DeployReceiver(_send, _ensure_manager())
+            def _native_busy():
+                na = ctx.get("native_app")
+                return bool(na and na.get("running"))
+
+            ctx["deploy"] = _load_deploy().DeployReceiver(
+                _send, _ensure_manager(), _native_busy
+            )
         return ctx["deploy"]
 
     def _ensure_updater():
         if ctx["updater"] is None:
+            def _native_busy():
+                na = ctx.get("native_app")
+                return bool(na and na.get("running"))
+
             ctx["updater"] = _load_update().RuntimeUpdateReceiver(
-                _send, _ensure_manager(), _ensure_deploy()
+                _send, _ensure_manager(), _ensure_deploy(), _native_busy
             )
         return ctx["updater"]
 

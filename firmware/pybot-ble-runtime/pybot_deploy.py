@@ -109,9 +109,10 @@ def _recover_incomplete_deploy():
 
 class DeployReceiver:
 
-    def __init__(self, send, manager):
+    def __init__(self, send, manager, is_busy=None):
         self._send = send
         self._manager = manager
+        self._is_busy = is_busy
         self._active = False
         self._fh = None
         self._mode = "mpy"
@@ -122,7 +123,7 @@ class DeployReceiver:
         self._chunk_index = 0
 
     def begin(self, mode, profile, size, hexhash):
-        if self._manager.running:
+        if self._manager.running or (self._is_busy and self._is_busy()):
             self._send("DEPLOY:ERROR:BUSY")
             return
         if self._active:

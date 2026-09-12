@@ -20,10 +20,11 @@ from pybot_ble import (
 
 class RuntimeUpdateReceiver:
 
-    def __init__(self, send, manager, deploy):
+    def __init__(self, send, manager, deploy, is_busy=None):
         self._send = send
         self._manager = manager
         self._deploy = deploy
+        self._is_busy = is_busy
         self._active = False
         self._fh = None
         self._version = ""
@@ -37,6 +38,8 @@ class RuntimeUpdateReceiver:
         if self._manager.running:
             return True
         if getattr(self._deploy, "_active", False):
+            return True
+        if self._is_busy and self._is_busy():
             return True
         return False
 

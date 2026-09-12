@@ -1144,3 +1144,49 @@ test("#18 ProgramManager keep_servos parity still present", () => {
   assert.match(run, /keep_servos=\(outcome == "done"\)/);
   assert.match(run, /_pybot_cleanup_normal/);
 });
+
+// ---------------------------------------------------------------------------
+// #20 — DEPLOY/UPDATE BUSY mientras native_app.running
+// ---------------------------------------------------------------------------
+
+test("#20 DeployReceiver/UpdateReceiver aceptan is_busy opcional", () => {
+  const deploy = readFw("pybot_deploy.py");
+  const update = readFw("pybot_update.py");
+  const ble = readFw("pybot_ble.py");
+  assert.match(deploy, /def __init__\(self, send, manager, is_busy=None\)/);
+  assert.match(deploy, /self\._manager\.running or \(self\._is_busy and self\._is_busy\(\)\)/);
+  assert.match(update, /def __init__\(self, send, manager, deploy, is_busy=None\)/);
+  assert.match(update, /if self\._is_busy and self\._is_busy\(\):/);
+  assert.match(ble, /def _native_busy\(\):/);
+  assert.match(ble, /DeployReceiver\(\s*_send, _ensure_manager\(\), _native_busy\s*\)/);
+  assert.match(
+    ble,
+    /RuntimeUpdateReceiver\(\s*_send, _ensure_manager\(\), _ensure_deploy\(\), _native_busy\s*\)/,
+  );
+});
+
+test("#20 mirror: native running → DEPLOY/UPDATE BUSY; idle → ok", () => {
+  function deployBegin(managerRunning, nativeRunning) {
+    const sent = [];
+    const isBusy = () => nativeRunning;
+    if (managerRunning || isBusy()) {
+      sent.push("DEPLOY:ERROR:BUSY");
+      return sent;
+    }
+    sent.push("DEPLOY:READY");
+    return sent;
+  }
+  function updateBusy(managerRunning, deployActive, nativeRunning) {
+    if (managerRunning) return true;
+    if (deployActive) return true;
+    if (nativeRunning) return true;
+    return false;
+  }
+  assert.deepEqual(deployBegin(false, true), ["DEPLOY:ERROR:BUSY"]);
+  assert.deepEqual(deployBegin(true, false), ["DEPLOY:ERROR:BUSY"]);
+  assert.deepEqual(deployBegin(false, false), ["DEPLOY:READY"]);
+  assert.equal(updateBusy(false, false, true), true);
+  assert.equal(updateBusy(false, true, false), true);
+  assert.equal(updateBusy(true, false, false), true);
+  assert.equal(updateBusy(false, false, false), false);
+});
