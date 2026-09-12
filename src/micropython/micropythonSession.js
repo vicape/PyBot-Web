@@ -239,7 +239,9 @@ export class MicroPythonSession {
     const esc = (p) => String(p).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const safeFinal = esc(path);
     const safeTemp = esc(path + ".__pybot_tmp");
-    const safeBak = esc(path + ".__pybot_bak");
+    const txNonce =
+      Date.now().toString(36) + Math.floor(Math.random() * 0xffffff).toString(16);
+    const safeBak = esc(path + ".__pybot_bak_" + txNonce);
     const expected = bytes.length;
 
     // Transferencia SOLO a temp; el final no se toca hasta el commit.
@@ -296,7 +298,7 @@ export class MicroPythonSession {
       throw e;
     }
 
-    // Verify temp size + safe commit (backup/rollback si final existia).
+    // Commit: backup transaccional propio; rollback centralizado ante cualquier error.
     const commit = [
       "import os",
       `T='${safeTemp}'`,
@@ -315,50 +317,39 @@ export class MicroPythonSession {
       "        os.remove(p)",
       "    except OSError:",
       "        pass",
+      "backup_made = False",
+      "placed = False",
       "try:",
       "    if _sz(T) != E:",
-      "        _rm(T)",
-      "        print('PYBOT_INSTALL_FAIL')",
-      "    else:",
-      "        _sync()",
-      "        had = True",
-      "        try:",
-      "            os.stat(F)",
-      "        except OSError:",
-      "            had = False",
-      "        if not had:",
-      "            os.rename(T, F)",
-      "            if _sz(F) != E:",
-      "                _rm(F)",
-      "                print('PYBOT_INSTALL_FAIL')",
-      "            else:",
-      "                _sync()",
-      "                print('PYBOT_INSTALL_OK')",
-      "        else:",
-      "            _rm(B)",
-      "            os.rename(F, B)",
-      "            try:",
-      "                os.rename(T, F)",
-      "            except Exception:",
-      "                try:",
-      "                    os.rename(B, F)",
-      "                except OSError:",
-      "                    pass",
-      "                _rm(T)",
-      "                print('PYBOT_INSTALL_FAIL')",
-      "            else:",
-      "                if _sz(F) != E:",
-      "                    _rm(F)",
-      "                    try:",
-      "                        os.rename(B, F)",
-      "                    except OSError:",
-      "                        pass",
-      "                    print('PYBOT_INSTALL_FAIL')",
-      "                else:",
-      "                    _sync()",
-      "                    _rm(B)",
-      "                    print('PYBOT_INSTALL_OK')",
+      "        raise OSError('temp')",
+      "    _sync()",
+      "    had = True",
+      "    try:",
+      "        os.stat(F)",
+      "    except OSError:",
+      "        had = False",
+      "    if had:",
+      "        os.rename(F, B)",
+      "        backup_made = True",
+      "    os.rename(T, F)",
+      "    placed = True",
+      "    if _sz(F) != E:",
+      "        raise OSError('final')",
+      "    _sync()",
+      "    if backup_made:",
+      "        _rm(B)",
+      "    print('PYBOT_INSTALL_OK')",
       "except Exception:",
+      "    if backup_made:",
+      "        _rm(F)",
+      "        try:",
+      "            os.rename(B, F)",
+      "        except Exception:",
+      "            pass",
+      "    else:",
+      "        _rm(T)",
+      "        if placed:",
+      "            _rm(F)",
       "    print('PYBOT_INSTALL_FAIL')",
     ].join("\n");
     const { stdout } = await this.execRaw(commit, { timeout: 15000 });

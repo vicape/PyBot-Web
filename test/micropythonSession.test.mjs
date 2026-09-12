@@ -219,56 +219,60 @@ function simulateInstallScript(fs, code, hooks = {}) {
     const E = Number(code.match(/E=(\d+)/)[1]);
     const sz = (p) => (fs.has(p) ? fs.get(p).length : -1);
     const rm = (p) => fs.delete(p);
+    let backupMade = false;
+    let placed = false;
+
+    // Guardrail: commit must not rm a generic preexisting __pybot_bak (no nonce).
+    assert.doesNotMatch(code, /_rm\([^)]*__pybot_bak'\)/);
+    assert.match(code, /backup_made = False/);
+    assert.match(code, /backup_made = True/);
+    assert.match(code, /placed = False/);
+    assert.match(B, /__pybot_bak_/);
 
     if (hooks.failMode === "verifySize") {
-      // Corrupt temp size without touching final.
       fs.set(T, new Uint8Array(Math.max(0, E - 1)));
     }
 
-    if (sz(T) !== E) {
-      rm(T);
-      return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
-    }
-
-    const had = fs.has(F);
-    if (!had) {
+    try {
+      if (sz(T) !== E) throw new Error("temp");
+      const had = fs.has(F);
+      if (had) {
+        fs.set(B, fs.get(F));
+        rm(F);
+        backupMade = true;
+      }
       if (hooks.failMode === "renameFinal") {
-        return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
+        throw new Error("rename T->F");
       }
       fs.set(F, fs.get(T));
       rm(T);
-      if (hooks.failMode === "verifyFinal" || sz(F) !== E) {
-        rm(F);
-        return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
+      placed = true;
+      if (hooks.failMode === "statFinalThrows") {
+        throw new Error("stat final");
       }
+      if (hooks.failMode === "verifyFinal" || hooks.failMode === "rollbackFail") {
+        fs.set(F, new Uint8Array(E > 0 ? E - 1 : 1));
+      }
+      if (sz(F) !== E) throw new Error("final size");
+      if (backupMade) rm(B);
       return { stdout: "PYBOT_INSTALL_OK\n", stderr: "" };
-    }
-
-    rm(B);
-    fs.set(B, fs.get(F));
-    rm(F);
-    if (hooks.failMode === "renameFinal") {
-      // Restore backup like firmware script.
-      fs.set(F, fs.get(B));
-      rm(B);
-      rm(T);
-      return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
-    }
-    fs.set(F, fs.get(T));
-    rm(T);
-    if (hooks.failMode === "verifyFinal") {
-      fs.set(F, new Uint8Array(E > 0 ? E - 1 : 1));
-    }
-    if (sz(F) !== E) {
-      rm(F);
-      if (fs.has(B)) {
-        fs.set(F, fs.get(B));
-        rm(B);
+    } catch {
+      if (backupMade) {
+        rm(F);
+        if (hooks.failMode === "rollbackFail") {
+          // TXBAK survives with OLD; final unrestored.
+          return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
+        }
+        if (fs.has(B)) {
+          fs.set(F, fs.get(B));
+          rm(B);
+        }
+      } else {
+        rm(T);
+        if (placed) rm(F);
       }
       return { stdout: "PYBOT_INSTALL_FAIL\n", stderr: "" };
     }
-    rm(B);
-    return { stdout: "PYBOT_INSTALL_OK\n", stderr: "" };
   }
 
   if (/os\.remove\('([^']+__pybot_tmp)'\)/.test(code) && !/os\.rename/.test(code)) {
@@ -307,7 +311,7 @@ test("installFile: replaces existing via temp without truncating final early", a
   });
   assert.equal(fsText(fs, "EDA6.py"), "NEW CONTENT");
   assert.equal(fs.has("EDA6.py.__pybot_tmp"), false);
-  assert.equal(fs.has("EDA6.py.__pybot_bak"), false);
+  assert.equal([...fs.keys()].some((k) => /EDA6\.py\.__pybot_bak_/.test(k)), false);
   assert.ok(hooks.scripts.some((c) => /__pybot_tmp/.test(c) && /'wb'/.test(c)));
   assert.ok(hooks.scripts.every((c) => !/open\('EDA6\.py', 'wb'\)/.test(c)));
   assert.ok(hooks.scripts.every((c) => !/open\('EDA6\.py', 'ab'\)/.test(c)));
@@ -414,6 +418,59 @@ test("installFile: progress remains chunk-based", async () => {
   await s.close();
 });
 
+test("installFile: preexisting generic backup is not deleted during commit", async () => {
+  const { s, fs, hooks } = await installSession({
+    "EDA6.py": "OLD",
+    "EDA6.py.__pybot_bak": "VERY_OLD_BACKUP",
+  });
+  await s.installFile("EDA6.py", "NEW");
+  assert.equal(fsText(fs, "EDA6.py"), "NEW");
+  assert.equal(fsText(fs, "EDA6.py.__pybot_bak"), "VERY_OLD_BACKUP");
+  const commit = hooks.scripts.find((c) => /backup_made/.test(c));
+  assert.ok(commit);
+  assert.match(commit, /B='EDA6\.py\.__pybot_bak_[^']+'/);
+  assert.doesNotMatch(commit, /_rm\(B\).*rename\(F, B\)/s);
+  assert.doesNotMatch(commit, /os\.remove\('EDA6\.py\.__pybot_bak'\)/);
+  await s.close();
+});
+
+test("installFile: exception after F->TXBAK during final stat restores OLD", async () => {
+  const { s, fs } = await installSession({ "EDA6.py": "OLD" }, { failMode: "statFinalThrows" });
+  await assert.rejects(() => s.installFile("EDA6.py", "NEW"), /INSTALL_FAIL/);
+  assert.equal(fsText(fs, "EDA6.py"), "OLD");
+  assert.equal([...fs.keys()].some((k) => /EDA6\.py\.__pybot_bak_/.test(k)), false);
+  await s.close();
+});
+
+test("installFile: temp->final rename exception restores OLD", async () => {
+  const { s, fs } = await installSession({ "EDA6.py": "OLD" }, { failMode: "renameFinal" });
+  await assert.rejects(() => s.installFile("EDA6.py", "NEW"), /INSTALL_FAIL/);
+  assert.equal(fsText(fs, "EDA6.py"), "OLD");
+  await s.close();
+});
+
+test("installFile: failed rollback keeps transactional backup with OLD", async () => {
+  const { s, fs } = await installSession({ "EDA6.py": "OLD" }, { failMode: "rollbackFail" });
+  await assert.rejects(() => s.installFile("EDA6.py", "NEW"), /INSTALL_FAIL/);
+  const txKeys = [...fs.keys()].filter((k) => /EDA6\.py\.__pybot_bak_/.test(k));
+  assert.equal(txKeys.length, 1);
+  assert.equal(fsText(fs, txKeys[0]), "OLD");
+  assert.notEqual(fsText(fs, "EDA6.py"), "NEW");
+  await s.close();
+});
+
+test("installFile: commit never removes generic __pybot_bak before verified final", async () => {
+  const { s, hooks } = await installSession({ "x.py": "1", "x.py.__pybot_bak": "KEEP" });
+  await s.installFile("x.py", "22");
+  const commit = hooks.scripts.find((c) => /backup_made/.test(c));
+  assert.ok(commit);
+  assert.doesNotMatch(commit, /remove\('x\.py\.__pybot_bak'\)/);
+  assert.doesNotMatch(commit, /_rm\('x\.py\.__pybot_bak'\)/);
+  // Solo el TX bak (con nonce) puede borrarse tras éxito.
+  assert.match(commit, /if backup_made:\s*\n\s*_rm\(B\)/m);
+  await s.close();
+});
+
 test("installFile: structural guards (no full read, temp suffixes, no version/firmware touch)", async () => {
   const src = readFileSync(
     new URL("../src/micropython/micropythonSession.js", import.meta.url),
@@ -421,7 +478,8 @@ test("installFile: structural guards (no full read, temp suffixes, no version/fi
   );
   const fn = src.slice(src.indexOf("async installFile("), src.indexOf("async syncFilesystem("));
   assert.match(fn, /\.__pybot_tmp/);
-  assert.match(fn, /\.__pybot_bak/);
+  assert.match(fn, /\.__pybot_bak_/);
+  assert.match(fn, /backup_made/);
   assert.match(fn, /os\.stat\(p\)\[6\]/);
   assert.doesNotMatch(fn, /open\([^)]+\)\.read\(/);
   assert.doesNotMatch(fn, /\.read\(\)/);
@@ -433,7 +491,7 @@ test("installFile: structural guards (no full read, temp suffixes, no version/fi
   const joined = hooks.scripts.join("\n");
   assert.doesNotMatch(joined, /open\([^)]*\)\.read\(/);
   assert.match(joined, /__pybot_tmp/);
-  assert.match(joined, /__pybot_bak/);
+  assert.match(joined, /__pybot_bak_/);
   await s.close();
 
   // No tocar fixes recientes de firmware/version en este cambio.
