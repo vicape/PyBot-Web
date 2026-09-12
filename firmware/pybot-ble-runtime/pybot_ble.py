@@ -607,8 +607,8 @@ def _maybe_autostart(manager):
         return
     manager.start_app()
 
-def _exec_student_app():
-    """Autostart nativo: exec del archivo del alumno. Stop = KeyboardInterrupt."""
+def _prepare_student_ns():
+    """Namespace de autostart nativo (EDA6 + MPY + net)."""
     meta = _load_app_meta()
     profile = "ESP32" if meta and meta.get("profile") == "ESP32" else "WEMOS"
     ns = {"__name__": "__main__"}
@@ -646,10 +646,53 @@ def _exec_student_app():
                 ns[k] = getattr(pybot_net, k)
     except Exception:
         pass
+    return ns
+
+def _exec_student_app(ns=None):
+    """Autostart nativo: exec del archivo del alumno. Stop = KeyboardInterrupt."""
+    if ns is None:
+        ns = _prepare_student_ns()
     with open(_APP_FILE) as f:
         code = f.read()
     exec(code, ns)
+    return ns
 
+def _cleanup_native_student(ns, outcome):
+    """
+    Misma semántica que ProgramManager._cleanup:
+      done  → keep_servos (EDA6._pybot_cleanup_normal)
+      stop/error → detenerTodo completo + pybot_mpy._pybot_cleanup
+    Fallos de cleanup no deben propagarse.
+    """
+    keep_servos = outcome == "done"
+    try:
+        if keep_servos:
+            try:
+                mod_eda6 = __import__(_EDA6_LIB)
+                fn = getattr(mod_eda6, "_pybot_cleanup_normal", None)
+                if fn:
+                    fn()
+                else:
+                    fn2 = ns.get("detenerTodo") if isinstance(ns, dict) else None
+                    if fn2:
+                        fn2()
+            except Exception:
+                fn2 = ns.get("detenerTodo") if isinstance(ns, dict) else None
+                if fn2:
+                    fn2()
+        else:
+            fn = ns.get("detenerTodo") if isinstance(ns, dict) else None
+            if fn:
+                fn()
+    except Exception:
+        pass
+    try:
+        mod_mpy = __import__(_MPY_LIB)
+        cu = getattr(mod_mpy, "_pybot_cleanup", None)
+        if cu:
+            cu()
+    except Exception:
+        pass
 
 def main():
     dev_id = device_id()
@@ -1091,8 +1134,10 @@ def main():
                     na["action"] = None
                     outcome = "done"
                     error_text = None
+                    ns = {}
                     try:
-                        _exec_student_app()
+                        ns = _prepare_student_ns()
+                        _exec_student_app(ns)
                     except KeyboardInterrupt:
                         outcome = "stopped"
                     except Exception as e:
@@ -1102,6 +1147,10 @@ def main():
                         except Exception:
                             error_text = "error"
                     finally:
+                        try:
+                            _cleanup_native_student(ns, outcome)
+                        except Exception:
+                            pass
                         try:
                             _load_deploy().finish_native_app(
                                 na, outcome, error_text, _send, _cancel_force_reset

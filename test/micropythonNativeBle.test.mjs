@@ -547,7 +547,7 @@ function nativeAutostartProfileFromMeta(meta) {
 test("native _exec_student_app applies app meta profile to EDA6 before student code", () => {
   const ble = readFw("pybot_ble.py");
   const fn = ble.slice(
-    ble.indexOf("def _exec_student_app"),
+    ble.indexOf("def _prepare_student_ns"),
     ble.indexOf("\ndef main("),
   );
   assert.match(fn, /meta = _load_app_meta\(\)/);
@@ -822,7 +822,7 @@ test("TEST1 native autostart marks running=true before exec", () => {
   const ble = readFw("pybot_ble.py");
   const block = ble.slice(ble.indexOf("if native:"), ble.indexOf("else:\n                    _maybe_autostart"));
   const runIdx = block.indexOf('na["running"] = True');
-  const execIdx = block.indexOf("_exec_student_app()");
+  const execIdx = block.indexOf("_exec_student_app(ns)");
   assert.ok(runIdx >= 0 && execIdx > runIdx);
 
   const m = createNativeLifecycleMirror();
@@ -1003,7 +1003,8 @@ test("TEST13 native boot still does not import pybot_run", () => {
   const nativeEnd = main.indexOf(finishCall, nativeStart);
   assert.ok(nativeEnd > nativeStart);
   const nativeBranch = main.slice(nativeStart, nativeEnd + 80);
-  assert.match(nativeBranch, /_exec_student_app\(\)/);
+  assert.match(nativeBranch, /_exec_student_app\(ns\)/);
+  assert.match(nativeBranch, /_cleanup_native_student\(/);
   assert.match(nativeBranch, /finish_native_app\(/);
   assert.doesNotMatch(nativeBranch, /_ensure_manager|_load_run|import pybot_run|from pybot_run/);
   assert.match(main, /if not native:\s*\r?\n\s*try:\s*\r?\n\s*_ensure_manager\(\)/m);
@@ -1012,7 +1013,7 @@ test("TEST13 native boot still does not import pybot_run", () => {
 test("TEST14 EDA6 profile fix still present before exec(code, ns)", () => {
   const ble = readFw("pybot_ble.py");
   const fn = ble.slice(
-    ble.indexOf("def _exec_student_app"),
+    ble.indexOf("def _prepare_student_ns"),
     ble.indexOf("\ndef main("),
   );
   const placaIdx = fn.indexOf("mod_eda6.PLACA_ACTUAL = profile");
@@ -1030,4 +1031,116 @@ test("deploy APP:INFO accepts running_override without manager", () => {
   assert.equal(appInfoRunning(null, null), false);
   assert.equal(appInfoRunning({ running: true, _persistent: true }, null), true);
   assert.equal(appInfoRunning({ running: true, _persistent: true }, false), false);
+});
+
+// ---------------------------------------------------------------------------
+// #18 — native autostart cleanup (paridad con ProgramManager._cleanup)
+// ---------------------------------------------------------------------------
+
+test("#18 firmware: _cleanup_native_student before finish_native_app", () => {
+  const ble = readFw("pybot_ble.py");
+  assert.match(ble, /def _cleanup_native_student\(/);
+  assert.match(ble, /keep_servos = outcome == "done"/);
+  assert.match(ble, /_pybot_cleanup_normal/);
+  assert.match(ble, /mod_mpy.*_pybot_cleanup|_pybot_cleanup/);
+  const main = ble.slice(ble.indexOf("def main("));
+  const marker = 'na["running"] = True';
+  const start = main.indexOf(marker);
+  const finish = main.indexOf("finish_native_app(", start);
+  const block = main.slice(start, finish + 40);
+  const cleanIdx = block.indexOf("_cleanup_native_student(");
+  const finIdx = block.indexOf("finish_native_app(");
+  assert.ok(cleanIdx >= 0 && finIdx > cleanIdx);
+});
+
+test("#18 done → cleanup_normal; stop/error → detenerTodo + mpy cleanup", () => {
+  /** Mirror mínimo de _cleanup_native_student. */
+  function cleanupNative(ns, outcome, hooks) {
+    const keep = outcome === "done";
+    try {
+      if (keep) {
+        hooks.normal();
+      } else {
+        if (typeof ns.detenerTodo === "function") ns.detenerTodo();
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      hooks.mpy();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const calls = [];
+  const ns = { detenerTodo: () => calls.push("detenerTodo") };
+  cleanupNative(ns, "done", {
+    normal: () => calls.push("normal"),
+    mpy: () => calls.push("mpy"),
+  });
+  assert.deepEqual(calls, ["normal", "mpy"]);
+
+  calls.length = 0;
+  cleanupNative(ns, "stopped", {
+    normal: () => calls.push("normal"),
+    mpy: () => calls.push("mpy"),
+  });
+  assert.deepEqual(calls, ["detenerTodo", "mpy"]);
+
+  calls.length = 0;
+  cleanupNative(ns, "error", {
+    normal: () => calls.push("normal"),
+    mpy: () => calls.push("mpy"),
+  });
+  assert.deepEqual(calls, ["detenerTodo", "mpy"]);
+});
+
+test("#18 cleanup que falla no tapa outcome ni ACK", () => {
+  const m = createNativeLifecycleMirror();
+  const outcomes = [];
+  function runWithCleanup(execFn, cleanupFn) {
+    m.native_app.running = true;
+    m.native_app.action = "stop";
+    let outcome = "done";
+    let errorText = null;
+    try {
+      execFn();
+    } catch (e) {
+      if (e && e.name === "KeyboardInterrupt") outcome = "stopped";
+      else {
+        outcome = "error";
+        errorText = e.message;
+      }
+    } finally {
+      try {
+        cleanupFn();
+      } catch {
+        /* must not alter outcome */
+      }
+      m.native_app.running = false;
+      const action = m.native_app.action;
+      m.native_app.action = null;
+      updateNativeAppRunState(m.st, outcome, errorText);
+      if (action === "stop") m.sent.push("APP:OK:STOP");
+      outcomes.push(outcome);
+    }
+  }
+  runWithCleanup(
+    () => {
+      throw Object.assign(new Error("x"), { name: "KeyboardInterrupt" });
+    },
+    () => {
+      throw new Error("cleanup boom");
+    },
+  );
+  assert.equal(outcomes[0], "stopped");
+  assert.ok(m.sent.includes("APP:OK:STOP"));
+  assert.equal(m.st.last_outcome, "stopped");
+});
+
+test("#18 ProgramManager keep_servos parity still present", () => {
+  const run = readFw("pybot_run.py");
+  assert.match(run, /keep_servos=\(outcome == "done"\)/);
+  assert.match(run, /_pybot_cleanup_normal/);
 });
