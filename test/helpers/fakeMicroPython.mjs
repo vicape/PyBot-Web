@@ -28,6 +28,9 @@ export class FakeMicroPythonTransport {
    *   fragment?: (u8: Uint8Array) => Uint8Array[],
    *   sameChunk?: boolean,
    *   txFail?: boolean,
+   *   omitStderrCtrlDOnInterrupt?: boolean,
+   *   omitStdoutCtrlDOnInterrupt?: boolean,
+   *   exitRawReplFail?: boolean,
    * }} [opts]
    */
   constructor(opts = {}) {
@@ -139,9 +142,16 @@ export class FakeMicroPythonTransport {
     if (this._busy && includesByte(u8, 0x03)) {
       this.ctrlCDuringExec += 1;
       this._busy = false;
+      if (this.opts.omitStdoutCtrlDOnInterrupt) {
+        // Simula pérdida total del cierre raw tras Ctrl+C (ni 1º ni 2º Ctrl+D).
+        return;
+      }
       this.emitBytes(new Uint8Array([0x04]));
       this.emitText("Traceback (most recent call last):\nKeyboardInterrupt\n");
-      this.emitBytes(new Uint8Array([0x04]));
+      if (!this.opts.omitStderrCtrlDOnInterrupt) {
+        this.emitBytes(new Uint8Array([0x04]));
+      }
+      // #30: stdout cerró, stderr parcial sin 2º Ctrl+D (caso físico BLE).
       return;
     }
 
@@ -165,6 +175,9 @@ export class FakeMicroPythonTransport {
     }
 
     if (u8.length === 1 && u8[0] === 0x02) {
+      if (this.opts.exitRawReplFail) {
+        throw new Error("EXIT_RAW_FAIL");
+      }
       this._raw = false;
       this._paste = false;
       this.emitText("\r\n>>> ");

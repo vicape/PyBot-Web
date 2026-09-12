@@ -99,6 +99,34 @@ export class MicroPythonSession {
   }
 
   /**
+   * Tras Ctrl+C, followExecution puede perder el 2º Ctrl+D (stderr) por BLE.
+   * Los bytes pendientes son un frame raw incompleto: no son un prefijo válido
+   * para el próximo enterRawRepl. Se descartan y se sale a friendly REPL.
+   * @returns {Promise<boolean>} true si la sesión quedó usable para otro Run
+   */
+  async _recoverAfterInterrupt() {
+    this.protocol.queue.clear();
+    try {
+      await this.protocol.exitRawRepl();
+    } catch {
+      try {
+        await this.protocol.interruptExecution();
+      } catch {
+        /* best-effort */
+      }
+      this.protocol.queue.clear();
+      try {
+        await this.protocol.exitRawRepl();
+      } catch {
+        return false;
+      }
+    }
+    // Prompt `>>>` / Ctrl+D tardío tras el abort no deben quedar en la cola.
+    this.protocol.queue.clear();
+    return true;
+  }
+
+  /**
    * Ejecuta el código del alumno en la placa y transmite stdout/stderr.
    * @param {string} userCode
    * @param {{onOut?:Function,onErr?:Function,shouldStop?:Function,prelude?:string,onStarted?:Function,wrap?:boolean}} cb
@@ -121,6 +149,9 @@ export class MicroPythonSession {
 
       const followOpts = {};
       if (onOut) followOpts.onStdout = onOut;
+      // Timeouts explícitos (tests / callers); el default de producción no cambia.
+      if (cb.stdoutTimeout != null) followOpts.stdoutTimeout = cb.stdoutTimeout;
+      if (cb.stderrTimeout != null) followOpts.stderrTimeout = cb.stderrTimeout;
       if (this._interrupted) {
         followOpts.stdoutTimeout = RAW_REPL_FOLLOW_AFTER_INTERRUPT_MS;
         followOpts.stderrTimeout = RAW_REPL_FOLLOW_AFTER_INTERRUPT_MS;
@@ -130,14 +161,18 @@ export class MicroPythonSession {
       try {
         result = await this.protocol.followExecution(followOpts);
       } catch (e) {
-        if (this._interrupted && errorCode(e) === PROTOCOL_ERROR.RAW_REPL_STDOUT_TIMEOUT) {
-          if (onOut) onOut("\n[Detenido]\n");
-          try {
-            await this.protocol.exitRawRepl();
-          } catch {
-            /* cleanup */
+        const code = errorCode(e);
+        const interruptFollowTimeout =
+          this._interrupted &&
+          (code === PROTOCOL_ERROR.RAW_REPL_STDOUT_TIMEOUT ||
+            code === PROTOCOL_ERROR.RAW_REPL_STDERR_TIMEOUT);
+        if (interruptFollowTimeout) {
+          const recovered = await this._recoverAfterInterrupt();
+          if (recovered) {
+            if (onOut) onOut("\n[Detenido]\n");
+            return { stdout: "", stderr: "", interrupted: true };
           }
-          return { stdout: "", stderr: "", interrupted: true };
+          throw e;
         }
         try {
           await this.protocol.exitRawRepl();

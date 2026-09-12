@@ -146,6 +146,284 @@ test("Q: 20 real while True pass Run/Stop cycles", { timeout: 30000 }, async () 
   await s.close();
 });
 
+/** #30: stderrTimeout corto para no esperar 8s en la reproducción. */
+const FOLLOW_SHORT = { stdoutTimeout: 2000, stderrTimeout: 80 };
+
+test("#30 A: interrupt + missing stderr Ctrl+D → Stop normal + recovery", async () => {
+  const board = new FakeMicroPythonTransport({ omitStderrCtrlDOnInterrupt: true });
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  let out = "";
+  let err = "";
+  const p = s.runProgram("while True:\n    pass\n", {
+    prelude: "",
+    ...FOLLOW_SHORT,
+    onOut: (c) => {
+      out += c;
+    },
+    onErr: (c) => {
+      err += c;
+    },
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  await s.interrupt();
+  const result = await p;
+  assert.equal(result.interrupted, true);
+  assert.match(out, /Detenido/);
+  assert.equal(err.includes("RAW_REPL_STDERR_TIMEOUT"), false);
+  assert.equal(s.protocol.queue.length, 0);
+  await s.close();
+});
+
+test("#30 physical: stderr timeout after Ctrl+C then next Run works", async () => {
+  const board = new FakeMicroPythonTransport({ omitStderrCtrlDOnInterrupt: true });
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  let out1 = "";
+  const p1 = s.runProgram("while True:\n    pass\n", {
+    prelude: "",
+    ...FOLLOW_SHORT,
+    onOut: (c) => {
+      out1 += c;
+    },
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  await s.interrupt();
+  const r1 = await p1;
+  assert.equal(r1.interrupted, true);
+  assert.match(out1, /Detenido/);
+  assert.equal(s.protocol.queue.length, 0);
+
+  let out2 = "";
+  await s.runProgram('print("after_stop")\n', {
+    prelude: "",
+    onOut: (c) => {
+      out2 += c;
+    },
+  });
+  assert.match(out2, /after_stop/);
+  await s.close();
+});
+
+test("#30 B: interrupt + missing stdout Ctrl+D recovers and next Run works", async () => {
+  const board = new FakeMicroPythonTransport({ omitStdoutCtrlDOnInterrupt: true });
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  let out = "";
+  const p = s.runProgram("while True:\n    pass\n", {
+    prelude: "",
+    ...FOLLOW_SHORT,
+    onOut: (c) => {
+      out += c;
+    },
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  await s.interrupt();
+  const r = await p;
+  assert.equal(r.interrupted, true);
+  assert.match(out, /Detenido/);
+
+  let out2 = "";
+  await s.runProgram('print("again")\n', {
+    prelude: "",
+    onOut: (c) => {
+      out2 += c;
+    },
+  });
+  assert.match(out2, /again/);
+  await s.close();
+});
+
+test("#30 C: interrupt + full KeyboardInterrupt still interrupted", async () => {
+  const board = new FakeMicroPythonTransport();
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  let out = "";
+  const p = s.runProgram("while True:\n    pass\n", {
+    prelude: "",
+    onOut: (c) => {
+      out += c;
+    },
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  await s.interrupt();
+  const r = await p;
+  assert.equal(r.interrupted, true);
+  assert.match(out, /Detenido/);
+  await s.close();
+});
+
+test("#30 D: stderr timeout WITHOUT interrupt remains an error", async () => {
+  const board = new FakeMicroPythonTransport({ omitStderrCtrlDOnInterrupt: true });
+  // Force a finite program that ends stdout but never sends 2nd Ctrl+D.
+  board._isInfinite = () => false;
+  const origFinish = board._finishClassic.bind(board);
+  board._finishClassic = function (text) {
+    this.execStarted = true;
+    this.emitBytes(new Uint8Array([0x4f, 0x4b]));
+    this.emitText("hi\n");
+    this.emitBytes(new Uint8Array([0x04])); // stdout end only
+    // no stderr Ctrl+D
+  };
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  await assert.rejects(
+    () =>
+      s.runProgram('print("hi")\n', {
+        prelude: "",
+        wrap: false,
+        ...FOLLOW_SHORT,
+        onOut: () => {},
+      }),
+    (e) => e && e.code === "RAW_REPL_STDERR_TIMEOUT",
+  );
+  void origFinish;
+  await s.close();
+});
+
+test("#30 E: stdout timeout WITHOUT interrupt remains an error", async () => {
+  const board = new FakeMicroPythonTransport();
+  board._finishClassic = function () {
+    this.execStarted = true;
+    this.emitBytes(new Uint8Array([0x4f, 0x4b]));
+    // nunca Ctrl+D
+  };
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  await assert.rejects(
+    () =>
+      s.runProgram('print("x")\n', {
+        prelude: "",
+        wrap: false,
+        stdoutTimeout: 60,
+        stderrTimeout: 60,
+        onOut: () => {},
+      }),
+    (e) => e && e.code === "RAW_REPL_STDOUT_TIMEOUT",
+  );
+  await s.close();
+});
+
+test("#30 F/G: Run→Stop→Run→Stop→Run with missing stderr Ctrl+D", async () => {
+  const board = new FakeMicroPythonTransport({ omitStderrCtrlDOnInterrupt: true });
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  for (let i = 0; i < 2; i++) {
+    let out = "";
+    const p = s.runProgram("while True:\n    pass\n", {
+      prelude: "",
+      ...FOLLOW_SHORT,
+      onOut: (c) => {
+        out += c;
+      },
+    });
+    await new Promise((r) => setTimeout(r, 15));
+    await s.interrupt();
+    const r = await p;
+    assert.equal(r.interrupted, true, "stop " + i);
+    assert.match(out, /Detenido/, "stop " + i);
+    // Tras recovery, no deben quedar restos del frame stderr incompleto.
+    assert.equal(s.protocol.queue.length, 0, "queue clean " + i);
+  }
+  let finalOut = "";
+  await s.runProgram('print("third")\n', {
+    prelude: "",
+    onOut: (c) => {
+      finalOut += c;
+    },
+  });
+  assert.match(finalOut, /third/);
+  await s.close();
+});
+
+test("#30 H: double Stop idle does not desync", async () => {
+  const board = new FakeMicroPythonTransport({ omitStderrCtrlDOnInterrupt: true });
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  const p = s.runProgram("while True:\n    pass\n", {
+    prelude: "",
+    ...FOLLOW_SHORT,
+    onOut: () => {},
+  });
+  await new Promise((r) => setTimeout(r, 15));
+  await s.interrupt();
+  await s.interrupt();
+  const r = await p;
+  assert.equal(r.interrupted, true);
+  await s.interrupt();
+  let out = "";
+  await s.runProgram('print("ok")\n', {
+    prelude: "",
+    onOut: (c) => {
+      out += c;
+    },
+  });
+  assert.match(out, /ok/);
+  await s.close();
+});
+
+test("#30 I: real program stderr is not silenced without interrupt", async () => {
+  const board = new FakeMicroPythonTransport();
+  board._stdoutFor = () => "";
+  board._finishClassic = function () {
+    this.execStarted = true;
+    this.emitBytes(new Uint8Array([0x4f, 0x4b]));
+    this.emitBytes(new Uint8Array([0x04]));
+    this.emitText("Traceback (most recent call last):\nValueError: boom\n");
+    this.emitBytes(new Uint8Array([0x04]));
+  };
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  let err = "";
+  const r = await s.runProgram("raise ValueError('boom')\n", {
+    prelude: "",
+    wrap: false,
+    onOut: () => {},
+    onErr: (c) => {
+      err += c;
+    },
+  });
+  assert.equal(r.interrupted, false);
+  assert.match(err, /ValueError: boom/);
+  await s.close();
+});
+
+test("#30 J: recovery failure does not claim interrupted success", async () => {
+  const board = new FakeMicroPythonTransport({
+    omitStderrCtrlDOnInterrupt: true,
+    exitRawReplFail: true,
+  });
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  const p = s.runProgram("while True:\n    pass\n", {
+    prelude: "",
+    ...FOLLOW_SHORT,
+    onOut: () => {},
+  });
+  await new Promise((r) => setTimeout(r, 15));
+  await s.interrupt();
+  await assert.rejects(() => p, (e) => e && e.code === "RAW_REPL_STDERR_TIMEOUT");
+  await s.close();
+});
+
+test("#30 K: leftover stderr bytes are cleared after interrupt timeout", async () => {
+  const board = new FakeMicroPythonTransport({ omitStderrCtrlDOnInterrupt: true });
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  const p = s.runProgram("while True:\n    pass\n", {
+    prelude: "",
+    ...FOLLOW_SHORT,
+    onOut: () => {},
+  });
+  await new Promise((r) => setTimeout(r, 15));
+  await s.interrupt();
+  await p;
+  assert.equal(s.protocol.queue.length, 0);
+  // No KeyboardInterrupt remnant that could poison the next banner wait.
+  assert.equal(new TextDecoder().decode(s.protocol.queue.peek(64)).includes("KeyboardInterrupt"), false);
+  await s.close();
+});
+
 test("fileExists uses raw REPL markers", async () => {
   const s = sessionOf();
   assert.equal(await s.fileExists("main.py"), true);
