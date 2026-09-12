@@ -608,21 +608,23 @@ def _maybe_autostart(manager):
     manager.start_app()
 
 def _prepare_student_ns():
-    """Namespace de autostart nativo (EDA6 + MPY + net)."""
+    """Namespace de autostart nativo según meta.mode (eda6 | mpy)."""
     meta = _load_app_meta()
+    mode = "eda6" if meta and meta.get("mode") == "eda6" else "mpy"
     profile = "ESP32" if meta and meta.get("profile") == "ESP32" else "WEMOS"
     ns = {"__name__": "__main__"}
-    try:
-        mod_eda6 = __import__(_EDA6_LIB)
+    if mode == "eda6":
         try:
-            mod_eda6.PLACA_ACTUAL = profile
+            mod_eda6 = __import__(_EDA6_LIB)
+            try:
+                mod_eda6.PLACA_ACTUAL = profile
+            except Exception:
+                pass
+            for k in dir(mod_eda6):
+                if not k.startswith("_"):
+                    ns[k] = getattr(mod_eda6, k)
         except Exception:
             pass
-        for k in dir(mod_eda6):
-            if not k.startswith("_"):
-                ns[k] = getattr(mod_eda6, k)
-    except Exception:
-        pass
     try:
         mod_mpy = __import__(_MPY_LIB)
         for k in dir(mod_mpy):
@@ -659,33 +661,37 @@ def _exec_student_app(ns=None):
 
 def _cleanup_native_student(ns, outcome):
     """
-    Misma semántica que ProgramManager._cleanup:
-      done  → keep_servos (EDA6._pybot_cleanup_normal)
-      stop/error → detenerTodo completo + pybot_mpy._pybot_cleanup
+    Misma semántica que ProgramManager._cleanup, respetando mode:
+      eda6 + done  → _pybot_cleanup_normal (servos posicionales)
+      eda6 + stop/error → detenerTodo
+      mpy → no importa EDA6; solo _pybot_cleanup de pybot_mpy
     Fallos de cleanup no deben propagarse.
     """
+    meta = _load_app_meta()
+    mode = "eda6" if meta and meta.get("mode") == "eda6" else "mpy"
     keep_servos = outcome == "done"
-    try:
-        if keep_servos:
-            try:
-                mod_eda6 = __import__(_EDA6_LIB)
-                fn = getattr(mod_eda6, "_pybot_cleanup_normal", None)
-                if fn:
-                    fn()
-                else:
+    if mode == "eda6":
+        try:
+            if keep_servos:
+                try:
+                    mod_eda6 = __import__(_EDA6_LIB)
+                    fn = getattr(mod_eda6, "_pybot_cleanup_normal", None)
+                    if fn:
+                        fn()
+                    else:
+                        fn2 = ns.get("detenerTodo") if isinstance(ns, dict) else None
+                        if fn2:
+                            fn2()
+                except Exception:
                     fn2 = ns.get("detenerTodo") if isinstance(ns, dict) else None
                     if fn2:
                         fn2()
-            except Exception:
-                fn2 = ns.get("detenerTodo") if isinstance(ns, dict) else None
-                if fn2:
-                    fn2()
-        else:
-            fn = ns.get("detenerTodo") if isinstance(ns, dict) else None
-            if fn:
-                fn()
-    except Exception:
-        pass
+            else:
+                fn = ns.get("detenerTodo") if isinstance(ns, dict) else None
+                if fn:
+                    fn()
+        except Exception:
+            pass
     try:
         mod_mpy = __import__(_MPY_LIB)
         cu = getattr(mod_mpy, "_pybot_cleanup", None)

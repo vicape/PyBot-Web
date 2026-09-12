@@ -1190,3 +1190,62 @@ test("#20 mirror: native running → DEPLOY/UPDATE BUSY; idle → ok", () => {
   assert.equal(updateBusy(true, false, false), true);
   assert.equal(updateBusy(false, false, false), false);
 });
+
+// ---------------------------------------------------------------------------
+// #19 — native autostart respeta meta.mode
+// ---------------------------------------------------------------------------
+
+test("#19 prepare importa EDA6 solo si mode=eda6", () => {
+  const ble = readFw("pybot_ble.py");
+  const prep = ble.slice(
+    ble.indexOf("def _prepare_student_ns"),
+    ble.indexOf("def _exec_student_app"),
+  );
+  assert.match(prep, /mode = "eda6" if meta and meta\.get\("mode"\) == "eda6" else "mpy"/);
+  assert.match(prep, /if mode == "eda6":/);
+  const eda6Import = prep.indexOf('mod_eda6 = __import__(_EDA6_LIB)');
+  const modeGate = prep.indexOf('if mode == "eda6":');
+  assert.ok(modeGate >= 0 && eda6Import > modeGate);
+  // mpy / net siguen fuera del gate eda6
+  const mpyImport = prep.indexOf('mod_mpy = __import__(_MPY_LIB)');
+  assert.ok(mpyImport > eda6Import);
+  assert.match(prep, /import pybot_net/);
+});
+
+test("#19 cleanup EDA6 solo en mode eda6; mpy siempre limpia pybot_mpy", () => {
+  const ble = readFw("pybot_ble.py");
+  const clean = ble.slice(
+    ble.indexOf("def _cleanup_native_student"),
+    ble.indexOf("\ndef main("),
+  );
+  assert.match(clean, /mode = "eda6" if meta and meta\.get\("mode"\) == "eda6" else "mpy"/);
+  assert.match(clean, /if mode == "eda6":/);
+  assert.match(clean, /_pybot_cleanup_normal/);
+  assert.match(clean, /_pybot_cleanup/);
+});
+
+test("#19 mirror: mpy ns sin símbolos EDA6; eda6 los incluye", () => {
+  function prepareNs(meta, libs) {
+    const mode = meta && meta.mode === "eda6" ? "eda6" : "mpy";
+    const ns = {};
+    if (mode === "eda6") {
+      for (const [k, v] of Object.entries(libs.eda6)) ns[k] = v;
+    }
+    for (const [k, v] of Object.entries(libs.mpy)) ns[k] = v;
+    for (const [k, v] of Object.entries(libs.net)) ns[k] = v;
+    return ns;
+  }
+  const libs = {
+    eda6: { servomotor: 1, detenerTodo: 2 },
+    mpy: { pin: 3 },
+    net: { wifi_conectar: 4 },
+  };
+  const mpyNs = prepareNs({ mode: "mpy" }, libs);
+  assert.equal(mpyNs.servomotor, undefined);
+  assert.equal(mpyNs.detenerTodo, undefined);
+  assert.equal(mpyNs.pin, 3);
+  assert.equal(mpyNs.wifi_conectar, 4);
+  const edaNs = prepareNs({ mode: "eda6", profile: "WEMOS" }, libs);
+  assert.equal(edaNs.servomotor, 1);
+  assert.equal(edaNs.pin, 3);
+});
