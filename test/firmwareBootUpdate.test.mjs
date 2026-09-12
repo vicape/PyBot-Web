@@ -44,6 +44,7 @@ const RUNTIME_FILES = [
 ];
 const RTBAK = ".rtbak";
 const RTBAK_READY = "pybot_runtime.rtbak_ready";
+const ABSENT = "pybot_runtime.rtbak_absent";
 const COPY_CHUNK = 256;
 
 /** Power loss: corta el proceso SIN ejecutar catch/restore. */
@@ -236,8 +237,9 @@ function _markRtbakReady(fs, hash, opts = {}) {
   if (opts.cutAfterMarker) throw new PowerCutError("cut after marker");
 }
 
-/** Backup idempotente: nunca borra/reemplaza un .rtbak existente. */
+/** Backup idempotente: nunca borra/reemplaza un .rtbak existente. Devuelve absent[] o null. */
 function _backupRuntime(fs, names, opts = {}) {
+  const absent = [];
   for (let i = 0; i < names.length; i++) {
     const name = names[i];
     const bak = name + RTBAK;
@@ -245,10 +247,14 @@ function _backupRuntime(fs, names, opts = {}) {
       if (opts.cutAfterBackupIndex === i) throw new PowerCutError("cut after backup " + i);
       continue;
     }
-    if (fs.exists(name) && !fs.rename(name, bak)) return false;
+    if (fs.exists(name)) {
+      if (!fs.rename(name, bak)) return null;
+    } else {
+      absent.push(name);
+    }
     if (opts.cutAfterBackupIndex === i) throw new PowerCutError("cut after backup " + i);
   }
-  return true;
+  return absent;
 }
 
 function _restoreRuntime(fs) {
@@ -269,12 +275,39 @@ function _clearRtbakReady(fs) {
   fs.remove(RTBAK_READY);
 }
 
+function _clearAbsent(fs) {
+  fs.remove(ABSENT);
+}
+
+function _writeAbsent(fs, hash, names) {
+  fs.files.set(ABSENT, String(hash || "").toLowerCase() + "\n" + names.join("\n") + (names.length ? "\n" : ""));
+}
+
+function _readAbsent(fs, hash) {
+  if (!fs.exists(ABSENT)) return [];
+  const want = String(hash || "").toLowerCase();
+  if (!want) return [];
+  const lines = String(fs.get(ABSENT) || "").split("\n");
+  if ((lines[0] || "").trim().toLowerCase() !== want) return [];
+  return lines
+    .slice(1)
+    .map((l) => l.trim())
+    .filter((n) => n && RUNTIME_FILES.includes(n));
+}
+
+function _removeAbsentModules(fs, hash) {
+  for (const name of _readAbsent(fs, hash)) fs.remove(name);
+  _clearAbsent(fs);
+}
+
 function _clearApplied(fs) {
   fs.remove(APPLIED);
 }
 
-function _abortPack(fs) {
+function _abortPack(fs, hash = "") {
+  const h = hash || String(fs.get(RTBAK_READY) || "").trim().toLowerCase();
   _restoreRuntime(fs);
+  _removeAbsentModules(fs, h);
   fs.remove(NEW);
   fs.remove(STATE);
   _clearRtbakReady(fs);
@@ -326,6 +359,7 @@ function _tryRecoverMissingState(fs) {
   fs.remove(NEW);
   _clearRtbakReady(fs);
   _clearApplied(fs);
+  _clearAbsent(fs);
   return null;
 }
 
@@ -340,11 +374,13 @@ function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
       fs.remove(STATE);
     } else {
       _restoreRuntime(fs);
+      _removeAbsentModules(fs, hash);
       if (fs.exists(BAK) && !fs.exists(MAIN)) fs.rename(BAK, MAIN);
       fs.remove(STATE);
     }
     _clearRtbakReady(fs);
     _clearApplied(fs);
+    _clearAbsent(fs);
     return;
   }
   if (stats) stats.order.push("validate");
@@ -354,15 +390,18 @@ function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
     fs.remove(STATE);
     _clearRtbakReady(fs);
     _clearApplied(fs);
+    _clearAbsent(fs);
     return;
   }
   const names = meta.map(([n]) => n);
   if (!_isRtbakReady(fs, hash)) {
     if (stats) stats.order.push("backup");
-    if (!_backupRuntime(fs, names, opts)) {
-      _abortPack(fs);
+    const absent = _backupRuntime(fs, names, opts);
+    if (absent === null) {
+      _abortPack(fs, hash);
       return;
     }
+    _writeAbsent(fs, hash, absent);
     if (stats) stats.order.push("mark");
     _markRtbakReady(fs, hash, opts);
   }
@@ -371,7 +410,7 @@ function _applyPack(fs, st, size, hash, hasHashlib, opts = {}) {
     _installPackFiles(fs, meta, stats, opts);
   } catch (e) {
     if (isPowerCut(e)) throw e;
-    _abortPack(fs);
+    _abortPack(fs, hash);
     return;
   }
   if (stats) stats.order.push("commit");
@@ -421,8 +460,10 @@ function _doApply(fs, st, size, hash, hasHashlib, opts = {}) {
 }
 
 function _doRollback(fs, st) {
+  const hexhash = String(st.hash || "").toLowerCase();
   if (st.pack) {
     _restoreRuntime(fs);
+    _removeAbsentModules(fs, hexhash);
     _clearRtbaks(fs);
     fs.remove(NEW);
     fs.remove(STATE);
@@ -436,6 +477,7 @@ function _doRollback(fs, st) {
       fs.remove(STATE);
       _clearRtbakReady(fs);
       _clearApplied(fs);
+      _clearAbsent(fs);
       return;
     }
   }
@@ -444,6 +486,7 @@ function _doRollback(fs, st) {
   fs.writeJson(STATE, st);
   _clearRtbakReady(fs);
   _clearApplied(fs);
+  _clearAbsent(fs);
 }
 
 /** Mirror de boot.py `_boot_apply_update` (corre ANTES de main.py en cada boot). */
@@ -476,6 +519,8 @@ function confirmBoot(fs) {
     _clearRtbaks(fs);
     fs.remove(STATE);
   }
+  // pybot_ble no conoce ABSENT; el próximo boot huérfano lo limpia.
+  // En tests, simular ese cleanup post-confirm vía boot sin state:
 }
 
 /** Ejecuta boot; si hay power cut, deja el FS congelado (sin cleanup). */
@@ -1471,4 +1516,136 @@ test("#28 firmware expone sidecar applied", () => {
   assert.match(src, /def _commit_pack_applied/);
   assert.match(src, /def _try_recover_missing_state/);
   assert.match(src, /_COPY_CHUNK\s*=\s*256/);
+});
+
+// ---------------------------------------------------------------------------
+// #29 — rollback elimina módulos que no existían antes
+// ---------------------------------------------------------------------------
+
+test("#29 módulo ausente OLD creado NEW; confirm lo conserva", () => {
+  const pack = buildPack([
+    ["main.py", "NEW_M\n"],
+    ["pybot_mpy.py", "NEW_MPY\n"], // no existía
+  ]);
+  const fs = new Fs({ [MAIN]: "OLD_M\n", [NEW]: pack });
+  assert.equal(fs.exists("pybot_mpy.py"), false);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs);
+  assert.equal(fs.get("pybot_mpy.py"), "NEW_MPY\n");
+  assert.equal(fs.exists("pybot_mpy.py" + RTBAK), false);
+  assert.ok(String(fs.get(ABSENT) || "").includes("pybot_mpy.py"));
+  confirmBoot(fs);
+  boot(fs); // orphan cleanup limpia ABSENT
+  assert.equal(fs.get("pybot_mpy.py"), "NEW_MPY\n");
+  assert.equal(fs.exists(ABSENT), false);
+});
+
+test("#29 success sin confirm: rollback borra módulo nuevo (fallaba antes)", () => {
+  const pack = buildPack([
+    ["main.py", "NEW_M\n"],
+    ["pybot_ble.py", "NEW_B\n"],
+    ["pybot_mpy.py", "SHOULD_VANISH\n"],
+  ]);
+  const fs = new Fs({
+    [MAIN]: "OLD_M\n",
+    "pybot_ble.py": "OLD_B\n",
+    [NEW]: pack,
+  });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs);
+  assert.equal(fs.exists("pybot_mpy.py"), true);
+  boot(fs); // rollback
+  assert.equal(fs.get(MAIN), "OLD_M\n");
+  assert.equal(fs.get("pybot_ble.py"), "OLD_B\n");
+  assert.equal(fs.exists("pybot_mpy.py"), false);
+  assert.equal(fs.exists(ABSENT), false);
+});
+
+test("#29 power loss mid-copy + rollback elimina ausentes", () => {
+  const pack = buildPack([
+    ["main.py", "NEW_M\n"],
+    ["pybot_net.py", "NEW_NET_" + "N".repeat(300) + "\n"],
+  ]);
+  const fs = new Fs({ [MAIN]: "OLD_M\n", [NEW]: pack });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  assert.equal(bootMaybeCut(fs, { cutDuringCopyAt: 1, cutAfterBytes: 10 }), true);
+  assert.equal(fs.exists("pybot_net.py"), true); // parcial NEW
+  boot(fs); // complete
+  assert.equal(fs.readJson(STATE).state, "applied");
+  boot(fs); // rollback
+  assert.equal(fs.get(MAIN), "OLD_M\n");
+  assert.equal(fs.exists("pybot_net.py"), false);
+});
+
+test("#29 múltiples ausentes + mezcla con existentes", () => {
+  const pack = buildPack([
+    ["main.py", "NM\n"],
+    ["pybot_ble.py", "NB\n"],
+    ["pybot_mpy.py", "A1\n"],
+    ["pybot_net.py", "A2\n"],
+  ]);
+  const fs = new Fs({
+    [MAIN]: "OM\n",
+    "pybot_ble.py": "OB\n",
+    [NEW]: pack,
+  });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs);
+  assert.equal(fs.exists("pybot_mpy.py"), true);
+  assert.equal(fs.exists("pybot_net.py"), true);
+  boot(fs);
+  assert.equal(fs.get(MAIN), "OM\n");
+  assert.equal(fs.get("pybot_ble.py"), "OB\n");
+  assert.equal(fs.exists("pybot_mpy.py"), false);
+  assert.equal(fs.exists("pybot_net.py"), false);
+});
+
+test("#29 absent no queda stale entre updates", () => {
+  const pack1 = buildPack([
+    ["main.py", "V1\n"],
+    ["pybot_mpy.py", "TMP\n"],
+  ]);
+  const fs = new Fs({ [MAIN]: "O\n", [NEW]: pack1 });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack1), hash: packHash(pack1) });
+  boot(fs);
+  confirmBoot(fs);
+  boot(fs);
+  assert.equal(fs.exists(ABSENT), false);
+  assert.equal(fs.exists("pybot_mpy.py"), true);
+
+  const pack2 = buildPack([
+    ["main.py", "V2\n"],
+    ["pybot_ble.py", "B2\n"],
+  ]);
+  fs.files.set("pybot_ble.py", "B1\n");
+  fs.files.set(NEW, pack2);
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack2), hash: packHash(pack2) });
+  boot(fs);
+  // pack2 no incluye mpy; absent de pack2 no debe listar basura vieja
+  const abs = String(fs.get(ABSENT) || "");
+  assert.ok(!abs.includes("pybot_mpy.py"));
+  boot(fs); // rollback pack2
+  assert.equal(fs.get(MAIN), "V1\n");
+  assert.equal(fs.exists("pybot_mpy.py"), true); // quedó del confirm anterior
+});
+
+test("#29 abort por copy fail también borra ausentes parciales", () => {
+  const pack = buildPack([
+    ["main.py", "NM\n"],
+    ["pybot_mpy.py", "XX\n"],
+  ]);
+  const fs = new Fs({ [MAIN]: "OM\n", [NEW]: pack });
+  webApply(fs, { from: "4.0.6", to: "4.0.6", size: packSize(pack), hash: packHash(pack) });
+  boot(fs, { failCopyAt: 1 });
+  assert.equal(fs.get(MAIN), "OM\n");
+  assert.equal(fs.exists("pybot_mpy.py"), false);
+  assert.equal(fs.exists(ABSENT), false);
+});
+
+test("#29 firmware registra rtbak_absent", () => {
+  const src = readFileSync(FW_BOOT_UPDATE, "utf8");
+  assert.match(src, /_ABSENT\s*=\s*"pybot_runtime\.rtbak_absent"/);
+  assert.match(src, /def _remove_absent_modules/);
+  assert.match(src, /_COPY_CHUNK\s*=\s*256/);
+  assert.match(src, /_APPLIED\s*=\s*"pybot_update\.applied"/);
 });

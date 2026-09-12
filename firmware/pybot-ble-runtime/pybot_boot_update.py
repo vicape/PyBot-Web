@@ -23,6 +23,8 @@ _RUNTIME_FILES = (
 _RTBAK = ".rtbak"
 # Marcador: fase de backup del pack actual completada (contenido = hash OTA).
 _RTBAK_READY = "pybot_runtime.rtbak_ready"
+# Módulos del pack que NO existían antes (hash + nombres); para borrarlos en rollback.
+_ABSENT = "pybot_runtime.rtbak_absent"
 # Lectura/escritura de bodies OTA acotada (no cargar módulos enteros en RAM).
 _COPY_CHUNK = 256
 
@@ -168,6 +170,7 @@ def _try_recover_missing_state():
     _remove(_NEW)
     _clear_rtbak_ready()
     _clear_applied_sidecar()
+    _clear_absent()
     return None
 
 def _new_is_valid(size, hexhash):
@@ -267,6 +270,45 @@ def _install_pack_files(meta):
 def _clear_rtbak_ready():
     _remove(_RTBAK_READY)
 
+def _clear_absent():
+    _remove(_ABSENT)
+
+def _write_absent(hexhash, names):
+    try:
+        with open(_ABSENT, "w") as f:
+            f.write((hexhash or "").lower() + "\n")
+            for name in names:
+                f.write(name + "\n")
+        return True
+    except Exception:
+        return False
+
+def _read_absent(hexhash):
+    """Nombres originalmente ausentes si el archivo pertenece al mismo hash."""
+    if not _exists(_ABSENT):
+        return []
+    want = (hexhash or "").lower()
+    if not want:
+        return []
+    try:
+        with open(_ABSENT, "r") as f:
+            lines = f.read().split("\n")
+        if not lines or (lines[0] or "").strip().lower() != want:
+            return []
+        out = []
+        for line in lines[1:]:
+            name = (line or "").strip()
+            if name and name in _RUNTIME_FILES:
+                out.append(name)
+        return out
+    except Exception:
+        return []
+
+def _remove_absent_modules(hexhash):
+    for name in _read_absent(hexhash):
+        _remove(name)
+    _clear_absent()
+
 def _is_rtbak_ready(hexhash):
     """True si el marker pertenece al mismo update (mismo hash)."""
     if not _exists(_RTBAK_READY):
@@ -291,16 +333,20 @@ def _backup_runtime_files(names):
     """
     Backup idempotente: si name.rtbak ya existe, NO se toca.
     Si no hay bak y el target existe, target -> bak.
-    Si ambos faltan, el archivo no existía en el runtime anterior.
+    Si ambos faltan, el archivo no existía → se lista en el retorno.
+    Devuelve list absent o None si falla.
     """
+    absent = []
     for name in names:
         bak = name + _RTBAK
         if _exists(bak):
             continue
         if _exists(name):
             if not _rename(name, bak):
-                return False
-    return True
+                return None
+        else:
+            absent.append(name)
+    return absent
 
 def _restore_runtime_files():
     for name in _RUNTIME_FILES:
@@ -313,8 +359,10 @@ def _clear_rtbaks():
     for name in _RUNTIME_FILES:
         _remove(name + _RTBAK)
 
-def _abort_pack_update():
+def _abort_pack_update(hexhash=None):
+    h = (hexhash or _read_rtbak_ready_hash() or "").lower()
     _restore_runtime_files()
+    _remove_absent_modules(h)
     _remove(_NEW)
     _clear_state()
     _clear_rtbak_ready()
@@ -327,11 +375,13 @@ def _apply_pack(st, size, hexhash):
             _clear_state()
         else:
             _restore_runtime_files()
+            _remove_absent_modules(hexhash)
             if _exists(_BAK) and not _exists(_MAIN):
                 _rename(_BAK, _MAIN)
             _clear_state()
         _clear_rtbak_ready()
         _clear_applied_sidecar()
+        _clear_absent()
         return
     # Validar pack COMPLETO antes de cualquier backup/escritura.
     meta = _validate_pack()
@@ -340,20 +390,26 @@ def _apply_pack(st, size, hexhash):
         _clear_state()
         _clear_rtbak_ready()
         _clear_applied_sidecar()
+        _clear_absent()
         return
     names = [n for n, _ in meta]
     # Marker listo => backups del ORIGINAL ya hechos; no re-respaldar.
     if not _is_rtbak_ready(hexhash):
-        if not _backup_runtime_files(names):
-            _abort_pack_update()
+        absent = _backup_runtime_files(names)
+        if absent is None:
+            _abort_pack_update(hexhash)
+            return
+        # Registrar ausentes ANTES del ready marker (power-loss seguro).
+        if not _write_absent(hexhash, absent):
+            _abort_pack_update(hexhash)
             return
         if not _mark_rtbak_ready(hexhash):
-            _abort_pack_update()
+            _abort_pack_update(hexhash)
             return
     try:
         _install_pack_files(meta)
     except Exception:
-        _abort_pack_update()
+        _abort_pack_update(hexhash)
         return
     _commit_pack_applied(st)
 
@@ -394,8 +450,10 @@ def _do_apply(st, size, hexhash):
         _do_apply_legacy(st, size, hexhash)
 
 def _do_rollback(st):
+    hexhash = (st.get("hash") or "").lower()
     if st.get("pack"):
         _restore_runtime_files()
+        _remove_absent_modules(hexhash)
         _clear_rtbaks()
         _remove(_NEW)
         _clear_state()
@@ -408,12 +466,14 @@ def _do_rollback(st):
             _clear_state()
             _clear_rtbak_ready()
             _clear_applied_sidecar()
+            _clear_absent()
             return
     _remove(_NEW)
     st["state"] = "rollback_failed"
     _write_json(_STATE, st)
     _clear_rtbak_ready()
     _clear_applied_sidecar()
+    _clear_absent()
 
 def apply():
     st = _read_json(_STATE)
