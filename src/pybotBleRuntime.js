@@ -136,18 +136,6 @@ export function buildBleRuntimePackBytes() {
   return out;
 }
 
-/**
- * Pack OTA como string latin1 (1 byte = 1 char) para reutilizar el canal UPDATE
- * que hace TextEncoder sobre el payload. Solo válido si el pack es ASCII-safe;
- * los .py del runtime lo son. Preferí `buildBleRuntimePackBytes` + sesión binaria.
- */
-export function buildBleRuntimePackText() {
-  const bytes = buildBleRuntimePackBytes();
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  return s;
-}
-
 /** SHA-256 hex del pack OTA (bytes exactos que viajan a la placa). */
 export function getBleRuntimePackHash() {
   return sha256Hex(buildBleRuntimePackBytes());

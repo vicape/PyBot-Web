@@ -1,22 +1,64 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { BleRuntimeUpdateSession } from "../src/bleRuntimeUpdateSession.js";
 import {
   UPDATE,
   MAX_RUNTIME_UPDATE_SIZE,
-  reassembleProgram,
+  UPDATE_SOURCE_CHUNK,
+  reassembleProgramBytes,
   sha256Hex,
+  sha256HexUtf8,
   base64ToBytes,
   compareRuntimeVersions,
+  buildUpdateBegin,
 } from "../src/bleProtocol.js";
+import { PYBOT_RUNTIME_MODULE_FILES } from "../src/esp32/pybotInstallManifest.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = join(__dirname, "..");
+const FW = join(root, "firmware/pybot-ble-runtime");
+const ENC = new TextEncoder();
+const PACK_MAGIC = "PYBOTRT1\n";
+
+/** Mismo algoritmo que buildBleRuntimePackBytes (sin import Vite ?raw). */
+function buildBleRuntimePackBytesFromDisk() {
+  const modules = PYBOT_RUNTIME_MODULE_FILES.map((name) => ({
+    name,
+    source: readFileSync(join(FW, name), "utf8"),
+  }));
+  const chunks = [ENC.encode(PACK_MAGIC)];
+  for (const { name, source } of modules) {
+    const data = ENC.encode(String(source ?? ""));
+    chunks.push(ENC.encode(name + "\n"));
+    chunks.push(ENC.encode(String(data.length) + "\n"));
+    chunks.push(data);
+  }
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
+}
+
+function getBleRuntimeModulesFromDisk() {
+  return PYBOT_RUNTIME_MODULE_FILES.map((name) => ({
+    name,
+    source: readFileSync(join(FW, name), "utf8"),
+  }));
+}
 
 /**
- * Mock FIEL del firmware UPDATE (RuntimeUpdateReceiver + boot.py apply). El
- * runtime NUNCA se escribe sobre `mainRuntime` durante la transferencia: se
- * acumula en `newTmp` y SOLO en APPLY (tras VERIFY:OK) se hace el swap (simulando
- * el reset + boot.py). Asi se valida que una transferencia interrumpida deja el
- * runtime anterior INTACTO.
+ * Mock FIEL del firmware UPDATE (RuntimeUpdateReceiver + boot.py apply).
+ * Reensambla CHUNKs como BYTES (base64ToBytes), nunca TextDecoder.
  */
 function makeMock(opts = {}) {
   const listeners = new Set();
@@ -59,7 +101,7 @@ function makeMock(opts = {}) {
       if (opts.noSpace) return emit(UPDATE.ERROR + ":NO_SPACE");
       if (opts.failBeginWrite) return emit(UPDATE.ERROR + ":WRITE_FAILED");
       st.tmpOpen = true;
-      st.newTmp = "";
+      st.newTmp = null;
       return emit(UPDATE.READY);
     }
     if (line.startsWith(UPDATE.CHUNK + ":")) {
@@ -93,11 +135,10 @@ function makeMock(opts = {}) {
     if (line === UPDATE.END) {
       if (!st.tmpOpen) return emit(UPDATE.ERROR + ":BAD_FRAME");
       st.tmpOpen = false;
-      const reassembled = reassembleProgram(st.chunks);
-      let bytes = new TextEncoder().encode(reassembled);
+      let bytes = reassembleProgramBytes(st.chunks);
       if (bytes.length !== st.begin.size) {
         st.newTmp = null;
-        return emit(UPDATE.ERROR + ":VERIFY_FAILED"); // runtime anterior intacto
+        return emit(UPDATE.ERROR + ":VERIFY_FAILED");
       }
       if (opts.corrupt) {
         bytes = Uint8Array.from(bytes);
@@ -106,7 +147,7 @@ function makeMock(opts = {}) {
       if (st.begin.hash) {
         if (opts.noHashlib) {
           st.newTmp = null;
-          return emit(UPDATE.ERROR + ":HASH_UNAVAILABLE"); // nunca VERIFY:OK
+          return emit(UPDATE.ERROR + ":HASH_UNAVAILABLE");
         }
         const digest = sha256Hex(bytes);
         if (digest !== st.begin.hash) {
@@ -114,19 +155,18 @@ function makeMock(opts = {}) {
           return emit(UPDATE.ERROR + ":BAD_HASH");
         }
       }
-      st.newTmp = reassembled; // .new verificado; main.py TODAVIA intacto
+      st.newTmp = bytes; // Uint8Array verificado; main aún intacto
       st.verified = true;
       return emit(UPDATE.VERIFY_OK);
     }
     if (line === UPDATE.APPLY) {
       if (!st.verified || st.newTmp == null) return emit(UPDATE.ERROR + ":BAD_FRAME");
-      // Simula: escribir pybot_update.json pending + reset + boot.py swap.
       emit(UPDATE.APPLYING);
-      st.mainRuntime = st.newTmp; // boot.py: .new -> main.py (con backup/rollback)
+      st.mainRuntime = st.newTmp; // Uint8Array instalado
       st.installed = st.begin.version;
       st.applied = true;
       st.newTmp = null;
-      queueMicrotask(() => mock._disconnect()); // la placa se reinicia
+      queueMicrotask(() => mock._disconnect());
       return;
     }
     if (line === UPDATE.ABORT) {
@@ -165,7 +205,12 @@ function makeMock(opts = {}) {
   return mock;
 }
 
+function asBytes(value) {
+  return value instanceof Uint8Array ? value : ENC.encode(String(value ?? ""));
+}
+
 const RUNTIME = "# PyBot runtime v-next\n" + "def f():\n    return 42\n".repeat(120);
+const RUNTIME_BYTES = ENC.encode(RUNTIME);
 
 // ---------------------------------------------------------------------------
 // Camino feliz: transferencia + verificación + apply
@@ -178,10 +223,8 @@ test("update transfers, verifies (size+hash) and applies (board swaps main.py)",
 
   assert.equal(res.ok, true);
   assert.equal(res.version, "3.2.0");
-  assert.equal(res.size, new TextEncoder().encode(RUNTIME).length);
-  // El firmware recibió EXACTAMENTE el runtime (chunking + reensamblado correcto)
-  // y boot.py lo instaló como main.py; la versión instalada pasó a la nueva.
-  assert.equal(mock._state.mainRuntime, RUNTIME);
+  assert.equal(res.size, RUNTIME_BYTES.length);
+  assert.deepEqual(asBytes(mock._state.mainRuntime), RUNTIME_BYTES);
   assert.equal(mock._state.installed, "3.2.0");
   assert.equal(mock._state.applied, true);
   assert.equal(session.isBusy(), false);
@@ -208,9 +251,8 @@ test("onProgress is based on CONFIRMED bytes and reaches 100% before applying", 
     version: "3.2.0",
     onProgress: (p) => seen.push(p),
   });
-  const total = new TextEncoder().encode(RUNTIME).length;
+  const total = RUNTIME_BYTES.length;
   const transfer = seen.filter((p) => p.phase === "transfer");
-  // Monotónico y nunca supera el total (bytes confirmados por ACK, no enviados).
   let last = -1;
   for (const p of transfer) {
     assert.ok(p.sent >= last, "progreso no monotónico");
@@ -235,7 +277,6 @@ for (const [label, opts, rx] of [
   test(`update error ${label} keeps the old runtime intact`, async () => {
     const mock = makeMock(opts);
     const session = new BleRuntimeUpdateSession(mock);
-    // BAD_VERSION: pedimos la MISMA versión que la instalada.
     const version = label.startsWith("BAD_VERSION") ? "3.1.0" : "3.2.0";
     await assert.rejects(() => session.update(RUNTIME, { version }), rx);
     assert.equal(mock._state.mainRuntime, "# OLD RUNTIME 3.1.0\n");
@@ -276,10 +317,6 @@ test("update HASH_UNAVAILABLE never claims VERIFY; old runtime intact", async ()
   assert.equal(mock._state.mainRuntime, "# OLD RUNTIME 3.1.0\n");
 });
 
-// ---------------------------------------------------------------------------
-// Transferencia interrumpida (disconnect) -> runtime viejo intacto
-// ---------------------------------------------------------------------------
-
 test("disconnect mid-update leaves the old runtime intact (never bricked)", async () => {
   const mock = makeMock({ disconnectAtChunk: 2 });
   const session = new BleRuntimeUpdateSession(mock);
@@ -289,13 +326,9 @@ test("disconnect mid-update leaves the old runtime intact (never bricked)", asyn
   );
   assert.equal(mock._state.mainRuntime, "# OLD RUNTIME 3.1.0\n");
   assert.equal(mock._state.applied, false);
-  assert.equal(mock._state.newTmp, null); // .new descartado
+  assert.equal(mock._state.newTmp, null);
   assert.equal(session.isBusy(), false);
 });
-
-// ---------------------------------------------------------------------------
-// Guardas de tamaño / conexión / versión (antes de tocar la placa)
-// ---------------------------------------------------------------------------
 
 test("update rejects runtime larger than MAX_RUNTIME_UPDATE_SIZE before sending", async () => {
   const mock = makeMock();
@@ -316,4 +349,229 @@ test("update requires a target version", async () => {
   const mock = makeMock();
   const session = new BleRuntimeUpdateSession(mock);
   await assert.rejects(() => session.update(RUNTIME, {}), /BLE_UPDATE_NO_VERSION/);
+});
+
+// ---------------------------------------------------------------------------
+// Punto 16 — transporte binario
+// ---------------------------------------------------------------------------
+
+test("TEST1: arbitrary bytes survive UPDATE chunks byte-for-byte", async () => {
+  const input = new Uint8Array([0x00, 0x01, 0x7f, 0x80, 0x94, 0xe2, 0xff]);
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  await session.update(input, { version: "3.2.0" });
+  assert.deepEqual(asBytes(mock._state.mainRuntime), input);
+});
+
+test("TEST2: em dash UTF-8 E2 80 94 is not corrupted to C3 A2 C2 80 C2 94", async () => {
+  const input = new Uint8Array([0xe2, 0x80, 0x94]);
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  await session.update(input, { version: "3.2.0" });
+  const got = asBytes(mock._state.mainRuntime);
+  assert.deepEqual(got, input);
+  assert.notDeepEqual(got, new Uint8Array([0xc3, 0xa2, 0xc2, 0x80, 0xc2, 0x94]));
+});
+
+test("TEST3: accented á (C3 A1) preserved", async () => {
+  const input = ENC.encode("á");
+  assert.deepEqual(input, new Uint8Array([0xc3, 0xa1]));
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  await session.update(input, { version: "3.2.0" });
+  assert.deepEqual(asBytes(mock._state.mainRuntime), input);
+});
+
+test("TEST4: BEGIN size is exact Uint8Array length", async () => {
+  const input = new Uint8Array([0x80, 0x81, 0x82, 0xff]);
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  await session.update(input, { version: "3.2.0" });
+  assert.equal(mock._state.begin.size, input.length);
+  assert.match(mock._state.sent[0], new RegExp(`^UPDATE:BEGIN:3\\.2\\.0:${input.length}:`));
+});
+
+test("TEST5: BEGIN hash is sha256Hex of exact bytes", async () => {
+  const input = new Uint8Array([0x00, 0xe2, 0x80, 0x94, 0xff]);
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  const res = await session.update(input, { version: "3.2.0" });
+  assert.equal(res.hash, sha256Hex(input));
+  assert.equal(res.hash, createHash("sha256").update(Buffer.from(input)).digest("hex"));
+  assert.equal(mock._state.begin.hash, res.hash);
+});
+
+test("TEST6: chunks are <= 192 bytes and reassemble to payload", async () => {
+  const input = new Uint8Array(UPDATE_SOURCE_CHUNK * 2 + 17);
+  for (let i = 0; i < input.length; i++) input[i] = (i * 17 + 0x80) & 0xff;
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  await session.update(input, { version: "3.2.0" });
+  const chunkLines = mock._state.sent.filter((l) => l.startsWith(UPDATE.CHUNK + ":"));
+  assert.equal(chunkLines.length, 3);
+  for (let i = 0; i < chunkLines.length; i++) {
+    const raw = base64ToBytes(chunkLines[i].slice((UPDATE.CHUNK + ":").length));
+    if (i < chunkLines.length - 1) assert.equal(raw.length, UPDATE_SOURCE_CHUNK);
+    else assert.ok(raw.length <= UPDATE_SOURCE_CHUNK);
+  }
+  assert.deepEqual(reassembleProgramBytes(mock._state.chunks), input);
+});
+
+test("TEST7: binary progress counts confirmed bytes", async () => {
+  const input = new Uint8Array(UPDATE_SOURCE_CHUNK + 40);
+  input.fill(0xaa);
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  const seen = [];
+  await session.update(input, { version: "3.2.0", onProgress: (p) => seen.push(p) });
+  const transfer = seen.filter((p) => p.phase === "transfer");
+  assert.equal(transfer[0].total, input.length);
+  assert.equal(transfer[transfer.length - 1].sent, input.length);
+  assert.equal(transfer[transfer.length - 1].pct, 100);
+  for (const p of transfer) assert.ok(p.sent <= p.total);
+});
+
+test("TEST8: string compatibility encodes via TextEncoder", async () => {
+  const text = "hola á —";
+  const expected = ENC.encode(text);
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  await session.update(text, { version: "3.2.0" });
+  assert.deepEqual(asBytes(mock._state.mainRuntime), expected);
+});
+
+test("TEST9: sha256Hex(TextEncoder(string)) matches sha256HexUtf8(string)", () => {
+  const s = "hola á — ESP32";
+  assert.equal(sha256Hex(ENC.encode(s)), sha256HexUtf8(s));
+});
+
+test("TEST10: real buildBleRuntimePackBytes survives OTA session", async () => {
+  const pack = buildBleRuntimePackBytesFromDisk();
+  assert.ok(pack.length > UPDATE_SOURCE_CHUNK);
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  const res = await session.update(pack, { version: "9.9.9" });
+  assert.equal(res.size, pack.length);
+  assert.equal(res.hash, sha256Hex(pack));
+  assert.deepEqual(asBytes(mock._state.mainRuntime), pack);
+});
+
+test("TEST11: real runtime non-ASCII (pybot_net em dash) survives pack OTA", async () => {
+  const net = readFileSync(join(FW, "pybot_net.py"));
+  assert.ok(net.includes(Buffer.from([0xe2, 0x80, 0x94])), "pybot_net.py must contain em dash UTF-8");
+  const pack = buildBleRuntimePackBytesFromDisk();
+  let found = false;
+  for (let i = 0; i < pack.length - 2; i++) {
+    if (pack[i] === 0xe2 && pack[i + 1] === 0x80 && pack[i + 2] === 0x94) {
+      found = true;
+      break;
+    }
+  }
+  assert.ok(found, "pack must contain E2 80 94 from pybot_net.py");
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  await session.update(pack, { version: "9.9.9" });
+  const got = asBytes(mock._state.mainRuntime);
+  assert.deepEqual(got, pack);
+  let bad = false;
+  for (let i = 0; i < got.length - 5; i++) {
+    if (
+      got[i] === 0xc3 &&
+      got[i + 1] === 0xa2 &&
+      got[i + 2] === 0xc2 &&
+      got[i + 3] === 0x80 &&
+      got[i + 4] === 0xc2 &&
+      got[i + 5] === 0x94
+    ) {
+      bad = true;
+      break;
+    }
+  }
+  assert.equal(bad, false);
+});
+
+test("TEST12: PYBOTRT1 internal sizes match file UTF-8 bytes", () => {
+  const pack = buildBleRuntimePackBytesFromDisk();
+  const modules = getBleRuntimeModulesFromDisk();
+  const magic = ENC.encode(PACK_MAGIC);
+  assert.deepEqual(pack.subarray(0, magic.length), magic);
+  let off = magic.length;
+  for (const { name, source } of modules) {
+    const nameBytes = ENC.encode(name + "\n");
+    assert.deepEqual(pack.subarray(off, off + nameBytes.length), nameBytes);
+    off += nameBytes.length;
+    let nl = pack.indexOf(0x0a, off);
+    const size = parseInt(new TextDecoder().decode(pack.subarray(off, nl)), 10);
+    off = nl + 1;
+    const data = pack.subarray(off, off + size);
+    assert.equal(data.length, size);
+    assert.deepEqual(data, ENC.encode(String(source ?? "")));
+    off += size;
+  }
+  assert.equal(off, pack.length);
+});
+
+test("TEST13: hardwareBridge uses buildBleRuntimePackBytes, not Text", () => {
+  const bridge = readFileSync(join(root, "src/hardwareBridge.js"), "utf8");
+  assert.match(bridge, /buildBleRuntimePackBytes\(\)/);
+  assert.doesNotMatch(bridge, /buildBleRuntimePackText/);
+});
+
+test("TEST14: pybot_update.py receiver still a2b_base64 + write", () => {
+  const src = readFileSync(join(root, "firmware/pybot-ble-runtime/pybot_update.py"), "utf8");
+  assert.match(src, /ubinascii\.a2b_base64/);
+  assert.match(src, /\.write\(data\)/);
+});
+
+test("TEST15: UPDATE protocol tokens and chunk size unchanged", () => {
+  assert.equal(UPDATE_SOURCE_CHUNK, 192);
+  assert.equal(UPDATE.BEGIN, "UPDATE:BEGIN");
+  assert.equal(UPDATE.CHUNK, "UPDATE:CHUNK");
+  assert.equal(UPDATE.END, "UPDATE:END");
+  assert.equal(UPDATE.APPLY, "UPDATE:APPLY");
+  assert.match(buildUpdateBegin("9.9.9", 3, "abc"), /^UPDATE:BEGIN:9\.9\.9:3:abc$/);
+});
+
+test("TEST16: Uint8Array over MAX_RUNTIME_UPDATE_SIZE rejected before BEGIN", async () => {
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  const huge = new Uint8Array(MAX_RUNTIME_UPDATE_SIZE + 1);
+  await assert.rejects(() => session.update(huge, { version: "3.2.0" }), /BLE_UPDATE_TOO_LONG/);
+  assert.equal(mock._state.begin, null);
+});
+
+test("TEST17: empty Uint8Array → BLE_UPDATE_EMPTY", async () => {
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  await assert.rejects(() => session.update(new Uint8Array(0), { version: "3.2.0" }), /BLE_UPDATE_EMPTY/);
+});
+
+test("TEST18: transfer error still attempts UPDATE:ABORT", async () => {
+  const mock = makeMock({ failChunkAt: 0 });
+  const session = new BleRuntimeUpdateSession(mock);
+  await assert.rejects(() => session.update(RUNTIME, { version: "3.2.0" }));
+  assert.ok(mock._state.sent.includes(UPDATE.ABORT));
+});
+
+test("TEST19: ASCII string path still works", async () => {
+  const ascii = "print(1)\n" + "x = 2\n".repeat(100);
+  const mock = makeMock();
+  const session = new BleRuntimeUpdateSession(mock);
+  await session.update(ascii, { version: "3.2.0" });
+  assert.deepEqual(asBytes(mock._state.mainRuntime), ENC.encode(ascii));
+});
+
+test("TEST20: pybot_boot_update.py unchanged in working tree for #16", () => {
+  // Structural guard: production path for #16 must not edit boot updater.
+  // Content sanity: still has pack parser / full read (punto 17 pendiente).
+  const boot = readFileSync(join(root, "firmware/pybot-ble-runtime/pybot_boot_update.py"), "utf8");
+  assert.match(boot, /def _parse_pack/);
+  assert.match(boot, /f\.read\(sz\)/);
+});
+
+test("buildBleRuntimePackText removed from production", () => {
+  const runtime = readFileSync(join(root, "src/pybotBleRuntime.js"), "utf8");
+  assert.doesNotMatch(runtime, /buildBleRuntimePackText/);
+  const bridge = readFileSync(join(root, "src/hardwareBridge.js"), "utf8");
+  assert.doesNotMatch(bridge, /buildBleRuntimePackText/);
 });

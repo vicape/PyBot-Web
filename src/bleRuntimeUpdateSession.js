@@ -1,13 +1,16 @@
 /**
  * BleRuntimeUpdateSession: actualizacion OTA del PROPIO runtime de la ESP32
- * (main.py) por BLE (protocolo UPDATE 3.1). Canal ADMINISTRATIVO: NO es una
- * funcion educativa (no hay updateRuntime() para el alumno); la orquesta el
- * bridge/UI.
+ * (main.py / pack PYBOTRT1) por BLE (protocolo UPDATE 3.1). Canal ADMINISTRATIVO:
+ * NO es una funcion educativa (no hay updateRuntime() para el alumno); la orquesta
+ * el bridge/UI.
  *
  * Flujo:
  *   UPDATE:BEGIN:<version>:<size>:<hash> -> UPDATE:READY ->
  *   (UPDATE:CHUNK:<b64> -> UPDATE:ACK:<n>)* -> UPDATE:END ->
  *   UPDATE:VERIFY:OK -> UPDATE:APPLY -> (UPDATE:APPLYING; la placa RESETEA).
+ *
+ * Payload: string (UTF-8) o Uint8Array (bytes exactos). El pack OTA multiarchivo
+ * debe enviarse como Uint8Array para no corromper bytes >= 0x80.
  *
  * Seguridad e integridad:
  *   - El firmware NUNCA sobrescribe main.py durante la transferencia: descarga a
@@ -29,9 +32,9 @@ import {
   UPDATE_SOURCE_CHUNK,
   buildUpdateBegin,
   buildUpdateChunk,
-  chunkRuntimeUpdate,
+  chunkBinaryPayload,
   parseUpdateFrame,
-  sha256HexUtf8,
+  sha256Hex,
 } from "./bleProtocol.js";
 
 export const UPDATE_READY_TIMEOUT_MS = 8000;
@@ -39,6 +42,8 @@ export const UPDATE_ACK_TIMEOUT_MS = 8000;
 export const UPDATE_VERIFY_TIMEOUT_MS = 15000;
 export const UPDATE_APPLY_TIMEOUT_MS = 6000;
 export const UPDATE_RECONNECT_TIMEOUT_MS = 20000;
+
+const _enc = new TextEncoder();
 
 export class BleRuntimeUpdateSession {
   /** @param {{ isConnected:Function, onData:Function, sendChunked:Function, onStateChange?:Function }} transport */
@@ -60,11 +65,11 @@ export class BleRuntimeUpdateSession {
   }
 
   /**
-   * Transfiere, verifica y aplica un runtime nuevo. Al aplicar, la placa se
+   * Transfiere, verifica y aplica un runtime/pack nuevo. Al aplicar, la placa se
    * resetea (el GATT se cae): la reconexion + verificacion por INFO la hace quien
    * llama (bridge). NO declara exito por VERIFY: solo transfiere/verifica/aplica.
    *
-   * @param {string} source fuente del runtime nuevo (main.py como texto)
+   * @param {string|Uint8Array} source texto UTF-8 o bytes exactos del pack/runtime
    * @param {{ version:string, onProgress?:Function }} opts
    * @returns {Promise<{ ok:true, size:number, hash:string, version:string }>}
    */
@@ -76,11 +81,14 @@ export class BleRuntimeUpdateSession {
     if (!version) throw new Error("BLE_UPDATE_NO_VERSION");
     const onProgress = opts.onProgress ?? (() => {});
 
-    const src = String(source ?? "");
-    const bytes = new TextEncoder().encode(src);
+    // Copia estable: hash y chunks usan exactamente el mismo contenido.
+    const bytes =
+      source instanceof Uint8Array
+        ? source.slice()
+        : _enc.encode(String(source ?? ""));
     if (bytes.length === 0) throw new Error("BLE_UPDATE_EMPTY");
     if (bytes.length > MAX_RUNTIME_UPDATE_SIZE) throw new Error("BLE_UPDATE_TOO_LONG");
-    const hash = sha256HexUtf8(src);
+    const hash = sha256Hex(bytes);
 
     this._busy = true;
 
@@ -140,8 +148,8 @@ export class BleRuntimeUpdateSession {
       if (ready.type === "error") throw new Error("BLE_UPDATE_ERROR:" + ready.code);
       if (ready.type !== "ready") throw new Error("BLE_UPDATE_ERROR:UNEXPECTED");
 
-      const chunks = chunkRuntimeUpdate(src);
-      let confirmed = 0; // bytes de fuente CONFIRMADOS por ACK
+      const chunks = chunkBinaryPayload(bytes, UPDATE_SOURCE_CHUNK);
+      let confirmed = 0; // bytes CONFIRMADOS por ACK
       onProgress({ phase: "begin", sent: 0, total: bytes.length, pct: 0 });
       for (let i = 0; i < chunks.length; i++) {
         await this._tr.sendChunked(buildUpdateChunk(chunks[i]));
@@ -150,12 +158,9 @@ export class BleRuntimeUpdateSession {
         if (ack.type !== "ack" || ack.index !== i) {
           throw new Error("BLE_UPDATE_ERROR:BAD_ACK");
         }
-        // Bytes de fuente de ESTE bloque (el ultimo puede ser menor).
-        const chunkBytes = Math.min(
-          UPDATE_SOURCE_CHUNK,
-          bytes.length - i * UPDATE_SOURCE_CHUNK,
-        );
-        confirmed += chunkBytes > 0 ? chunkBytes : 0;
+        const start = i * UPDATE_SOURCE_CHUNK;
+        const chunkLen = Math.min(UPDATE_SOURCE_CHUNK, bytes.length - start);
+        confirmed += chunkLen > 0 ? chunkLen : 0;
         onProgress({
           phase: "transfer",
           sent: confirmed,

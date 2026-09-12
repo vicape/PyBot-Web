@@ -51,7 +51,7 @@ import { downloadProgramToArduino } from "./arduinoVmSession.js";
 import {
   getBleRuntimeVersion,
   getBleRuntimeInstallFiles,
-  buildBleRuntimePackText,
+  buildBleRuntimePackBytes,
   getPybotNetSource,
   BLE_RUNTIME_FILENAME,
   BLE_BOOT_FILENAME,
@@ -953,11 +953,12 @@ export async function bleUpdateRuntime(hooks = {}) {
 
   // Pack multi-archivo (PYBOTRT1): boot.py 3.2+ lo descomprime en los módulos.
   // Placas < 3.2.0 deben actualizar por USB (runtimeUpdateStatus.needsUsb).
-  const source = buildBleRuntimePackText();
+  // Bytes exactos (no Latin-1 string): evita corrupción de UTF-8 >= 0x80.
+  const packBytes = buildBleRuntimePackBytes();
   const version = getBleRuntimeVersion();
 
   // 2-3) Transferir + verificar + aplicar. Al aplicar, la placa RESETEA (BLE cae).
-  await _bleUpdate.update(source, { version, onProgress });
+  await _bleUpdate.update(packBytes, { version, onProgress });
 
   // 4) Reconectar al MISMO device (sin volver a mostrar el selector del navegador).
   onProgress({ phase: "reconnecting", pct: 100 });

@@ -589,17 +589,33 @@ export function chunkProgram(code, chunkBytes = RUN_SOURCE_CHUNK) {
 }
 
 /**
+ * Reensambla chunks base64 a bytes exactos (sin TextDecoder).
+ * @param {string[]} b64Chunks @returns {Uint8Array}
+ */
+export function reassembleProgramBytes(b64Chunks) {
+  const parts = Array.isArray(b64Chunks) ? b64Chunks : [];
+  const decoded = [];
+  let total = 0;
+  for (const c of parts) {
+    const bytes = base64ToBytes(c);
+    decoded.push(bytes);
+    total += bytes.length;
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const b of decoded) {
+    out.set(b, off);
+    off += b.length;
+  }
+  return out;
+}
+
+/**
  * Reensambla una lista de chunks base64 en el texto original (inverso de chunkProgram).
  * @param {string[]} b64Chunks @returns {string}
  */
 export function reassembleProgram(b64Chunks) {
-  const parts = Array.isArray(b64Chunks) ? b64Chunks : [];
-  const out = [];
-  for (const c of parts) {
-    const bytes = base64ToBytes(c);
-    for (let i = 0; i < bytes.length; i++) out.push(bytes[i]);
-  }
-  return _dec.decode(Uint8Array.from(out));
+  return _dec.decode(reassembleProgramBytes(b64Chunks));
 }
 
 /**
@@ -885,12 +901,28 @@ export function buildUpdateChunk(b64Chunk) {
 }
 
 /**
+ * Parte bytes arbitrarios en chunks base64 (sin pasar por string/UTF-8).
+ * @param {Uint8Array|number[]} bytes
+ * @param {number} [chunkBytes]
+ * @returns {string[]}
+ */
+export function chunkBinaryPayload(bytes, chunkBytes = UPDATE_SOURCE_CHUNK) {
+  const b = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes ?? []);
+  const size = chunkBytes > 0 ? chunkBytes : UPDATE_SOURCE_CHUNK;
+  const chunks = [];
+  for (let i = 0; i < b.length; i += size) {
+    chunks.push(bytesToBase64(b.subarray(i, i + size)));
+  }
+  return chunks;
+}
+
+/**
  * Parte el fuente del runtime en chunks base64 para UPDATE (chunk grande, ACK por bloque).
  * @param {string} code @param {number} [chunkBytes]
  * @returns {string[]}
  */
 export function chunkRuntimeUpdate(code, chunkBytes = UPDATE_SOURCE_CHUNK) {
-  return chunkProgram(code, chunkBytes > 0 ? chunkBytes : UPDATE_SOURCE_CHUNK);
+  return chunkBinaryPayload(_enc.encode(String(code ?? "")), chunkBytes);
 }
 
 /**
