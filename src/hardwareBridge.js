@@ -1488,11 +1488,8 @@ export async function flashProgramToBoard(code, profile = getEda6Profile()) {
   if (!_mpSession) throw new Error("not_connected");
   await _mpSession.interruptAndRecoverRepl();
   await installEda6Library(profile);
-  try {
-    await _mpSession.installFile("pybot_net.py", getPybotNetSource());
-  } catch {
-    /* ignore */
-  }
+  // pybot_net es dependencia de EDA6 (wifi_*/web_*); fallo de install debe abortar el Flash.
+  await _mpSession.installFile("pybot_net.py", getPybotNetSource());
   const mainPy = prepareMainPyForFlash(code);
   await _mpSession.installFile(MAIN_PY_FILENAME, mainPy);
   return flashAndReset(true);
@@ -1503,11 +1500,8 @@ export async function flashGpioProgramToBoard(code) {
   if (!_mpSession) throw new Error("not_connected");
   await _mpSession.interruptAndRecoverRepl();
   await _mpSession.installFile(PYBOT_HW_FILENAME, getPybotHwLibrarySource());
-  try {
-    await _mpSession.installFile("pybot_net.py", getPybotNetSource());
-  } catch {
-    /* ignore */
-  }
+  // pybot_mpy reexporta pybot_net; instalarlo es requerido para Flash GPIO coherente.
+  await _mpSession.installFile("pybot_net.py", getPybotNetSource());
   await _mpSession.installFile(MAIN_PY_FILENAME, prepareMainPyForGpioFlash(code));
   return flashAndReset(false);
 }

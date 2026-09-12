@@ -128,3 +128,46 @@ test("HTTP helper parses URLs (JS mirror of firmware _parse_url)", () => {
     path: "/x",
   });
 });
+
+// ---------------------------------------------------------------------------
+// #22 — Flash no traga fallos de install pybot_net
+// ---------------------------------------------------------------------------
+
+test("#22 flash EDA6/GPIO requieren installFile pybot_net sin catch vacío", () => {
+  const bridge = readFileSync(join(__dirname, "..", "src", "hardwareBridge.js"), "utf8");
+  const eda = bridge.slice(
+    bridge.indexOf("export async function flashProgramToBoard"),
+    bridge.indexOf("export async function flashGpioProgramToBoard"),
+  );
+  const gpio = bridge.slice(
+    bridge.indexOf("export async function flashGpioProgramToBoard"),
+    bridge.indexOf("export async function installBleRuntime"),
+  );
+  assert.match(eda, /installFile\("pybot_net\.py"/);
+  assert.match(gpio, /installFile\("pybot_net\.py"/);
+  assert.doesNotMatch(eda, /catch\s*\{\s*\/\* ignore \*\//);
+  assert.doesNotMatch(gpio, /catch\s*\{\s*\/\* ignore \*\//);
+  // main.py se instala DESPUÉS de pybot_net
+  assert.ok(eda.indexOf('installFile("pybot_net.py"') < eda.indexOf("MAIN_PY_FILENAME"));
+  assert.ok(gpio.indexOf('installFile("pybot_net.py"') < gpio.indexOf("MAIN_PY_FILENAME"));
+});
+
+test("#22 mirror: fallo pybot_net aborta antes de main.py", async () => {
+  const installed = [];
+  async function flashLike({ failNet = false } = {}) {
+    installed.length = 0;
+    await Promise.resolve();
+    installed.push("EDA6.py");
+    try {
+      if (failNet) throw new Error("NET_INSTALL_FAIL");
+      installed.push("pybot_net.py");
+    } catch (e) {
+      throw e; // required — no swallow
+    }
+    installed.push("main.py");
+    return installed.slice();
+  }
+  assert.deepEqual(await flashLike(), ["EDA6.py", "pybot_net.py", "main.py"]);
+  await assert.rejects(() => flashLike({ failNet: true }), /NET_INSTALL_FAIL/);
+  assert.deepEqual(installed, ["EDA6.py"]);
+});
