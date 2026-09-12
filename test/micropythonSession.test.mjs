@@ -319,7 +319,8 @@ test("installFile: replaces existing via temp without truncating final early", a
   assert.equal(typeof progress[0].done, "number");
   assert.equal(typeof progress[0].total, "number");
   assert.equal(typeof progress[0].pct, "number");
-  assert.equal(progress[0].total, progress.length || progress[0].total);
+  assert.equal(progress[0].total, new TextEncoder().encode("NEW CONTENT").length);
+  assert.equal(progress[progress.length - 1].done, progress[0].total);
   await s.close();
 });
 
