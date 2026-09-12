@@ -535,8 +535,16 @@ export async function connectMicroPythonEsp32Session(port, options = {}) {
 
   try {
     await port.open({ baudRate });
-  } catch {
-    throw new Error("BUSY");
+  } catch (e) {
+    // Web Serial: InvalidStateError en open() = este SerialPort ya no está closed
+    // (ya abierto / opening). NetworkError y demás son fallos OS ambiguos → no BUSY.
+    if (e?.name === "InvalidStateError") {
+      const err = new Error("BUSY");
+      err.code = "BUSY";
+      err.cause = e;
+      throw err;
+    }
+    throw e;
   }
 
   const writer = port.writable.getWriter();
