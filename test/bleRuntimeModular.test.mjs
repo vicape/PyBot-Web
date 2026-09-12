@@ -249,3 +249,57 @@ test("OTA pack PYBOTRT1 round-trips module names and sizes", () => {
   }
   assert.deepEqual(found, MODULE_FILES);
 });
+
+/** Mirror mínimo: LED admin deshabilitado → ERR,NO_LED; PING/INFO intactos. */
+function makeAdminCommandMirror() {
+  const hw = { _led: null, set_led() { return this._led != null; } };
+  const caps = ["run", "stop"];
+  function info() {
+    return JSON.stringify({
+      device: "PYBOT-TEST",
+      firmware: "4.0.6",
+      protocol: "3.2",
+      capabilities: caps,
+    });
+  }
+  function process(command) {
+    const upper = String(command || "").trim().toUpperCase();
+    if (upper === "PING") return "PONG";
+    if (upper === "INFO") return info();
+    if (upper === "LED,1") return hw.set_led(true) ? "OK" : "ERR,NO_LED";
+    if (upper === "LED,0") return hw.set_led(false) ? "OK" : "ERR,NO_LED";
+    return "ERR,UNKNOWN_COMMAND";
+  }
+  return { hw, process };
+}
+
+test("GPIO2 must not be claimed by BLE runtime at boot", () => {
+  const ble = readFw("pybot_ble.py");
+  assert.match(ble, /BUILTIN_LED_PIN = None/);
+  assert.doesNotMatch(ble, /BUILTIN_LED_PIN = \d+/);
+  const hwInit = ble.slice(
+    ble.indexOf("class HardwareController"),
+    ble.indexOf("class CommandProcessor"),
+  );
+  assert.match(hwInit, /if BUILTIN_LED_PIN is None:\s*\n\s*return/m);
+  assert.doesNotMatch(hwInit, /machine\.Pin\(\s*2\s*,/);
+  // Sin otra reserva incondicional de GPIO2 como OUTPUT en el runtime BLE.
+  assert.doesNotMatch(ble, /machine\.Pin\(\s*2\s*,\s*machine\.Pin\.OUT/);
+  assert.doesNotMatch(ble, /Pin\(\s*2\s*,\s*[^)]*OUT/);
+
+  const { hw, process } = makeAdminCommandMirror();
+  assert.equal(hw.set_led(true), false);
+  assert.equal(process("LED,1"), "ERR,NO_LED");
+  assert.equal(process("LED,0"), "ERR,NO_LED");
+  assert.equal(process("PING"), "PONG");
+  const info = JSON.parse(process("INFO"));
+  assert.equal(info.firmware, "4.0.6");
+  assert.equal(info.protocol, "3.2");
+
+  const eda6 = readFileSync(
+    join(__dirname, "..", "src", "assets", "EDA6.py"),
+    "utf8",
+  );
+  assert.match(eda6, /"adc_inputs": \[2, 4, 35, 34\]/);
+  assert.match(eda6, /"digital_inputs": \[4, 2, 15, 0\]/);
+});

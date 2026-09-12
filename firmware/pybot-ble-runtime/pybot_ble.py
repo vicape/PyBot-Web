@@ -28,7 +28,7 @@ PYBOT_CAPABILITIES = (
     "reliable-repl-v1",
 )
 
-BUILTIN_LED_PIN = 2
+BUILTIN_LED_PIN = None
 
 MAX_COMMAND_LENGTH = const(96)
 _TX_CHUNK = const(20)  # margen seguro para MTU BLE por defecto (23 -> 20 utiles)
@@ -251,6 +251,8 @@ class HardwareController:
 
     def __init__(self):
         self._led = None
+        if BUILTIN_LED_PIN is None:
+            return
         try:
             self._led = machine.Pin(BUILTIN_LED_PIN, machine.Pin.OUT)
             self._led.value(0)
