@@ -1410,7 +1410,7 @@ test("#27 UTF-8 + student app + state contract + versiones", () => {
   assert.equal(fs.exists(STATE), false);
 
   const ble = readFileSync(join(__dirname, "..", "firmware/pybot-ble-runtime/pybot_ble.py"), "utf8");
-  assert.match(ble, /PYBOT_RUNTIME_VERSION = "4\.0\.6"/);
+  assert.match(ble, /PYBOT_RUNTIME_VERSION = "4\.0\.7"/);
   assert.match(ble, /PYBOT_PROTOCOL_VERSION = "3\.2"/);
 });
 

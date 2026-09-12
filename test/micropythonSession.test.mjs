@@ -528,7 +528,7 @@ test("installFile: structural guards (no full read, temp suffixes, no version/fi
     new URL("../firmware/pybot-ble-runtime/pybot_ble.py", import.meta.url),
     "utf8",
   );
-  assert.match(ble, /PYBOT_RUNTIME_VERSION = "4\.0\.6"/);
+  assert.match(ble, /PYBOT_RUNTIME_VERSION = "4\.0\.7"/);
   assert.match(ble, /BUILTIN_LED_PIN = None/);
 });
 

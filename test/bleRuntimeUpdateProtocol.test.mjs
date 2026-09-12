@@ -27,8 +27,8 @@ import {
 // Versión / capability (fuente de verdad única)
 // ---------------------------------------------------------------------------
 
-test("runtime 4.0.6 / protocol 3.2 declare runtime-update capability", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.6");
+test("runtime 4.0.7 / protocol 3.2 declare runtime-update capability", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.7");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.2");
   assert.ok(PYBOT_CAPABILITIES.includes("runtime-update"));
 });
@@ -98,6 +98,57 @@ test("runtimeUpdateStatus: 4.0.4 -> current needs USB (new pybot_rble.py file)",
   const s = runtimeUpdateStatus(
     { firmware: "4.0.4", capabilities: ["runtime-update", "native-repl"] },
     PYBOT_RUNTIME_VERSION,
+  );
+  assert.equal(s.updateAvailable, true);
+  assert.equal(s.supportsOta, true);
+  assert.equal(s.canUpdateOta, false);
+  assert.equal(s.needsUsb, true);
+});
+
+test("runtimeUpdateStatus: 4.0.6 installed -> 4.0.7 published is OTA (not USB)", () => {
+  const s = runtimeUpdateStatus(
+    {
+      firmware: "4.0.6",
+      capabilities: ["runtime-update", "native-repl", "reliable-repl-v1"],
+    },
+    "4.0.7",
+  );
+  assert.equal(s.updateAvailable, true);
+  assert.equal(s.supportsOta, true);
+  assert.equal(s.canUpdateOta, true);
+  assert.equal(s.needsUsb, false);
+  assert.equal(s.latest, "4.0.7");
+});
+
+test("runtimeUpdateStatus: 4.0.7 installed matches published -> no update", () => {
+  const s = runtimeUpdateStatus(
+    {
+      firmware: "4.0.7",
+      capabilities: ["runtime-update", "native-repl", "reliable-repl-v1"],
+    },
+    "4.0.7",
+  );
+  assert.equal(s.updateAvailable, false);
+  assert.equal(s.canUpdateOta, false);
+  assert.equal(s.needsUsb, false);
+});
+
+test("runtimeUpdateStatus: 4.0.8 installed never offered as downgrade to 4.0.7", () => {
+  const s = runtimeUpdateStatus(
+    {
+      firmware: "4.0.8",
+      capabilities: ["runtime-update", "native-repl", "reliable-repl-v1"],
+    },
+    "4.0.7",
+  );
+  assert.equal(s.updateAvailable, false);
+  assert.equal(s.canUpdateOta, false);
+});
+
+test("runtimeUpdateStatus: 3.1.x -> 4.0.7 still requires USB", () => {
+  const s = runtimeUpdateStatus(
+    { firmware: "3.1.0", capabilities: ["runtime-update"] },
+    "4.0.7",
   );
   assert.equal(s.updateAvailable, true);
   assert.equal(s.supportsOta, true);

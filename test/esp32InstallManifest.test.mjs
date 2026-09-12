@@ -335,10 +335,10 @@ test("CASO10: EDA6 WEMOS vs ESP32 expected hashes differ when sources differ", (
   assert.notEqual(expW["EDA6.py"], expE["EDA6.py"]);
 });
 
-test("CASO11: runtime 4.0.6 with old file content fails by hash", () => {
+test("CASO11: current runtime with old file content fails by hash", () => {
   const expectedHashes = buildExpectedFromSources();
   const payload = payloadMatchingExpected(expectedHashes, {
-    runtime: "4.0.6",
+    runtime: PYBOT_RUNTIME_VERSION,
     protocol: "3.2",
   });
   payload.hashes["pybot_ble.py"] = "11".repeat(32);

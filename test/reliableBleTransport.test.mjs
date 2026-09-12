@@ -601,7 +601,7 @@ test("4.0.4 native-repl without reliable-repl-v1 needs update, never legacy", ()
   assert.equal(plan.diag.error, "BLE_REPL_NEEDS_UPDATE");
 });
 
-test("4.0.6 + reliable-repl-v1 plans native MicroPythonSession", () => {
+test("current runtime + reliable-repl-v1 plans native MicroPythonSession", () => {
   const plan = planBleExecutionBackend({
     nativeFlagEnabled: true,
     info: {

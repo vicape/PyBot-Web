@@ -58,11 +58,11 @@ function buildPackBytes(modules) {
   return out;
 }
 
-test("runtime modules declare 4.0.6 / protocol 3.2", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.6");
+test("runtime modules declare 4.0.7 / protocol 3.2", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.7");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.2");
   const core = readFw("pybot_ble.py");
-  assert.match(core, /PYBOT_RUNTIME_VERSION = "4\.0\.6"/);
+  assert.match(core, /PYBOT_RUNTIME_VERSION = "4\.0\.7"/);
   assert.match(core, /PYBOT_PROTOCOL_VERSION = "3\.2"/);
   // 3.2.3+: RUN:BEGIN/READY fuera del IRQ (cola + poll en main loop).
   assert.match(core, /poll_commands/);
@@ -257,7 +257,7 @@ function makeAdminCommandMirror() {
   function info() {
     return JSON.stringify({
       device: "PYBOT-TEST",
-      firmware: "4.0.6",
+      firmware: "4.0.7",
       protocol: "3.2",
       capabilities: caps,
     });
@@ -293,7 +293,7 @@ test("GPIO2 must not be claimed by BLE runtime at boot", () => {
   assert.equal(process("LED,0"), "ERR,NO_LED");
   assert.equal(process("PING"), "PONG");
   const info = JSON.parse(process("INFO"));
-  assert.equal(info.firmware, "4.0.6");
+  assert.equal(info.firmware, "4.0.7");
   assert.equal(info.protocol, "3.2");
 
   const eda6 = readFileSync(

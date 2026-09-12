@@ -32,8 +32,8 @@ import {
   parseInfoResponse,
 } from "../src/bleProtocol.js";
 
-test("version and protocol bumped to 4.0.6 / 3.2 (native REPL + reliable BLE)", () => {
-  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.6");
+test("version and protocol bumped to 4.0.7 / 3.2 (native REPL + reliable BLE)", () => {
+  assert.equal(PYBOT_RUNTIME_VERSION, "4.0.7");
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.2");
 });
 
