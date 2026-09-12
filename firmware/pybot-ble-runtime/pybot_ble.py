@@ -174,6 +174,19 @@ def _load_state():
 def _save_state(st):
     return _write_json(_STATE_FILE, st)
 
+def _update_native_app_run_state(outcome, err_text):
+    """Lifecycle de app persistente nativa (sin importar pybot_run)."""
+    st = _load_state()
+    if outcome == "error":
+        st["fail_count"] = int(st.get("fail_count", 0)) + 1
+        st["last_error"] = (err_text or "error")[:200]
+        st["last_outcome"] = "error"
+    else:
+        st["fail_count"] = 0
+        st["last_error"] = ""
+        st["last_outcome"] = outcome
+    _save_state(st)
+
 def _set_safe_boot(flag):
     st = _load_state()
     st["safe_boot"] = bool(flag)
@@ -655,7 +668,13 @@ def main():
     hardware = HardwareController()
     processor = CommandProcessor(hardware, dev_name, dev_id)
     holder = {}
-    ctx = {"manager": None, "deploy": None, "updater": None}
+    # native_app: lifecycle liviano de autostart nativo (sin ProgramManager).
+    ctx = {
+        "manager": None,
+        "deploy": None,
+        "updater": None,
+        "native_app": {"running": False, "action": None},
+    }
 
     native = True
     try:
@@ -694,6 +713,15 @@ def main():
             )
         return ctx["updater"]
 
+    def _program_running():
+        m = ctx.get("manager")
+        if m and m.running:
+            return True
+        na = ctx.get("native_app")
+        if na and na.get("running"):
+            return True
+        return False
+
     def _disable_autostart():
         try:
             meta = _load_app_meta()
@@ -706,14 +734,21 @@ def main():
     def _force_reset():
         # Si APP:DELETE pidio borrar y el programa no cedia, borrar ANTES del reset.
         m = ctx.get("manager")
+        na = ctx.get("native_app")
+        do_delete = False
         if m and getattr(m, "_app_ack", None) == "delete":
+            do_delete = True
+            try:
+                m._app_ack = None
+            except Exception:
+                pass
+        elif na and na.get("action") == "delete":
+            do_delete = True
+            na["action"] = None
+        if do_delete:
             try:
                 from pybot_deploy import _delete_app
                 _delete_app()
-            except Exception:
-                pass
-            try:
-                m._app_ack = None
             except Exception:
                 pass
         ok = False
@@ -751,8 +786,7 @@ def main():
 
     def _schedule_force_reset():
         """Agenda reset fuera del IRQ (exec bloquea el main). 3.2.7: solo si running."""
-        m = ctx.get("manager")
-        if not m or not m.running:
+        if not _program_running():
             ctx["force_reset"] = False
             return
         ctx["force_reset"] = True
@@ -763,8 +797,7 @@ def main():
         def _cb(_t):
             ctx["force_timer"] = None
             ctx["force_timer_armed"] = False
-            m2 = ctx.get("manager")
-            if not m2 or not m2.running:
+            if not _program_running():
                 ctx["force_reset"] = False
                 return
             try:
@@ -781,6 +814,37 @@ def main():
                 t.init(period=40, mode=machine.Timer.ONE_SHOT, callback=_cb)
                 ctx["force_timer"] = t
                 return
+            except Exception:
+                pass
+
+    def _finish_native_app(outcome, error_text):
+        """Tras _exec_student_app: estado + ACK diferido de APP:STOP/DELETE."""
+        na = ctx["native_app"]
+        na["running"] = False
+        action = na.get("action")
+        na["action"] = None
+        try:
+            _cancel_force_reset()
+        except Exception:
+            pass
+        try:
+            _update_native_app_run_state(outcome, error_text)
+        except Exception:
+            pass
+        if action == "delete":
+            ok = False
+            try:
+                from pybot_deploy import _delete_app
+                ok = bool(_delete_app())
+            except Exception:
+                ok = False
+            try:
+                _send("APP:OK:DELETE" if ok else "APP:ERROR:DELETE_FAILED")
+            except Exception:
+                pass
+        elif action == "stop":
+            try:
+                _send("APP:OK:STOP")
             except Exception:
                 pass
 
@@ -805,20 +869,40 @@ def main():
             m = ctx["manager"]
             if m:
                 m.request_force_stop()
-            # 3.2.7: no reset si ya STOPPED (running=False).
-            if m and m.running:
+            # 3.2.7: no reset si ya STOPPED (running=False). Incluye native_app.
+            if _program_running():
                 _schedule_force_reset()
             return True
         # APP:STOP/DELETE deben marcar flags YA: si van a la cola RX y el main
         # esta bloqueado en exec(), nunca se procesan → placa zombie (regresion 3.2.3).
         # 3.2.5: cualquier programa en exec (RUN temporal o app), no solo persistent.
         if upper == "APP:STOP":
+            na = ctx.get("native_app")
+            if na and na.get("running"):
+                na["action"] = "stop"
+                tr = holder.get("transport")
+                if tr:
+                    try:
+                        tr.inject_ctrl_c()
+                    except Exception:
+                        pass
+                return True
             m = ctx["manager"]
             if m and m.running:
                 m.request_app_stop("stop")
                 return True
             return False
         if upper == "APP:DELETE":
+            na = ctx.get("native_app")
+            if na and na.get("running"):
+                na["action"] = "delete"
+                tr = holder.get("transport")
+                if tr:
+                    try:
+                        tr.inject_ctrl_c()
+                    except Exception:
+                        pass
+                return True
             m = ctx["manager"]
             if m and m.running and m._persistent:
                 m.request_app_stop("delete")
@@ -844,7 +928,7 @@ def main():
             m = ctx["manager"]
             if m:
                 m.request_force_stop()
-            if m and m.running:
+            if _program_running():
                 _schedule_force_reset()
             return None
         if t.startswith("RUN:"):
@@ -887,7 +971,21 @@ def main():
             return None
         if t.startswith("APP:"):
             try:
-                _load_deploy().handle_app(_send, _ensure_manager(), t)
+                running_ov = None
+                if native:
+                    na = ctx.get("native_app")
+                    running_ov = bool(na and na.get("running"))
+                if t == "APP:INFO":
+                    # No cargar ProgramManager solo para saber si corre.
+                    _load_deploy().handle_app(
+                        _send, ctx.get("manager"), t, running_override=running_ov
+                    )
+                elif t == "APP:START" and running_ov:
+                    _send("APP:ERROR:BUSY")
+                else:
+                    _load_deploy().handle_app(
+                        _send, _ensure_manager(), t, running_override=running_ov
+                    )
             except Exception as e:
                 tag = _load_err_deploy or _load_err_run or _load_err_tag(e)
                 try:
@@ -980,8 +1078,7 @@ def main():
         sched["armed"] = False
         try:
             if ctx.get("force_reset"):
-                m = ctx.get("manager")
-                if m and m.running:
+                if _program_running():
                     ctx["force_reset"] = False
                     _force_reset()
                     return
@@ -1044,12 +1141,23 @@ def main():
             meta = _load_app_meta()
             if meta and meta.get("autostart") and _file_exists(_APP_FILE):
                 if native:
+                    na = ctx["native_app"]
+                    na["running"] = True
+                    na["action"] = None
+                    outcome = "done"
+                    error_text = None
                     try:
                         _exec_student_app()
                     except KeyboardInterrupt:
-                        pass
-                    except Exception:
-                        pass
+                        outcome = "stopped"
+                    except Exception as e:
+                        outcome = "error"
+                        try:
+                            error_text = str(e)
+                        except Exception:
+                            error_text = "error"
+                    finally:
+                        _finish_native_app(outcome, error_text)
                 else:
                     _maybe_autostart(_ensure_manager())
     except Exception:

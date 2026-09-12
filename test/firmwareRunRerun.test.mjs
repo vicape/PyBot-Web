@@ -189,7 +189,8 @@ test("cooperative stop + RUN:BEGIN cancel pending FORCE timer (model)", () => {
 test("FORCE while running=False does not schedule reset (3.2.7)", () => {
   const bleSrc = fs.readFileSync(BLE_PY, "utf8");
   assert.match(bleSrc, /PYBOT_RUNTIME_VERSION = "4\.0\.6"/);
-  // Callback del Timer y _schedule_force_reset exigen running.
-  assert.match(bleSrc, /if not m2 or not m2\.running:/);
+  // Callback del Timer y _schedule_force_reset exigen running (manager o native_app).
+  assert.match(bleSrc, /def _program_running/);
+  assert.match(bleSrc, /if not _program_running\(\):/);
   assert.match(bleSrc, /huerfano post-STOPPED/);
 });

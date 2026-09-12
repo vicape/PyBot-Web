@@ -52,8 +52,10 @@ test("runtime 4.0.0 declares version and schedules FORCE via Timer", () => {
   // Referencia al Timer para poder cancelarlo tras STOP cooperativo / RUN:BEGIN.
   assert.match(src, /t\.deinit\(\)/);
   // 3.2.7: no resetear si running=False (FORCE tardio tras STOPPED).
-  assert.match(src, /if not m or not m\.running:/);
-  assert.match(src, /if m and m\.running:\s*\n\s*_schedule_force_reset\(\)/m);
+  // Incluye native_app via _program_running().
+  assert.match(src, /def _program_running/);
+  assert.match(src, /if not _program_running\(\):/);
+  assert.match(src, /if _program_running\(\):\s*\n\s*_schedule_force_reset\(\)/m);
 });
 
 test("APP:STOP and APP:DELETE are handled as urgent when app is running", () => {
@@ -65,6 +67,7 @@ test("APP:STOP and APP:DELETE are handled as urgent when app is running", () => 
   // 3.2.5: APP:STOP urgente si hay cualquier exec (no exige _persistent).
   const urgent = src.slice(src.indexOf("def on_urgent"), src.indexOf("def on_command"));
   assert.match(urgent, /if m and m\.running:/);
+  assert.match(urgent, /native_app/);
   assert.ok(!/m\.running and m\._persistent/.test(urgent.split("APP:STOP")[1]?.split("APP:DELETE")[0] ?? ""));
 });
 

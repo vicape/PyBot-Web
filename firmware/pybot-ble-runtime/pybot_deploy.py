@@ -252,12 +252,16 @@ class DeployReceiver:
         }
         return _atomic_install_app(meta, self._size)
 
-def _app_info_json(manager):
+def _app_info_json(manager, running_override=None):
     meta = _load_app_meta()
     st = _load_state()
+    if running_override is not None:
+        running = bool(running_override)
+    else:
+        running = bool(manager and manager.running and manager._persistent)
     obj = {
         "installed": bool(meta) and _file_exists(_APP_FILE),
-        "running": bool(manager.running and manager._persistent),
+        "running": running,
         "autostart": bool(meta.get("autostart")) if meta else False,
         "mode": (meta.get("mode") if meta else "") or "",
         "profile": (meta.get("profile") if meta else "") or "",
@@ -296,18 +300,22 @@ def handle_deploy(deploy, line):
     else:
         deploy._send("DEPLOY:ERROR:BAD_FRAME")
 
-def handle_app(send, manager, cmd):
+def handle_app(send, manager, cmd, running_override=None):
     if cmd == "APP:INFO":
-        send("APP:INFO:" + _app_info_json(manager))
+        send("APP:INFO:" + _app_info_json(manager, running_override=running_override))
     elif cmd == "APP:START":
-        if manager.start_app():
+        if running_override:
+            send("APP:ERROR:BUSY")
+        elif manager is None:
+            send("APP:ERROR:BUSY")
+        elif manager.start_app():
             send("APP:OK:START")
     elif cmd == "APP:STOP":
         # Cualquier exec en curso (RUN temporal o app): pedir stop y ACK diferido
         # en _finish. Evita APP:OK:STOP falso mientras el programa sigue vivo.
-        if manager.running:
+        if manager is not None and manager.running:
             manager.request_app_stop("stop")
-        elif manager.pending:
+        elif manager is not None and manager.pending:
             manager.pending = False
             try:
                 manager.reset_idle()
@@ -317,7 +325,7 @@ def handle_app(send, manager, cmd):
         else:
             send("APP:OK:STOP")
     elif cmd == "APP:DELETE":
-        if manager.running and manager._persistent:
+        if manager is not None and manager.running and manager._persistent:
             manager.request_app_stop("delete")
         elif _delete_app():
             send("APP:OK:DELETE")

@@ -27,7 +27,9 @@ const MODULE_FILES = [
 ];
 const BOOT_CORE_FILES = ["boot.py", "main.py", "pybot_ble.py"];
 const PACK_MAGIC = "PYBOTRT1\n";
-const BOOT_CORE_MAX_BYTES = 36000;
+// Budget de fuente del core de boot (no RAM). Sube levemente con lifecycle
+// nativo liviano en pybot_ble (sin ProgramManager al boot).
+const BOOT_CORE_MAX_BYTES = 38500;
 const LEGACY_MAIN_BYTES = 56421;
 
 function readFw(name) {
@@ -209,7 +211,8 @@ test("boot core size is well below the legacy monolith", () => {
     if (BOOT_CORE_FILES.includes(name)) bootCore += n;
   }
   assert.ok(bootCore < BOOT_CORE_MAX_BYTES, `bootCore=${bootCore}`);
-  assert.ok(bootCore < LEGACY_MAIN_BYTES * 0.65, `bootCore=${bootCore} should be well below legacy`);
+  // Core sigue claramente bajo el monolito legacy (~56KB).
+  assert.ok(bootCore < LEGACY_MAIN_BYTES * 0.7, `bootCore=${bootCore} should be well below legacy`);
   assert.ok(total > bootCore);
 });
 

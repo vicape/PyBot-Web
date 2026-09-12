@@ -650,3 +650,361 @@ test("hardwareBridge Stop native uses Ctrl+C, not STOP:FORCE", () => {
   assert.ok(nativeIdx < forceIdx || forceIdx < 0 || body.indexOf("_bleMpSession") < forceIdx);
   assert.match(body, /kind: "no-session"/);
 });
+
+/* ------------------------------------------------------------------ */
+/* Punto 6: lifecycle liviano de app nativa persistente (sin pybot_run) */
+/* ------------------------------------------------------------------ */
+
+const MAX_AUTOSTART_FAILS = 3;
+
+/** Mirror de _update_native_app_run_state / ProgramManager finish semantics. */
+function updateNativeAppRunState(st, outcome, errText) {
+  if (outcome === "error") {
+    st.fail_count = (st.fail_count | 0) + 1;
+    st.last_error = String(errText || "error").slice(0, 200);
+    st.last_outcome = "error";
+  } else {
+    st.fail_count = 0;
+    st.last_error = "";
+    st.last_outcome = outcome;
+  }
+  return st;
+}
+
+function appInfoRunning(manager, runningOverride) {
+  if (runningOverride !== null && runningOverride !== undefined) {
+    return Boolean(runningOverride);
+  }
+  return Boolean(manager && manager.running && manager._persistent);
+}
+
+/**
+ * Mirror del bloque nativo: running / action / Ctrl+C / ACK diferido / state.
+ * No importa ProgramManager.
+ */
+function createNativeLifecycleMirror() {
+  const native_app = { running: false, action: null };
+  const sent = [];
+  let deleted = false;
+  let ctrlC = 0;
+  let execCalls = 0;
+  let secondStart = 0;
+  const st = { fail_count: 0, last_error: "", last_outcome: "", safe_boot: false };
+
+  function inject_ctrl_c() {
+    ctrlC += 1;
+  }
+
+  function on_urgent(upper) {
+    if (upper === "APP:STOP") {
+      if (native_app.running) {
+        native_app.action = "stop";
+        inject_ctrl_c();
+        return true; // no ACK inmediato
+      }
+      return false;
+    }
+    if (upper === "APP:DELETE") {
+      if (native_app.running) {
+        native_app.action = "delete";
+        inject_ctrl_c();
+        return true;
+      }
+      return false;
+    }
+    if (upper === "STOP:FORCE") {
+      if (native_app.running) {
+        // agenda Timer; no reset en IRQ
+        return { scheduled: true, resetInIrq: false };
+      }
+      return { scheduled: false, resetInIrq: false };
+    }
+    return false;
+  }
+
+  function finish(outcome, errorText) {
+    native_app.running = false;
+    const action = native_app.action;
+    native_app.action = null;
+    updateNativeAppRunState(st, outcome, errorText);
+    if (action === "delete") {
+      deleted = true;
+      sent.push("APP:OK:DELETE");
+    } else if (action === "stop") {
+      sent.push("APP:OK:STOP");
+    }
+  }
+
+  function runAutostart(execFn) {
+    native_app.running = true;
+    native_app.action = null;
+    let outcome = "done";
+    let errorText = null;
+    try {
+      execCalls += 1;
+      execFn();
+    } catch (e) {
+      if (e && e.name === "KeyboardInterrupt") {
+        outcome = "stopped";
+      } else {
+        outcome = "error";
+        errorText = e && e.message ? e.message : String(e);
+      }
+    } finally {
+      finish(outcome, errorText);
+    }
+  }
+
+  function handleApp(cmd) {
+    const runningOv = Boolean(native_app.running);
+    if (cmd === "APP:INFO") {
+      return { running: appInfoRunning(null, runningOv) };
+    }
+    if (cmd === "APP:START") {
+      if (runningOv) {
+        sent.push("APP:ERROR:BUSY");
+        return "APP:ERROR:BUSY";
+      }
+      secondStart += 1;
+      sent.push("APP:OK:START");
+      return "APP:OK:START";
+    }
+    return null;
+  }
+
+  function shouldAutostart() {
+    if (st.safe_boot) return false;
+    if ((st.fail_count | 0) >= MAX_AUTOSTART_FAILS) return false;
+    return true;
+  }
+
+  return {
+    native_app,
+    sent,
+    st,
+    get deleted() {
+      return deleted;
+    },
+    get ctrlC() {
+      return ctrlC;
+    },
+    get execCalls() {
+      return execCalls;
+    },
+    get secondStart() {
+      return secondStart;
+    },
+    on_urgent,
+    runAutostart,
+    handleApp,
+    shouldAutostart,
+  };
+}
+
+test("native lifecycle: source has native_app state and finish helper", () => {
+  const ble = readFw("pybot_ble.py");
+  assert.match(ble, /"native_app":\s*\{\s*"running":\s*False,\s*"action":\s*None\s*\}/);
+  assert.match(ble, /def _finish_native_app/);
+  assert.match(ble, /def _update_native_app_run_state/);
+  assert.match(ble, /def _program_running/);
+  // Precarga de ProgramManager solo bajo `if not native`.
+  assert.match(ble, /if not native:\s*\n\s*try:\s*\n\s*_ensure_manager\(\)/m);
+});
+
+test("TEST1 native autostart marks running=true before exec", () => {
+  const ble = readFw("pybot_ble.py");
+  const block = ble.slice(ble.indexOf("if native:"), ble.indexOf("else:\n                    _maybe_autostart"));
+  const runIdx = block.indexOf('na["running"] = True');
+  const execIdx = block.indexOf("_exec_student_app()");
+  assert.ok(runIdx >= 0 && execIdx > runIdx);
+
+  const m = createNativeLifecycleMirror();
+  let sawRunning = false;
+  m.runAutostart(() => {
+    sawRunning = m.native_app.running === true;
+  });
+  assert.equal(sawRunning, true);
+});
+
+test("TEST2 native autostart always returns running=false after finish", () => {
+  const m1 = createNativeLifecycleMirror();
+  m1.runAutostart(() => {});
+  assert.equal(m1.native_app.running, false);
+
+  const m2 = createNativeLifecycleMirror();
+  m2.runAutostart(() => {
+    const err = new Error("boom");
+    err.name = "KeyboardInterrupt";
+    throw err;
+  });
+  assert.equal(m2.native_app.running, false);
+
+  const m3 = createNativeLifecycleMirror();
+  m3.runAutostart(() => {
+    throw new Error("fail");
+  });
+  assert.equal(m3.native_app.running, false);
+});
+
+test("TEST3 APP:INFO during native autostart reports running=true", () => {
+  const m = createNativeLifecycleMirror();
+  let info = null;
+  m.runAutostart(() => {
+    info = m.handleApp("APP:INFO");
+  });
+  assert.deepEqual(info, { running: true });
+});
+
+test("TEST4 APP:INFO after finish reports running=false", () => {
+  const m = createNativeLifecycleMirror();
+  m.runAutostart(() => {});
+  assert.deepEqual(m.handleApp("APP:INFO"), { running: false });
+});
+
+test("TEST5 APP:STOP during native autostart: flag + Ctrl+C, ACK after exec", () => {
+  const m = createNativeLifecycleMirror();
+  let midAck = null;
+  m.runAutostart(() => {
+    assert.equal(m.on_urgent("APP:STOP"), true);
+    assert.equal(m.native_app.action, "stop");
+    assert.equal(m.ctrlC, 1);
+    midAck = m.sent.includes("APP:OK:STOP");
+    const err = new Error("stop");
+    err.name = "KeyboardInterrupt";
+    throw err;
+  });
+  assert.equal(midAck, false);
+  assert.ok(m.sent.includes("APP:OK:STOP"));
+  assert.equal(m.native_app.running, false);
+  assert.equal(m.st.last_outcome, "stopped");
+});
+
+test("TEST6 APP:DELETE during native autostart: stop first, delete after, ACK after", () => {
+  const m = createNativeLifecycleMirror();
+  let deletedDuring = false;
+  m.runAutostart(() => {
+    assert.equal(m.on_urgent("APP:DELETE"), true);
+    assert.equal(m.native_app.action, "delete");
+    deletedDuring = m.deleted;
+    const err = new Error("stop");
+    err.name = "KeyboardInterrupt";
+    throw err;
+  });
+  assert.equal(deletedDuring, false);
+  assert.equal(m.deleted, true);
+  assert.ok(m.sent.includes("APP:OK:DELETE"));
+});
+
+test("TEST7 APP:START while native running returns BUSY and does not start second", () => {
+  const m = createNativeLifecycleMirror();
+  let mid = null;
+  m.runAutostart(() => {
+    mid = m.handleApp("APP:START");
+  });
+  assert.equal(mid, "APP:ERROR:BUSY");
+  assert.equal(m.execCalls, 1);
+  assert.equal(m.secondStart, 0);
+});
+
+test("TEST8 normal finish: fail_count=0, last_error='', last_outcome=done", () => {
+  const m = createNativeLifecycleMirror();
+  m.st.fail_count = 2;
+  m.st.last_error = "old";
+  m.runAutostart(() => {});
+  assert.equal(m.st.fail_count, 0);
+  assert.equal(m.st.last_error, "");
+  assert.equal(m.st.last_outcome, "done");
+});
+
+test("TEST9 KeyboardInterrupt: fail_count=0, last_error='', last_outcome=stopped", () => {
+  const m = createNativeLifecycleMirror();
+  m.st.fail_count = 1;
+  m.runAutostart(() => {
+    const err = new Error("ki");
+    err.name = "KeyboardInterrupt";
+    throw err;
+  });
+  assert.equal(m.st.fail_count, 0);
+  assert.equal(m.st.last_error, "");
+  assert.equal(m.st.last_outcome, "stopped");
+});
+
+test("TEST10 Exception: fail_count+=1, last_error set, last_outcome=error", () => {
+  const m = createNativeLifecycleMirror();
+  m.st.fail_count = 1;
+  m.runAutostart(() => {
+    throw new Error("sensor fail");
+  });
+  assert.equal(m.st.fail_count, 2);
+  assert.match(m.st.last_error, /sensor fail/);
+  assert.equal(m.st.last_outcome, "error");
+});
+
+test("TEST11 fail_count >= _MAX_AUTOSTART_FAILS still blocks autostart", () => {
+  const ble = readFw("pybot_ble.py");
+  assert.match(ble, /_MAX_AUTOSTART_FAILS = const\(3\)/);
+  assert.match(
+    ble,
+    /elif int\(st\.get\("fail_count", 0\)\) < _MAX_AUTOSTART_FAILS:/,
+  );
+  const m = createNativeLifecycleMirror();
+  m.st.fail_count = MAX_AUTOSTART_FAILS;
+  assert.equal(m.shouldAutostart(), false);
+  m.st.fail_count = MAX_AUTOSTART_FAILS - 1;
+  assert.equal(m.shouldAutostart(), true);
+});
+
+test("TEST12 STOP:FORCE recognizes native_app running without reset in IRQ", () => {
+  const ble = readFw("pybot_ble.py");
+  const urgent = ble.slice(ble.indexOf("def on_urgent"), ble.indexOf("def on_command"));
+  assert.match(urgent, /STOP:FORCE/);
+  assert.match(urgent, /_program_running\(\)/);
+  assert.match(urgent, /_schedule_force_reset\(\)/);
+  assert.doesNotMatch(urgent, /machine\.reset\(\)/);
+
+  const m = createNativeLifecycleMirror();
+  m.native_app.running = true;
+  const r = m.on_urgent("STOP:FORCE");
+  assert.equal(r.scheduled, true);
+  assert.equal(r.resetInIrq, false);
+});
+
+test("TEST13 native boot still does not import pybot_run", () => {
+  const ble = readFw("pybot_ble.py");
+  assert.match(ble, /LEGACY ONLY: precargar ProgramManager/);
+  assert.match(ble, /4\.0 NO importa\s*\r?\n\s*# pybot_run al boot/m);
+  const main = ble.slice(ble.indexOf("def main("));
+  const marker = 'na["running"] = True';
+  const nativeStart = main.indexOf(marker);
+  assert.ok(nativeStart >= 0);
+  const finishCall = "_finish_native_app(outcome, error_text)";
+  const nativeEnd = main.indexOf(finishCall, nativeStart);
+  assert.ok(nativeEnd > nativeStart);
+  const nativeBranch = main.slice(nativeStart, nativeEnd + finishCall.length);
+  assert.match(nativeBranch, /_exec_student_app\(\)/);
+  assert.match(nativeBranch, /_finish_native_app\(outcome, error_text\)/);
+  assert.doesNotMatch(nativeBranch, /_ensure_manager|_load_run|import pybot_run|from pybot_run/);
+  assert.match(main, /if not native:\s*\r?\n\s*try:\s*\r?\n\s*_ensure_manager\(\)/m);
+});
+
+test("TEST14 EDA6 profile fix still present before exec(code, ns)", () => {
+  const ble = readFw("pybot_ble.py");
+  const fn = ble.slice(
+    ble.indexOf("def _exec_student_app"),
+    ble.indexOf("\ndef main("),
+  );
+  const placaIdx = fn.indexOf("mod_eda6.PLACA_ACTUAL = profile");
+  const execIdx = fn.indexOf("exec(code, ns)");
+  assert.ok(placaIdx >= 0 && execIdx > placaIdx);
+});
+
+test("deploy APP:INFO accepts running_override without manager", () => {
+  const deploy = readFw("pybot_deploy.py");
+  assert.match(deploy, /def _app_info_json\(manager, running_override=None\)/);
+  assert.match(deploy, /def handle_app\(send, manager, cmd, running_override=None\)/);
+  assert.match(deploy, /if running_override is not None:/);
+  assert.match(deploy, /APP:ERROR:BUSY/);
+  assert.equal(appInfoRunning(null, true), true);
+  assert.equal(appInfoRunning(null, false), false);
+  assert.equal(appInfoRunning({ running: true, _persistent: true }, null), true);
+});
