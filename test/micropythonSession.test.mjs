@@ -403,19 +403,46 @@ test("installFile: obsolete temp is cleared without touching final", async () =>
   await s.close();
 });
 
-test("installFile: progress remains chunk-based", async () => {
+test("installFile: progress is UTF-8 byte-based (#23)", async () => {
   const content = "A".repeat(1500); // enough for >1 b64 chunk of 1024
   const { s } = await installSession();
   const progress = [];
   await s.installFile("big.py", content, { onProgress: (p) => progress.push({ ...p }) });
   assert.ok(progress.length >= 2);
-  assert.equal(progress[0].done, 1);
-  assert.equal(progress[progress.length - 1].done, progress[0].total);
-  assert.equal(progress[0].total, progress[progress.length - 1].total);
+  assert.equal(progress[0].total, 1500);
+  assert.equal(progress[progress.length - 1].done, 1500);
+  assert.equal(progress[progress.length - 1].pct, 100);
+  let prev = -1;
   for (const p of progress) {
-    assert.equal(p.pct, Math.round((p.done / p.total) * 100));
+    assert.ok(p.done >= prev);
+    assert.ok(p.done <= p.total);
+    assert.ok(p.pct <= 100);
+    prev = p.done;
   }
   await s.close();
+});
+
+test("installFile: progress UTF-8 multibyte (—, á, º) uses byte length (#23)", async () => {
+  const content = "café — º\n" + "x".repeat(1200);
+  const byteLen = new TextEncoder().encode(content).length;
+  const { s } = await installSession();
+  const progress = [];
+  await s.installFile("utf8.py", content, { onProgress: (p) => progress.push({ ...p }) });
+  assert.equal(progress[0].total, byteLen);
+  assert.equal(progress[progress.length - 1].done, byteLen);
+  assert.equal(progress[progress.length - 1].pct, 100);
+  await s.close();
+});
+
+test("#23 hardwareBridge installBleRuntime suma bytes UTF-8", () => {
+  const bridge = readFileSync(new URL("../src/hardwareBridge.js", import.meta.url), "utf8");
+  const fn = bridge.slice(
+    bridge.indexOf("export async function installBleRuntime"),
+    bridge.indexOf("export async function clearPersistentAppUsb"),
+  );
+  assert.match(fn, /TextEncoder\(\)\.encode/);
+  assert.match(fn, /info\?\.done/);
+  assert.doesNotMatch(fn, /String\(f\.source \?\? ""\)\.length/);
 });
 
 test("installFile: preexisting generic backup is not deleted during commit", async () => {

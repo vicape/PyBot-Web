@@ -1531,7 +1531,8 @@ export async function installBleRuntime(hooks = {}) {
 
   // Runtime 4.0.0: boot.py + main.py + módulos (ble/repl/mpy/net/run/deploy/update).
   const files = getBleRuntimeInstallFiles();
-  const totalBytes = files.reduce((n, f) => n + String(f.source ?? "").length, 0);
+  const utf8Len = (s) => new TextEncoder().encode(String(s ?? "")).length;
+  const totalBytes = files.reduce((n, f) => n + utf8Len(f.source), 0);
   let doneBytes = 0;
   onProgress?.({ phase: "installing", done: 0, total: totalBytes, pct: 0 });
 
@@ -1546,7 +1547,7 @@ export async function installBleRuntime(hooks = {}) {
     await _mpSession.installFile(file.name, file.source, {
       onProgress: (info) => {
         const localDone = info?.done ?? 0;
-        const overall = doneBytes + localDone;
+        const overall = Math.min(totalBytes, doneBytes + localDone);
         onProgress?.({
           phase,
           done: overall,
@@ -1555,7 +1556,7 @@ export async function installBleRuntime(hooks = {}) {
         });
       },
     });
-    doneBytes += String(file.source ?? "").length;
+    doneBytes += utf8Len(file.source);
   }
 
   onProgress?.({ phase: "verifying", done: totalBytes, total: totalBytes, pct: 100 });

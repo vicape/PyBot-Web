@@ -259,7 +259,7 @@ export class MicroPythonSession {
       { timeout: 8000 },
     );
 
-    const total = chunks.length || 1;
+    const total = expected;
     let done = 0;
     try {
       for (const chunk of chunks) {
@@ -274,10 +274,17 @@ export class MicroPythonSession {
         if (!stdout.includes("PYBOT_INSTALL_OK")) {
           throw new Error("INSTALL_FAIL");
         }
-        done += 1;
+        // Progreso en BYTES decodificados (no en cantidad de chunks).
+        const pad = chunk.endsWith("==") ? 2 : chunk.endsWith("=") ? 1 : 0;
+        done = Math.min(total, done + Math.floor((chunk.length * 3) / 4) - pad);
         if (onProgress) {
-          onProgress({ done, total, pct: Math.round((done / total) * 100) });
+          const pct =
+            total === 0 ? 100 : Math.min(100, Math.round((done / total) * 100));
+          onProgress({ done, total, pct });
         }
+      }
+      if (onProgress && chunks.length === 0) {
+        onProgress({ done: 0, total: 0, pct: 100 });
       }
     } catch (e) {
       try {
