@@ -388,14 +388,39 @@ export class MicroPythonSession {
   }
 
   /**
+   * Verifica main.py en la placa sin materializar el source completo como str.
+   * Construye un módulo temporal `_pybot_verify.py` en streaming (chunks) con el
+   * body bajo `if False:` e importa para forzar el lexer de archivo de MicroPython.
+   *
    * @param {boolean} checkEda6
    * @returns {Promise<{ok:boolean, mainSize:number, detail:string}>}
    */
   async verifyMainPyOnBoard(checkEda6 = false) {
+    const hwCheck = checkEda6
+      ? [
+          "if _ok:",
+          "    try:",
+          "        import EDA6",
+          "    except Exception as e:",
+          "        _ok = False",
+          "        _detail = 'eda6:' + str(e)",
+        ].join("\n")
+      : [
+          "if _ok:",
+          "    try:",
+          "        import pybot_hw",
+          "    except Exception as e:",
+          "        _ok = False",
+          "        _detail = 'pybot_hw:' + str(e)",
+        ].join("\n");
+    // Streaming verify: sin leer main completo a str; import usa lexer de archivo.
     const code = [
-      "import os",
+      "import os, sys, gc",
       "_ok = True",
       "_detail = ''",
+      "_VERIFY = '_pybot_verify'",
+      "_VERIFY_PY = '_pybot_verify.py'",
+      "_CHUNK = 256",
       "try:",
       "    _sz = os.stat('main.py')[6]",
       "except OSError:",
@@ -403,28 +428,45 @@ export class MicroPythonSession {
       "    _detail = 'missing_main'",
       "    _sz = -1",
       "if _ok:",
+      "    _src = None",
+      "    _dst = None",
       "    try:",
-      "        compile(open('main.py').read(), 'main.py', 'exec')",
-      "    except Exception as e:",
-      "        _ok = False",
-      "        _detail = 'compile:' + str(e)",
-      checkEda6
-        ? [
-            "if _ok:",
-            "    try:",
-            "        import EDA6",
-            "    except Exception as e:",
-            "        _ok = False",
-            "        _detail = 'eda6:' + str(e)",
-          ].join("\n")
-        : [
-            "if _ok:",
-            "    try:",
-            "        import pybot_hw",
-            "    except Exception as e:",
-            "        _ok = False",
-            "        _detail = 'pybot_hw:' + str(e)",
-          ].join("\n"),
+      "        try:",
+      "            _src = open('main.py', 'rb')",
+      "            _dst = open(_VERIFY_PY, 'wb')",
+      "            _dst.write(b'if False:\\n    pass\\n    ')",
+      "            while True:",
+      "                _chunk = _src.read(_CHUNK)",
+      "                if not _chunk:",
+      "                    break",
+      "                _dst.write(_chunk.replace(b'\\n', b'\\n    '))",
+      "            _src.close()",
+      "            _src = None",
+      "            _dst.close()",
+      "            _dst = None",
+      "            sys.modules.pop(_VERIFY, None)",
+      "            __import__(_VERIFY)",
+      "        except Exception as e:",
+      "            _ok = False",
+      "            _detail = 'compile:' + str(e)",
+      "        finally:",
+      "            if _src is not None:",
+      "                try:",
+      "                    _src.close()",
+      "                except Exception:",
+      "                    pass",
+      "            if _dst is not None:",
+      "                try:",
+      "                    _dst.close()",
+      "                except Exception:",
+      "                    pass",
+      "            sys.modules.pop(_VERIFY, None)",
+      "            try:",
+      "                os.remove(_VERIFY_PY)",
+      "            except OSError:",
+      "                pass",
+      "            gc.collect()",
+      hwCheck,
       "print('PYBOT_VERIFY', _ok, _sz, _detail)",
     ].join("\n");
     const { stdout } = await this.execRaw(code, { timeout: 20000 });

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { MicroPythonSession } from "../src/micropythonEsp32Session.js";
 import { BYTE_CTRL_C } from "../src/micropython/constants.js";
 import { FakeMicroPythonTransport } from "./helpers/fakeMicroPython.mjs";
@@ -529,4 +530,281 @@ test("installFile: structural guards (no full read, temp suffixes, no version/fi
   );
   assert.match(ble, /PYBOT_RUNTIME_VERSION = "4\.0\.6"/);
   assert.match(ble, /BUILTIN_LED_PIN = None/);
+});
+
+/** Compila/ejecuta source Python vía intérprete local (espejo del board). */
+function pyCompileExec(source, { exec = false } = {}) {
+  const script = [
+    "import sys",
+    "src = sys.stdin.buffer.read()",
+    "try:",
+    "    code = compile(src, '_pybot_verify.py', 'exec')",
+    exec ? "    ns = {}" : "    ns = None",
+    exec ? "    exec(code, ns)" : "    pass",
+    "    sys.stdout.write('OK')",
+    "except Exception as e:",
+    "    sys.stdout.write(type(e).__name__ + ':' + str(e))",
+    "    sys.exit(1)",
+  ].join("\n");
+  const r = spawnSync("python", ["-c", script], {
+    input: Buffer.from(source),
+    encoding: "buffer",
+  });
+  const out = Buffer.from(r.stdout || []).toString("utf8");
+  if (r.status === 0 && out === "OK") return { ok: true, detail: "" };
+  return { ok: false, detail: out || `python_exit:${r.status}` };
+}
+
+/**
+ * Simula el script de verifyMainPyOnBoard contra un FS en memoria.
+ * Demuestra comportamiento (no solo texto): wrap streaming, no ejecución, cleanup.
+ */
+function simulateVerifyScript(fs, code, hooks = {}) {
+  hooks.scripts = hooks.scripts || [];
+  hooks.scripts.push(code);
+  hooks.modules = hooks.modules || new Set();
+  hooks.imported = hooks.imported || [];
+
+  assert.doesNotMatch(code, /open\(\s*['\"]main\.py['\"]\s*\)\.read\s*\(/);
+  assert.doesNotMatch(code, /compile\(\s*open\(/);
+  assert.match(code, /_CHUNK\s*=\s*256/);
+  assert.match(code, /if False:/);
+  assert.match(code, /__import__\(_VERIFY\)/);
+  assert.match(code, /os\.remove\(_VERIFY_PY\)/);
+  assert.match(code, /sys\.modules\.pop\(_VERIFY,\s*None\)/);
+  assert.match(code, /gc\.collect\(\)/);
+
+  let ok = true;
+  let detail = "";
+  let sz = -1;
+
+  if (!fs.has("main.py")) {
+    return { stdout: `PYBOT_VERIFY False -1 missing_main\n`, stderr: "" };
+  }
+  sz = fs.get("main.py").length;
+
+  const VERIFY = "_pybot_verify";
+  const VERIFY_PY = "_pybot_verify.py";
+  const CHUNK = 256;
+
+  try {
+    try {
+      const main = fs.get("main.py");
+      const parts = [Buffer.from("if False:\n    pass\n    ")];
+      const indentedNl = Buffer.from("\n    ");
+      for (let i = 0; i < main.length; i += CHUNK) {
+        const chunk = main.subarray(i, i + CHUNK);
+        const pieces = [];
+        let start = 0;
+        for (let j = 0; j < chunk.length; j++) {
+          if (chunk[j] === 0x0a) {
+            pieces.push(chunk.subarray(start, j));
+            pieces.push(indentedNl);
+            start = j + 1;
+          }
+        }
+        pieces.push(chunk.subarray(start));
+        parts.push(Buffer.concat(pieces));
+      }
+      const wrapped = Buffer.concat(parts);
+      fs.set(VERIFY_PY, new Uint8Array(wrapped));
+
+      hooks.modules.delete(VERIFY);
+      if (hooks.failMode === "importBoom") {
+        throw new Error("import failed");
+      }
+      const wrappedStr = Buffer.from(wrapped).toString("utf8");
+      const compiled = pyCompileExec(wrappedStr, { exec: true });
+      if (!compiled.ok) {
+        throw new Error(compiled.detail);
+      }
+      hooks.modules.add(VERIFY);
+      hooks.imported.push(VERIFY);
+    } catch (e) {
+      ok = false;
+      detail = "compile:" + String(e.message || e);
+    } finally {
+      hooks.modules.delete(VERIFY);
+      fs.delete(VERIFY_PY);
+    }
+  } catch (e) {
+    ok = false;
+    if (!detail) detail = "compile:" + String(e.message || e);
+  }
+
+  if (ok) {
+    const wantEda6 = /import EDA6/.test(code);
+    const mod = wantEda6 ? "EDA6" : "pybot_hw";
+    hooks.imported.push(mod);
+    if (!fs.has(`${mod}.py`) && !hooks.hwPresent) {
+      ok = false;
+      detail = `${wantEda6 ? "eda6" : "pybot_hw"}:module not found`;
+    }
+  }
+
+  assert.equal(fs.has(VERIFY_PY), false);
+  assert.equal(hooks.modules.has(VERIFY), false);
+
+  return {
+    stdout: `PYBOT_VERIFY ${ok ? "True" : "False"} ${sz} ${detail}\n`,
+    stderr: "",
+  };
+}
+
+async function verifySession(initialFiles = {}, hooks = {}, checkEda6 = false) {
+  const fs = new Map();
+  for (const [k, v] of Object.entries(initialFiles)) {
+    fs.set(k, typeof v === "string" ? ENC.encode(v) : v);
+  }
+  hooks.scripts = hooks.scripts || [];
+  hooks.modules = hooks.modules || new Set();
+  hooks.imported = hooks.imported || [];
+  const board = new FakeMicroPythonTransport();
+  const s = new MicroPythonSession(board, 115200);
+  await s.detect();
+  s.execRaw = async (code) => simulateVerifyScript(fs, code, hooks);
+  return { s, fs, hooks, board, checkEda6 };
+}
+
+test("verifyMainPyOnBoard: generated script no longer uses open(main).read()", async () => {
+  const src = readFileSync(
+    new URL("../src/micropython/micropythonSession.js", import.meta.url),
+    "utf8",
+  );
+  const start = src.indexOf("async verifyMainPyOnBoard(");
+  const end = src.indexOf("async hardwareReset(", start);
+  assert.ok(start >= 0 && end > start);
+  const fn = src.slice(start, end);
+  assert.doesNotMatch(fn, /open\(\s*['\"]main\.py['\"]\s*\)\.read\s*\(/);
+  assert.doesNotMatch(fn, /compile\(\s*open\(/);
+  assert.match(fn, /_pybot_verify/);
+  assert.match(fn, /if False:/);
+  assert.match(fn, /_CHUNK\s*=\s*256/);
+  assert.match(fn, /__import__/);
+
+  const { s, hooks } = await verifySession({
+    "main.py": "from pybot_hw import *\nx=1\n",
+    "pybot_hw.py": "#hw\n",
+  });
+  await s.verifyMainPyOnBoard(false);
+  const script = hooks.scripts[0];
+  assert.doesNotMatch(script, /open\('main\.py'\)\.read\(/);
+  assert.match(script, /open\('main\.py', 'rb'\)/);
+  assert.match(script, /_chunk = _src\.read\(_CHUNK\)/);
+  await s.close();
+});
+
+test("verifyMainPyOnBoard: valid main passes and keeps hw checks", async () => {
+  const { s, hooks } = await verifySession({
+    "main.py": "from pybot_hw import *\n\nx = 1\n",
+    "pybot_hw.py": "#hw\n",
+  });
+  const r = await s.verifyMainPyOnBoard(false);
+  assert.equal(r.ok, true);
+  assert.equal(r.detail, "");
+  assert.ok(r.mainSize > 0);
+  assert.ok(hooks.imported.includes("pybot_hw"));
+  await s.close();
+});
+
+test("verifyMainPyOnBoard: invalid syntax fails with compile:", async () => {
+  const { s, fs } = await verifySession({
+    "main.py": "from pybot_hw import *\ndef f(\n",
+    "pybot_hw.py": "#hw\n",
+  });
+  const r = await s.verifyMainPyOnBoard(false);
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /^compile:/);
+  assert.equal(fs.has("_pybot_verify.py"), false);
+  await s.close();
+});
+
+test("verifyMainPyOnBoard: student raise does not execute", async () => {
+  const { s, fs, hooks } = await verifySession({
+    "main.py": 'from pybot_hw import *\nraise Exception("NO DEBE EJECUTARSE")\n',
+    "pybot_hw.py": "#hw\n",
+  });
+  const r = await s.verifyMainPyOnBoard(false);
+  assert.equal(r.ok, true, r.detail);
+  assert.equal(r.detail, "");
+  assert.equal(fs.has("_pybot_verify.py"), false);
+  assert.equal(hooks.modules.has("_pybot_verify"), false);
+  await s.close();
+});
+
+test("verifyMainPyOnBoard: temp cleaned on SyntaxError and success", async () => {
+  for (const main of [
+    "from EDA6 import *\nfrom time import sleep\nx=1\n",
+    "from EDA6 import *\ndef bad(\n",
+  ]) {
+    const { s, fs, hooks } = await verifySession(
+      { "main.py": main, "EDA6.py": "#eda\n" },
+      {},
+      true,
+    );
+    await s.verifyMainPyOnBoard(true);
+    assert.equal(fs.has("_pybot_verify.py"), false);
+    assert.equal(hooks.modules.has("_pybot_verify"), false);
+    await s.close();
+  }
+});
+
+test("verifyMainPyOnBoard: EDA6 and pybot_hw missing still reported", async () => {
+  const a = await verifySession({ "main.py": "from EDA6 import *\nx=1\n" });
+  const ra = await a.s.verifyMainPyOnBoard(true);
+  assert.equal(ra.ok, false);
+  assert.match(ra.detail, /^eda6:/);
+  await a.s.close();
+
+  const b = await verifySession({ "main.py": "from pybot_hw import *\nx=1\n" });
+  const rb = await b.s.verifyMainPyOnBoard(false);
+  assert.equal(rb.ok, false);
+  assert.match(rb.detail, /^pybot_hw:/);
+  await b.s.close();
+});
+
+test("verifyMainPyOnBoard: compile-time return/break still detected", async () => {
+  for (const body of ["return 1\n", "break\n"]) {
+    const { s } = await verifySession({
+      "main.py": "from pybot_hw import *\n" + body,
+      "pybot_hw.py": "#hw\n",
+    });
+    const r = await s.verifyMainPyOnBoard(false);
+    assert.equal(r.ok, false);
+    assert.match(r.detail, /^compile:/);
+    await s.close();
+  }
+});
+
+test("verifyMainPyOnBoard: wrapping preserves supported PyBot constructs", async () => {
+  const bodies = [
+    "class A:\n  def m(self):\n    return 1\n",
+    "for i in range(2):\n  while i:\n    break\n",
+    "try:\n  1\nexcept Exception:\n  pass\n",
+    "def d(f):\n  return f\n@d\ndef f():\n  pass\n",
+    's = """a\nb"""\n',
+    'x = "á — º"\n',
+    "x = 1",
+    "x = 1\n",
+    'x = "' + "a".repeat(4000) + '"\n',
+  ];
+  for (const body of bodies) {
+    const main = "from pybot_hw import *\n" + body;
+    const { s } = await verifySession({
+      "main.py": main,
+      "pybot_hw.py": "#hw\n",
+    });
+    const r = await s.verifyMainPyOnBoard(false);
+    assert.equal(r.ok, true, body.slice(0, 40) + " → " + r.detail);
+    await s.close();
+  }
+});
+
+test("verifyMainPyOnBoard: missing_main contract", async () => {
+  const { s } = await verifySession({});
+  const r = await s.verifyMainPyOnBoard(false);
+  assert.equal(r.ok, false);
+  assert.equal(r.detail, "missing_main");
+  assert.equal(r.mainSize, -1);
+  await s.close();
 });
