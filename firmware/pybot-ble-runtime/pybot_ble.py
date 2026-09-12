@@ -174,19 +174,6 @@ def _load_state():
 def _save_state(st):
     return _write_json(_STATE_FILE, st)
 
-def _update_native_app_run_state(outcome, err_text):
-    """Lifecycle de app persistente nativa (sin importar pybot_run)."""
-    st = _load_state()
-    if outcome == "error":
-        st["fail_count"] = int(st.get("fail_count", 0)) + 1
-        st["last_error"] = (err_text or "error")[:200]
-        st["last_outcome"] = "error"
-    else:
-        st["fail_count"] = 0
-        st["last_error"] = ""
-        st["last_outcome"] = outcome
-    _save_state(st)
-
 def _set_safe_boot(flag):
     st = _load_state()
     st["safe_boot"] = bool(flag)
@@ -668,7 +655,6 @@ def main():
     hardware = HardwareController()
     processor = CommandProcessor(hardware, dev_name, dev_id)
     holder = {}
-    # native_app: lifecycle liviano de autostart nativo (sin ProgramManager).
     ctx = {
         "manager": None,
         "deploy": None,
@@ -715,12 +701,21 @@ def main():
 
     def _program_running():
         m = ctx.get("manager")
-        if m and m.running:
-            return True
         na = ctx.get("native_app")
-        if na and na.get("running"):
-            return True
-        return False
+        return bool((m and m.running) or (na and na.get("running")))
+
+    def _native_irq_stop(action):
+        na = ctx["native_app"]
+        if not na.get("running"):
+            return False
+        na["action"] = action
+        tr = holder.get("transport")
+        if tr:
+            try:
+                tr.inject_ctrl_c()
+            except Exception:
+                pass
+        return True
 
     def _disable_autostart():
         try:
@@ -817,37 +812,6 @@ def main():
             except Exception:
                 pass
 
-    def _finish_native_app(outcome, error_text):
-        """Tras _exec_student_app: estado + ACK diferido de APP:STOP/DELETE."""
-        na = ctx["native_app"]
-        na["running"] = False
-        action = na.get("action")
-        na["action"] = None
-        try:
-            _cancel_force_reset()
-        except Exception:
-            pass
-        try:
-            _update_native_app_run_state(outcome, error_text)
-        except Exception:
-            pass
-        if action == "delete":
-            ok = False
-            try:
-                from pybot_deploy import _delete_app
-                ok = bool(_delete_app())
-            except Exception:
-                ok = False
-            try:
-                _send("APP:OK:DELETE" if ok else "APP:ERROR:DELETE_FAILED")
-            except Exception:
-                pass
-        elif action == "stop":
-            try:
-                _send("APP:OK:STOP")
-            except Exception:
-                pass
-
     def on_urgent(text):
         """Solo flags / agenda Timer en IRQ: NUNCA notify/sleep/reset directo."""
         try:
@@ -877,15 +841,7 @@ def main():
         # esta bloqueado en exec(), nunca se procesan → placa zombie (regresion 3.2.3).
         # 3.2.5: cualquier programa en exec (RUN temporal o app), no solo persistent.
         if upper == "APP:STOP":
-            na = ctx.get("native_app")
-            if na and na.get("running"):
-                na["action"] = "stop"
-                tr = holder.get("transport")
-                if tr:
-                    try:
-                        tr.inject_ctrl_c()
-                    except Exception:
-                        pass
+            if _native_irq_stop("stop"):
                 return True
             m = ctx["manager"]
             if m and m.running:
@@ -893,15 +849,7 @@ def main():
                 return True
             return False
         if upper == "APP:DELETE":
-            na = ctx.get("native_app")
-            if na and na.get("running"):
-                na["action"] = "delete"
-                tr = holder.get("transport")
-                if tr:
-                    try:
-                        tr.inject_ctrl_c()
-                    except Exception:
-                        pass
+            if _native_irq_stop("delete"):
                 return True
             m = ctx["manager"]
             if m and m.running and m._persistent:
@@ -971,21 +919,16 @@ def main():
             return None
         if t.startswith("APP:"):
             try:
-                running_ov = None
-                if native:
-                    na = ctx.get("native_app")
-                    running_ov = bool(na and na.get("running"))
+                # Solo override=True si native_app corre; None deja ver manager existente.
+                ov = True if (native and ctx["native_app"].get("running")) else None
                 if t == "APP:INFO":
-                    # No cargar ProgramManager solo para saber si corre.
                     _load_deploy().handle_app(
-                        _send, ctx.get("manager"), t, running_override=running_ov
+                        _send, ctx.get("manager"), t, running_override=ov
                     )
-                elif t == "APP:START" and running_ov:
+                elif t == "APP:START" and ov:
                     _send("APP:ERROR:BUSY")
                 else:
-                    _load_deploy().handle_app(
-                        _send, _ensure_manager(), t, running_override=running_ov
-                    )
+                    _load_deploy().handle_app(_send, _ensure_manager(), t)
             except Exception as e:
                 tag = _load_err_deploy or _load_err_run or _load_err_tag(e)
                 try:
@@ -1157,7 +1100,12 @@ def main():
                         except Exception:
                             error_text = "error"
                     finally:
-                        _finish_native_app(outcome, error_text)
+                        try:
+                            _load_deploy().finish_native_app(
+                                na, outcome, error_text, _send, _cancel_force_reset
+                            )
+                        except Exception:
+                            na["running"] = False
                 else:
                     _maybe_autostart(_ensure_manager())
     except Exception:

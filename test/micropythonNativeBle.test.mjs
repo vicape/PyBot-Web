@@ -678,6 +678,11 @@ function appInfoRunning(manager, runningOverride) {
   return Boolean(manager && manager.running && manager._persistent);
 }
 
+/** Mirror del override nativo: True solo si corre; None si no. */
+function nativeRunningOverride(nativeRunning) {
+  return nativeRunning ? true : null;
+}
+
 /**
  * Mirror del bloque nativo: running / action / Ctrl+C / ACK diferido / state.
  * No importa ProgramManager.
@@ -755,10 +760,10 @@ function createNativeLifecycleMirror() {
     }
   }
 
-  function handleApp(cmd) {
-    const runningOv = Boolean(native_app.running);
+  function handleApp(cmd, manager = null) {
+    const runningOv = nativeRunningOverride(native_app.running);
     if (cmd === "APP:INFO") {
-      return { running: appInfoRunning(null, runningOv) };
+      return { running: appInfoRunning(manager, runningOv) };
     }
     if (cmd === "APP:START") {
       if (runningOv) {
@@ -803,10 +808,12 @@ function createNativeLifecycleMirror() {
 
 test("native lifecycle: source has native_app state and finish helper", () => {
   const ble = readFw("pybot_ble.py");
+  const deploy = readFw("pybot_deploy.py");
   assert.match(ble, /"native_app":\s*\{\s*"running":\s*False,\s*"action":\s*None\s*\}/);
-  assert.match(ble, /def _finish_native_app/);
-  assert.match(ble, /def _update_native_app_run_state/);
   assert.match(ble, /def _program_running/);
+  assert.match(ble, /def _native_irq_stop/);
+  assert.match(deploy, /def finish_native_app/);
+  assert.match(deploy, /def update_native_run_state/);
   // Precarga de ProgramManager solo bajo `if not native`.
   assert.match(ble, /if not native:\s*\n\s*try:\s*\n\s*_ensure_manager\(\)/m);
 });
@@ -859,6 +866,21 @@ test("TEST4 APP:INFO after finish reports running=false", () => {
   const m = createNativeLifecycleMirror();
   m.runAutostart(() => {});
   assert.deepEqual(m.handleApp("APP:INFO"), { running: false });
+});
+
+test("APP:INFO: manager persistent running wins when native_app is idle", () => {
+  const ble = readFw("pybot_ble.py");
+  assert.match(
+    ble,
+    /ov = True if \(native and ctx\["native_app"\]\.get\("running"\)\) else None/,
+  );
+  const manager = { running: true, _persistent: true };
+  assert.equal(
+    appInfoRunning(manager, nativeRunningOverride(false)),
+    true,
+  );
+  assert.equal(appInfoRunning(null, nativeRunningOverride(false)), false);
+  assert.equal(appInfoRunning(null, nativeRunningOverride(true)), true);
 });
 
 test("TEST5 APP:STOP during native autostart: flag + Ctrl+C, ACK after exec", () => {
@@ -977,12 +999,12 @@ test("TEST13 native boot still does not import pybot_run", () => {
   const marker = 'na["running"] = True';
   const nativeStart = main.indexOf(marker);
   assert.ok(nativeStart >= 0);
-  const finishCall = "_finish_native_app(outcome, error_text)";
+  const finishCall = "finish_native_app(";
   const nativeEnd = main.indexOf(finishCall, nativeStart);
   assert.ok(nativeEnd > nativeStart);
-  const nativeBranch = main.slice(nativeStart, nativeEnd + finishCall.length);
+  const nativeBranch = main.slice(nativeStart, nativeEnd + 80);
   assert.match(nativeBranch, /_exec_student_app\(\)/);
-  assert.match(nativeBranch, /_finish_native_app\(outcome, error_text\)/);
+  assert.match(nativeBranch, /finish_native_app\(/);
   assert.doesNotMatch(nativeBranch, /_ensure_manager|_load_run|import pybot_run|from pybot_run/);
   assert.match(main, /if not native:\s*\r?\n\s*try:\s*\r?\n\s*_ensure_manager\(\)/m);
 });
@@ -1005,6 +1027,7 @@ test("deploy APP:INFO accepts running_override without manager", () => {
   assert.match(deploy, /if running_override is not None:/);
   assert.match(deploy, /APP:ERROR:BUSY/);
   assert.equal(appInfoRunning(null, true), true);
-  assert.equal(appInfoRunning(null, false), false);
+  assert.equal(appInfoRunning(null, null), false);
   assert.equal(appInfoRunning({ running: true, _persistent: true }, null), true);
+  assert.equal(appInfoRunning({ running: true, _persistent: true }, false), false);
 });

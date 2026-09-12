@@ -252,6 +252,45 @@ class DeployReceiver:
         }
         return _atomic_install_app(meta, self._size)
 
+def update_native_run_state(outcome, err_text):
+    st = _load_state()
+    if outcome == "error":
+        st["fail_count"] = int(st.get("fail_count", 0)) + 1
+        st["last_error"] = (err_text or "error")[:200]
+    else:
+        st["fail_count"] = 0
+        st["last_error"] = ""
+    st["last_outcome"] = outcome
+    _save_state(st)
+
+def finish_native_app(na, outcome, err_text, send, cancel_force=None):
+    na["running"] = False
+    action = na.get("action")
+    na["action"] = None
+    if cancel_force:
+        try:
+            cancel_force()
+        except Exception:
+            pass
+    try:
+        update_native_run_state(outcome, err_text)
+    except Exception:
+        pass
+    if action == "delete":
+        try:
+            ok = bool(_delete_app())
+        except Exception:
+            ok = False
+        try:
+            send("APP:OK:DELETE" if ok else "APP:ERROR:DELETE_FAILED")
+        except Exception:
+            pass
+    elif action == "stop":
+        try:
+            send("APP:OK:STOP")
+        except Exception:
+            pass
+
 def _app_info_json(manager, running_override=None):
     meta = _load_app_meta()
     st = _load_state()
