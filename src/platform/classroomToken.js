@@ -1,6 +1,9 @@
 /**
  * Access tokens Classroom en memoria, aislados por usuario + modo.
  * Nunca reutilizar entre alumnos ni entre teacher/student.
+ *
+ * La renovación del access_token se hace SOLO vía /api/refresh-classroom-token
+ * (GOOGLE_CLIENT_SECRET nunca en el browser).
  */
 
 import { getSupabase } from "../supabaseClient.js";
@@ -9,9 +12,7 @@ import {
   getStoredStudentGoogleRefreshToken,
 } from "./profileApi.js";
 
-const TOKEN_URL = "https://oauth2.googleapis.com/token";
-const CLIENT_ID = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
-const CLIENT_SECRET = String(import.meta.env.VITE_GOOGLE_CLIENT_SECRET || "").trim();
+const REFRESH_API = "/api/refresh-classroom-token";
 
 /** @type {Map<string, { accessToken: string, expiresAt: number }>} */
 const tokenCache = new Map();
@@ -74,32 +75,55 @@ export function primeClassroomAccessToken(userId, mode, accessToken, expiresInSe
   tokenCache.set(cacheKey(uid, m), { accessToken: tok, expiresAt });
 }
 
+/**
+ * Renueva el access_token vía endpoint server-side (nunca llama a Google
+ * con client_secret desde el browser).
+ * @param {string} refreshToken
+ */
 async function refreshAccessToken(refreshToken) {
-  if (!CLIENT_ID || !CLIENT_SECRET) {
-    const err = new Error("Faltan VITE_GOOGLE_CLIENT_ID / VITE_GOOGLE_CLIENT_SECRET");
-    err.code = "missing_oauth_client";
+  const sb = getSupabase();
+  if (!sb) {
+    const err = new Error("Supabase no configurado");
+    err.code = "supabase_unavailable";
     throw err;
   }
-  const body = new URLSearchParams({
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
-    refresh_token: String(refreshToken),
-    grant_type: "refresh_token",
-  });
-  const res = await fetch(TOKEN_URL, {
+  const { data: sessionData, error: sessionError } = await sb.auth.getSession();
+  if (sessionError) {
+    const err = new Error(sessionError.message || "session_error");
+    err.code = "session_error";
+    throw err;
+  }
+  const supabaseAccess = sessionData?.session?.access_token;
+  if (!supabaseAccess) {
+    const err = new Error("Sesión PyBot requerida para renovar Classroom");
+    err.code = "unauthorized";
+    throw err;
+  }
+
+  const res = await fetch(REFRESH_API, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${supabaseAccess}`,
+    },
+    body: JSON.stringify({ refresh_token: String(refreshToken) }),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(json.error_description || json.error || `token_refresh_${res.status}`);
-    err.code = json.error || "token_refresh_failed";
+    const code = String(json.error || `token_refresh_${res.status}`);
+    const err = new Error(code);
+    err.code = code;
     err.status = res.status;
     throw err;
   }
+  const accessToken = String(json.access_token || "").trim();
+  if (!accessToken) {
+    const err = new Error("token_refresh_empty");
+    err.code = "token_refresh_empty";
+    throw err;
+  }
   return {
-    accessToken: String(json.access_token || ""),
+    accessToken,
     expiresIn: Number(json.expires_in) || 3600,
   };
 }
