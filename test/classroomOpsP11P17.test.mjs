@@ -30,6 +30,9 @@ test("P12 grade batch summary success/skipped/error", () => {
     { ok: true },
   ]);
   assert.deepEqual(s, { success: 2, skipped: 1, error: 1, total: 4 });
+  const tab = readFileSync(join(root, "src/components/pybotclass/CourseIntegrationsTab.jsx"), "utf8");
+  assert.match(tab, /summarizeClassroomGradeBatch/);
+  assert.match(tab, /omitidas/);
 });
 
 test("P13 return batch uses same summary shape", () => {

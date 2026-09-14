@@ -14,6 +14,7 @@ import {
   syncClassroomSubmissionsForActivity,
   matchClassroomSubmission,
 } from "../../platform/activityClassroom.js";
+import { summarizeClassroomGradeBatch } from "../../platform/classroomSyncResults.js";
 import { fetchActivitySubmissions } from "../../platform/activitySubmissions.js";
 import { getSupabase } from "../../supabaseClient.js";
 import {
@@ -197,15 +198,21 @@ export default function CourseIntegrationsTab({
         (members.data ?? []).filter((m) => m.email).map((m) => [m.user_id, m.email]),
       );
 
-      let sent = 0;
+      const batchResults = [];
       for (const g of gradebook?.grades || []) {
         if (g.classroom_grade_synced_at) continue;
         const activity = actById.get(g.activity_id);
-        if (!activity?.classroom_coursework_id || g.grade == null) continue;
+        if (!activity?.classroom_coursework_id || g.grade == null) {
+          batchResults.push({ skipped: true, error: "missing_activity_or_grade" });
+          continue;
+        }
 
         const { rows: subs } = await fetchActivitySubmissions(g.activity_id);
         const pySub = subs.find((s) => s.user_id === g.user_id);
-        if (!pySub) continue;
+        if (!pySub) {
+          batchResults.push({ skipped: true, error: "missing_pybot_submission" });
+          continue;
+        }
 
         let classroomSubmissionId = pySub.classroom_submission_id || null;
 
@@ -224,14 +231,20 @@ export default function CourseIntegrationsTab({
             courseWorkId: activity.classroom_coursework_id,
             userId: user.id,
           });
-          if (!sync.ok) continue;
+          if (!sync.ok) {
+            batchResults.push({ ok: false, error: sync.error || "sync_submissions_failed" });
+            continue;
+          }
           const match = (sync.rows || []).find((cs) =>
             matchClassroomSubmission(cs, pySub, null, classroomUserIdByPybotUser, emailByPybotUser),
           );
           classroomSubmissionId = match?.id || null;
         }
 
-        if (!classroomSubmissionId) continue;
+        if (!classroomSubmissionId) {
+          batchResults.push({ skipped: true, error: "classroom_submission_not_found" });
+          continue;
+        }
 
         const res = await sendGradeToClassroom({
           submission: pySub,
@@ -241,9 +254,12 @@ export default function CourseIntegrationsTab({
           classroomSubmissionId,
           userId: user.id,
         });
-        if (res.ok) sent += 1;
+        batchResults.push(res);
       }
-      setMsg(`Se enviaron ${sent} nota(s) a Classroom.`);
+      const summary = summarizeClassroomGradeBatch(batchResults);
+      setMsg(
+        `Notas Classroom: ${summary.success} ok · ${summary.skipped} omitidas · ${summary.error} error(es) (total ${summary.total}).`,
+      );
       await loadStats();
     } catch (ex) {
       setErr(ex?.message || "Error al enviar notas.");
