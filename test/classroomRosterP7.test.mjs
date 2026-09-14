@@ -31,18 +31,21 @@ test("P7 report taxonomy mapped from legacy statuses", () => {
   assert.equal(summary.error, 0);
 });
 
-test("P7 UI no promete borrado automático de alumnos", () => {
+test("P7 UI describes client preserve + server residual prune honestly", () => {
   const page = readFileSync(
     new URL("../src/pages/CourseActivitiesPage.jsx", import.meta.url),
     "utf8",
   );
   assert.doesNotMatch(page, /quitará del curso a los alumnos importados/);
-  assert.doesNotMatch(page, /quita del curso a quienes ya no están en Classroom/);
-  assert.match(page, /No elimina automáticamente alumnos/);
+  assert.doesNotMatch(page, /quita del curso a quienes ya no est[eé]n en Classroom/);
+  assert.doesNotMatch(page, /No elimina automáticamente alumnos/);
+  assert.match(page, /Se conservan alumnos ya vinculados/);
+  assert.match(page, /aún puede limpiar pendientes/);
   const roster = readFileSync(
     new URL("../src/components/pybotclass/CourseRosterTab.jsx", import.meta.url),
     "utf8",
   );
   assert.match(roster, /matched/);
-  assert.match(roster, /No se eliminan alumnos/);
+  assert.doesNotMatch(roster, /No se eliminan alumnos/);
+  assert.match(roster, /aún pueden limpiarse en\s+servidor/);
 });

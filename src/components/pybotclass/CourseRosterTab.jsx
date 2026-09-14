@@ -233,8 +233,9 @@ export default function CourseRosterTab({
           Sync Classroom: matched {syncReport.matched} · created {syncReport.created} · pending{" "}
           {syncReport.pending} · skipped {syncReport.skipped}
           {syncReport.conflict ? ` · conflict ${syncReport.conflict}` : ""}
-          {syncReport.error ? ` · error ${syncReport.error}` : ""}. No se eliminan alumnos
-          existentes automáticamente.
+          {syncReport.error ? ` · error ${syncReport.error}` : ""}. Se conservan alumnos con
+          classroom_user_id; pendientes o miembros Classroom sin ID aún pueden limpiarse en
+          servidor.
         </PbcAlert>
       ) : null}
 

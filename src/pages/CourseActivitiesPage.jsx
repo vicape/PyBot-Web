@@ -330,7 +330,8 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
 
       const classroomStudents = await listCourseStudents(tok, classroomCourseId);
 
-      // P7: sync conservador — no borra alumnos existentes de PyBot automáticamente.
+      // P7: cliente envía unión de IDs (Classroom ∪ miembros con classroom_user_id).
+      // El RPC productivo aún puede limpiar pendientes / miembros Classroom sin ID.
       const sync = await syncClassroomRosterToCourse(sb, {
         courseId,
         orgId,
@@ -518,8 +519,9 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
               <h3 className="auth-section__title">Importar desde Google Classroom</h3>
               <p className="auth-card__muted auth-card__muted--tight">
                 Sincroniza el roster de Classroom con este curso: agrega o actualiza alumnos y deja
-                pendientes a quienes aún no tienen cuenta PyBot. No elimina automáticamente alumnos
-                ya existentes en el curso.
+                pendientes a quienes aún no tienen cuenta PyBot. Se conservan alumnos ya vinculados
+                con ID de Classroom; el servidor aún puede limpiar pendientes o miembros Classroom
+                sin ID vinculado.
               </p>
               {importErr ? (
                 <p className="auth-card__notice auth-card__notice--err">{importErr}</p>
