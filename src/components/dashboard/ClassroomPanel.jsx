@@ -18,7 +18,7 @@ import {
   shouldShowClassroomReconnect,
 } from "../../platform/classifyClassroomConnection.js";
 import { getSupabase } from "../../supabaseClient.js";
-import { slugifyOrganizationName } from "../../slugify.js";
+import { importClassroomCourseToOrg } from "../../platform/importClassroomCourse.js";
 import { track } from "../../telemetry/index.js";
 
 export default function ClassroomPanel({
@@ -182,68 +182,25 @@ export default function ClassroomPanel({
     setImporting(classroomCourse.id);
     setImportErr("");
 
-    const title = classroomCourse.name || classroomCourse.section || `Curso ${classroomCourse.id}`;
-    const slug = slugifyOrganizationName(title);
-
-    // 1) Chequear si ya existe un curso con este classroom_course_id en este colegio
-    const { data: existing } = await sb
-      .from("courses")
-      .select("id")
-      .eq("org_id", targetOrgId)
-      .eq("classroom_course_id", classroomCourse.id)
-      .maybeSingle();
-
-    if (existing?.id) {
-      setImporting(null);
-      setImportedIds((prev) => new Set([...prev, classroomCourse.id]));
-      navigate(`/dashboard/org/${targetOrgId}/course/${existing.id}`);
-      return;
-    }
-
-    const payload = {
-      org_id: targetOrgId,
-      title,
-      slug,
-      classroom_course_id: classroomCourse.id,
-      created_by: user.id,
-    };
-
-    let { data: row, error } = await sb
-      .from("courses")
-      .insert(payload)
-      .select("id")
-      .maybeSingle();
-
-    // Si falla por slug/columna, reintento progresivos
-    if (error?.message?.includes("slug")) {
-      const { slug: _omitSlug, ...withoutSlug } = payload;
-      ({ data: row, error } = await sb
-        .from("courses")
-        .insert(withoutSlug)
-        .select("id")
-        .maybeSingle());
-    }
-    if (error?.message?.includes("classroom_course_id")) {
-      const { classroom_course_id: _omitCl, ...withoutCl } = payload;
-      ({ data: row, error } = await sb
-        .from("courses")
-        .insert(withoutCl)
-        .select("id")
-        .maybeSingle());
-    }
+    const result = await importClassroomCourseToOrg(sb, {
+      orgId: targetOrgId,
+      classroomCourse,
+      userId: user.id,
+    });
 
     setImporting(null);
 
-    if (error) {
-      console.error("importCourse:", error);
-      setImportErr(`No se pudo importar "${title}": ${error.message}`);
+    if (!result.ok) {
+      const title =
+        classroomCourse.name || classroomCourse.section || `Curso ${classroomCourse.id}`;
+      console.error("importCourse:", result);
+      setImportErr(result.message || `No se pudo importar "${title}".`);
       return;
     }
 
     setImportedIds((prev) => new Set([...prev, classroomCourse.id]));
-
-    if (row?.id) {
-      navigate(`/dashboard/org/${targetOrgId}/course/${row.id}`);
+    if (result.courseId) {
+      navigate(`/dashboard/org/${targetOrgId}/course/${result.courseId}`);
     }
   };
 
