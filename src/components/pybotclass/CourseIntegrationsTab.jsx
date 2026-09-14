@@ -14,7 +14,12 @@ import {
   syncClassroomSubmissionsForActivity,
   matchClassroomSubmission,
 } from "../../platform/activityClassroom.js";
-import { summarizeClassroomGradeBatch } from "../../platform/classroomSyncResults.js";
+import {
+  formatClassroomBatchSummary,
+  normalizeClassroomBatchItem,
+  summarizeClassroomGradeBatch,
+  summarizeClassroomPublishBatch,
+} from "../../platform/classroomSyncResults.js";
 import { fetchActivitySubmissions } from "../../platform/activitySubmissions.js";
 import { getSupabase } from "../../supabaseClient.js";
 import {
@@ -134,17 +139,25 @@ export default function CourseIntegrationsTab({
   const doImport = async () => {
     const selected = importList.filter((cw) => selectedCw.has(cw.id));
     setBusy("import");
-    const { imported, updated, error } = await importClassroomActivities(sb, {
+    setErr("");
+    setMsg("");
+    const result = await importClassroomActivities(sb, {
       courseId,
       courseWorks: selected,
       createdBy: user.id,
     });
     setBusy("");
-    if (error) {
-      setErr(error);
+    const summary = result.summary || { success: 0, skipped: 0, error: 1, total: 0 };
+    setMsg(
+      formatClassroomBatchSummary(
+        `Import Classroom (${result.imported || 0} nuevas · ${result.updated || 0} actualizadas)`,
+        summary,
+      ),
+    );
+    if (summary.error > 0 || result.error === "missing_args") {
+      setErr(result.error || formatClassroomBatchSummary("Import Classroom", summary));
       return;
     }
-    setMsg(`Importadas: ${imported} nuevas, ${updated} actualizadas.`);
     setShowImport(false);
     await onReloadActivities?.();
     await loadStats();
@@ -153,18 +166,23 @@ export default function CourseIntegrationsTab({
   const publishAll = async () => {
     setBusy("publish");
     setErr("");
+    setMsg("");
     try {
       const { rows: acts } = await fetchCourseActivities(courseId);
-      let count = 0;
+      const batchResults = [];
       for (const a of acts) {
         const res = await publishActivityToClassroom({
           activity: a,
           classroomCourseId,
           userId: user.id,
         });
-        if (res.ok) count += 1;
+        batchResults.push(normalizeClassroomBatchItem(res));
       }
-      setMsg(`Publicadas/actualizadas ${count} actividad(es) en Classroom.`);
+      const summary = summarizeClassroomPublishBatch(batchResults);
+      setMsg(formatClassroomBatchSummary("Publicación Classroom", summary));
+      if (summary.error > 0) {
+        setErr(formatClassroomBatchSummary("Publicación Classroom", summary));
+      }
       await onReloadActivities?.();
     } catch (ex) {
       setErr(ex?.message || "Error al publicar.");
@@ -257,9 +275,10 @@ export default function CourseIntegrationsTab({
         batchResults.push(res);
       }
       const summary = summarizeClassroomGradeBatch(batchResults);
-      setMsg(
-        `Notas Classroom: ${summary.success} ok · ${summary.skipped} omitidas · ${summary.error} error(es) (total ${summary.total}).`,
-      );
+      setMsg(formatClassroomBatchSummary("Notas Classroom", summary));
+      if (summary.error > 0) {
+        setErr(formatClassroomBatchSummary("Notas Classroom", summary));
+      }
       await loadStats();
     } catch (ex) {
       setErr(ex?.message || "Error al enviar notas.");

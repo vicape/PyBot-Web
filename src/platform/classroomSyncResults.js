@@ -34,6 +34,24 @@ export function classifyPybotClassroomTurnIn(classroomResult) {
 }
 
 /**
+ * Normaliza un resultado de op Classroom a {ok|skipped|error} para batches (P14).
+ * @param {{ ok?: boolean, skipped?: boolean, error?: string }|null|undefined} res
+ */
+export function normalizeClassroomBatchItem(res) {
+  if (!res) return { ok: false, error: "empty_result" };
+  if (res.skipped) return { skipped: true, error: res.error || null };
+  if (res.ok) return { ok: true };
+  const code = String(res.error || "");
+  if (
+    code === "associated_with_developer_false" ||
+    code === "coursework_not_associated_with_developer"
+  ) {
+    return { skipped: true, error: code };
+  }
+  return { ok: false, error: code || "failed" };
+}
+
+/**
  * @param {Array<{ ok?: boolean, skipped?: boolean, error?: string }>} results
  */
 export function summarizeClassroomGradeBatch(results = []) {
@@ -41,11 +59,17 @@ export function summarizeClassroomGradeBatch(results = []) {
   let skipped = 0;
   let error = 0;
   for (const r of results) {
-    if (r?.skipped) skipped += 1;
-    else if (r?.ok) success += 1;
+    const n = normalizeClassroomBatchItem(r);
+    if (n.skipped) skipped += 1;
+    else if (n.ok) success += 1;
     else error += 1;
   }
   return { success, skipped, error, total: results.length };
+}
+
+/** Alias publish batch (misma taxonomía P14). */
+export function summarizeClassroomPublishBatch(results = []) {
+  return summarizeClassroomGradeBatch(results);
 }
 
 /**
@@ -53,4 +77,12 @@ export function summarizeClassroomGradeBatch(results = []) {
  */
 export function summarizeClassroomReturnBatch(results = []) {
   return summarizeClassroomGradeBatch(results);
+}
+
+/**
+ * @param {string} label
+ * @param {{ success: number, skipped: number, error: number, total: number }} summary
+ */
+export function formatClassroomBatchSummary(label, summary) {
+  return `${label}: ${summary.success} ok · ${summary.skipped} omitidas · ${summary.error} error(es) (total ${summary.total}).`;
 }

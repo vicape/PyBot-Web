@@ -32,7 +32,24 @@ test("P12 grade batch summary success/skipped/error", () => {
   assert.deepEqual(s, { success: 2, skipped: 1, error: 1, total: 4 });
   const tab = readFileSync(join(root, "src/components/pybotclass/CourseIntegrationsTab.jsx"), "utf8");
   assert.match(tab, /summarizeClassroomGradeBatch/);
-  assert.match(tab, /omitidas/);
+  assert.match(tab, /formatClassroomBatchSummary/);
+  const helpers = readFileSync(join(root, "src/platform/classroomSyncResults.js"), "utf8");
+  assert.match(helpers, /omitidas/);
+});
+
+test("P14 publishAll and import report success/skipped/error (not success-only)", () => {
+  const tab = readFileSync(join(root, "src/components/pybotclass/CourseIntegrationsTab.jsx"), "utf8");
+  assert.match(tab, /summarizeClassroomPublishBatch/);
+  assert.match(tab, /normalizeClassroomBatchItem/);
+  assert.match(tab, /formatClassroomBatchSummary/);
+  assert.doesNotMatch(tab, /Publicadas\/actualizadas \$\{count\}/);
+  assert.doesNotMatch(tab, /if \(res\.ok\) count \+= 1/);
+  const s = summarizeClassroomGradeBatch([
+    { ok: true },
+    { error: "associated_with_developer_false" },
+    { ok: false, error: "missing_access_token" },
+  ]);
+  assert.deepEqual(s, { success: 1, skipped: 1, error: 1, total: 3 });
 });
 
 test("P13 return batch uses same summary shape", () => {

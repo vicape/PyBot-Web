@@ -368,14 +368,26 @@ export function mapClassroomCourseWorkToActivity(courseWork) {
  */
 export async function importClassroomActivities(supabase, { courseId, courseWorks, createdBy }) {
   if (!supabase || !courseId || !createdBy) {
-    return { imported: 0, updated: 0, error: "missing_args" };
+    return {
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      errorCount: 0,
+      error: "missing_args",
+      summary: { success: 0, skipped: 0, error: 1, total: 0 },
+    };
   }
   let imported = 0;
   let updated = 0;
+  let skipped = 0;
+  let errorCount = 0;
 
   for (const cw of courseWorks) {
     const mapped = mapClassroomCourseWorkToActivity(cw);
-    if (!mapped.classroom_coursework_id) continue;
+    if (!mapped.classroom_coursework_id) {
+      skipped += 1;
+      continue;
+    }
 
     const { data: existing } = await supabase
       .from("activities")
@@ -401,6 +413,7 @@ export async function importClassroomActivities(supabase, { courseId, courseWork
         })
         .eq("id", existing.id);
       if (!error) updated += 1;
+      else errorCount += 1;
     } else {
       const { error } = await supabase.from("activities").insert({
         course_id: courseId,
@@ -409,10 +422,20 @@ export async function importClassroomActivities(supabase, { courseId, courseWork
         ...mapped,
       });
       if (!error) imported += 1;
+      else errorCount += 1;
     }
   }
 
-  return { imported, updated, error: null };
+  const success = imported + updated;
+  const total = success + skipped + errorCount;
+  return {
+    imported,
+    updated,
+    skipped,
+    errorCount,
+    error: errorCount > 0 ? `${errorCount} actividad(es) no se pudieron importar/actualizar.` : null,
+    summary: { success, skipped, error: errorCount, total },
+  };
 }
 
 export function countPendingClassroomGrades(gradebook) {
