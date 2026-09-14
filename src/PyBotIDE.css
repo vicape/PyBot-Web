@@ -409,6 +409,17 @@
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
 }
 
+/* Indicador visual de prueba: punto discreto junto al logo. */
+.brand-test-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+  opacity: 0.35;
+  flex-shrink: 0;
+  margin-left: -10px;
+}
+
 .ide-root[data-theme="light"] .brand-logo-full {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
 }
