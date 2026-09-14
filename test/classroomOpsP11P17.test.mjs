@@ -57,6 +57,10 @@ test("P15 disconnect clears tokens only (source contract)", () => {
   assert.doesNotMatch(disc, /signOut|signInWithOAuth/);
   const profile = readFileSync(join(root, "src/platform/profileApi.js"), "utf8");
   assert.match(profile, /export async function clearClassroomTokens/);
+  const panel = readFileSync(join(root, "src/components/dashboard/ClassroomPanel.jsx"), "utf8");
+  assert.match(panel, /disconnectClassroomIntegration/);
+  assert.match(panel, /Desconectar Classroom/);
+  assert.match(panel, /No se cierra tu sesión de PyBotClass/);
 });
 
 test("P16 migration review marker present; no VITE secret", () => {

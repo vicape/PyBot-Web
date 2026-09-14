@@ -9,6 +9,7 @@ import {
   resolveImportOrgId,
   saveClassroomOrgHint,
 } from "../../platform/classroomOrgContext.js";
+import { disconnectClassroomIntegration } from "../../platform/disconnectClassroom.js";
 import { fetchProfile, markClassroomLinked } from "../../platform/profileApi.js";
 import { getValidClassroomToken } from "../../platform/classroomToken.js";
 import {
@@ -57,6 +58,7 @@ export default function ClassroomPanel({
   const [testing, setTesting] = useState(false);
   const [err, setErr] = useState("");
   const [okMsg, setOkMsg] = useState("");
+  const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
     if (!canUseClassroom) return;
@@ -166,6 +168,35 @@ export default function ClassroomPanel({
       mode: "teacher",
       orgId: effectiveOrgId || null,
     });
+  };
+
+  const onDisconnectClassroom = async () => {
+    if (!user?.id || disconnecting) return;
+    const ok = window.confirm(
+      "¿Desconectar Google Classroom?\n\n" +
+        "Se quita la autorización de Classroom de esta cuenta PyBot.\n" +
+        "No se cierra tu sesión de PyBotClass ni se borran cursos, actividades ni entregas.",
+    );
+    if (!ok) return;
+    setDisconnecting(true);
+    setErr("");
+    setOkMsg("");
+    try {
+      const r = await disconnectClassroomIntegration({ userId: user.id, mode: "teacher" });
+      if (!r.ok) {
+        setErr(r.error || "No se pudo desconectar Google Classroom.");
+        return;
+      }
+      setCourses([]);
+      setImportedIds(new Set());
+      setLinkedAt(null);
+      setConnectionStatus(CLASSROOM_CONNECTION.NOT_CONNECTED);
+      setOkMsg("Google Classroom desconectado. Tu sesión de PyBotClass sigue activa.");
+    } catch (ex) {
+      setErr(ex?.message || "No se pudo desconectar Google Classroom.");
+    } finally {
+      setDisconnecting(false);
+    }
   };
 
   if (!canUseClassroom) {
@@ -298,6 +329,17 @@ export default function ClassroomPanel({
         >
           {testing ? "Comprobando…" : "Probar conexión"}
         </button>
+        {connectionStatus !== CLASSROOM_CONNECTION.NOT_CONNECTED &&
+        connectionStatus !== CLASSROOM_CONNECTION.CHECKING ? (
+          <button
+            type="button"
+            className="auth-btn auth-btn--ghost"
+            disabled={disconnecting || testing}
+            onClick={() => void onDisconnectClassroom()}
+          >
+            {disconnecting ? "Desconectando…" : "Desconectar Classroom"}
+          </button>
+        ) : null}
       </div>
 
       {!hasAnyStaffOrg ? (
