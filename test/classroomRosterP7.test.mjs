@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   buildConservativeActiveClassroomUserIds,
   summarizeClassroomSyncResults,
@@ -28,4 +29,20 @@ test("P7 report taxonomy mapped from legacy statuses", () => {
   assert.equal(summary.skipped, 1);
   assert.equal(summary.conflict, 0);
   assert.equal(summary.error, 0);
+});
+
+test("P7 UI no promete borrado automático de alumnos", () => {
+  const page = readFileSync(
+    new URL("../src/pages/CourseActivitiesPage.jsx", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(page, /quitará del curso a los alumnos importados/);
+  assert.doesNotMatch(page, /quita del curso a quienes ya no están en Classroom/);
+  assert.match(page, /No elimina automáticamente alumnos/);
+  const roster = readFileSync(
+    new URL("../src/components/pybotclass/CourseRosterTab.jsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(roster, /matched/);
+  assert.match(roster, /No se eliminan alumnos/);
 });

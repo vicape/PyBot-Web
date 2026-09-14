@@ -66,6 +66,7 @@ export default function CourseRosterTab({
   const [removingId, setRemovingId] = useState(null);
   const [inviteLink, setInviteLink] = useState("");
   const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [syncReport, setSyncReport] = useState(null);
 
   const load = useCallback(async () => {
     if (!sb || !courseId) return;
@@ -119,6 +120,14 @@ export default function CourseRosterTab({
       const classroomStudents = await listCourseStudents(tok, classroomCourseId);
       const sync = await syncClassroomRosterToCourse(sb, { courseId, orgId, classroomStudents });
       if (!sync.ok) throw { message: sync.error };
+      setSyncReport({
+        matched: sync.summary?.matched ?? 0,
+        created: sync.summary?.created ?? 0,
+        pending: sync.summary?.pending ?? 0,
+        skipped: sync.summary?.skipped ?? 0,
+        conflict: sync.summary?.conflict ?? 0,
+        error: sync.summary?.error ?? 0,
+      });
       await load();
     } catch (ex) {
       setSyncErr(classroomSyncErrorMessage(ex));
@@ -219,6 +228,15 @@ export default function CourseRosterTab({
       />
 
       {syncErr ? <PbcAlert variant="error">{syncErr}</PbcAlert> : null}
+      {syncReport ? (
+        <PbcAlert variant="info">
+          Sync Classroom: matched {syncReport.matched} · created {syncReport.created} · pending{" "}
+          {syncReport.pending} · skipped {syncReport.skipped}
+          {syncReport.conflict ? ` · conflict ${syncReport.conflict}` : ""}
+          {syncReport.error ? ` · error ${syncReport.error}` : ""}. No se eliminan alumnos
+          existentes automáticamente.
+        </PbcAlert>
+      ) : null}
 
       {subTab === "alumnos" ? (
         <>

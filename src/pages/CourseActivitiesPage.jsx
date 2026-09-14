@@ -330,21 +330,7 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
 
       const classroomStudents = await listCourseStudents(tok, classroomCourseId);
 
-      // Roster vacío es válido: limpia alumnos source=classroom que ya no están.
-      // Si hay alumnos Classroom en PyBot y Google devolvió 0, pedir confirmación.
-      const classroomMembersNow = members.filter((m) => m.source === "classroom");
-      if (classroomStudents.length === 0 && classroomMembersNow.length > 0) {
-        const ok = window.confirm(
-          "Classroom actualmente devuelve 0 alumnos.\n\n" +
-            "La sincronización quitará del curso a los alumnos importados desde Classroom.\n\n" +
-            "¿Continuar?",
-        );
-        if (!ok) {
-          setImportState(null);
-          return;
-        }
-      }
-
+      // P7: sync conservador — no borra alumnos existentes de PyBot automáticamente.
       const sync = await syncClassroomRosterToCourse(sb, {
         courseId,
         orgId,
@@ -531,9 +517,9 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
             <div className="dash-panel" style={{ marginBottom: "1.25rem", padding: "1rem" }}>
               <h3 className="auth-section__title">Importar desde Google Classroom</h3>
               <p className="auth-card__muted auth-card__muted--tight">
-                Sincroniza el roster de Classroom con este curso: agrega alumnos nuevos, actualiza los
-                existentes y quita del curso a quienes ya no están en Classroom. Los que aún no tienen
-                cuenta PyBot aparecen en la lista para invitarlos.
+                Sincroniza el roster de Classroom con este curso: agrega o actualiza alumnos y deja
+                pendientes a quienes aún no tienen cuenta PyBot. No elimina automáticamente alumnos
+                ya existentes en el curso.
               </p>
               {importErr ? (
                 <p className="auth-card__notice auth-card__notice--err">{importErr}</p>
