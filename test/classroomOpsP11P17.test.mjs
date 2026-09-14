@@ -20,6 +20,11 @@ test("P11 PyBot saved even when Classroom fails/pending", () => {
   assert.equal(classifyPybotClassroomTurnIn({ ok: true }).classroom, "ok");
   assert.match(classroomTurnInUserMessage({ ok: false, needsConnect: true }) || "", /entregada en PyBot/);
   assert.match(classroomTurnInSuccessMessage({ ok: true }) || "", /PyBot/);
+  const sub = readFileSync(join(root, "src/platform/activitySubmissions.js"), "utf8");
+  assert.match(sub, /classifyPybotClassroomTurnIn/);
+  assert.match(sub, /sync/);
+  const page = readFileSync(join(root, "src/pages/ActivityPage.jsx"), "utf8");
+  assert.match(page, /classifyPybotClassroomTurnIn/);
 });
 
 test("P12 grade batch summary success/skipped/error", () => {
@@ -29,7 +34,14 @@ test("P12 grade batch summary success/skipped/error", () => {
     { ok: false, error: "x" },
     { ok: true },
   ]);
-  assert.deepEqual(s, { success: 2, skipped: 1, error: 1, total: 4 });
+  assert.deepEqual(s, {
+    success: 2,
+    skipped: 1,
+    error: 1,
+    total: 4,
+    returnSkipped: 0,
+    returnError: 0,
+  });
   const tab = readFileSync(join(root, "src/components/pybotclass/CourseIntegrationsTab.jsx"), "utf8");
   assert.match(tab, /summarizeClassroomGradeBatch/);
   assert.match(tab, /formatClassroomBatchSummary/);
@@ -49,13 +61,36 @@ test("P14 publishAll and import report success/skipped/error (not success-only)"
     { error: "associated_with_developer_false" },
     { ok: false, error: "missing_access_token" },
   ]);
-  assert.deepEqual(s, { success: 1, skipped: 1, error: 1, total: 3 });
+  assert.deepEqual(s, {
+    success: 1,
+    skipped: 1,
+    error: 1,
+    total: 3,
+    returnSkipped: 0,
+    returnError: 0,
+  });
 });
 
-test("P13 return batch uses same summary shape", () => {
-  const s = summarizeClassroomReturnBatch([{ ok: true }, { ok: false }]);
+test("P13 return batch reports returned vs skipped_not_turned_in", () => {
+  const s = summarizeClassroomReturnBatch([
+    { ok: true, returned: true, return_status: "ok" },
+    { ok: true, returned: false, return_status: "skipped_not_turned_in" },
+    { ok: false, error: "x" },
+  ]);
   assert.equal(s.success, 1);
+  assert.equal(s.skipped, 1);
   assert.equal(s.error, 1);
+  const grade = summarizeClassroomGradeBatch([
+    { ok: true, return_status: "skipped_not_turned_in" },
+    { ok: true, return_status: "error" },
+  ]);
+  assert.equal(grade.returnSkipped, 1);
+  assert.equal(grade.returnError, 1);
+  const sub = readFileSync(join(root, "src/platform/activitySubmissions.js"), "utf8");
+  assert.match(sub, /classifyPybotClassroomTurnIn/);
+  const send = readFileSync(join(root, "src/platform/activityClassroom.js"), "utf8");
+  assert.match(send, /return_status/);
+  assert.match(send, /returned:/);
 });
 
 test("P14 classifier: rate limit / network / associatedWithDeveloper", () => {

@@ -1,5 +1,6 @@
 import { getSupabase } from "../supabaseClient.js";
 import { turnInPybotActivityToClassroom } from "./activityClassroom.js";
+import { classifyPybotClassroomTurnIn } from "./classroomSyncResults.js";
 
 /**
  * Entrega formal del alumno (RPC submit_activity).
@@ -25,7 +26,15 @@ export async function submitActivity(activityId, code) {
     classroom = { ok: false, skipped: false, error: ex?.message || "classroom_turn_in_failed" };
   }
 
-  return { ok: true, submission: data, classroom, error: null };
+  const sync = classifyPybotClassroomTurnIn(classroom);
+  // Invariante P11: PyBot ya quedó entregado; classroom es secundario.
+  return {
+    ok: true,
+    submission: data,
+    classroom,
+    sync,
+    error: null,
+  };
 }
 
 /** Lectura de la entrega propia del alumno. */

@@ -389,12 +389,30 @@ export async function sendGradeToClassroom({
           .eq("id", submission.id);
         return {
           ok: true,
+          returned: false,
+          return_status: "skipped_not_turned_in",
           warning:
             "Nota asignada en Classroom, pero no se pudo «devolver» porque el alumno aún no entregó en Classroom (turnIn).",
           error: null,
         };
       }
       console.warn("returnStudentSubmission:", retEx);
+      await sb
+        .from("activity_submissions")
+        .update({
+          classroom_grade_synced_at: new Date().toISOString(),
+          classroom_grade_sync_error: `return_failed: ${retMsg || "unknown"}`,
+          classroom_submission_id: classroomSubmissionId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", submission.id);
+      return {
+        ok: true,
+        returned: false,
+        return_status: "error",
+        warning: retMsg || "Nota asignada, pero falló devolver en Classroom.",
+        error: null,
+      };
     }
 
     const { error } = await sb
@@ -408,7 +426,7 @@ export async function sendGradeToClassroom({
       .eq("id", submission.id);
 
     if (error) return { ok: false, error: error.message };
-    return { ok: true, error: null };
+    return { ok: true, returned: true, return_status: "ok", error: null };
   } catch (ex) {
     const msg = ex?.message || "grade_sync_failed";
     const friendly = /FAILED_PRECONDITION|not.?turned.?in/i.test(msg)

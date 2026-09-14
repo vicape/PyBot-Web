@@ -52,19 +52,23 @@ export function normalizeClassroomBatchItem(res) {
 }
 
 /**
- * @param {Array<{ ok?: boolean, skipped?: boolean, error?: string }>} results
+ * @param {Array<{ ok?: boolean, skipped?: boolean, error?: string, return_status?: string }>} results
  */
 export function summarizeClassroomGradeBatch(results = []) {
   let success = 0;
   let skipped = 0;
   let error = 0;
+  let returnSkipped = 0;
+  let returnError = 0;
   for (const r of results) {
     const n = normalizeClassroomBatchItem(r);
     if (n.skipped) skipped += 1;
     else if (n.ok) success += 1;
     else error += 1;
+    if (r?.return_status === "skipped_not_turned_in") returnSkipped += 1;
+    else if (r?.return_status === "error") returnError += 1;
   }
-  return { success, skipped, error, total: results.length };
+  return { success, skipped, error, total: results.length, returnSkipped, returnError };
 }
 
 /** Alias publish batch (misma taxonomía P14). */
@@ -73,16 +77,32 @@ export function summarizeClassroomPublishBatch(results = []) {
 }
 
 /**
- * @param {Array<{ ok?: boolean, skipped?: boolean, error?: string }>} results
+ * Batch de «return» Classroom (P13): resume returned / skipped / error desde grade results.
+ * @param {Array<{ ok?: boolean, skipped?: boolean, returned?: boolean, return_status?: string }>} results
  */
 export function summarizeClassroomReturnBatch(results = []) {
-  return summarizeClassroomGradeBatch(results);
+  let success = 0;
+  let skipped = 0;
+  let error = 0;
+  for (const r of results) {
+    if (r?.skipped || r?.return_status === "skipped_not_turned_in") skipped += 1;
+    else if (r?.returned === true || r?.return_status === "ok") success += 1;
+    else if (r?.ok === false) error += 1;
+    else if (r?.return_status === "error" || r?.returned === false) error += 1;
+    else if (r?.ok) success += 1;
+    else error += 1;
+  }
+  return { success, skipped, error, total: results.length };
 }
 
 /**
  * @param {string} label
- * @param {{ success: number, skipped: number, error: number, total: number }} summary
+ * @param {{ success: number, skipped: number, error: number, total: number, returnSkipped?: number, returnError?: number }} summary
  */
 export function formatClassroomBatchSummary(label, summary) {
-  return `${label}: ${summary.success} ok · ${summary.skipped} omitidas · ${summary.error} error(es) (total ${summary.total}).`;
+  let msg = `${label}: ${summary.success} ok · ${summary.skipped} omitidas · ${summary.error} error(es) (total ${summary.total}).`;
+  if (summary.returnSkipped || summary.returnError) {
+    msg += ` Return: ${summary.returnSkipped || 0} sin turnIn · ${summary.returnError || 0} error(es).`;
+  }
+  return msg;
 }

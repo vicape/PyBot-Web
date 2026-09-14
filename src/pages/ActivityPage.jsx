@@ -32,6 +32,7 @@ import {
   classroomTurnInSuccessMessage,
   turnInPybotActivityToClassroom,
 } from "../platform/activityClassroom.js";
+import { classifyPybotClassroomTurnIn } from "../platform/classroomSyncResults.js";
 import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
 import { listLessonBlocks } from "../platform/contentApi.js";
 import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
@@ -471,9 +472,15 @@ export default function ActivityPage() {
       return;
     }
     setBusy(false);
+    const sync = r.sync || classifyPybotClassroomTurnIn(cr);
     const okMsg = classroomTurnInSuccessMessage(cr);
     const failMsg = classroomTurnInUserMessage(cr);
-    setActionMsg(failMsg || okMsg || "Actividad entregada.");
+    // P11: siempre afirmar entrega PyBot; Classroom es secundario.
+    if (sync.pybot === "saved" && sync.classroom !== "ok" && sync.classroom !== "already_ok") {
+      setActionMsg(failMsg || okMsg || "Actividad entregada en PyBot.");
+    } else {
+      setActionMsg(failMsg || okMsg || "Actividad entregada.");
+    }
   };
 
   const onGrade = async (submissionId) => {
