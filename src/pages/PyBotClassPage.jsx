@@ -17,7 +17,6 @@ import {
   listPybotclassOrganizations,
 } from "../platform/pybotClassApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
-import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 import { clearClassroomTokenCache } from "../platform/classroomToken.js";
 import { isStaffRole } from "../orgRole.js";
 
@@ -145,10 +144,6 @@ export default function PyBotClassPage() {
       }
       return;
     }
-
-    if (wasClassroomOAuthIntent() && !panel) {
-      setSearchParams({ panel: "classroom" }, { replace: true });
-    }
   }, [loading, authLoading, hasStaffAccess, panel, setSearchParams]);
 
   const filteredCourses = useMemo(() => {
@@ -176,7 +171,7 @@ export default function PyBotClassPage() {
             Google Classroom
           </h1>
           <p className="pbc-hero-block__subtitle" style={{ marginBottom: "1rem" }}>
-            Conectá tu cuenta Google para importar cursos. Usá la misma cuenta con la que ingresaste a
+            Conectá tu cuenta Google para importar cursos. Puede ser distinta de tu cuenta de
             PyBotClass.
           </p>
           <ClassroomPanel

@@ -2,20 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSupabase } from "../supabaseClient.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
-import {
-  clearClassroomTokenCache,
-  primeClassroomAccessToken,
-} from "../platform/classroomToken.js";
 import { updatePreferredRole } from "../platform/profileApi.js";
-import { confirmClassroomPersistence } from "../platform/confirmClassroomPersistence.js";
 import { consumeSignupRole } from "../platform/signupRole.js";
-import {
-  wasClassroomOAuthIntent,
-  consumeClassroomOAuthMode,
-  peekClassroomOAuthExpected,
-  clearClassroomOAuthExpected,
-  clearPendingClassroomTurnIn,
-} from "../platform/googleOAuth.js";
 
 function safeInternalNext(raw) {
   if (typeof raw !== "string") return null;
@@ -31,6 +19,7 @@ function getUrlError() {
   return err ? { code: err, description: desc } : null;
 }
 
+/** Callback de login/autenticación PyBot (Supabase OAuth). Sin Classroom. */
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
   const finished = useRef(false);
@@ -70,83 +59,11 @@ export default function AuthCallbackPage() {
       finished.current = true;
 
       const signupRole = consumeSignupRole();
-      const isClassroomIntent = wasClassroomOAuthIntent();
-      const expected = peekClassroomOAuthExpected();
-      const classroomMode = isClassroomIntent ? consumeClassroomOAuthMode() : "teacher";
-      const mode = classroomMode === "student" ? "student" : "teacher";
 
       try {
         await ensureProfileForUser(session.user, signupRole);
         if (signupRole) await updatePreferredRole(session.user.id, signupRole);
-
-        if (isClassroomIntent) {
-          const expectedId = expected.userId;
-          const sessionEmail = String(session.user.email || "").toLowerCase();
-          const expectedEmail = expected.email ? String(expected.email).toLowerCase() : null;
-
-          const idMismatch = expectedId && expectedId !== session.user.id;
-          const emailMismatch =
-            !idMismatch && expectedEmail && sessionEmail && expectedEmail !== sessionEmail;
-
-          if (idMismatch || emailMismatch) {
-            clearClassroomTokenCache(session.user.id, mode);
-            clearPendingClassroomTurnIn();
-            clearClassroomOAuthExpected();
-            setErrorMsg(
-              "Conectaste una cuenta Google diferente de la cuenta con la que ingresaste a PyBotClass.",
-            );
-            return;
-          }
-
-          const expiresIn = 3600;
-          const refreshToken = session.provider_refresh_token
-            ? String(session.provider_refresh_token).trim()
-            : "";
-
-          if (session.provider_token) {
-            primeClassroomAccessToken(
-              session.user.id,
-              mode,
-              session.provider_token,
-              expiresIn,
-            );
-          }
-
-          const persist = await confirmClassroomPersistence({
-            userId: session.user.id,
-            mode,
-            refreshToken,
-            expiresIn,
-          });
-
-          if (!persist.ok) {
-            clearClassroomTokenCache(session.user.id, mode);
-            clearPendingClassroomTurnIn();
-            clearClassroomOAuthExpected();
-            setErrorMsg(
-              persist.message ||
-                "No se pudo confirmar la conexión permanente con Google Classroom.",
-            );
-            return;
-          }
-
-          clearClassroomOAuthExpected();
-        }
       } catch {
-        if (isClassroomIntent) {
-          // Fallo crítico de Classroom: no ocultar ni navegar como éxito.
-          try {
-            clearClassroomTokenCache(session.user.id, mode);
-          } catch {
-            /* ignore */
-          }
-          clearPendingClassroomTurnIn();
-          clearClassroomOAuthExpected();
-          setErrorMsg(
-            "No se pudo guardar la autorización permanente de Google Classroom.",
-          );
-          return;
-        }
         // Login normal: no bloquear la navegación si falla sincronización secundaria.
       }
 

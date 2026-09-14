@@ -269,7 +269,8 @@ export default function ClassroomPanel({
 
       <div className="auth-org-row__actions" style={{ marginBottom: "1rem" }}>
         <p className="auth-card__muted" style={{ marginBottom: "0.5rem" }}>
-          Usá la misma cuenta Google con la que ingresaste a PyBotClass.
+          Vinculá la cuenta Google que usás para Classroom. Puede ser distinta de tu cuenta de
+          PyBotClass.
         </p>
         <button
           type="button"

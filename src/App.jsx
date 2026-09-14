@@ -4,6 +4,7 @@ import PyBotIDE from "./PyBotIDE.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import AuthCallbackPage from "./pages/AuthCallbackPage.jsx";
+import ClassroomAuthCallbackPage from "./pages/ClassroomAuthCallbackPage.jsx";
 import OrgCoursesPage from "./pages/OrgCoursesPage.jsx";
 import CourseActivitiesPage from "./pages/CourseActivitiesPage.jsx";
 import JoinOrgPage from "./pages/JoinOrgPage.jsx";
@@ -27,6 +28,7 @@ function AppRoutes() {
         <Route path="/" element={<PyBotIDE />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/auth/classroom/callback" element={<ClassroomAuthCallbackPage />} />
         <Route path="/join" element={<JoinOrgPage />} />
         <Route path="/actividad/:activityId" element={<ActivityPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />

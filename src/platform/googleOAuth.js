@@ -25,9 +25,11 @@ export const GOOGLE_CLASSROOM_STUDENT_SCOPES = [
 /** @deprecated Preferir GOOGLE_CLASSROOM_TEACHER_SCOPES / STUDENT. */
 export const GOOGLE_CLASSROOM_SCOPES = GOOGLE_CLASSROOM_TEACHER_SCOPES;
 
-const OAUTH_EXPECTED_USER_ID = "pybot_oauth_expected_user_id";
-const OAUTH_EXPECTED_EMAIL = "pybot_oauth_expected_email";
-const OAUTH_CLASSROOM_MODE = "pybot_oauth_classroom_mode";
+export const CLASSROOM_OAUTH_CALLBACK_PATH = "/auth/classroom/callback";
+export const CLASSROOM_OAUTH_FLOW_KEY = "pybot_classroom_oauth_flow";
+export const CLASSROOM_OAUTH_TTL_MS = 10 * 60 * 1000;
+export const EXCHANGE_CLASSROOM_CODE_API = "/api/exchange-classroom-code";
+
 const PENDING_TURNIN_KEY = "pybot_pending_classroom_turnin";
 const PENDING_TURNIN_TTL_MS = 10 * 60 * 1000;
 
@@ -50,7 +52,7 @@ export function studentLoginOAuthOptions(redirectTo) {
 }
 
 /**
- * OAuth con scopes Classroom.
+ * Opciones legacy (documentación / tests). Classroom ya no usa Supabase OAuth.
  * @param {string} redirectTo
  * @param {"teacher"|"student"} [mode="teacher"]
  */
@@ -62,7 +64,7 @@ export function classroomOAuthOptions(redirectTo, mode = "teacher") {
   return {
     redirectTo,
     scopes,
-    queryParams: { prompt: "consent", access_type: "offline" },
+    queryParams: { prompt: "consent select_account", access_type: "offline" },
   };
 }
 
@@ -71,18 +73,134 @@ export function teacherLoginOAuthOptions(redirectTo) {
   return classroomOAuthOptions(redirectTo, "teacher");
 }
 
+/** Valor aleatorio criptográficamente seguro para OAuth `state`. */
+export function createClassroomOAuthState() {
+  const bytes = new Uint8Array(32);
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export function getClassroomRedirectUri(origin = typeof window !== "undefined" ? window.location.origin : "") {
+  return `${String(origin || "").replace(/\/$/, "")}${CLASSROOM_OAUTH_CALLBACK_PATH}`;
+}
+
+export function scopesForClassroomMode(mode = "teacher") {
+  return normalizeMode(mode) === "student"
+    ? GOOGLE_CLASSROOM_STUDENT_SCOPES
+    : GOOGLE_CLASSROOM_TEACHER_SCOPES;
+}
+
 /**
- * Conectar Google Classroom bajo demanda.
+ * @param {{ clientId: string, redirectUri: string, scopes: string, state: string }} args
+ */
+export function buildClassroomAuthorizeUrl({ clientId, redirectUri, scopes, state }) {
+  const params = new URLSearchParams({
+    client_id: String(clientId || ""),
+    redirect_uri: String(redirectUri || ""),
+    response_type: "code",
+    scope: String(scopes || ""),
+    access_type: "offline",
+    prompt: "consent select_account",
+    state: String(state || ""),
+    include_granted_scopes: "true",
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+/**
+ * @param {{
+ *   state: string,
+ *   initiatingPybotUserId: string,
+ *   mode: "teacher"|"student",
+ *   nextPath: string,
+ *   createdAt: number,
+ * }} flow
+ */
+export function saveClassroomOAuthFlow(flow) {
+  try {
+    sessionStorage.setItem(
+      CLASSROOM_OAUTH_FLOW_KEY,
+      JSON.stringify({
+        state: String(flow.state || ""),
+        initiatingPybotUserId: String(flow.initiatingPybotUserId || ""),
+        mode: normalizeMode(flow.mode),
+        nextPath: String(flow.nextPath || ""),
+        createdAt: Number(flow.createdAt) || Date.now(),
+      }),
+    );
+  } catch {
+    //
+  }
+}
+
+/** @returns {null | { state: string, initiatingPybotUserId: string, mode: "teacher"|"student", nextPath: string, createdAt: number }} */
+export function loadClassroomOAuthFlow() {
+  try {
+    const raw = sessionStorage.getItem(CLASSROOM_OAUTH_FLOW_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.state || !parsed?.initiatingPybotUserId) return null;
+    return {
+      state: String(parsed.state),
+      initiatingPybotUserId: String(parsed.initiatingPybotUserId),
+      mode: normalizeMode(parsed.mode),
+      nextPath: String(parsed.nextPath || ""),
+      createdAt: Number(parsed.createdAt) || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearClassroomOAuthFlow() {
+  try {
+    sessionStorage.removeItem(CLASSROOM_OAUTH_FLOW_KEY);
+  } catch {
+    //
+  }
+}
+
+/**
+ * Valida state CSRF + TTL del flujo Classroom.
+ * @param {ReturnType<typeof loadClassroomOAuthFlow>} stored
+ * @param {string|null} returnedState
+ * @param {number} [now=Date.now()]
+ * @param {number} [ttlMs=CLASSROOM_OAUTH_TTL_MS]
+ * @returns {{ ok: true, flow: object } | { ok: false, code: string }}
+ */
+export function validateClassroomOAuthFlow(stored, returnedState, now = Date.now(), ttlMs = CLASSROOM_OAUTH_TTL_MS) {
+  if (!stored?.state || !stored?.initiatingPybotUserId) {
+    return { ok: false, code: "missing_flow" };
+  }
+  if (!returnedState || typeof returnedState !== "string") {
+    return { ok: false, code: "missing_state" };
+  }
+  if (returnedState !== stored.state) {
+    return { ok: false, code: "state_mismatch" };
+  }
+  const age = now - Number(stored.createdAt || 0);
+  if (!Number.isFinite(age) || age < 0 || age > ttlMs) {
+    return { ok: false, code: "flow_expired" };
+  }
+  return { ok: true, flow: stored };
+}
+
+/**
+ * Conectar Google Classroom bajo demanda (OAuth Google directo; no Supabase OAuth).
  * @param {string} [nextPath]
  * @param {{ mode?: "teacher"|"student" }} [opts]
  */
 export async function connectGoogleClassroom(nextPath, opts = {}) {
   const sb = getSupabase();
-  if (!sb) return;
+  if (!sb) return { ok: false, error: "no_supabase" };
 
   const mode = normalizeMode(opts?.mode);
   const next =
-    typeof nextPath === "string" && nextPath.startsWith("/")
+    typeof nextPath === "string" && nextPath.startsWith("/") && !nextPath.startsWith("//")
       ? nextPath
       : mode === "student"
         ? "/"
@@ -91,68 +209,85 @@ export async function connectGoogleClassroom(nextPath, opts = {}) {
   const {
     data: { user },
   } = await sb.auth.getUser();
-
-  try {
-    sessionStorage.setItem("pybot_oauth_next", next);
-    sessionStorage.setItem("pybot_oauth_classroom", "1");
-    sessionStorage.setItem(OAUTH_CLASSROOM_MODE, mode);
-    if (user?.id) sessionStorage.setItem(OAUTH_EXPECTED_USER_ID, user.id);
-    else sessionStorage.removeItem(OAUTH_EXPECTED_USER_ID);
-    if (user?.email) sessionStorage.setItem(OAUTH_EXPECTED_EMAIL, String(user.email).toLowerCase());
-    else sessionStorage.removeItem(OAUTH_EXPECTED_EMAIL);
-  } catch {
-    //
+  if (!user?.id) {
+    return { ok: false, error: "not_authenticated" };
   }
 
-  const redirectTo = `${window.location.origin}/auth/callback`;
-  await sb.auth.signInWithOAuth({
-    provider: "google",
-    options: classroomOAuthOptions(redirectTo, mode),
+  const clientId =
+    typeof import.meta.env.VITE_GOOGLE_CLIENT_ID === "string"
+      ? import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()
+      : "";
+  if (!clientId) {
+    return { ok: false, error: "missing_client_id" };
+  }
+
+  const state = createClassroomOAuthState();
+  const redirectUri = getClassroomRedirectUri();
+  const scopes = scopesForClassroomMode(mode);
+
+  saveClassroomOAuthFlow({
+    state,
+    initiatingPybotUserId: user.id,
+    mode,
+    nextPath: next,
+    createdAt: Date.now(),
   });
+
+  const url = buildClassroomAuthorizeUrl({ clientId, redirectUri, scopes, state });
+  window.location.assign(url);
+  return { ok: true };
 }
 
-export function wasClassroomOAuthIntent() {
-  try {
-    const v = sessionStorage.getItem("pybot_oauth_classroom");
-    sessionStorage.removeItem("pybot_oauth_classroom");
-    return v === "1";
-  } catch {
-    return false;
-  }
-}
-
-/** Lee y limpia el mode Classroom del OAuth (teacher|student). Default teacher. */
-export function consumeClassroomOAuthMode() {
-  try {
-    const v = sessionStorage.getItem(OAUTH_CLASSROOM_MODE);
-    sessionStorage.removeItem(OAUTH_CLASSROOM_MODE);
-    return normalizeMode(v);
-  } catch {
-    return "teacher";
-  }
-}
-
-/** Expectativas de cuenta para validar post-callback. No limpia. */
-export function peekClassroomOAuthExpected() {
-  try {
+/**
+ * Intercambia authorization code por tokens vía backend (Bearer Supabase).
+ * @param {{ code: string, redirectUri: string, accessToken: string }} args
+ */
+export async function exchangeClassroomAuthorizationCode({ code, redirectUri, accessToken }) {
+  const res = await fetch(EXCHANGE_CLASSROOM_CODE_API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      code: String(code || ""),
+      redirect_uri: String(redirectUri || ""),
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
     return {
-      userId: sessionStorage.getItem(OAUTH_EXPECTED_USER_ID) || null,
-      email: sessionStorage.getItem(OAUTH_EXPECTED_EMAIL) || null,
-      mode: normalizeMode(sessionStorage.getItem(OAUTH_CLASSROOM_MODE)),
+      ok: false,
+      error: data.error || "exchange_failed",
+      status: res.status,
     };
-  } catch {
-    return { userId: null, email: null, mode: "teacher" };
   }
+  return {
+    ok: true,
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_in: data.expires_in ?? 3600,
+  };
 }
 
+/** @deprecated Classroom ya no usa el callback de login Supabase. */
+export function wasClassroomOAuthIntent() {
+  return false;
+}
+
+/** @deprecated */
+export function consumeClassroomOAuthMode() {
+  return "teacher";
+}
+
+/** @deprecated */
+export function peekClassroomOAuthExpected() {
+  return { userId: null, email: null, mode: "teacher" };
+}
+
+/** @deprecated */
 export function clearClassroomOAuthExpected() {
-  try {
-    sessionStorage.removeItem(OAUTH_EXPECTED_USER_ID);
-    sessionStorage.removeItem(OAUTH_EXPECTED_EMAIL);
-    sessionStorage.removeItem(OAUTH_CLASSROOM_MODE);
-  } catch {
-    //
-  }
+  // no-op: flujo Classroom migrado a CLASSROOM_OAUTH_FLOW_KEY
 }
 
 /**
@@ -204,10 +339,5 @@ export function clearPendingClassroomTurnIn() {
 
 /** @deprecated Ya no se usa en login. */
 export function markTeacherLoginOAuthIntent() {
-  try {
-    sessionStorage.setItem("pybot_oauth_classroom", "1");
-    sessionStorage.setItem(OAUTH_CLASSROOM_MODE, "teacher");
-  } catch {
-    //
-  }
+  // no-op
 }

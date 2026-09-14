@@ -14,7 +14,6 @@ import { fetchProfile } from "../platform/profileApi.js";
 import { ensureProfileForUser } from "../platform/ensureProfile.js";
 import { fetchMyEnrolledCourses } from "../platform/studentCoursesApi.js";
 import { isSuperAdmin } from "../platformRole.js";
-import { wasClassroomOAuthIntent } from "../platform/googleOAuth.js";
 import { createOrganizationWithOwner } from "../platform/organizationApi.js";
 import { COUNTRIES, countryNameByCode } from "../data/countries.js";
 
@@ -231,9 +230,6 @@ export default function DashboardPage() {
         setSessionUser(u);
         finishLoading();
         if (u) void applyProfile(u);
-        if (wasClassroomOAuthIntent() && !cancelled) {
-          navigate("/dashboard/classes?panel=classroom", { replace: true });
-        }
       })
       .catch((ex) => {
         console.error("DashboardPage.getSession:", ex);

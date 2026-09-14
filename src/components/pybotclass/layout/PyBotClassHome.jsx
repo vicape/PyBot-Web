@@ -427,8 +427,8 @@ export default function PyBotClassHome({
           </button>
           <p className="pbc-panel-card__hint">
             {hasStaffAccess
-              ? "Usá la misma cuenta Google con la que ingresaste a PyBotClass."
-              : "Necesario para marcar entregas también en Classroom. Usá la misma cuenta Google."}
+              ? "Vinculá la cuenta Google que usás para Classroom. Puede ser distinta de tu cuenta de PyBotClass."
+              : "Necesario para marcar entregas también en Classroom. Puede ser una cuenta Google distinta de PyBotClass."}
           </p>
         </div>
       </aside>
