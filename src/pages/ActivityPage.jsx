@@ -22,7 +22,7 @@ import {
   submitActivity,
 } from "../platform/activitySubmissions.js";
 import { connectGoogleClassroom, getPendingClassroomTurnIn, setPendingClassroomTurnIn, clearPendingClassroomTurnIn } from "../platform/googleOAuth.js";
-import { getStoredStudentClassroomLink } from "../platform/profileApi.js";
+import { fetchOrganizationClassroomLink, getStoredStudentClassroomLink } from "../platform/profileApi.js";
 import {
   fetchCachedClassroomSubmissions,
   publishActivityToClassroom,
@@ -220,11 +220,15 @@ export default function ActivityPage() {
       setMySubmission(sub.submission);
 
       if (act.classroom_coursework_id && nextClassroomCourseId) {
-        const stored = await getStoredStudentClassroomLink(user.id);
-        const linked = !!(
-          stored?.classroom_student_linked_at ||
-          stored?.google_student_refresh_token
-        );
+        let linked = false;
+        if (nextOrgId) {
+          const link = await fetchOrganizationClassroomLink(user.id, nextOrgId, "student");
+          linked = !!(link.ok && link.linkedAt);
+        }
+        if (!linked) {
+          const stored = await getStoredStudentClassroomLink(user.id);
+          linked = !!(stored?.classroom_student_linked_at || stored?.google_student_token_expires_at);
+        }
         setClassroomLinked(linked);
         setNeedsClassroomConnect(false);
       } else {

@@ -58,66 +58,27 @@ export async function updatePreferredRole(userId, role) {
   return { ok: true, error: null, skipped: false };
 }
 
-/** Guarda tokens Classroom docente (legacy). No toca campos student. */
-export async function saveGoogleTokens(userId, { accessToken, refreshToken, expiresIn }) {
-  const sb = getSupabase();
-  if (!sb || !userId) return { ok: false, error: "no_client" };
-
-  const patch = {};
-  if (refreshToken) patch.google_refresh_token = refreshToken;
-  if (expiresIn) {
-    patch.google_token_expires_at = new Date(Date.now() + expiresIn * 1000).toISOString();
-  }
-  // accessToken: solo en memoria (classroomToken), nunca en DB
-  if (Object.keys(patch).length === 0) return { ok: true };
-
-  const { error } = await sb.from("profiles").update(patch).eq("id", userId);
-
-  if (error?.message?.includes("does not exist") ||
-      error?.message?.includes("google_refresh_token") ||
-      error?.message?.includes("google_token_expires")) {
-    return { ok: true, skipped: true };
-  }
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+/** @deprecated Browser no escribe RT. Solo server (exchange). */
+export async function saveGoogleTokens(_userId, _tokens) {
+  return { ok: false, error: "server_only", skipped: true };
 }
 
-/** Guarda tokens Classroom alumno. No toca campos docente. */
-export async function saveStudentGoogleTokens(userId, { refreshToken, expiresIn }) {
-  const sb = getSupabase();
-  if (!sb || !userId) return { ok: false, error: "no_client" };
-
-  const patch = {};
-  if (refreshToken) patch.google_student_refresh_token = refreshToken;
-  if (expiresIn) {
-    patch.google_student_token_expires_at = new Date(Date.now() + expiresIn * 1000).toISOString();
-  }
-  if (Object.keys(patch).length === 0) return { ok: true };
-
-  const { error } = await sb.from("profiles").update(patch).eq("id", userId);
-
-  if (
-    error?.message?.includes("does not exist") ||
-    error?.message?.includes("google_student_refresh_token") ||
-    error?.message?.includes("google_student_token_expires")
-  ) {
-    return { ok: true, skipped: true };
-  }
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+/** @deprecated Browser no escribe RT. Solo server (exchange). */
+export async function saveStudentGoogleTokens(_userId, _tokens) {
+  return { ok: false, error: "server_only", skipped: true };
 }
 
 /**
- * Perfil Classroom docente (objeto para UI / refresh).
- * @returns {Promise<object|null>}
+ * Metadata Classroom docente (sin refresh tokens). Browser-safe.
+ * @returns {Promise<{ classroom_linked_at?: string|null, google_token_expires_at?: string|null }|null>}
  */
-export async function getStoredGoogleRefreshToken(userId) {
+export async function getStoredClassroomLinkMeta(userId) {
   const sb = getSupabase();
   if (!sb || !userId) return null;
 
   let { data, error } = await sb
     .from("profiles")
-    .select("google_refresh_token, google_token_expires_at, classroom_linked_at")
+    .select("classroom_linked_at, google_token_expires_at")
     .eq("id", userId)
     .maybeSingle();
 
@@ -129,41 +90,40 @@ export async function getStoredGoogleRefreshToken(userId) {
       .maybeSingle();
     return fb.data ?? null;
   }
-
+  if (error) return null;
   return data ?? null;
 }
 
-/** Refresh token Classroom alumno (string) o null. */
-export async function getStoredStudentGoogleRefreshToken(userId) {
-  const sb = getSupabase();
-  if (!sb || !userId) return null;
-
-  const { data, error } = await sb
-    .from("profiles")
-    .select("google_student_refresh_token, google_student_token_expires_at, classroom_student_linked_at")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (error?.message?.includes("does not exist")) return null;
-  if (error) return null;
-  const tok = data?.google_student_refresh_token;
-  return tok ? String(tok) : null;
+/**
+ * @deprecated No usar desde frontend. Los RT no son legibles en browser.
+ * Conservado solo como stub que NUNCA selecciona refresh tokens.
+ */
+export async function getStoredGoogleRefreshToken(userId) {
+  return getStoredClassroomLinkMeta(userId);
 }
 
-/** Perfil Classroom alumno (objeto para UI). */
+/** Metadata Classroom alumno (sin refresh tokens). */
 export async function getStoredStudentClassroomLink(userId) {
   const sb = getSupabase();
   if (!sb || !userId) return null;
 
   const { data, error } = await sb
     .from("profiles")
-    .select("google_student_refresh_token, google_student_token_expires_at, classroom_student_linked_at")
+    .select("classroom_student_linked_at, google_student_token_expires_at")
     .eq("id", userId)
     .maybeSingle();
 
   if (error?.message?.includes("does not exist")) return null;
   if (error) return null;
   return data ?? null;
+}
+
+/**
+ * @deprecated No devolver RT. Stub metadata-only.
+ */
+export async function getStoredStudentGoogleRefreshToken(userId) {
+  const link = await getStoredStudentClassroomLink(userId);
+  return null;
 }
 
 export async function markClassroomLinked(userId) {
@@ -199,6 +159,28 @@ export async function markStudentClassroomLinked(userId) {
   }
   if (error) return { ok: false, error: error.message };
   return { ok: true, error: null, skipped: false };
+}
+
+/**
+ * Lista links Classroom org-scoped del usuario (metadata sin RT).
+ */
+export async function listOrganizationClassroomLinks(userId, mode = "teacher") {
+  const sb = getSupabase();
+  const uid = String(userId || "").trim();
+  const m = mode === "student" ? "student" : "teacher";
+  if (!sb || !uid) return { rows: [], error: "missing_args" };
+
+  const { data, error } = await sb
+    .from("organization_classroom_links")
+    .select("org_id, mode, classroom_linked_at, google_token_expires_at")
+    .eq("user_id", uid)
+    .eq("mode", m);
+
+  if (error?.message?.includes("does not exist") || error?.code === "42P01") {
+    return { rows: [], error: null, skipped: true };
+  }
+  if (error) return { rows: [], error: error.message };
+  return { rows: data ?? [], error: null };
 }
 
 /**

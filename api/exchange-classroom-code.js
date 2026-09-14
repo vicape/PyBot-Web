@@ -5,18 +5,17 @@
  * Header: Authorization: Bearer <supabase_access_token>
  * Body:   { code, redirect_uri, mode?, org_id? }
  *
- * Responde:
- *   - vault OK: { access_token, expires_in, persisted: true, org_id, mode }  (sin refresh_token)
- *   - vault no disponible / sin org: { access_token, refresh_token, expires_in, persisted: false }
- *
- * Server-side env: SUPABASE_URL, SUPABASE_SERVICE_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+ * NUNCA responde refresh_token. Persistencia siempre server-side (vault o profiles legacy).
  */
 
 import { resolveUserId } from "./_telemetryHelpers.js";
+import { assertClassroomOrgAccess } from "./_classroomOrgAuth.js";
 import {
   isUuid,
+  loadClassroomRefreshToken,
   normalizeClassroomMode,
   upsertClassroomCredentials,
+  upsertLegacyProfileCredentials,
 } from "./_classroomCredentials.js";
 
 export const CLASSROOM_CALLBACK_PATH = "/auth/classroom/callback";
@@ -54,6 +53,17 @@ export function isAllowedClassroomRedirectUri(redirectUri, req = {}) {
   return host === reqHost;
 }
 
+function accessOnlyPayload({ accessToken, expiresIn, orgId, mode, persisted, source }) {
+  return {
+    access_token: accessToken,
+    expires_in: expiresIn,
+    persisted: !!persisted,
+    org_id: orgId || null,
+    mode,
+    source: source || undefined,
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "method_not_allowed" });
@@ -87,6 +97,15 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "unauthorized" });
   }
 
+  if (!isUuid(orgId)) {
+    return res.status(400).json({ error: "missing_org" });
+  }
+
+  const access = await assertClassroomOrgAccess({ userId, orgId, mode });
+  if (!access.ok) {
+    return res.status(403).json({ error: access.error || "forbidden_org" });
+  }
+
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
@@ -117,10 +136,9 @@ export default async function handler(req, res) {
   }
 
   const expiresIn = data.expires_in ?? 3600;
-  const refreshToken = data.refresh_token || null;
+  const refreshToken = data.refresh_token ? String(data.refresh_token).trim() : "";
 
-  // P5/P16: persist server-side when org_id + refresh_token available.
-  if (refreshToken && isUuid(orgId)) {
+  if (refreshToken) {
     const saved = await upsertClassroomCredentials({
       userId,
       orgId,
@@ -129,26 +147,56 @@ export default async function handler(req, res) {
       expiresIn,
     });
     if (saved.ok) {
-      return res.status(200).json({
-        access_token: data.access_token,
-        expires_in: expiresIn,
-        persisted: true,
-        org_id: orgId,
-        mode,
-      });
+      return res.status(200).json(
+        accessOnlyPayload({
+          accessToken: data.access_token,
+          expiresIn,
+          orgId,
+          mode,
+          persisted: true,
+          source: "vault",
+        }),
+      );
     }
-    // Vault not applied yet → legacy response with refresh_token for dual-path.
     if (!saved.vaultUnavailable) {
       return res.status(500).json({ error: saved.error || "persist_failed" });
     }
+
+    const legacy = await upsertLegacyProfileCredentials({
+      userId,
+      mode,
+      refreshToken,
+      expiresIn,
+    });
+    if (!legacy.ok) {
+      return res.status(500).json({ error: legacy.error || "legacy_persist_failed" });
+    }
+    return res.status(200).json(
+      accessOnlyPayload({
+        accessToken: data.access_token,
+        expiresIn,
+        orgId,
+        mode,
+        persisted: true,
+        source: "profiles_legacy",
+      }),
+    );
   }
 
-  return res.status(200).json({
-    access_token: data.access_token,
-    refresh_token: refreshToken,
-    expires_in: expiresIn,
-    persisted: false,
-    org_id: isUuid(orgId) ? orgId : null,
-    mode,
-  });
+  // Google no devolvió RT (reconsent): OK si ya hay RT server-side.
+  const existing = await loadClassroomRefreshToken({ userId, orgId, mode });
+  if (existing.refreshToken) {
+    return res.status(200).json(
+      accessOnlyPayload({
+        accessToken: data.access_token,
+        expiresIn,
+        orgId,
+        mode,
+        persisted: true,
+        source: existing.source || "existing",
+      }),
+    );
+  }
+
+  return res.status(400).json({ error: "missing_refresh_token" });
 }

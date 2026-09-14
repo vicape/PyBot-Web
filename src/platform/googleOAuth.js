@@ -304,11 +304,11 @@ export async function exchangeClassroomAuthorizationCode({
   return {
     ok: true,
     access_token: data.access_token,
-    refresh_token: data.refresh_token || null,
     expires_in: data.expires_in ?? 3600,
     persisted: !!data.persisted,
     org_id: data.org_id || body.org_id || null,
     mode: data.mode || body.mode,
+    source: data.source || null,
   };
 }
 

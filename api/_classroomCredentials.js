@@ -31,6 +31,47 @@ function isMissingRelation(err) {
 }
 
 /**
+ * Persist refresh token in profiles (legacy transition). Service role only.
+ * Never exposed to browser.
+ */
+export async function upsertLegacyProfileCredentials({ userId, mode, refreshToken, expiresIn }) {
+  const uid = String(userId || "").trim();
+  const m = normalizeClassroomMode(mode);
+  const rt = String(refreshToken || "").trim();
+  if (!isUuid(uid) || !rt) return { ok: false, error: "missing_params" };
+
+  const expiresAt =
+    Number.isFinite(Number(expiresIn)) && Number(expiresIn) > 0
+      ? new Date(Date.now() + Number(expiresIn) * 1000).toISOString()
+      : null;
+  const now = new Date().toISOString();
+
+  const patch =
+    m === "student"
+      ? {
+          google_student_refresh_token: rt,
+          google_student_token_expires_at: expiresAt,
+          classroom_student_linked_at: now,
+        }
+      : {
+          google_refresh_token: rt,
+          google_token_expires_at: expiresAt,
+          classroom_linked_at: now,
+        };
+
+  try {
+    await supabaseRest(`profiles?id=eq.${uid}`, {
+      method: "PATCH",
+      prefer: "return=minimal",
+      body: patch,
+    });
+    return { ok: true, source: "profiles_legacy" };
+  } catch (err) {
+    return { ok: false, error: err.message || "legacy_persist_failed" };
+  }
+}
+
+/**
  * Persist refresh token + link metadata.
  * @returns {{ ok: boolean, vault?: boolean, vaultUnavailable?: boolean, error?: string }}
  */

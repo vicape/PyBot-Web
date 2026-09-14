@@ -10,7 +10,7 @@ import {
   saveClassroomOrgHint,
 } from "../../platform/classroomOrgContext.js";
 import { disconnectClassroomIntegration } from "../../platform/disconnectClassroom.js";
-import { fetchProfile, markClassroomLinked } from "../../platform/profileApi.js";
+import { fetchOrganizationClassroomLink, fetchProfile } from "../../platform/profileApi.js";
 import { getValidClassroomToken } from "../../platform/classroomToken.js";
 import {
   CLASSROOM_CONNECTION,
@@ -69,6 +69,14 @@ export default function ClassroomPanel({
     if (!canUseClassroom) return;
     const sb = getSupabase();
     if (!sb) return;
+    if (!effectiveOrgId) {
+      setCourses([]);
+      setConnectionStatus(CLASSROOM_CONNECTION.NOT_CONNECTED);
+      setErr("Seleccioná un colegio.");
+      setLoading(false);
+      setTesting(false);
+      return;
+    }
     setTesting(true);
     setConnectionStatus(CLASSROOM_CONNECTION.CHECKING);
     setErr("");
@@ -76,7 +84,7 @@ export default function ClassroomPanel({
     try {
       const tok = await getValidClassroomToken(user?.id, {
         mode: "teacher",
-        orgId: effectiveOrgId || null,
+        orgId: effectiveOrgId,
       });
       if (!tok) {
         setCourses([]);
@@ -87,8 +95,12 @@ export default function ClassroomPanel({
       setCourses(list);
       setConnectionStatus(CLASSROOM_CONNECTION.CONNECTED);
       if (user?.id) {
-        const mark = await markClassroomLinked(user.id);
-        if (mark.ok && !mark.skipped) setLinkedAt(new Date().toISOString());
+        const link = await fetchOrganizationClassroomLink(user.id, effectiveOrgId, "teacher");
+        if (link.ok && link.linkedAt) setLinkedAt(link.linkedAt);
+        else {
+          const { profile } = await fetchProfile(user.id);
+          setLinkedAt(profile?.classroom_linked_at ?? null);
+        }
       }
       setOkMsg(`Conectado: ${list.length} curso(s) activo(s) en Classroom.`);
 
@@ -167,21 +179,25 @@ export default function ClassroomPanel({
   };
 
   const onConnectClassroom = () => {
+    if (!effectiveOrgId) {
+      setErr("Seleccioná un colegio.");
+      return;
+    }
     void connectGoogleClassroom(undefined, {
       mode: "teacher",
-      orgId: effectiveOrgId || null,
+      orgId: effectiveOrgId,
     });
   };
 
   const onDisconnectClassroom = async () => {
     if (!user?.id || disconnecting) return;
+    if (!effectiveOrgId) {
+      setErr("Seleccioná un colegio para desconectar Classroom de esa institución.");
+      return;
+    }
     const ok = window.confirm(
-      "¿Desconectar Google Classroom" +
-        (effectiveOrgId ? " de este colegio" : "") +
-        "?\n\n" +
-        "Se quita la autorización de Classroom" +
-        (effectiveOrgId ? " solo para el colegio seleccionado" : "") +
-        ".\n" +
+      "¿Desconectar Google Classroom de este colegio?\n\n" +
+        "Se quita la autorización de Classroom solo para el colegio seleccionado.\n" +
         "No se cierra tu sesión de PyBotClass ni se borran cursos, actividades ni entregas.",
     );
     if (!ok) return;
@@ -192,17 +208,23 @@ export default function ClassroomPanel({
       const r = await disconnectClassroomIntegration({
         userId: user.id,
         mode: "teacher",
-        orgId: effectiveOrgId || null,
+        orgId: effectiveOrgId,
       });
       if (!r.ok) {
-        setErr(r.error || "No se pudo desconectar Google Classroom.");
+        if (r.error === "org_scoped_disconnect_unavailable") {
+          setErr(
+            "Aún no se puede desconectar solo este colegio (vault no disponible). No se borró la autorización global.",
+          );
+        } else {
+          setErr(r.error || "No se pudo desconectar Google Classroom.");
+        }
         return;
       }
       setCourses([]);
       setImportedIds(new Set());
       setLinkedAt(null);
       setConnectionStatus(CLASSROOM_CONNECTION.NOT_CONNECTED);
-      setOkMsg("Google Classroom desconectado. Tu sesión de PyBotClass sigue activa.");
+      setOkMsg("Google Classroom desconectado para este colegio. Tu sesión de PyBotClass sigue activa.");
     } catch (ex) {
       setErr(ex?.message || "No se pudo desconectar Google Classroom.");
     } finally {

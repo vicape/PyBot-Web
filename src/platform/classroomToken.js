@@ -145,6 +145,10 @@ export async function getValidClassroomToken(userId, opts = {}) {
   const mode = normalizeMode(opts?.mode);
   const orgId =
     typeof opts?.orgId === "string" && opts.orgId.trim() ? opts.orgId.trim() : null;
+  if (!orgId) {
+    // P5: sin colegio no hay refresh org-scoped; no caer a token global.
+    return null;
+  }
 
   const key = cacheKey(uid, mode, orgId);
   const cached = tokenCache.get(key);

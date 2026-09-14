@@ -80,13 +80,26 @@ export async function publishActivityToClassroom({
   activity,
   classroomCourseId,
   userId,
+  orgId = null,
 }) {
   const sb = getSupabase();
   if (!sb || !activity?.id || !classroomCourseId) {
     return { ok: false, error: "missing_args" };
   }
 
-  const tok = await tryGetClassroomToken(userId);
+  let resolvedOrgId = orgId;
+  if (!resolvedOrgId && activity?.course_id) {
+    const { data: course } = await sb
+      .from("courses")
+      .select("org_id")
+      .eq("id", activity.course_id)
+      .maybeSingle();
+    resolvedOrgId = course?.org_id || null;
+  }
+  const tok = await tryGetClassroomToken(userId, {
+    mode: "teacher",
+    orgId: resolvedOrgId,
+  });
   if (!tok) return { ok: false, error: "missing_access_token" };
 
   // P8/P9: no asumir patch sobre courseWork que Google marca como no editable por developer.
@@ -231,11 +244,28 @@ export async function syncClassroomSubmissionsForActivity({
   classroomCourseId,
   courseWorkId,
   userId,
+  orgId = null,
 }) {
   const sb = getSupabase();
+  let resolvedOrgId = orgId;
+  if (!resolvedOrgId && activityId) {
+    const { data: act } = await sb
+      ?.from("activities")
+      .select("course_id")
+      .eq("id", activityId)
+      .maybeSingle();
+    if (act?.course_id) {
+      const { data: course } = await sb
+        .from("courses")
+        .select("org_id")
+        .eq("id", act.course_id)
+        .maybeSingle();
+      resolvedOrgId = course?.org_id || null;
+    }
+  }
   let tok;
   try {
-    tok = await getValidClassroomToken(userId);
+    tok = await getValidClassroomToken(userId, { mode: "teacher", orgId: resolvedOrgId });
   } catch (ex) {
     return {
       ok: false,
@@ -337,6 +367,8 @@ export async function sendGradeToClassroom({
   courseWorkId,
   classroomSubmissionId,
   userId,
+  orgId = null,
+  returnOnly = false,
 }) {
   const sb = getSupabase();
   if (!sb || !submission?.id || submission.grade == null) {
@@ -356,22 +388,37 @@ export async function sendGradeToClassroom({
     };
   }
 
+  let resolvedOrgId = orgId;
+  if (!resolvedOrgId && activity?.course_id) {
+    const { data: course } = await sb
+      .from("courses")
+      .select("org_id")
+      .eq("id", activity.course_id)
+      .maybeSingle();
+    resolvedOrgId = course?.org_id || null;
+  }
+
   let tok;
   try {
-    tok = await getValidClassroomToken(userId);
+    tok = await getValidClassroomToken(userId, {
+      mode: "teacher",
+      orgId: resolvedOrgId,
+    });
   } catch (ex) {
     return { ok: false, error: ex?.message || "missing_access_token", code: ex?.code };
   }
   if (!tok) return { ok: false, error: "missing_access_token" };
 
   try {
-    await patchStudentSubmissionGrade(
-      tok,
-      classroomCourseId,
-      courseWorkId,
-      classroomSubmissionId,
-      submission.grade,
-    );
+    if (!returnOnly) {
+      await patchStudentSubmissionGrade(
+        tok,
+        classroomCourseId,
+        courseWorkId,
+        classroomSubmissionId,
+        submission.grade,
+      );
+    }
     try {
       await returnStudentSubmission(tok, classroomCourseId, courseWorkId, classroomSubmissionId);
     } catch (retEx) {
@@ -383,6 +430,8 @@ export async function sendGradeToClassroom({
           .update({
             classroom_grade_synced_at: new Date().toISOString(),
             classroom_grade_sync_error: null,
+            classroom_grade_return_status: "skipped_not_turned_in",
+            classroom_grade_returned_at: null,
             classroom_submission_id: classroomSubmissionId,
             updated_at: new Date().toISOString(),
           })
@@ -402,6 +451,8 @@ export async function sendGradeToClassroom({
         .update({
           classroom_grade_synced_at: new Date().toISOString(),
           classroom_grade_sync_error: `return_failed: ${retMsg || "unknown"}`,
+          classroom_grade_return_status: "error_retryable",
+          classroom_grade_returned_at: null,
           classroom_submission_id: classroomSubmissionId,
           updated_at: new Date().toISOString(),
         })
@@ -409,7 +460,7 @@ export async function sendGradeToClassroom({
       return {
         ok: true,
         returned: false,
-        return_status: "error",
+        return_status: "error_retryable",
         warning: retMsg || "Nota asignada, pero falló devolver en Classroom.",
         error: null,
       };
@@ -420,6 +471,8 @@ export async function sendGradeToClassroom({
       .update({
         classroom_grade_synced_at: new Date().toISOString(),
         classroom_grade_sync_error: null,
+        classroom_grade_return_status: "ok",
+        classroom_grade_returned_at: new Date().toISOString(),
         classroom_submission_id: classroomSubmissionId,
         updated_at: new Date().toISOString(),
       })
@@ -566,7 +619,7 @@ export async function turnInPybotActivityToClassroom(activityId) {
 
   const { data: course } = await sb
     .from("courses")
-    .select("classroom_course_id")
+    .select("classroom_course_id, org_id")
     .eq("id", act.course_id)
     .maybeSingle();
 
@@ -578,7 +631,10 @@ export async function turnInPybotActivityToClassroom(activityId) {
   // --- token (student) ---
   let tok = null;
   try {
-    tok = await getValidClassroomToken(user.id, { mode: "student" });
+    tok = await getValidClassroomToken(user.id, {
+      mode: "student",
+      orgId: course?.org_id || null,
+    });
   } catch (ex) {
     if (isClassroomApiDisabled(ex)) {
       return failTurnIn({

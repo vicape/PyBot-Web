@@ -4,8 +4,8 @@ import { countryNameByCode } from "../../../data/countries.js";
 import { computeAccountRoleBadges, computeQuickSummary } from "../../../platform/accountRoles.js";
 import { normalizeCourseRole } from "../../../platform/courseRole.js";
 import { connectGoogleClassroom } from "../../../platform/googleOAuth.js";
-import { loadClassroomOrgHint } from "../../../platform/classroomOrgContext.js";
-import { fetchProfile } from "../../../platform/profileApi.js";
+import { loadClassroomOrgHint, pickInitialClassroomOrgId } from "../../../platform/classroomOrgContext.js";
+import { listOrganizationClassroomLinks } from "../../../platform/profileApi.js";
 import {
   CoursesActionIcon,
   CreateCourseActionIcon,
@@ -36,7 +36,8 @@ export default function PyBotClassHome({
 }) {
   const [roleFilter, setRoleFilter] = useState("all");
   const [orgFilter, setOrgFilter] = useState("");
-  const [classroomLinked, setClassroomLinked] = useState(null); // null loading
+  const [classroomLinked, setClassroomLinked] = useState(null); // null loading | boolean | "multi"
+  const [classroomLinkedCount, setClassroomLinkedCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -44,16 +45,38 @@ export default function PyBotClassHome({
     let cancelled = false;
     if (!user?.id) {
       setClassroomLinked(false);
+      setClassroomLinkedCount(0);
       return undefined;
     }
-    void fetchProfile(user.id).then(({ profile }) => {
+    void (async () => {
+      const staffOrgs = (orgs || [])
+        .map((o) => ({
+          id: o.org_id || o.id,
+          role: o.role,
+        }))
+        .filter((o) => o.id && (o.role === "owner" || o.role === "teacher"));
+      const hint = loadClassroomOrgHint();
+      const selected = pickInitialClassroomOrgId({
+        preferredOrgId: orgFilter || null,
+        lastHintOrgId: hint,
+        staffOrgs,
+      });
+      const { rows } = await listOrganizationClassroomLinks(user.id, "teacher");
       if (cancelled) return;
-      setClassroomLinked(!!(profile?.classroom_linked_at || profile?.google_token_expires_at));
-    });
+      const linkedRows = (rows || []).filter((r) => r.classroom_linked_at);
+      setClassroomLinkedCount(linkedRows.length);
+      if (selected) {
+        setClassroomLinked(linkedRows.some((r) => r.org_id === selected));
+      } else if (staffOrgs.length > 1) {
+        setClassroomLinked("multi");
+      } else {
+        setClassroomLinked(linkedRows.length > 0);
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.id, orgs, orgFilter]);
 
   useEffect(() => {
     const content = document.querySelector(".pbc-dashboard__content");
@@ -111,20 +134,32 @@ export default function PyBotClassHome({
   const primaryCountry = orgMemberships.find((o) => o.country_code)?.country_code;
 
   const onClassroomConnect = () => {
-    const orgId =
-      orgFilter ||
-      loadClassroomOrgHint() ||
-      orgMemberships.find((o) => o.role === "owner" || o.role === "teacher")?.id ||
-      orgMemberships[0]?.id ||
-      null;
+    const staffOrgs = orgMemberships.filter((o) => o.role === "owner" || o.role === "teacher");
+    const orgId = pickInitialClassroomOrgId({
+      preferredOrgId: orgFilter || null,
+      lastHintOrgId: loadClassroomOrgHint(),
+      staffOrgs,
+    });
+    if (!orgId) {
+      window.alert("Seleccioná un colegio antes de vincular Google Classroom.");
+      return;
+    }
     void connectGoogleClassroom("/dashboard/classes", {
       mode: "teacher",
-      orgId: orgId || null,
+      orgId,
     });
   };
 
   const classroomStatusLabel =
-    classroomLinked == null ? "…" : classroomLinked ? "Vinculado" : "No vinculado";
+    classroomLinked == null
+      ? "…"
+      : classroomLinked === "multi"
+        ? classroomLinkedCount
+          ? `${classroomLinkedCount} colegio(s) vinculado(s)`
+          : "Elegí un colegio"
+        : classroomLinked
+          ? "Vinculado"
+          : "No vinculado";
 
   return (
     <div className="pbc-home">
@@ -137,18 +172,26 @@ export default function PyBotClassHome({
           <button
             type="button"
             className={`pbc-classroom-status${
-              classroomLinked ? " pbc-classroom-status--on" : " pbc-classroom-status--off"
+              classroomLinked === true
+                ? " pbc-classroom-status--on"
+                : classroomLinked === "multi" && classroomLinkedCount > 0
+                  ? " pbc-classroom-status--on"
+                  : " pbc-classroom-status--off"
             }`}
             onClick={onClassroomConnect}
             title={
-              classroomLinked
+              classroomLinked === true
                 ? "Google Classroom vinculado. Clic para volver a autorizar."
-                : "Google Classroom no vinculado. Clic para vincular."
+                : classroomLinked === "multi"
+                  ? "Varios colegios: elegí uno antes de vincular o reconectar."
+                  : "Google Classroom no vinculado. Clic para vincular."
             }
             aria-label={
-              classroomLinked
+              classroomLinked === true
                 ? "Google Classroom vinculado. Volver a autorizar."
-                : "Vincular Google Classroom"
+                : classroomLinked === "multi"
+                  ? "Elegí un colegio para vincular Google Classroom"
+                  : "Vincular Google Classroom"
             }
           >
             <span className="pbc-classroom-status__icon" aria-hidden>
@@ -423,7 +466,9 @@ export default function PyBotClassHome({
           <h3 className="pbc-panel-card__title">Google Classroom</h3>
           <div
             className={`pbc-classroom-status pbc-classroom-status--panel${
-              classroomLinked ? " pbc-classroom-status--on" : " pbc-classroom-status--off"
+              classroomLinked === true || (classroomLinked === "multi" && classroomLinkedCount > 0)
+                ? " pbc-classroom-status--on"
+                : " pbc-classroom-status--off"
             }`}
           >
             <span className="pbc-classroom-status__icon" aria-hidden>
@@ -441,7 +486,11 @@ export default function PyBotClassHome({
             <span className="pbc-btn--classroom__icon" aria-hidden>
               <GoogleClassroomIcon />
             </span>
-            {classroomLinked ? "Volver a autorizar Google Classroom" : "Vincular Google Classroom"}
+            {classroomLinked === true
+              ? "Volver a autorizar Google Classroom"
+              : classroomLinked === "multi"
+                ? "Elegí un colegio para vincular"
+                : "Vincular Google Classroom"}
           </button>
           <p className="pbc-panel-card__hint">
             {hasStaffAccess

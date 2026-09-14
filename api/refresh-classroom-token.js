@@ -3,13 +3,13 @@
  *
  * POST /api/refresh-classroom-token
  * Header: Authorization: Bearer <supabase_access_token>
- * Body (preferido P5/P16): { mode, org_id }
- * Body (legacy P1):        { refresh_token }
+ * Body: { mode, org_id }
  *
- * Responde: { access_token, expires_in, source? } o { error }
+ * NO acepta refresh_token del browser. Resuelve RT solo server-side.
  */
 
 import { resolveUserId } from "./_telemetryHelpers.js";
+import { assertClassroomOrgAccess } from "./_classroomOrgAuth.js";
 import {
   isUuid,
   loadClassroomRefreshToken,
@@ -24,13 +24,16 @@ export default async function handler(req, res) {
   const authHeader = req.headers["authorization"] || "";
   const supabaseToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const body = req.body || {};
-  const legacyRefresh =
-    typeof body.refresh_token === "string" ? body.refresh_token.trim() : "";
   const mode = normalizeClassroomMode(body.mode);
   const orgId = typeof body.org_id === "string" ? body.org_id.trim() : "";
 
   if (!supabaseToken) {
     return res.status(400).json({ error: "missing_params" });
+  }
+
+  // Reject client-supplied Google secrets explicitly.
+  if (Object.prototype.hasOwnProperty.call(body, "refresh_token")) {
+    return res.status(400).json({ error: "refresh_token_not_allowed" });
   }
 
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -44,19 +47,17 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "unauthorized" });
   }
 
-  let refreshToken = legacyRefresh || null;
-  let source = legacyRefresh ? "client_legacy" : null;
-
-  if (!refreshToken) {
-    const loaded = await loadClassroomRefreshToken({
-      userId,
-      orgId: isUuid(orgId) ? orgId : null,
-      mode,
-    });
-    refreshToken = loaded.refreshToken;
-    source = loaded.source;
+  if (!isUuid(orgId)) {
+    return res.status(400).json({ error: "missing_org" });
   }
 
+  const access = await assertClassroomOrgAccess({ userId, orgId, mode });
+  if (!access.ok) {
+    return res.status(403).json({ error: access.error || "forbidden_org" });
+  }
+
+  const loaded = await loadClassroomRefreshToken({ userId, orgId, mode });
+  const refreshToken = loaded.refreshToken;
   if (!refreshToken) {
     return res.status(400).json({ error: "missing_refresh_token" });
   }
@@ -88,6 +89,6 @@ export default async function handler(req, res) {
   return res.status(200).json({
     access_token: data.access_token,
     expires_in: data.expires_in ?? 3600,
-    source: source || undefined,
+    source: loaded.source || undefined,
   });
 }

@@ -145,37 +145,25 @@ export default function ClassroomAuthCallbackPage() {
 
       const expiresIn = Number(exchanged.expires_in) || 3600;
       const orgId = exchanged.org_id || flow.orgId || null;
-      let persist;
 
-      if (exchanged.persisted) {
-        persist = await confirmClassroomPersistence({
-          userId: user.id,
-          mode,
-          orgId,
-          serverPersisted: true,
-        });
-      } else {
-        const refreshToken = exchanged.refresh_token
-          ? String(exchanged.refresh_token).trim()
-          : "";
-        if (!refreshToken) {
-          finished.current = true;
-          clearClassroomTokenCache(user.id, mode);
-          clearPendingClassroomTurnIn();
-          clearClassroomOAuthFlow();
-          setErrorMsg(
-            "Google no devolvió la autorización necesaria para mantener Classroom conectado. Volvé a conectar Classroom.",
-          );
-          return;
-        }
-        persist = await confirmClassroomPersistence({
-          userId: user.id,
-          mode,
-          refreshToken,
-          expiresIn,
-          orgId,
-        });
+      if (!exchanged.persisted) {
+        finished.current = true;
+        clearClassroomTokenCache(user.id, mode);
+        clearPendingClassroomTurnIn();
+        clearClassroomOAuthFlow();
+        setErrorMsg(
+          "No se pudo guardar la autorización permanente de Google Classroom. Volvé a conectar.",
+        );
+        return;
       }
+
+      const persist = await confirmClassroomPersistence({
+        userId: user.id,
+        mode,
+        orgId,
+        serverPersisted: true,
+        source: exchanged.source || null,
+      });
 
       if (!persist.ok) {
         finished.current = true;
