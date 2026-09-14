@@ -1,5 +1,7 @@
 import { getSupabase } from "../supabaseClient.js";
 import { normalizeCourseRole } from "./courseRole.js";
+import { classroomDuePartsToIso } from "./classroomDueDate.js";
+import { normalizeActivityOrigin } from "./activityOrigin.js";
 
 export const PYBOTCLASS_MIGRATION_HINT =
   "Faltan las migraciones PyBotClass en Supabase. Ejecutá en el SQL Editor: 20260831000031_pybotclass_security_fix.sql, 20260831000032_pybotclass_activity_meta.sql y 20260831000033_pybotclass_queries.sql";
@@ -344,23 +346,11 @@ export function formatDateTimeEs(iso) {
 
 /** Mapea courseWork de Classroom a campos de actividad PyBot. */
 export function mapClassroomCourseWorkToActivity(courseWork) {
-  let dueAt = null;
-  if (courseWork?.dueDate) {
-    const y = courseWork.dueDate.year;
-    const m = String(courseWork.dueDate.month).padStart(2, "0");
-    const d = String(courseWork.dueDate.day).padStart(2, "0");
-    let time = "23:59:59";
-    if (courseWork.dueTime) {
-      const hh = String(courseWork.dueTime.hours ?? 23).padStart(2, "0");
-      const mm = String(courseWork.dueTime.minutes ?? 59).padStart(2, "0");
-      time = `${hh}:${mm}:00`;
-    }
-    dueAt = `${y}-${m}-${d}T${time}`;
-  }
+  const dueAt = classroomDuePartsToIso(courseWork?.dueDate, courseWork?.dueTime);
   return {
     title: courseWork?.title || "Actividad Classroom",
     description: courseWork?.description || "",
-    origin: "classroom",
+    origin: normalizeActivityOrigin("classroom") || "classroom",
     classroom_coursework_id: courseWork?.id || null,
     classroom_coursework_url: courseWork?.alternateLink || null,
     max_points: courseWork?.maxPoints != null ? Number(courseWork.maxPoints) : null,

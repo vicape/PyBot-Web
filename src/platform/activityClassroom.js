@@ -9,6 +9,7 @@ import {
   returnStudentSubmission,
   turnInStudentSubmission,
 } from "../classroom/classroomApi.js";
+import { pybotDueAtToClassroomParts } from "./classroomDueDate.js";
 
 async function tryGetClassroomToken(userId, opts = {}) {
   try {
@@ -59,13 +60,7 @@ async function recordMyClassroomSubmission(activityId, googleRow, turnedIn) {
   return { ok: true, result: data };
 }
 function activityDueParts(activity) {
-  if (!activity?.due_at) return { dueDate: null, dueTime: null };
-  const d = new Date(activity.due_at);
-  if (Number.isNaN(d.getTime())) return { dueDate: null, dueTime: null };
-  return {
-    dueDate: { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() },
-    dueTime: { hours: d.getHours(), minutes: d.getMinutes() },
-  };
+  return pybotDueAtToClassroomParts(activity?.due_at);
 }
 
 function validateGradeForActivity(activity, grade) {
@@ -93,6 +88,19 @@ export async function publishActivityToClassroom({
 
   const tok = await tryGetClassroomToken(userId);
   if (!tok) return { ok: false, error: "missing_access_token" };
+
+  // P8/P9: no asumir patch sobre courseWork que Google marca como no editable por developer.
+  if (
+    activity.classroom_coursework_id &&
+    activity.classroom_associated_with_developer === false
+  ) {
+    return {
+      ok: false,
+      error: "associated_with_developer_false",
+      message:
+        "Google no permite modificar esta actividad desde PyBot (associatedWithDeveloper=false).",
+    };
+  }
 
   const activityUrl = `${window.location.origin}/actividad/${encodeURIComponent(activity.id)}`;
   const { dueDate, dueTime } = activityDueParts(activity);
