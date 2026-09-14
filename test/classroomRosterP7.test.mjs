@@ -31,6 +31,22 @@ test("P7 report taxonomy mapped from legacy statuses", () => {
   assert.equal(summary.error, 0);
 });
 
+test("P7 migration 46 disables roster auto-delete (review file, not applied)", () => {
+  const mig = readFileSync(
+    new URL("../supabase/migrations/20260914000046_classroom_roster_no_autodelete.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(mig, /READY FOR MIGRATION REVIEW/);
+  assert.match(mig, /auto_delete_disabled/);
+  assert.match(mig, /create or replace function public\.sync_classroom_course_roster/);
+  assert.match(mig, /create or replace function public\.sync_classroom_course_teachers/);
+  assert.match(mig, /create or replace function public\.replace_course_roster_pending/);
+  assert.doesNotMatch(mig, /raise notice 'P7 migration review/);
+  assert.doesNotMatch(mig, /with doomed as/);
+  assert.doesNotMatch(mig, /delete from public\.course_members/);
+  assert.doesNotMatch(mig, /delete from public\.course_roster_pending/);
+});
+
 test("P7 UI describes client preserve + server residual prune honestly", () => {
   const page = readFileSync(
     new URL("../src/pages/CourseActivitiesPage.jsx", import.meta.url),
