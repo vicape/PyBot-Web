@@ -448,7 +448,21 @@ export function countPendingClassroomGrades(gradebook) {
   return (gradebook.grades || []).filter((g) => {
     if (!classroomActivityIds.has(g.activity_id)) return false;
     if (g.grade == null) return false;
-    if (g.classroom_grade_synced_at) return false;
-    return true;
+    const ret = g.classroom_grade_return_status;
+    if (!g.classroom_grade_synced_at) return true;
+    // Grade synced but return still pending / retryable
+    if (ret === "error_retryable" || ret === "skipped_not_turned_in") return true;
+    if (ret === "ok") return false;
+    // Legacy rows without return_status: treat synced as done
+    return false;
   }).length;
+}
+
+/** True if this grade needs Classroom return retry (grade already patched). */
+export function needsClassroomReturnRetry(g) {
+  if (!g?.classroom_grade_synced_at) return false;
+  return (
+    g.classroom_grade_return_status === "error_retryable" ||
+    g.classroom_grade_return_status === "skipped_not_turned_in"
+  );
 }

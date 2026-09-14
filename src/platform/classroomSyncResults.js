@@ -66,7 +66,7 @@ export function summarizeClassroomGradeBatch(results = []) {
     else if (n.ok) success += 1;
     else error += 1;
     if (r?.return_status === "skipped_not_turned_in") returnSkipped += 1;
-    else if (r?.return_status === "error") returnError += 1;
+    else if (r?.return_status === "error" || r?.return_status === "error_retryable") returnError += 1;
   }
   return { success, skipped, error, total: results.length, returnSkipped, returnError };
 }

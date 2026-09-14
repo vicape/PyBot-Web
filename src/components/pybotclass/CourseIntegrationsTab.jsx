@@ -6,6 +6,7 @@ import {
   fetchCourseActivities,
   fetchPybotclassGradebook,
   importClassroomActivities,
+  needsClassroomReturnRetry,
 } from "../../platform/pybotClassApi.js";
 import {
   fetchCachedClassroomSubmissions,
@@ -218,7 +219,8 @@ export default function CourseIntegrationsTab({
 
       const batchResults = [];
       for (const g of gradebook?.grades || []) {
-        if (g.classroom_grade_synced_at) continue;
+        const retryReturn = needsClassroomReturnRetry(g);
+        if (g.classroom_grade_synced_at && !retryReturn) continue;
         const activity = actById.get(g.activity_id);
         if (!activity?.classroom_coursework_id || g.grade == null) {
           batchResults.push({ skipped: true, error: "missing_activity_or_grade" });
@@ -248,6 +250,7 @@ export default function CourseIntegrationsTab({
             classroomCourseId,
             courseWorkId: activity.classroom_coursework_id,
             userId: user.id,
+            orgId,
           });
           if (!sync.ok) {
             batchResults.push({ ok: false, error: sync.error || "sync_submissions_failed" });
@@ -271,6 +274,8 @@ export default function CourseIntegrationsTab({
           courseWorkId: activity.classroom_coursework_id,
           classroomSubmissionId,
           userId: user.id,
+          orgId,
+          returnOnly: retryReturn,
         });
         batchResults.push(res);
       }

@@ -63,7 +63,7 @@ export async function fetchActivitySubmissions(activityId) {
   const { data, error } = await sb
     .from("activity_submissions")
     .select(
-      "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, classroom_grade_synced_at, classroom_grade_sync_error, classroom_submission_id",
+      "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, classroom_grade_synced_at, classroom_grade_sync_error, classroom_grade_return_status, classroom_grade_returned_at, classroom_submission_id",
     )
     .eq("activity_id", activityId)
     .order("submitted_at", { ascending: false });
