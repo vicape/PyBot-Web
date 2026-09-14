@@ -176,8 +176,12 @@ export default function ClassroomPanel({
   const onDisconnectClassroom = async () => {
     if (!user?.id || disconnecting) return;
     const ok = window.confirm(
-      "¿Desconectar Google Classroom?\n\n" +
-        "Se quita la autorización de Classroom de esta cuenta PyBot.\n" +
+      "¿Desconectar Google Classroom" +
+        (effectiveOrgId ? " de este colegio" : "") +
+        "?\n\n" +
+        "Se quita la autorización de Classroom" +
+        (effectiveOrgId ? " solo para el colegio seleccionado" : "") +
+        ".\n" +
         "No se cierra tu sesión de PyBotClass ni se borran cursos, actividades ni entregas.",
     );
     if (!ok) return;
@@ -185,7 +189,11 @@ export default function ClassroomPanel({
     setErr("");
     setOkMsg("");
     try {
-      const r = await disconnectClassroomIntegration({ userId: user.id, mode: "teacher" });
+      const r = await disconnectClassroomIntegration({
+        userId: user.id,
+        mode: "teacher",
+        orgId: effectiveOrgId || null,
+      });
       if (!r.ok) {
         setErr(r.error || "No se pudo desconectar Google Classroom.");
         return;

@@ -1,31 +1,71 @@
 /**
  * Desconectar integración Classroom (P15).
- * No cierra sesión PyBot, no borra cursos/actividades/submissions.
+ * Org-scoped + mode; no cierra sesión PyBot; no borra cursos/actividades.
  */
 
+import { getSupabase } from "../supabaseClient.js";
 import { clearClassroomTokenCache } from "./classroomToken.js";
 import { clearClassroomTokens } from "./profileApi.js";
 import { clearClassroomOrgHint } from "./classroomOrgContext.js";
 
+const DISCONNECT_API = "/api/disconnect-classroom";
+
 /**
- * @param {{ userId: string, mode?: "teacher"|"student"|"both" }} args
+ * @param {{
+ *   userId: string,
+ *   mode?: "teacher"|"student"|"both",
+ *   orgId?: string|null,
+ * }} args
  */
-export async function disconnectClassroomIntegration({ userId, mode = "both" } = {}) {
+export async function disconnectClassroomIntegration({
+  userId,
+  mode = "teacher",
+  orgId = null,
+} = {}) {
   const uid = String(userId || "").trim();
   if (!uid) return { ok: false, error: "missing_user" };
 
-  const cleared = await clearClassroomTokens(uid, mode);
-  if (!cleared.ok) return cleared;
+  const oid = typeof orgId === "string" && orgId.trim() ? orgId.trim() : null;
+  const modes =
+    mode === "both" ? ["teacher", "student"] : [mode === "student" ? "student" : "teacher"];
 
-  if (mode === "both") {
-    clearClassroomTokenCache(uid);
+  if (oid) {
+    const sb = getSupabase();
+    if (!sb) return { ok: false, error: "no_client" };
+    const { data: sessionData } = await sb.auth.getSession();
+    const access = sessionData?.session?.access_token;
+    if (!access) return { ok: false, error: "unauthorized" };
+
+    for (const m of modes) {
+      const res = await fetch(DISCONNECT_API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${access}`,
+        },
+        body: JSON.stringify({
+          org_id: oid,
+          mode: m,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { ok: false, error: json.error || "disconnect_failed" };
+      }
+      clearClassroomTokenCache(uid, m, oid);
+    }
   } else {
-    clearClassroomTokenCache(uid, mode);
+    // No org context: legacy global clear (pre-multi-org UX).
+    for (const m of modes) {
+      const cleared = await clearClassroomTokens(uid, m);
+      if (!cleared.ok) return cleared;
+      clearClassroomTokenCache(uid, m);
+    }
   }
 
-  if (mode === "teacher" || mode === "both") {
+  if (modes.includes("teacher")) {
     clearClassroomOrgHint();
   }
 
-  return { ok: true, skipped: !!cleared.skipped };
+  return { ok: true };
 }

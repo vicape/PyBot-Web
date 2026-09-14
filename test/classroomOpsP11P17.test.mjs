@@ -72,15 +72,18 @@ test("P14 classifier: rate limit / network / associatedWithDeveloper", () => {
 
 test("P15 disconnect clears tokens only (source contract)", () => {
   const disc = readFileSync(join(root, "src/platform/disconnectClassroom.js"), "utf8");
-  assert.match(disc, /clearClassroomTokens/);
+  assert.match(disc, /\/api\/disconnect-classroom/);
   assert.match(disc, /clearClassroomTokenCache/);
   assert.doesNotMatch(disc, /signOut|signInWithOAuth/);
-  const profile = readFileSync(join(root, "src/platform/profileApi.js"), "utf8");
-  assert.match(profile, /export async function clearClassroomTokens/);
+  const api = readFileSync(join(root, "api/disconnect-classroom.js"), "utf8");
+  assert.match(api, /clearClassroomCredentials/);
+  assert.match(api, /org_id/);
+  assert.doesNotMatch(api, /signOut/);
   const panel = readFileSync(join(root, "src/components/dashboard/ClassroomPanel.jsx"), "utf8");
   assert.match(panel, /disconnectClassroomIntegration/);
   assert.match(panel, /Desconectar Classroom/);
   assert.match(panel, /No se cierra tu sesión de PyBotClass/);
+  assert.match(panel, /orgId: effectiveOrgId/);
 });
 
 test("P16 vault migration is server-only; browser token path has no RT select", () => {
