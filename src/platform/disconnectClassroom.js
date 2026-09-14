@@ -15,12 +15,15 @@ const DISCONNECT_API = "/api/disconnect-classroom";
  *   userId: string,
  *   mode?: "teacher"|"student"|"both",
  *   orgId?: string|null,
+ *   globalLegacy?: boolean,
  * }} args
+ * globalLegacy: wipe perfiles legacy global solo si se pide explícitamente (nunca vía org).
  */
 export async function disconnectClassroomIntegration({
   userId,
   mode = "teacher",
   orgId = null,
+  globalLegacy = false,
 } = {}) {
   const uid = String(userId || "").trim();
   if (!uid) return { ok: false, error: "missing_user" };
@@ -49,18 +52,22 @@ export async function disconnectClassroomIntegration({
         }),
       });
       const json = await res.json().catch(() => ({}));
+      if (res.status === 409 || json.error === "org_scoped_disconnect_unavailable") {
+        return { ok: false, error: "org_scoped_disconnect_unavailable", orgId: oid, mode: m };
+      }
       if (!res.ok) {
         return { ok: false, error: json.error || "disconnect_failed" };
       }
       clearClassroomTokenCache(uid, m, oid);
     }
-  } else {
-    // No org context: legacy global clear (pre-multi-org UX).
+  } else if (globalLegacy) {
     for (const m of modes) {
       const cleared = await clearClassroomTokens(uid, m);
       if (!cleared.ok) return cleared;
       clearClassroomTokenCache(uid, m);
     }
+  } else {
+    return { ok: false, error: "missing_org" };
   }
 
   if (modes.includes("teacher")) {
