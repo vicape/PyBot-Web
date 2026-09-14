@@ -15,6 +15,7 @@ import {
   validateClassroomOAuthFlow,
   shouldClearClassroomOAuthFlow,
 } from "../platform/googleOAuth.js";
+import { saveClassroomOrgHint } from "../platform/classroomOrgContext.js";
 
 function safeInternalNext(raw) {
   if (typeof raw !== "string") return null;
@@ -176,6 +177,10 @@ export default function ClassroomAuthCallbackPage() {
 
       if (exchanged.access_token) {
         primeClassroomAccessToken(user.id, mode, exchanged.access_token, expiresIn);
+      }
+
+      if (flow.orgId) {
+        saveClassroomOrgHint(flow.orgId);
       }
 
       clearClassroomOAuthFlow();

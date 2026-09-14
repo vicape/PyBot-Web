@@ -117,10 +117,13 @@ export function buildClassroomAuthorizeUrl({ clientId, redirectUri, scopes, stat
  *   mode: "teacher"|"student",
  *   nextPath: string,
  *   createdAt: number,
+ *   orgId?: string|null,
  * }} flow
  */
 export function saveClassroomOAuthFlow(flow) {
   try {
+    const orgId =
+      typeof flow.orgId === "string" && flow.orgId.trim() ? flow.orgId.trim() : null;
     sessionStorage.setItem(
       CLASSROOM_OAUTH_FLOW_KEY,
       JSON.stringify({
@@ -129,6 +132,7 @@ export function saveClassroomOAuthFlow(flow) {
         mode: normalizeMode(flow.mode),
         nextPath: String(flow.nextPath || ""),
         createdAt: Number(flow.createdAt) || Date.now(),
+        orgId,
       }),
     );
   } catch {
@@ -136,7 +140,7 @@ export function saveClassroomOAuthFlow(flow) {
   }
 }
 
-/** @returns {null | { state: string, initiatingPybotUserId: string, mode: "teacher"|"student", nextPath: string, createdAt: number }} */
+/** @returns {null | { state: string, initiatingPybotUserId: string, mode: "teacher"|"student", nextPath: string, createdAt: number, orgId: string|null }} */
 export function loadClassroomOAuthFlow() {
   try {
     const raw = sessionStorage.getItem(CLASSROOM_OAUTH_FLOW_KEY);
@@ -149,6 +153,10 @@ export function loadClassroomOAuthFlow() {
       mode: normalizeMode(parsed.mode),
       nextPath: String(parsed.nextPath || ""),
       createdAt: Number(parsed.createdAt) || 0,
+      orgId:
+        typeof parsed.orgId === "string" && parsed.orgId.trim()
+          ? parsed.orgId.trim()
+          : null,
     };
   } catch {
     return null;
@@ -204,13 +212,15 @@ export function shouldClearClassroomOAuthFlow(validationResult) {
 /**
  * Conectar Google Classroom bajo demanda (OAuth Google directo; no Supabase OAuth).
  * @param {string} [nextPath]
- * @param {{ mode?: "teacher"|"student" }} [opts]
+ * @param {{ mode?: "teacher"|"student", orgId?: string|null }} [opts]
  */
 export async function connectGoogleClassroom(nextPath, opts = {}) {
   const sb = getSupabase();
   if (!sb) return { ok: false, error: "no_supabase" };
 
   const mode = normalizeMode(opts?.mode);
+  const orgId =
+    typeof opts?.orgId === "string" && opts.orgId.trim() ? opts.orgId.trim() : null;
   const next =
     typeof nextPath === "string" && nextPath.startsWith("/") && !nextPath.startsWith("//")
       ? nextPath
@@ -249,6 +259,7 @@ export async function connectGoogleClassroom(nextPath, opts = {}) {
     mode,
     nextPath: next,
     createdAt: Date.now(),
+    orgId,
   });
 
   const url = buildClassroomAuthorizeUrl({ clientId, redirectUri, scopes, state });

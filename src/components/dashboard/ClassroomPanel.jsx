@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { listTeacherClassroomCourses } from "../../classroom/classroomApi.js";
 import { connectGoogleClassroom } from "../../platform/googleOAuth.js";
+import {
+  classroomOrgAccountNotice,
+  loadClassroomOrgHint,
+  pickInitialClassroomOrgId,
+  resolveImportOrgId,
+  saveClassroomOrgHint,
+} from "../../platform/classroomOrgContext.js";
 import { fetchProfile, markClassroomLinked } from "../../platform/profileApi.js";
 import { getValidClassroomToken } from "../../platform/classroomToken.js";
 import {
@@ -21,8 +28,24 @@ export default function ClassroomPanel({
   canUseClassroom = true,
 }) {
   const navigate = useNavigate();
-  const [selectedOrgId, setSelectedOrgId] = useState(staffOrgId || staffOrgs[0]?.id || "");
-  const effectiveOrgId = selectedOrgId || staffOrgId || "";
+  const [selectedOrgId, setSelectedOrgId] = useState(() =>
+    pickInitialClassroomOrgId({
+      preferredOrgId: staffOrgId,
+      lastHintOrgId: loadClassroomOrgHint(),
+      staffOrgs,
+    }),
+  );
+  const effectiveOrgId = resolveImportOrgId({ selectedOrgId, staffOrgs });
+  const hasAnyStaffOrg = staffOrgs.length > 0;
+  const orgNotice = useMemo(
+    () =>
+      classroomOrgAccountNotice({
+        selectedOrgId: effectiveOrgId,
+        hintOrgId: loadClassroomOrgHint(),
+      }),
+    [effectiveOrgId, selectedOrgId],
+  );
+
   /** Metadata histórica (última conexión exitosa conocida). No define salud actual. */
   const [linkedAt, setLinkedAt] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState(CLASSROOM_CONNECTION.CHECKING);
@@ -64,7 +87,7 @@ export default function ClassroomPanel({
       }
       setOkMsg(`Conectado: ${list.length} curso(s) activo(s) en Classroom.`);
 
-      // Cargar qué cursos ya fueron importados en el colegio
+      // Cargar qué cursos ya fueron importados en el colegio seleccionado
       if (sb && effectiveOrgId) {
         const { data: existing, error: eEx } = await sb
           .from("courses")
@@ -76,6 +99,8 @@ export default function ClassroomPanel({
         } else if (existing) {
           setImportedIds(new Set(existing.map((r) => r.classroom_course_id)));
         }
+      } else {
+        setImportedIds(new Set());
       }
     } catch (ex) {
       console.error("ClassroomPanel.refreshCourses:", ex);
@@ -99,14 +124,19 @@ export default function ClassroomPanel({
   }, [user?.id, effectiveOrgId, canUseClassroom]);
 
   useEffect(() => {
-    if (staffOrgId && !selectedOrgId) setSelectedOrgId(staffOrgId);
-  }, [staffOrgId, selectedOrgId]);
-
-  useEffect(() => {
-    if (staffOrgs.length === 1 && staffOrgs[0]?.id) {
-      setSelectedOrgId(staffOrgs[0].id);
+    if (staffOrgs.length === 0) {
+      setSelectedOrgId("");
+      return;
     }
-  }, [staffOrgs]);
+    setSelectedOrgId((prev) => {
+      const next = pickInitialClassroomOrgId({
+        preferredOrgId: prev || staffOrgId,
+        lastHintOrgId: loadClassroomOrgHint(),
+        staffOrgs,
+      });
+      return next;
+    });
+  }, [staffOrgs, staffOrgId]);
 
   useEffect(() => {
     if (!canUseClassroom) {
@@ -125,13 +155,27 @@ export default function ClassroomPanel({
     })();
   }, [user?.id, refreshCourses, canUseClassroom]);
 
+  const onSelectOrg = (orgId) => {
+    setSelectedOrgId(orgId);
+    if (orgId) saveClassroomOrgHint(orgId);
+    setImportedIds(new Set());
+  };
+
+  const onConnectClassroom = () => {
+    void connectGoogleClassroom(undefined, {
+      mode: "teacher",
+      orgId: effectiveOrgId || null,
+    });
+  };
+
   if (!canUseClassroom) {
     return null;
   }
 
   const importCourse = async (classroomCourse) => {
     const sb = getSupabase();
-    if (!sb || !user?.id || !effectiveOrgId) {
+    const targetOrgId = resolveImportOrgId({ selectedOrgId, staffOrgs });
+    if (!sb || !user?.id || !targetOrgId) {
       setImportErr("Seleccioná un colegio antes de importar.");
       return;
     }
@@ -145,19 +189,19 @@ export default function ClassroomPanel({
     const { data: existing } = await sb
       .from("courses")
       .select("id")
-      .eq("org_id", effectiveOrgId)
+      .eq("org_id", targetOrgId)
       .eq("classroom_course_id", classroomCourse.id)
       .maybeSingle();
 
     if (existing?.id) {
       setImporting(null);
       setImportedIds((prev) => new Set([...prev, classroomCourse.id]));
-      navigate(`/dashboard/org/${effectiveOrgId}/course/${existing.id}`);
+      navigate(`/dashboard/org/${targetOrgId}/course/${existing.id}`);
       return;
     }
 
     const payload = {
-      org_id: effectiveOrgId,
+      org_id: targetOrgId,
       title,
       slug,
       classroom_course_id: classroomCourse.id,
@@ -199,7 +243,7 @@ export default function ClassroomPanel({
     setImportedIds((prev) => new Set([...prev, classroomCourse.id]));
 
     if (row?.id) {
-      navigate(`/dashboard/org/${effectiveOrgId}/course/${row.id}`);
+      navigate(`/dashboard/org/${targetOrgId}/course/${row.id}`);
     }
   };
 
@@ -220,15 +264,18 @@ export default function ClassroomPanel({
         colegio.
       </p>
 
-      {staffOrgs.length >= 2 ? (
+      {hasAnyStaffOrg ? (
         <label className="auth-org-label" style={{ display: "block", marginBottom: "0.75rem" }}>
           Importar en colegio:
           <select
             className="auth-org-input auth-org-input--block"
-            value={effectiveOrgId}
-            onChange={(e) => setSelectedOrgId(e.target.value)}
+            value={effectiveOrgId || selectedOrgId || ""}
+            onChange={(e) => onSelectOrg(e.target.value)}
             style={{ marginTop: "0.35rem" }}
           >
+            {staffOrgs.length > 1 && !effectiveOrgId ? (
+              <option value="">Elegí un colegio…</option>
+            ) : null}
             {staffOrgs.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name || o.id.slice(0, 8)}
@@ -237,6 +284,10 @@ export default function ClassroomPanel({
           </select>
         </label>
       ) : null}
+
+      <p className="auth-card__muted auth-card__muted--tight" style={{ marginBottom: "0.75rem" }}>
+        {orgNotice.message}
+      </p>
 
       <div className="dash-status-row">
         <span className={badgeClass}>{badge.label}</span>
@@ -255,7 +306,7 @@ export default function ClassroomPanel({
               type="button"
               className="auth-link"
               style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              onClick={() => void connectGoogleClassroom(undefined, { mode: "teacher" })}
+              onClick={onConnectClassroom}
             >
               Reconectar →
             </button>
@@ -275,7 +326,7 @@ export default function ClassroomPanel({
         <button
           type="button"
           className="auth-btn auth-btn--primary"
-          onClick={() => void connectGoogleClassroom(undefined, { mode: "teacher" })}
+          onClick={onConnectClassroom}
         >
           {connectionStatus === CLASSROOM_CONNECTION.RECONNECT_REQUIRED ||
           connectionStatus === CLASSROOM_CONNECTION.INSUFFICIENT_PERMISSIONS
@@ -292,7 +343,7 @@ export default function ClassroomPanel({
         </button>
       </div>
 
-      {!staffOrgId ? (
+      {!hasAnyStaffOrg ? (
         <p className="auth-card__notice">
           Creá un colegio en la pestaña{" "}
           <Link to="/dashboard?tab=schools">Colegios</Link> para poder importar cursos.
@@ -302,11 +353,15 @@ export default function ClassroomPanel({
       {connectionStatus === CLASSROOM_CONNECTION.CONNECTED && courses.length > 0 ? (
         <>
           <h3 className="auth-section__title">Tus cursos en Classroom</h3>
-          {staffOrgId ? (
+          {effectiveOrgId ? (
             <p className="auth-card__muted auth-card__muted--tight" style={{ marginBottom: "0.75rem" }}>
-              Hacé clic en <strong>Importar</strong> para crear el curso en tu colegio PyBot.
+              Hacé clic en <strong>Importar</strong> para crear el curso en el colegio seleccionado.
             </p>
-          ) : null}
+          ) : (
+            <p className="auth-card__notice" style={{ marginBottom: "0.75rem" }}>
+              Seleccioná un colegio arriba antes de importar.
+            </p>
+          )}
           <ul className="auth-org-list">
             {courses.map((c) => {
               const alreadyImported = importedIds.has(c.id);
@@ -317,7 +372,7 @@ export default function ClassroomPanel({
                     <span className="auth-org-row__name">{c.name || c.section || c.id}</span>
                     <span className="auth-org-row__meta">ID: {c.id}</span>
                   </div>
-                  {staffOrgId ? (
+                  {effectiveOrgId ? (
                     alreadyImported ? (
                       <span className="dash-badge dash-badge--ok">Importado</span>
                     ) : (
@@ -342,8 +397,8 @@ export default function ClassroomPanel({
             ? "No hay cursos activos donde seas docente en Classroom."
             : "Tras conectar, acá verás los cursos donde sos docente. Luego importalos en "}
           {connectionStatus !== CLASSROOM_CONNECTION.CONNECTED ? (
-            staffOrgId ? (
-              <Link to={`/dashboard/org/${staffOrgId}`}>Cursos del colegio</Link>
+            effectiveOrgId ? (
+              <Link to={`/dashboard/org/${effectiveOrgId}`}>Cursos del colegio</Link>
             ) : (
               "la sección Cursos de tu colegio"
             )

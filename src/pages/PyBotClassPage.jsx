@@ -128,6 +128,7 @@ export default function PyBotClassPage() {
     [orgs],
   );
   const hasStaffAccess = staffOrgs.length > 0;
+  /** Preferencia UI; el panel resuelve el colegio efectivo (no fuerza staffOrgs[0] con multi-colegio). */
   const staffOrgId = staffOrgs[0]?.id || null;
 
   useEffect(() => {
