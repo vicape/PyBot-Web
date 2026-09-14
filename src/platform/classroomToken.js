@@ -1,16 +1,12 @@
 /**
- * Access tokens Classroom en memoria, aislados por usuario + modo.
- * Nunca reutilizar entre alumnos ni entre teacher/student.
+ * Access tokens Classroom en memoria, aislados por usuario + modo + org.
+ * Nunca reutilizar entre alumnos ni entre teacher/student ni entre colegios.
  *
- * La renovación del access_token se hace SOLO vía /api/refresh-classroom-token
- * (GOOGLE_CLIENT_SECRET nunca en el browser).
+ * Renovación SOLO vía /api/refresh-classroom-token (nunca GOOGLE_CLIENT_SECRET en browser).
+ * P5/P16: el browser NO lee refresh tokens; el server los carga del vault / legacy profiles.
  */
 
 import { getSupabase } from "../supabaseClient.js";
-import {
-  getStoredGoogleRefreshToken,
-  getStoredStudentGoogleRefreshToken,
-} from "./profileApi.js";
 
 const REFRESH_API = "/api/refresh-classroom-token";
 
@@ -28,41 +24,48 @@ function ensureAuthListener() {
   });
 }
 
-function cacheKey(userId, mode) {
-  return `${String(userId || "").trim()}:${mode === "student" ? "student" : "teacher"}`;
-}
-
 function normalizeMode(mode) {
   return mode === "student" ? "student" : "teacher";
+}
+
+function cacheKey(userId, mode, orgId) {
+  const oid = orgId ? String(orgId).trim() : "legacy";
+  return `${String(userId || "").trim()}:${normalizeMode(mode)}:${oid}`;
 }
 
 /**
  * @param {string} [userId]
  * @param {"teacher"|"student"} [mode]
+ * @param {string} [orgId]
  */
-export function clearClassroomTokenCache(userId, mode) {
+export function clearClassroomTokenCache(userId, mode, orgId) {
   ensureAuthListener();
   if (!userId) {
     tokenCache.clear();
     return;
   }
   const uid = String(userId).trim();
-  if (mode) {
-    tokenCache.delete(cacheKey(uid, normalizeMode(mode)));
+  if (mode && orgId) {
+    tokenCache.delete(cacheKey(uid, mode, orgId));
     return;
   }
-  tokenCache.delete(cacheKey(uid, "teacher"));
-  tokenCache.delete(cacheKey(uid, "student"));
+  if (mode) {
+    const prefix = `${uid}:${normalizeMode(mode)}:`;
+    for (const k of tokenCache.keys()) {
+      if (k.startsWith(prefix)) tokenCache.delete(k);
+    }
+    return;
+  }
+  const prefix = `${uid}:`;
+  for (const k of tokenCache.keys()) {
+    if (k.startsWith(prefix)) tokenCache.delete(k);
+  }
 }
 
 /**
  * Primar access token en memoria (p.ej. tras OAuth Classroom). No persiste.
- * @param {string} userId
- * @param {"teacher"|"student"} mode
- * @param {string} accessToken
- * @param {number} [expiresInSec]
  */
-export function primeClassroomAccessToken(userId, mode, accessToken, expiresInSec) {
+export function primeClassroomAccessToken(userId, mode, accessToken, expiresInSec, orgId) {
   const uid = String(userId || "").trim();
   const tok = String(accessToken || "").trim();
   if (!uid || !tok) return;
@@ -72,15 +75,14 @@ export function primeClassroomAccessToken(userId, mode, accessToken, expiresInSe
     Number.isFinite(expSec) && expSec > 0
       ? Date.now() + Math.max(30, expSec - 60) * 1000
       : Date.now() + 50 * 60 * 1000;
-  tokenCache.set(cacheKey(uid, m), { accessToken: tok, expiresAt });
+  tokenCache.set(cacheKey(uid, m, orgId), { accessToken: tok, expiresAt });
 }
 
 /**
- * Renueva el access_token vía endpoint server-side (nunca llama a Google
- * con client_secret desde el browser).
- * @param {string} refreshToken
+ * Renueva access_token vía server. Preferido: { mode, org_id }.
+ * Legacy body refresh_token ya no se usa desde el browser.
  */
-async function refreshAccessToken(refreshToken) {
+async function refreshAccessTokenViaApi({ mode, orgId }) {
   const sb = getSupabase();
   if (!sb) {
     const err = new Error("Supabase no configurado");
@@ -100,13 +102,16 @@ async function refreshAccessToken(refreshToken) {
     throw err;
   }
 
+  const body = { mode: normalizeMode(mode) };
+  if (orgId) body.org_id = String(orgId).trim();
+
   const res = await fetch(REFRESH_API, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${supabaseAccess}`,
     },
-    body: JSON.stringify({ refresh_token: String(refreshToken) }),
+    body: JSON.stringify(body),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -130,7 +135,7 @@ async function refreshAccessToken(refreshToken) {
 
 /**
  * @param {string} userId
- * @param {{ mode?: "teacher"|"student" }} [opts]
+ * @param {{ mode?: "teacher"|"student", orgId?: string|null }} [opts]
  * @returns {Promise<string|null>}
  */
 export async function getValidClassroomToken(userId, opts = {}) {
@@ -138,36 +143,25 @@ export async function getValidClassroomToken(userId, opts = {}) {
   const uid = String(userId || "").trim();
   if (!uid) return null;
   const mode = normalizeMode(opts?.mode);
+  const orgId =
+    typeof opts?.orgId === "string" && opts.orgId.trim() ? opts.orgId.trim() : null;
 
-  const key = cacheKey(uid, mode);
+  const key = cacheKey(uid, mode, orgId);
   const cached = tokenCache.get(key);
   if (cached?.accessToken && cached.expiresAt > Date.now()) {
     return cached.accessToken;
   }
 
-  let refreshToken = null;
-  if (mode === "student") {
-    refreshToken = await getStoredStudentGoogleRefreshToken(uid);
-  } else {
-    const stored = await getStoredGoogleRefreshToken(uid);
-    refreshToken =
-      typeof stored === "string" ? stored : stored?.google_refresh_token || null;
-  }
-  refreshToken = refreshToken ? String(refreshToken).trim() : null;
-
-  if (refreshToken) {
-    try {
-      const { accessToken, expiresIn } = await refreshAccessToken(refreshToken);
-      if (accessToken) {
-        primeClassroomAccessToken(uid, mode, accessToken, expiresIn);
-        return accessToken;
-      }
-    } catch (e) {
-      clearClassroomTokenCache(uid, mode);
-      throw e;
+  try {
+    const { accessToken, expiresIn } = await refreshAccessTokenViaApi({ mode, orgId });
+    if (accessToken) {
+      primeClassroomAccessToken(uid, mode, accessToken, expiresIn, orgId);
+      return accessToken;
     }
+  } catch (e) {
+    clearClassroomTokenCache(uid, mode, orgId || undefined);
+    throw e;
   }
 
-  // No usar session.provider_token del login normal (scopes openid/email/profile).
   return null;
 }

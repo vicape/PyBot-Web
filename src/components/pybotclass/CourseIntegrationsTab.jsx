@@ -72,7 +72,7 @@ export default function CourseIntegrationsTab({
   const withToken = async (fn) => {
     setErr("");
     setMsg("");
-    const tok = await getValidClassroomToken(user?.id);
+    const tok = await getValidClassroomToken(user?.id, { mode: "teacher", orgId: orgId || null });
     if (!tok) {
       setErr("Classroom no conectado. Conectalo desde tu cuenta.");
       return null;

@@ -130,7 +130,10 @@ export default function PyBotClassCoursePage() {
     setImportBusy(true);
     setErr("");
     try {
-      const tok = await getValidClassroomToken(user?.id);
+      const tok = await getValidClassroomToken(user?.id, {
+        mode: "teacher",
+        orgId: course?.org_id || null,
+      });
       if (!tok) throw new Error("Classroom no conectado.");
       const list = await listCourseWork(tok, course.classroom_course_id);
       setImportPicker({ list, selected: new Set(list.map((cw) => cw.id)) });

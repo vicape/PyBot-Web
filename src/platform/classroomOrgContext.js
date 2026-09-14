@@ -105,7 +105,7 @@ export function classroomOrgAccountNotice({ selectedOrgId = "", hintOrgId = null
   }
   return {
     kind: "global",
-    message:
-      "Por ahora Classroom usa una sola cuenta Google por usuario PyBot. Al reconectar, esa cuenta se usa para todos tus colegios. El colegio elegido abajo solo define dónde se importan los cursos.",
-  };
+  message:
+      "Classroom puede usar una cuenta Google distinta por colegio (cuando esté habilitado el vault server-only). El colegio elegido define dónde se importan los cursos y qué credenciales se usan.",
+};
 }

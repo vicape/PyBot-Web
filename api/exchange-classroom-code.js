@@ -3,16 +3,21 @@
  *
  * POST /api/exchange-classroom-code
  * Header: Authorization: Bearer <supabase_access_token>
- * Body:   { code: string, redirect_uri: string }
+ * Body:   { code, redirect_uri, mode?, org_id? }
  *
- * Responde: { access_token, refresh_token, expires_in } o { error }
+ * Responde:
+ *   - vault OK: { access_token, expires_in, persisted: true, org_id, mode }  (sin refresh_token)
+ *   - vault no disponible / sin org: { access_token, refresh_token, expires_in, persisted: false }
  *
- * Variables de entorno (server-side, sin prefijo VITE_):
- *   SUPABASE_URL
- *   SUPABASE_SERVICE_KEY
- *   GOOGLE_CLIENT_ID
- *   GOOGLE_CLIENT_SECRET
+ * Server-side env: SUPABASE_URL, SUPABASE_SERVICE_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
  */
+
+import { resolveUserId } from "./_telemetryHelpers.js";
+import {
+  isUuid,
+  normalizeClassroomMode,
+  upsertClassroomCredentials,
+} from "./_classroomCredentials.js";
 
 export const CLASSROOM_CALLBACK_PATH = "/auth/classroom/callback";
 
@@ -60,6 +65,8 @@ export default async function handler(req, res) {
   const code = typeof body.code === "string" ? body.code.trim() : "";
   const redirectUri =
     typeof body.redirect_uri === "string" ? body.redirect_uri.trim() : "";
+  const mode = normalizeClassroomMode(body.mode);
+  const orgId = typeof body.org_id === "string" ? body.org_id.trim() : "";
 
   if (!supabaseToken || !code || !redirectUri) {
     return res.status(400).json({ error: "missing_params" });
@@ -75,13 +82,8 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "server_misconfigured" });
   }
 
-  const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: {
-      Authorization: `Bearer ${supabaseToken}`,
-      apikey: serviceKey,
-    },
-  });
-  if (!userRes.ok) {
+  const userId = await resolveUserId(req);
+  if (!userId) {
     return res.status(401).json({ error: "unauthorized" });
   }
 
@@ -114,9 +116,39 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "missing_access_token" });
   }
 
+  const expiresIn = data.expires_in ?? 3600;
+  const refreshToken = data.refresh_token || null;
+
+  // P5/P16: persist server-side when org_id + refresh_token available.
+  if (refreshToken && isUuid(orgId)) {
+    const saved = await upsertClassroomCredentials({
+      userId,
+      orgId,
+      mode,
+      refreshToken,
+      expiresIn,
+    });
+    if (saved.ok) {
+      return res.status(200).json({
+        access_token: data.access_token,
+        expires_in: expiresIn,
+        persisted: true,
+        org_id: orgId,
+        mode,
+      });
+    }
+    // Vault not applied yet → legacy response with refresh_token for dual-path.
+    if (!saved.vaultUnavailable) {
+      return res.status(500).json({ error: saved.error || "persist_failed" });
+    }
+  }
+
   return res.status(200).json({
     access_token: data.access_token,
-    refresh_token: data.refresh_token || null,
-    expires_in: data.expires_in ?? 3600,
+    refresh_token: refreshToken,
+    expires_in: expiresIn,
+    persisted: false,
+    org_id: isUuid(orgId) ? orgId : null,
+    mode,
   });
 }

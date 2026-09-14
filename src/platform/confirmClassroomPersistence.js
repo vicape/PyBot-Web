@@ -1,6 +1,9 @@
 /**
  * Confirmación de persistencia de OAuth Classroom (teacher/student).
- * No marca vinculado hasta verificar refresh token leíble y coincidente.
+ *
+ * Paths:
+ * - serverPersisted + orgId (P5/P16): verifica metadata en organization_classroom_links (sin RT).
+ * - legacy refreshToken (P1/P2): save + readback + mark en profiles (solo si vault no persistió).
  */
 
 import {
@@ -10,20 +13,22 @@ import {
   markStudentClassroomLinked,
   getStoredGoogleRefreshToken,
   getStoredStudentGoogleRefreshToken,
+  fetchOrganizationClassroomLink,
 } from "./profileApi.js";
 
 /**
  * @param {{
  *   userId: string,
  *   mode: "teacher"|"student",
- *   refreshToken: string,
+ *   refreshToken?: string,
  *   expiresIn?: number,
+ *   orgId?: string|null,
+ *   serverPersisted?: boolean,
  * }} args
  * @param {object} [api] inyección opcional para tests
- * @returns {Promise<{ ok: boolean, code?: string, message?: string }>}
  */
 export async function confirmClassroomPersistence(
-  { userId, mode, refreshToken, expiresIn },
+  { userId, mode, refreshToken, expiresIn, orgId, serverPersisted },
   api = {
     saveGoogleTokens,
     saveStudentGoogleTokens,
@@ -31,10 +36,10 @@ export async function confirmClassroomPersistence(
     markStudentClassroomLinked,
     getStoredGoogleRefreshToken,
     getStoredStudentGoogleRefreshToken,
+    fetchOrganizationClassroomLink,
   },
 ) {
   const uid = String(userId || "").trim();
-  const refresh = String(refreshToken || "").trim();
   if (!uid) {
     return {
       ok: false,
@@ -42,6 +47,38 @@ export async function confirmClassroomPersistence(
       message: "No se pudo confirmar la conexión permanente con Google Classroom.",
     };
   }
+
+  const isStudent = mode === "student";
+  const oid = typeof orgId === "string" ? orgId.trim() : "";
+
+  // P5/P16: exchange ya persistió en vault — confirmar solo metadata (nunca RT).
+  if (serverPersisted) {
+    if (!oid) {
+      return {
+        ok: false,
+        code: "missing_org",
+        message: "Falta el colegio para confirmar la conexión de Classroom.",
+      };
+    }
+    const link = await api.fetchOrganizationClassroomLink(uid, oid, mode);
+    if (!link?.ok) {
+      return {
+        ok: false,
+        code: "persist_unconfirmed",
+        message: "No se pudo confirmar la conexión permanente con Google Classroom.",
+      };
+    }
+    if (!link.linkedAt) {
+      return {
+        ok: false,
+        code: "persist_unconfirmed",
+        message: "No se pudo confirmar la conexión permanente con Google Classroom.",
+      };
+    }
+    return { ok: true, source: "vault" };
+  }
+
+  const refresh = String(refreshToken || "").trim();
   if (!refresh) {
     return {
       ok: false,
@@ -50,8 +87,6 @@ export async function confirmClassroomPersistence(
         "Google no devolvió la autorización necesaria para mantener Classroom conectado. Volvé a conectar Classroom.",
     };
   }
-
-  const isStudent = mode === "student";
 
   const saved = isStudent
     ? await api.saveStudentGoogleTokens(uid, { refreshToken: refresh, expiresIn })
@@ -94,5 +129,5 @@ export async function confirmClassroomPersistence(
     };
   }
 
-  return { ok: true };
+  return { ok: true, source: "profiles_legacy" };
 }

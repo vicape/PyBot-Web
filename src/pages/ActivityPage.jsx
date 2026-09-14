@@ -464,7 +464,10 @@ export default function ActivityPage() {
           "Actividad entregada en PyBot. Autorizá Google Classroom para completar la entrega.",
       );
       setBusy(false);
-      void connectGoogleClassroom(`/actividad/${activityId}`, { mode: "student" });
+      void connectGoogleClassroom(`/actividad/${activityId}`, {
+        mode: "student",
+        orgId: orgId || null,
+      });
       return;
     }
     setBusy(false);

@@ -4,7 +4,8 @@ import { countryNameByCode } from "../../../data/countries.js";
 import { computeAccountRoleBadges, computeQuickSummary } from "../../../platform/accountRoles.js";
 import { normalizeCourseRole } from "../../../platform/courseRole.js";
 import { connectGoogleClassroom } from "../../../platform/googleOAuth.js";
-import { getStoredGoogleRefreshToken } from "../../../platform/profileApi.js";
+import { loadClassroomOrgHint } from "../../../platform/classroomOrgContext.js";
+import { fetchProfile } from "../../../platform/profileApi.js";
 import {
   CoursesActionIcon,
   CreateCourseActionIcon,
@@ -45,11 +46,9 @@ export default function PyBotClassHome({
       setClassroomLinked(false);
       return undefined;
     }
-    void getStoredGoogleRefreshToken(user.id).then((stored) => {
+    void fetchProfile(user.id).then(({ profile }) => {
       if (cancelled) return;
-      setClassroomLinked(
-        !!(stored?.classroom_linked_at || stored?.google_refresh_token || stored?.google_token_expires_at),
-      );
+      setClassroomLinked(!!(profile?.classroom_linked_at || profile?.google_token_expires_at));
     });
     return () => {
       cancelled = true;
@@ -112,7 +111,16 @@ export default function PyBotClassHome({
   const primaryCountry = orgMemberships.find((o) => o.country_code)?.country_code;
 
   const onClassroomConnect = () => {
-    void connectGoogleClassroom("/dashboard/classes", { mode: "teacher" });
+    const orgId =
+      orgFilter ||
+      loadClassroomOrgHint() ||
+      orgMemberships.find((o) => o.role === "owner" || o.role === "teacher")?.id ||
+      orgMemberships[0]?.id ||
+      null;
+    void connectGoogleClassroom("/dashboard/classes", {
+      mode: "teacher",
+      orgId: orgId || null,
+    });
   };
 
   const classroomStatusLabel =

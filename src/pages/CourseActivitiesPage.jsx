@@ -321,7 +321,7 @@ function StudentsTab({ orgId, courseId, classroomCourseId, user, staff }) {
     setImportResults([]);
 
     try {
-      const tok = await getValidClassroomToken(user?.id);
+      const tok = await getValidClassroomToken(user?.id, { mode: "teacher", orgId: orgId || null });
       if (!tok) {
         setImportErr(classroomSyncErrorMessage({ code: "missing_access_token" }));
         setImportState(null);

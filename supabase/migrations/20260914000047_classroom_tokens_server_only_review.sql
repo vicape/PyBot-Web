@@ -1,22 +1,23 @@
--- READY FOR MIGRATION REVIEW — P16 server-only Classroom refresh tokens
+-- READY FOR MIGRATION REVIEW — P16 cutover notes (companion to 00045)
 -- DO NOT APPLY TO PRODUCTION without human review.
 --
--- Goal: stop reading google_refresh_token from the browser under RLS.
--- Keep profiles columns during transition; dual-read then cut over.
+-- 00045 creates private.classroom_oauth_secrets (server-only RT) + public.organization_classroom_links.
+-- This file documents cutover; it intentionally does NOT drop profiles.google_* yet
+-- (dual-read fallback for refresh API until backfill verified).
 --
--- Proposed phases:
--- 1) Create private schema/table or vault for refresh tokens (service role only).
--- 2) Dual-write from confirmClassroomPersistence + exchange endpoint.
--- 3) Change getValidClassroomToken path to call server with Bearer Supabase only
---    (already refreshes via /api/refresh-classroom-token).
--- 4) Stop selecting google_refresh_token in profileApi frontend selects.
--- 5) Eventually NULL browser-readable columns after backfill verified.
+-- App rules after 00045 applied:
+--   1) exchange/refresh/disconnect APIs read/write vault with SUPABASE_SERVICE_KEY
+--   2) browser never SELECTs refresh tokens
+--   3) browser never writes google_*_refresh_token to profiles for new connects
+--   4) getValidClassroomToken(userId, { mode, orgId }) refreshes via API with org context
 --
--- Rollback: keep profiles.google_* populated; frontend falls back to current P1 path.
+-- Later cutover (separate migration, human-approved):
+--   - stop dual-read from profiles
+--   - null browser-readable refresh columns after verification
 --
--- This file is a marker + checklist. Full cutover requires Vercel/Supabase review.
+-- Rollback: keep profiles.google_* populated; APIs fall back when vault row missing.
 
 do $$
 begin
-  raise notice 'P16 READY FOR MIGRATION REVIEW: server-only Classroom refresh tokens';
+  raise notice 'P16 companion to 00045: vault is source of truth when present; profiles dual-read until cutover';
 end $$;

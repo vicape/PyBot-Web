@@ -269,19 +269,29 @@ export async function connectGoogleClassroom(nextPath, opts = {}) {
 
 /**
  * Intercambia authorization code por tokens vía backend (Bearer Supabase).
- * @param {{ code: string, redirectUri: string, accessToken: string }} args
+ * @param {{ code: string, redirectUri: string, accessToken: string, mode?: string, orgId?: string|null }} args
  */
-export async function exchangeClassroomAuthorizationCode({ code, redirectUri, accessToken }) {
+export async function exchangeClassroomAuthorizationCode({
+  code,
+  redirectUri,
+  accessToken,
+  mode,
+  orgId,
+}) {
+  const body = {
+    code: String(code || ""),
+    redirect_uri: String(redirectUri || ""),
+    mode: mode === "student" ? "student" : "teacher",
+  };
+  if (typeof orgId === "string" && orgId.trim()) body.org_id = orgId.trim();
+
   const res = await fetch(EXCHANGE_CLASSROOM_CODE_API, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({
-      code: String(code || ""),
-      redirect_uri: String(redirectUri || ""),
-    }),
+    body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -294,8 +304,11 @@ export async function exchangeClassroomAuthorizationCode({ code, redirectUri, ac
   return {
     ok: true,
     access_token: data.access_token,
-    refresh_token: data.refresh_token,
+    refresh_token: data.refresh_token || null,
     expires_in: data.expires_in ?? 3600,
+    persisted: !!data.persisted,
+    org_id: data.org_id || body.org_id || null,
+    mode: data.mode || body.mode,
   };
 }
 

@@ -5,7 +5,7 @@ import { getSupabase } from "../supabaseClient.js";
  * el código sigue funcionando con las que sí existen.
  */
 const PROFILE_COLUMNS_FULL =
-  "id, email, display_name, avatar_url, preferred_role, is_super_admin, classroom_linked_at, google_refresh_token, google_token_expires_at, classroom_student_linked_at, google_student_refresh_token, google_student_token_expires_at, ui_theme, ui_background, ui_background_color";
+  "id, email, display_name, avatar_url, preferred_role, is_super_admin, classroom_linked_at, google_token_expires_at, classroom_student_linked_at, google_student_token_expires_at, ui_theme, ui_background, ui_background_color";
 const PROFILE_COLUMNS_FALLBACK = "id, email, display_name, avatar_url";
 
 export async function fetchProfile(userId) {
@@ -202,7 +202,40 @@ export async function markStudentClassroomLinked(userId) {
 }
 
 /**
- * Quita credenciales Classroom del perfil (P15). No cierra sesión PyBot ni borra cursos.
+ * Metadata de vínculo Classroom por org (P5/P16). Sin refresh tokens.
+ * @param {string} userId
+ * @param {string} orgId
+ * @param {"teacher"|"student"} [mode="teacher"]
+ */
+export async function fetchOrganizationClassroomLink(userId, orgId, mode = "teacher") {
+  const sb = getSupabase();
+  const uid = String(userId || "").trim();
+  const oid = String(orgId || "").trim();
+  const m = mode === "student" ? "student" : "teacher";
+  if (!sb || !uid || !oid) return { ok: false, linkedAt: null, error: "missing_args" };
+
+  const { data, error } = await sb
+    .from("organization_classroom_links")
+    .select("classroom_linked_at, google_token_expires_at, mode, org_id")
+    .eq("user_id", uid)
+    .eq("org_id", oid)
+    .eq("mode", m)
+    .maybeSingle();
+
+  if (error?.message?.includes("does not exist") || error?.code === "42P01") {
+    return { ok: false, linkedAt: null, error: "links_unavailable", skipped: true };
+  }
+  if (error) return { ok: false, linkedAt: null, error: error.message };
+  return {
+    ok: true,
+    linkedAt: data?.classroom_linked_at ?? null,
+    expiresAt: data?.google_token_expires_at ?? null,
+    error: null,
+  };
+}
+
+/**
+ * Quita credenciales Classroom del perfil (legacy P15). No cierra sesión PyBot ni borra cursos.
  * @param {string} userId
  * @param {"teacher"|"student"|"both"} [mode="both"]
  */

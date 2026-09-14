@@ -130,6 +130,8 @@ export default function ClassroomAuthCallbackPage() {
         code,
         redirectUri,
         accessToken: session.access_token,
+        mode,
+        orgId: flow.orgId,
       });
 
       if (!exchanged.ok) {
@@ -141,28 +143,39 @@ export default function ClassroomAuthCallbackPage() {
         return;
       }
 
-      const refreshToken = exchanged.refresh_token
-        ? String(exchanged.refresh_token).trim()
-        : "";
       const expiresIn = Number(exchanged.expires_in) || 3600;
+      const orgId = exchanged.org_id || flow.orgId || null;
+      let persist;
 
-      if (!refreshToken) {
-        finished.current = true;
-        clearClassroomTokenCache(user.id, mode);
-        clearPendingClassroomTurnIn();
-        clearClassroomOAuthFlow();
-        setErrorMsg(
-          "Google no devolvió la autorización necesaria para mantener Classroom conectado. Volvé a conectar Classroom.",
-        );
-        return;
+      if (exchanged.persisted) {
+        persist = await confirmClassroomPersistence({
+          userId: user.id,
+          mode,
+          orgId,
+          serverPersisted: true,
+        });
+      } else {
+        const refreshToken = exchanged.refresh_token
+          ? String(exchanged.refresh_token).trim()
+          : "";
+        if (!refreshToken) {
+          finished.current = true;
+          clearClassroomTokenCache(user.id, mode);
+          clearPendingClassroomTurnIn();
+          clearClassroomOAuthFlow();
+          setErrorMsg(
+            "Google no devolvió la autorización necesaria para mantener Classroom conectado. Volvé a conectar Classroom.",
+          );
+          return;
+        }
+        persist = await confirmClassroomPersistence({
+          userId: user.id,
+          mode,
+          refreshToken,
+          expiresIn,
+          orgId,
+        });
       }
-
-      const persist = await confirmClassroomPersistence({
-        userId: user.id,
-        mode,
-        refreshToken,
-        expiresIn,
-      });
 
       if (!persist.ok) {
         finished.current = true;
@@ -176,11 +189,11 @@ export default function ClassroomAuthCallbackPage() {
       }
 
       if (exchanged.access_token) {
-        primeClassroomAccessToken(user.id, mode, exchanged.access_token, expiresIn);
+        primeClassroomAccessToken(user.id, mode, exchanged.access_token, expiresIn, orgId);
       }
 
-      if (flow.orgId) {
-        saveClassroomOrgHint(flow.orgId);
+      if (orgId) {
+        saveClassroomOrgHint(orgId);
       }
 
       clearClassroomOAuthFlow();

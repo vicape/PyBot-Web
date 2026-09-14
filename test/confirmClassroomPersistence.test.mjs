@@ -14,6 +14,26 @@ function apiMock(overrides = {}) {
   };
 }
 
+test("P2 serverPersisted confirms via org link metadata (no RT)", async () => {
+  const r = await confirmClassroomPersistence(
+    { userId: "u1", mode: "teacher", orgId: "org-1", serverPersisted: true },
+    {
+      fetchOrganizationClassroomLink: async () => ({
+        ok: true,
+        linkedAt: "2026-01-01T00:00:00Z",
+      }),
+      saveGoogleTokens: async () => {
+        throw new Error("should_not_write_profiles");
+      },
+      getStoredGoogleRefreshToken: async () => {
+        throw new Error("should_not_read_rt");
+      },
+    },
+  );
+  assert.equal(r.ok, true);
+  assert.equal(r.source, "vault");
+});
+
 test("P2 teacher: éxito solo tras save + readback + mark", async () => {
   let marked = false;
   const r = await confirmClassroomPersistence(

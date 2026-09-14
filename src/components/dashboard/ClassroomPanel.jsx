@@ -74,7 +74,10 @@ export default function ClassroomPanel({
     setErr("");
     setOkMsg("");
     try {
-      const tok = await getValidClassroomToken(user?.id);
+      const tok = await getValidClassroomToken(user?.id, {
+        mode: "teacher",
+        orgId: effectiveOrgId || null,
+      });
       if (!tok) {
         setCourses([]);
         setConnectionStatus(CLASSROOM_CONNECTION.NOT_CONNECTED);

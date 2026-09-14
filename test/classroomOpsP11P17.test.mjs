@@ -83,15 +83,25 @@ test("P15 disconnect clears tokens only (source contract)", () => {
   assert.match(panel, /No se cierra tu sesión de PyBotClass/);
 });
 
-test("P16 migration review marker present; no VITE secret", () => {
-  const mig = readFileSync(
+test("P16 vault migration is server-only; browser token path has no RT select", () => {
+  const mig45 = readFileSync(
+    join(root, "supabase/migrations/20260914000045_organization_classroom_credentials.sql"),
+    "utf8",
+  );
+  assert.match(mig45, /private\.classroom_oauth_secrets/);
+  assert.match(mig45, /organization_classroom_links/);
+  assert.doesNotMatch(mig45, /organization_classroom_credentials_select_own/);
+  assert.match(mig45, /revoke all on table private\.classroom_oauth_secrets from authenticated/);
+  const mig47 = readFileSync(
     join(root, "supabase/migrations/20260914000047_classroom_tokens_server_only_review.sql"),
     "utf8",
   );
-  assert.match(mig, /READY FOR MIGRATION REVIEW/);
+  assert.match(mig47, /READY FOR MIGRATION REVIEW/);
   const tok = readFileSync(join(root, "src/platform/classroomToken.js"), "utf8");
   assert.doesNotMatch(tok, /VITE_GOOGLE_CLIENT_SECRET/);
+  assert.doesNotMatch(tok, /getStoredGoogleRefreshToken|getStoredStudentGoogleRefreshToken/);
   assert.match(tok, /\/api\/refresh-classroom-token/);
+  assert.match(tok, /org_id/);
 });
 
 test("P17 OAuth production remains external checklist (no Google Cloud edits in repo)", () => {

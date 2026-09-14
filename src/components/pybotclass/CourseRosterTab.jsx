@@ -115,7 +115,7 @@ export default function CourseRosterTab({
     setSyncBusy(true);
     setSyncErr("");
     try {
-      const tok = await getValidClassroomToken(user?.id);
+      const tok = await getValidClassroomToken(user?.id, { mode: "teacher", orgId: orgId || null });
       if (!tok) throw { code: "missing_access_token" };
       const classroomStudents = await listCourseStudents(tok, classroomCourseId);
       const sync = await syncClassroomRosterToCourse(sb, { courseId, orgId, classroomStudents });
@@ -144,7 +144,7 @@ export default function CourseRosterTab({
     setSyncBusy(true);
     setSyncErr("");
     try {
-      const tok = await getValidClassroomToken(user?.id);
+      const tok = await getValidClassroomToken(user?.id, { mode: "teacher", orgId: orgId || null });
       if (!tok) throw { code: "missing_access_token" };
       const classroomTeachers = await listCourseTeachers(tok, classroomCourseId);
       const sync = await syncClassroomTeachersToCourse(sb, {
