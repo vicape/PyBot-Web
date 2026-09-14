@@ -142,10 +142,19 @@ test("P16 vault migration is server-only; browser token path has no RT select", 
   assert.match(tok, /org_id/);
 });
 
-test("P17 OAuth production remains external checklist (no Google Cloud edits in repo)", () => {
-  // Code responsibility: dedicated classroom callback + public client id only.
+test("P17 OAuth: código vs checklist externa (nunca completo solo por repo)", async () => {
   const oauth = readFileSync(join(root, "src/platform/googleOAuth.js"), "utf8");
   assert.match(oauth, /VITE_GOOGLE_CLIENT_ID/);
   assert.doesNotMatch(oauth, /VITE_GOOGLE_CLIENT_SECRET/);
   assert.match(oauth, /auth\/classroom\/callback/);
+  const { classroomP17Status, isClassroomExternalSetupComplete } = await import(
+    "../src/platform/classroomExternalChecklist.js",
+  );
+  assert.equal(isClassroomExternalSetupComplete(), false);
+  const st = classroomP17Status();
+  assert.equal(st.complete, false);
+  assert.ok(st.codeResolved.includes("dedicated_classroom_oauth_callback"));
+  assert.ok(st.externalPending.includes("oauth_verification"));
+  assert.ok(st.externalPending.includes("workspace_admin"));
+  assert.ok(st.externalPending.includes("google_redirect_uri"));
 });
