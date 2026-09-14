@@ -4,6 +4,7 @@ import {
   CLASSROOM_CONNECTION,
   classifyClassroomConnectionError,
   classroomConnectionBadge,
+  shouldShowClassroomReconnect,
 } from "../src/platform/classifyClassroomConnection.js";
 import { readFileSync } from "node:fs";
 
@@ -62,13 +63,36 @@ test("P3: ClassroomPanel no usa linkedAt solo para badge verde", () => {
   assert.match(src, /connectionStatus/);
   assert.match(src, /CLASSROOM_CONNECTION\.CONNECTED/);
   assert.match(src, /classifyClassroomConnectionError/);
+  assert.match(src, /shouldShowClassroomReconnect/);
 });
 
 test("P3: linkedAt histórico no implica CONNECTED en el clasificador", () => {
-  // El clasificador no recibe linkedAt; un error con historial sigue siendo ERROR.
   const r = classifyClassroomConnectionError({ status: 500, message: "boom" });
   assert.equal(r.status, CLASSROOM_CONNECTION.ERROR);
   assert.equal(classroomConnectionBadge(r.status).label, "No se pudo comprobar");
+});
+
+test("P3: ERROR no ofrece Reconectar; RECONNECT y permisos sí", () => {
+  assert.equal(shouldShowClassroomReconnect(CLASSROOM_CONNECTION.ERROR), false);
+  assert.equal(shouldShowClassroomReconnect(CLASSROOM_CONNECTION.CHECKING), false);
+  assert.equal(shouldShowClassroomReconnect(CLASSROOM_CONNECTION.NOT_CONNECTED), false);
+  assert.equal(shouldShowClassroomReconnect(CLASSROOM_CONNECTION.CONNECTED), false);
+  assert.equal(shouldShowClassroomReconnect(CLASSROOM_CONNECTION.RECONNECT_REQUIRED), true);
+  assert.equal(shouldShowClassroomReconnect(CLASSROOM_CONNECTION.INSUFFICIENT_PERMISSIONS), true);
+});
+
+test("P3: PyBotClassHome usa Vinculado/No vinculado, no Conectado por persistencia", () => {
+  const src = readFileSync(
+    new URL("../src/components/pybotclass/layout/PyBotClassHome.jsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(src, /Vinculado/);
+  assert.match(src, /No vinculado/);
+  assert.doesNotMatch(src, /classroomLinked \? "Conectado"/);
+  assert.doesNotMatch(src, /"No conectado"/);
+  assert.doesNotMatch(src, /Google Classroom conectado/);
+  assert.match(src, /Google Classroom vinculado/);
+  assert.match(src, /Google Classroom no vinculado/);
 });
 
 test("P1/P2 intactos", () => {

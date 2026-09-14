@@ -111,7 +111,7 @@ export default function PyBotClassHome({
   };
 
   const classroomStatusLabel =
-    classroomLinked == null ? "…" : classroomLinked ? "Conectado" : "No conectado";
+    classroomLinked == null ? "…" : classroomLinked ? "Vinculado" : "No vinculado";
 
   return (
     <div className="pbc-home">
@@ -129,13 +129,13 @@ export default function PyBotClassHome({
             onClick={onClassroomConnect}
             title={
               classroomLinked
-                ? "Google Classroom conectado. Clic para reconectar."
-                : "Google Classroom no conectado. Clic para conectar."
+                ? "Google Classroom vinculado. Clic para volver a autorizar."
+                : "Google Classroom no vinculado. Clic para vincular."
             }
             aria-label={
               classroomLinked
-                ? "Google Classroom conectado. Reconectar."
-                : "Conectar Google Classroom"
+                ? "Google Classroom vinculado. Volver a autorizar."
+                : "Vincular Google Classroom"
             }
           >
             <span className="pbc-classroom-status__icon" aria-hidden>
@@ -423,7 +423,7 @@ export default function PyBotClassHome({
             <span className="pbc-btn--classroom__icon" aria-hidden>
               <GoogleClassroomIcon />
             </span>
-            {classroomLinked ? "Reconectar Google Classroom" : "Conectar Google Classroom"}
+            {classroomLinked ? "Volver a autorizar Google Classroom" : "Vincular Google Classroom"}
           </button>
           <p className="pbc-panel-card__hint">
             {hasStaffAccess

@@ -101,3 +101,11 @@ export function classroomConnectionBadge(status) {
       return { label: "Sin conectar", tone: "muted" };
   }
 }
+
+/** CTA OAuth «Reconectar» sólo cuando la autorización falla de forma accionable. */
+export function shouldShowClassroomReconnect(status) {
+  return (
+    status === CLASSROOM_CONNECTION.RECONNECT_REQUIRED ||
+    status === CLASSROOM_CONNECTION.INSUFFICIENT_PERMISSIONS
+  );
+}

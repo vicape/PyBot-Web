@@ -8,6 +8,7 @@ import {
   CLASSROOM_CONNECTION,
   classifyClassroomConnectionError,
   classroomConnectionBadge,
+  shouldShowClassroomReconnect,
 } from "../../platform/classifyClassroomConnection.js";
 import { getSupabase } from "../../supabaseClient.js";
 import { slugifyOrganizationName } from "../../slugify.js";
@@ -209,10 +210,7 @@ export default function ClassroomPanel({
   const badge = classroomConnectionBadge(connectionStatus);
   const badgeClass =
     badge.tone === "ok" ? "dash-badge dash-badge--ok" : "dash-badge dash-badge--muted";
-  const showReconnect =
-    connectionStatus === CLASSROOM_CONNECTION.RECONNECT_REQUIRED ||
-    connectionStatus === CLASSROOM_CONNECTION.INSUFFICIENT_PERMISSIONS ||
-    connectionStatus === CLASSROOM_CONNECTION.ERROR;
+  const showReconnect = shouldShowClassroomReconnect(connectionStatus);
 
   return (
     <section className="dash-panel">
