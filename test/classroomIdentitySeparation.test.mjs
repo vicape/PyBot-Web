@@ -13,6 +13,7 @@ import {
   scopesForClassroomMode,
   validateClassroomOAuthFlow,
   baseLoginOAuthOptions,
+  shouldClearClassroomOAuthFlow,
 } from "../src/platform/googleOAuth.js";
 import { isAllowedClassroomRedirectUri } from "../api/exchange-classroom-code.js";
 import { confirmClassroomPersistence } from "../src/platform/confirmClassroomPersistence.js";
@@ -182,6 +183,37 @@ test("P4 security: createClassroomOAuthState sin Math.random; exige Web Crypto",
   assert.equal(typeof state, "string");
   assert.ok(state.length >= 32);
   assert.match(state, /^[0-9a-f]+$/);
+});
+
+test("P4 security: state_mismatch / missing_state NO limpian el flujo", () => {
+  assert.equal(shouldClearClassroomOAuthFlow({ ok: false, code: "state_mismatch" }), false);
+  assert.equal(shouldClearClassroomOAuthFlow({ ok: false, code: "missing_state" }), false);
+  const page = readSrc("src/pages/ClassroomAuthCallbackPage.jsx");
+  assert.match(page, /shouldClearClassroomOAuthFlow\(validated\)/);
+});
+
+test("P4 security: flow_expired / missing_flow SÍ limpian; state válido + error también", () => {
+  assert.equal(shouldClearClassroomOAuthFlow({ ok: false, code: "flow_expired" }), true);
+  assert.equal(shouldClearClassroomOAuthFlow({ ok: false, code: "missing_flow" }), true);
+  assert.equal(shouldClearClassroomOAuthFlow({ ok: true, flow: {} }), false);
+
+  const now = 1_700_000_000_000;
+  const flow = {
+    state: "good-state",
+    initiatingPybotUserId: "user-pybot",
+    mode: "teacher",
+    nextPath: "/dashboard/classes",
+    createdAt: now,
+  };
+  assert.equal(validateClassroomOAuthFlow(flow, "good-state", now).ok, true);
+
+  const page = readSrc("src/pages/ClassroomAuthCallbackPage.jsx");
+  // Tras state válido, error Google limpia el flujo (respuesta legítima terminal)
+  const validateIdx = page.indexOf("validateClassroomOAuthFlow(stored, state)");
+  const errorBlock = page.slice(page.indexOf("if (error)", validateIdx), page.indexOf("const flow = validated.flow"));
+  assert.match(errorBlock, /clearClassroomOAuthFlow\(\)/);
+  // Éxito con code también limpia al final
+  assert.match(page, /clearClassroomOAuthFlow\(\);\s*\r?\n\s*finished\.current = true;\s*\r?\n\s*navigate\(next/s);
 });
 
 test("P4 server exchange: redirect URI + Bearer; secret no en frontend", () => {

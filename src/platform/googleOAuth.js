@@ -189,6 +189,19 @@ export function validateClassroomOAuthFlow(stored, returnedState, now = Date.now
 }
 
 /**
+ * Tras fallo de validación de state: ¿borrar el flujo en sessionStorage?
+ * state_mismatch / missing_state: no (callback no autenticado no destruye el flujo legítimo).
+ * flow_expired / missing_flow: sí.
+ * @param {{ ok?: boolean, code?: string }} validationResult
+ */
+export function shouldClearClassroomOAuthFlow(validationResult) {
+  if (!validationResult || validationResult.ok) return false;
+  return (
+    validationResult.code === "flow_expired" || validationResult.code === "missing_flow"
+  );
+}
+
+/**
  * Conectar Google Classroom bajo demanda (OAuth Google directo; no Supabase OAuth).
  * @param {string} [nextPath]
  * @param {{ mode?: "teacher"|"student" }} [opts]

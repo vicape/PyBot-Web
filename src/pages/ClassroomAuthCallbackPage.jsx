@@ -13,6 +13,7 @@ import {
   getClassroomRedirectUri,
   loadClassroomOAuthFlow,
   validateClassroomOAuthFlow,
+  shouldClearClassroomOAuthFlow,
 } from "../platform/googleOAuth.js";
 
 function safeInternalNext(raw) {
@@ -55,7 +56,9 @@ export default function ClassroomAuthCallbackPage() {
       const validated = validateClassroomOAuthFlow(stored, state);
       if (!validated.ok) {
         finished.current = true;
-        clearClassroomOAuthFlow();
+        if (shouldClearClassroomOAuthFlow(validated)) {
+          clearClassroomOAuthFlow();
+        }
         if (validated.code === "flow_expired") {
           setErrorMsg("La autorización de Google Classroom expiró. Volvé a conectar.");
         } else {
