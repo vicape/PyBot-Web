@@ -1,4 +1,5 @@
 import { getSupabase } from "../supabaseClient.js";
+import { normalizeCourseRole } from "./courseRole.js";
 
 export const PYBOTCLASS_MIGRATION_HINT =
   "Faltan las migraciones PyBotClass en Supabase. Ejecutá en el SQL Editor: 20260831000031_pybotclass_security_fix.sql, 20260831000032_pybotclass_activity_meta.sql y 20260831000033_pybotclass_queries.sql";
@@ -9,6 +10,14 @@ function isMissingRpcError(message) {
 
 function isStaffOrgRole(role) {
   return role === "owner" || role === "teacher";
+}
+
+function withNormalizedCourseRole(row) {
+  if (!row || typeof row !== "object") return row;
+  return {
+    ...row,
+    my_course_role: normalizeCourseRole(row.my_course_role),
+  };
 }
 
 async function fallbackListPybotclassOrganizations(sb) {
@@ -110,7 +119,9 @@ async function fallbackListPybotclassMyCourses(sb, orgId) {
   }
 
   return {
-    rows: [...byCourse.values()].sort((a, b) => a.course_title.localeCompare(b.course_title)),
+    rows: [...byCourse.values()]
+      .map(withNormalizedCourseRole)
+      .sort((a, b) => a.course_title.localeCompare(b.course_title)),
     error: null,
   };
 }
@@ -130,7 +141,12 @@ export async function listPybotclassMyCourses(orgId = null) {
   const { data, error } = await sb.rpc("list_pybotclass_my_courses", {
     p_org_id: orgId || null,
   });
-  if (!error) return { rows: data ?? [], error: null };
+  if (!error) {
+    return {
+      rows: (data ?? []).map(withNormalizedCourseRole),
+      error: null,
+    };
+  }
   if (isMissingRpcError(error.message)) return fallbackListPybotclassMyCourses(sb, orgId);
   return { rows: [], error: error.message };
 }

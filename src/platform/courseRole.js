@@ -1,11 +1,23 @@
 import { isStaffRole } from "../orgRole.js";
 
 /**
+ * Rol efectivo en un curso (no rol institucional).
+ * owner (acceso staff vía org) → teacher; desconocido → null (nunca student).
+ * @param {unknown} role
+ * @returns {"teacher"|"student"|null}
+ */
+export function normalizeCourseRole(role) {
+  if (role === "owner" || role === "teacher") return "teacher";
+  if (role === "student") return "student";
+  return null;
+}
+
+/**
  * Capacidades docentes sobre un curso concreto.
  * @param {{ orgRole?: string | null, courseRole?: string | null }} opts
  */
 export function canTeachCourse({ orgRole = null, courseRole = null } = {}) {
-  return isStaffRole(orgRole) || courseRole === "teacher";
+  return isStaffRole(orgRole) || normalizeCourseRole(courseRole) === "teacher";
 }
 
 /**
@@ -13,7 +25,7 @@ export function canTeachCourse({ orgRole = null, courseRole = null } = {}) {
  * @param {{ courseRole?: string | null }} opts
  */
 export function isCourseStudent({ courseRole = null } = {}) {
-  return courseRole === "student";
+  return normalizeCourseRole(courseRole) === "student";
 }
 
 /**

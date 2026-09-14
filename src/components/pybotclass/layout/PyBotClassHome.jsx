@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { countryNameByCode } from "../../../data/countries.js";
 import { computeAccountRoleBadges, computeQuickSummary } from "../../../platform/accountRoles.js";
+import { normalizeCourseRole } from "../../../platform/courseRole.js";
 import { connectGoogleClassroom } from "../../../platform/googleOAuth.js";
 import { getStoredGoogleRefreshToken } from "../../../platform/profileApi.js";
 import {
@@ -98,8 +99,12 @@ export default function PyBotClassHome({
 
   const filtered = useMemo(() => {
     let rows = courses;
-    if (roleFilter === "teacher") rows = rows.filter((c) => c.my_course_role === "teacher");
-    if (roleFilter === "student") rows = rows.filter((c) => c.my_course_role === "student");
+    if (roleFilter === "teacher") {
+      rows = rows.filter((c) => normalizeCourseRole(c.my_course_role) === "teacher");
+    }
+    if (roleFilter === "student") {
+      rows = rows.filter((c) => normalizeCourseRole(c.my_course_role) === "student");
+    }
     if (orgFilter) rows = rows.filter((c) => c.org_id === orgFilter);
     return rows;
   }, [courses, roleFilter, orgFilter]);
@@ -301,7 +306,10 @@ export default function PyBotClassHome({
           ) : (
             <div className="pbc-course-grid">
               {filtered.map((c) => {
-                const rb = ROLE_BADGE[c.my_course_role] || ROLE_BADGE.student;
+                const role = normalizeCourseRole(c.my_course_role);
+                const rb = role ? ROLE_BADGE[role] : null;
+                const headerTone =
+                  role === "teacher" ? "teacher" : role === "student" ? "student" : "neutral";
                 return (
                   <Link
                     key={c.course_id}
@@ -309,19 +317,21 @@ export default function PyBotClassHome({
                     className="pbc-course-card"
                   >
                     <div
-                      className={`pbc-course-card__header pbc-course-card__header--${c.my_course_role === "teacher" ? "teacher" : "student"}`}
+                      className={`pbc-course-card__header pbc-course-card__header--${headerTone}`}
                       aria-hidden
                     >
                       <span className="pbc-course-card__header-icon">
-                        {c.my_course_role === "teacher" ? "📘" : "📗"}
+                        {role === "teacher" ? "📘" : role === "student" ? "📗" : ""}
                       </span>
                     </div>
                     <div className="pbc-course-card__body">
                       <p className="pbc-course-card__title">{c.course_title}</p>
                       <p className="pbc-course-card__meta">{c.org_name || "Institución"}</p>
                       <div className="pbc-course-card__footer">
-                        <span className={`pbc-badge pbc-badge--${rb.variant}`}>{rb.label}</span>
-                        {c.my_course_role === "teacher" && c.student_count > 0 ? (
+                        {rb ? (
+                          <span className={`pbc-badge pbc-badge--${rb.variant}`}>{rb.label}</span>
+                        ) : null}
+                        {role === "teacher" && c.student_count > 0 ? (
                           <span className="pbc-course-card__stat">{c.student_count} alumnos</span>
                         ) : null}
                         {c.pending_grade_count > 0 ? (

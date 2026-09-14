@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { normalizeCourseRole } from "../../platform/courseRole.js";
 
 export function PbcPage({ children }) {
   return <div className="pbc-page">{children}</div>;
@@ -64,6 +65,7 @@ export function PbcClassGrid({ children }) {
 
 export function PbcClassCard({ course, showOrg }) {
   const pending = course.pending_grade_count ?? 0;
+  const role = normalizeCourseRole(course.my_course_role);
   return (
     <Link to={`/dashboard/classes/${course.course_id}`} className="pbc-class-card">
       <div className="pbc-class-card__top">
@@ -96,9 +98,9 @@ export function PbcClassCard({ course, showOrg }) {
         ) : (
           <span className="pbc-pill pbc-pill--muted">PyBotClass</span>
         )}
-        {course.my_course_role === "student" ? (
+        {role === "student" ? (
           <span className="pbc-pill pbc-pill--muted">Alumno</span>
-        ) : course.my_course_role === "teacher" ? (
+        ) : role === "teacher" ? (
           <span className="pbc-pill pbc-pill--role">Docente</span>
         ) : null}
       </div>

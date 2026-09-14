@@ -1,10 +1,10 @@
 import { getSupabase } from "../supabaseClient.js";
 import { getContent, getLesson, listContentUnits, listUnitLessons } from "./contentApi.js";
+import { normalizeCourseRole } from "./courseRole.js";
 import { listPybotclassMyCourses } from "./pybotClassApi.js";
 
 function canAssignAsTeacher(row) {
-  const role = row?.my_course_role;
-  return role === "teacher" || role === "owner";
+  return normalizeCourseRole(row?.my_course_role) === "teacher";
 }
 
 export async function listTeacherCoursesForAssign() {

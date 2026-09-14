@@ -1,4 +1,4 @@
-import { hasStaffMembership } from "../orgRole.js";
+import { normalizeCourseRole } from "./courseRole.js";
 
 /**
  * Badges de rol derivados de datos reales (no preferred_role).
@@ -15,13 +15,13 @@ export function computeAccountRoleBadges({ orgs = [], courses = [], isSuperAdmin
     badges.push({ id: "gestion", label: "Gestión", variant: "purple" });
   }
 
-  const teachesCourse = courses.some((c) => c.my_course_role === "teacher");
+  const teachesCourse = courses.some((c) => normalizeCourseRole(c.my_course_role) === "teacher");
   const hasStaffOrg = orgs.some((o) => o.role === "owner" || o.role === "teacher");
   if (teachesCourse || hasStaffOrg) {
     badges.push({ id: "docente", label: "Docente", variant: "blue" });
   }
 
-  const studiesCourse = courses.some((c) => c.my_course_role === "student");
+  const studiesCourse = courses.some((c) => normalizeCourseRole(c.my_course_role) === "student");
   if (studiesCourse) {
     badges.push({ id: "alumno", label: "Alumno", variant: "teal" });
   }
@@ -30,8 +30,8 @@ export function computeAccountRoleBadges({ orgs = [], courses = [], isSuperAdmin
 }
 
 export function computeQuickSummary({ courses = [], isSuperAdmin = false } = {}) {
-  const teacherCourses = courses.filter((c) => c.my_course_role === "teacher");
-  const studentCourses = courses.filter((c) => c.my_course_role === "student");
+  const teacherCourses = courses.filter((c) => normalizeCourseRole(c.my_course_role) === "teacher");
+  const studentCourses = courses.filter((c) => normalizeCourseRole(c.my_course_role) === "student");
   const pending = courses.reduce((n, c) => n + (c.pending_grade_count ?? 0), 0);
   const totalStudents = teacherCourses.reduce((n, c) => n + (c.student_count ?? 0), 0);
   const totalActivities = teacherCourses.reduce((n, c) => n + (c.activity_count ?? 0), 0);
