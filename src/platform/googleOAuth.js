@@ -73,14 +73,13 @@ export function teacherLoginOAuthOptions(redirectTo) {
   return classroomOAuthOptions(redirectTo, "teacher");
 }
 
-/** Valor aleatorio criptográficamente seguro para OAuth `state`. */
+/** Valor aleatorio criptográficamente seguro para OAuth `state`. Sin Web Crypto: error. */
 export function createClassroomOAuthState() {
-  const bytes = new Uint8Array(32);
-  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
-    crypto.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  if (typeof crypto === "undefined" || typeof crypto.getRandomValues !== "function") {
+    throw new Error("web_crypto_unavailable");
   }
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -221,7 +220,13 @@ export async function connectGoogleClassroom(nextPath, opts = {}) {
     return { ok: false, error: "missing_client_id" };
   }
 
-  const state = createClassroomOAuthState();
+  let state;
+  try {
+    state = createClassroomOAuthState();
+  } catch {
+    return { ok: false, error: "web_crypto_unavailable" };
+  }
+
   const redirectUri = getClassroomRedirectUri();
   const scopes = scopesForClassroomMode(mode);
 

@@ -118,6 +118,72 @@ test("P4 callback page exige sesión PyBot e iniciador; NO compara email", () =>
   assert.doesNotMatch(page, /Error al iniciar sesión/);
 });
 
+test("P4 security: state se valida ANTES de procesar error Google", () => {
+  const page = readSrc("src/pages/ClassroomAuthCallbackPage.jsx");
+  const validateIdx = page.indexOf("validateClassroomOAuthFlow(stored, state)");
+  const errorIdx = page.indexOf("if (error)", validateIdx);
+  assert.ok(validateIdx >= 0, "debe validar state");
+  assert.ok(errorIdx > validateIdx, "error Google solo tras state válido");
+  // No debe haber un if (error) previo a la validación
+  const earlyError = page.indexOf("if (error)");
+  assert.equal(earlyError, errorIdx);
+});
+
+test("P4 security: error Google con state correcto es legítimo tras validar", () => {
+  const now = 1_700_000_000_000;
+  const flow = {
+    state: "good-state",
+    initiatingPybotUserId: "user-pybot",
+    mode: "teacher",
+    nextPath: "/dashboard/classes",
+    createdAt: now,
+  };
+  const gate = validateClassroomOAuthFlow(flow, "good-state", now);
+  assert.equal(gate.ok, true);
+  // Con gate ok, el callback puede mostrar access_denied (orden en página)
+  const page = readSrc("src/pages/ClassroomAuthCallbackPage.jsx");
+  assert.match(page, /errorDescription/);
+});
+
+test("P4 security: error Google + state incorrecto/ausente/expirado se rechaza por state", () => {
+  const now = 1_700_000_000_000;
+  const flow = {
+    state: "good-state",
+    initiatingPybotUserId: "user-pybot",
+    mode: "teacher",
+    nextPath: "/dashboard/classes",
+    createdAt: now,
+  };
+  // Independiente de error=access_denied en la URL: el gate de state falla primero
+  assert.equal(validateClassroomOAuthFlow(flow, "wrong-state", now).code, "state_mismatch");
+  assert.equal(validateClassroomOAuthFlow(flow, null, now).code, "missing_state");
+  assert.equal(validateClassroomOAuthFlow(flow, "", now).code, "missing_state");
+  assert.equal(
+    validateClassroomOAuthFlow(flow, "good-state", now + CLASSROOM_OAUTH_TTL_MS + 1).code,
+    "flow_expired",
+  );
+});
+
+test("P4 security: createClassroomOAuthState sin Math.random; exige Web Crypto", () => {
+  const src = readSrc("src/platform/googleOAuth.js");
+  const start = src.indexOf("export function createClassroomOAuthState");
+  const end = src.indexOf("export function getClassroomRedirectUri", start);
+  const body = src.slice(start, end);
+  assert.doesNotMatch(body, /Math\.random/);
+  assert.match(body, /getRandomValues/);
+  assert.match(body, /web_crypto_unavailable/);
+
+  const connectStart = src.indexOf("export async function connectGoogleClassroom");
+  const connectBody = src.slice(connectStart, src.indexOf("export async function exchangeClassroomAuthorizationCode", connectStart));
+  assert.match(connectBody, /web_crypto_unavailable/);
+  assert.match(connectBody, /try \{\s*state = createClassroomOAuthState/s);
+
+  const state = createClassroomOAuthState();
+  assert.equal(typeof state, "string");
+  assert.ok(state.length >= 32);
+  assert.match(state, /^[0-9a-f]+$/);
+});
+
 test("P4 server exchange: redirect URI + Bearer; secret no en frontend", () => {
   const api = readSrc("api/exchange-classroom-code.js");
   assert.match(api, /req\.method !== "POST"/);

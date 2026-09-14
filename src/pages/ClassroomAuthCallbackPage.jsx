@@ -51,17 +51,7 @@ export default function ClassroomAuthCallbackPage() {
       const defaultReturn = storedNext || "/dashboard/classes?panel=classroom";
       setReturnHref(defaultReturn);
 
-      if (error) {
-        finished.current = true;
-        clearClassroomOAuthFlow();
-        setErrorMsg(
-          errorDescription
-            ? decodeURIComponent(String(errorDescription).replace(/\+/g, " "))
-            : "No se pudo conectar Google Classroom",
-        );
-        return;
-      }
-
+      // state/TTL antes de confiar en error o code de Google
       const validated = validateClassroomOAuthFlow(stored, state);
       if (!validated.ok) {
         finished.current = true;
@@ -71,6 +61,17 @@ export default function ClassroomAuthCallbackPage() {
         } else {
           setErrorMsg("No se pudo conectar Google Classroom");
         }
+        return;
+      }
+
+      if (error) {
+        finished.current = true;
+        clearClassroomOAuthFlow();
+        setErrorMsg(
+          errorDescription
+            ? decodeURIComponent(String(errorDescription).replace(/\+/g, " "))
+            : "No se pudo conectar Google Classroom",
+        );
         return;
       }
 
