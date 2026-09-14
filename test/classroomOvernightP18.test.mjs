@@ -82,10 +82,18 @@ test("P18 overnight consolidation smoke (post-corrections)", () => {
   assert.match(mig46, /auto_delete_disabled/);
   assert.doesNotMatch(mig46, /with doomed as/);
 
+  const mig48 = readFileSync(
+    join(root, "supabase/migrations/20260914000048_classroom_grade_return_status.sql"),
+    "utf8",
+  );
+  assert.match(mig48, /classroom_grade_return_status/);
+  assert.match(mig48, /error_retryable/);
+
   const tok = readFileSync(join(root, "src/platform/classroomToken.js"), "utf8");
   assert.doesNotMatch(tok, /getStoredGoogleRefreshToken/);
   assert.match(tok, /org_id/);
 
   const disc = readFileSync(join(root, "src/platform/disconnectClassroom.js"), "utf8");
   assert.match(disc, /\/api\/disconnect-classroom/);
+  assert.match(disc, /org_scoped_disconnect_unavailable/);
 });

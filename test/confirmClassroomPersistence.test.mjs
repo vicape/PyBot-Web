@@ -2,31 +2,25 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { confirmClassroomPersistence } from "../src/platform/confirmClassroomPersistence.js";
 
-function apiMock(overrides = {}) {
-  return {
-    saveGoogleTokens: async () => ({ ok: true, skipped: false }),
-    saveStudentGoogleTokens: async () => ({ ok: true, skipped: false }),
-    getStoredGoogleRefreshToken: async () => ({ google_refresh_token: "RT_TEACHER" }),
-    getStoredStudentGoogleRefreshToken: async () => "RT_STUDENT",
-    markClassroomLinked: async () => ({ ok: true, skipped: false }),
-    markStudentClassroomLinked: async () => ({ ok: true, skipped: false }),
-    ...overrides,
-  };
-}
-
-test("P2 serverPersisted confirms via org link metadata (no RT)", async () => {
+test("P2/P16 serverPersisted confirma vía organization_classroom_links (sin RT)", async () => {
   const r = await confirmClassroomPersistence(
-    { userId: "u1", mode: "teacher", orgId: "org-1", serverPersisted: true },
+    {
+      userId: "u1",
+      mode: "teacher",
+      orgId: "org-1",
+      serverPersisted: true,
+      source: "vault",
+    },
     {
       fetchOrganizationClassroomLink: async () => ({
         ok: true,
         linkedAt: "2026-01-01T00:00:00Z",
       }),
-      saveGoogleTokens: async () => {
-        throw new Error("should_not_write_profiles");
+      getStoredClassroomLinkMeta: async () => {
+        throw new Error("should_not_need_legacy");
       },
-      getStoredGoogleRefreshToken: async () => {
-        throw new Error("should_not_read_rt");
+      getStoredStudentClassroomLink: async () => {
+        throw new Error("should_not_need_student");
       },
     },
   );
@@ -34,177 +28,89 @@ test("P2 serverPersisted confirms via org link metadata (no RT)", async () => {
   assert.equal(r.source, "vault");
 });
 
-test("P2 teacher: éxito solo tras save + readback + mark", async () => {
-  let marked = false;
+test("P2/P16 legacy profiles_legacy confirma con metadata linked_at", async () => {
   const r = await confirmClassroomPersistence(
-    { userId: "u1", mode: "teacher", refreshToken: "RT_TEACHER", expiresIn: 3600 },
-    apiMock({
-      markClassroomLinked: async () => {
-        marked = true;
-        return { ok: true, skipped: false };
-      },
-    }),
+    {
+      userId: "u1",
+      mode: "teacher",
+      orgId: "org-1",
+      serverPersisted: true,
+      source: "profiles_legacy",
+    },
+    {
+      fetchOrganizationClassroomLink: async () => ({ ok: false, linkedAt: null }),
+      getStoredClassroomLinkMeta: async () => ({
+        classroom_linked_at: "2026-01-01T00:00:00Z",
+      }),
+      getStoredStudentClassroomLink: async () => null,
+    },
   );
   assert.equal(r.ok, true);
-  assert.equal(marked, true);
+  assert.equal(r.source, "profiles_legacy");
 });
 
-test("P2 teacher: save ok:false no marca vinculado", async () => {
-  let marked = false;
+test("P2 student: metadata student linked_at", async () => {
   const r = await confirmClassroomPersistence(
-    { userId: "u1", mode: "teacher", refreshToken: "RT", expiresIn: 3600 },
-    apiMock({
-      saveGoogleTokens: async () => ({ ok: false, error: "db" }),
-      markClassroomLinked: async () => {
-        marked = true;
-        return { ok: true };
-      },
-    }),
+    {
+      userId: "u2",
+      mode: "student",
+      orgId: "org-1",
+      serverPersisted: true,
+      source: "profiles_legacy",
+    },
+    {
+      fetchOrganizationClassroomLink: async () => ({ ok: false, linkedAt: null }),
+      getStoredClassroomLinkMeta: async () => null,
+      getStoredStudentClassroomLink: async () => ({
+        classroom_student_linked_at: "2026-01-01T00:00:00Z",
+      }),
+    },
+  );
+  assert.equal(r.ok, true);
+  assert.equal(r.source, "profiles_legacy");
+});
+
+test("P2 sin serverPersisted falla", async () => {
+  const r = await confirmClassroomPersistence(
+    { userId: "u1", mode: "teacher", orgId: "org-1", serverPersisted: false },
+    {
+      fetchOrganizationClassroomLink: async () => ({
+        ok: true,
+        linkedAt: "2026-01-01T00:00:00Z",
+      }),
+    },
   );
   assert.equal(r.ok, false);
-  assert.equal(r.code, "persist_failed");
-  assert.equal(marked, false);
+  assert.equal(r.code, "server_persist_required");
 });
 
-test("P2 teacher: skipped:true no es persistencia válida", async () => {
-  let marked = false;
+test("P2 sin metadata falla persist_unconfirmed", async () => {
   const r = await confirmClassroomPersistence(
-    { userId: "u1", mode: "teacher", refreshToken: "RT", expiresIn: 3600 },
-    apiMock({
-      saveGoogleTokens: async () => ({ ok: true, skipped: true }),
-      markClassroomLinked: async () => {
-        marked = true;
-        return { ok: true };
-      },
-    }),
-  );
-  assert.equal(r.ok, false);
-  assert.equal(r.code, "persist_skipped");
-  assert.equal(marked, false);
-});
-
-test("P2 teacher: sin refresh token falla", async () => {
-  let saved = false;
-  const r = await confirmClassroomPersistence(
-    { userId: "u1", mode: "teacher", refreshToken: "", expiresIn: 3600 },
-    apiMock({
-      saveGoogleTokens: async () => {
-        saved = true;
-        return { ok: true };
-      },
-    }),
-  );
-  assert.equal(r.ok, false);
-  assert.equal(r.code, "missing_refresh_token");
-  assert.equal(saved, false);
-});
-
-test("P2 teacher: readback distinto no marca vinculado", async () => {
-  let marked = false;
-  const r = await confirmClassroomPersistence(
-    { userId: "u1", mode: "teacher", refreshToken: "RT_A", expiresIn: 3600 },
-    apiMock({
-      getStoredGoogleRefreshToken: async () => ({ google_refresh_token: "RT_B" }),
-      markClassroomLinked: async () => {
-        marked = true;
-        return { ok: true };
-      },
-    }),
+    {
+      userId: "u1",
+      mode: "teacher",
+      orgId: "org-1",
+      serverPersisted: true,
+      source: "vault",
+    },
+    {
+      fetchOrganizationClassroomLink: async () => ({ ok: false, linkedAt: null }),
+      getStoredClassroomLinkMeta: async () => ({ classroom_linked_at: null }),
+      getStoredStudentClassroomLink: async () => null,
+    },
   );
   assert.equal(r.ok, false);
   assert.equal(r.code, "persist_unconfirmed");
-  assert.equal(marked, false);
 });
 
-test("P2 teacher: mark skipped:true falla", async () => {
-  const r = await confirmClassroomPersistence(
-    { userId: "u1", mode: "teacher", refreshToken: "RT_TEACHER", expiresIn: 3600 },
-    apiMock({
-      markClassroomLinked: async () => ({ ok: true, skipped: true }),
-    }),
+test("P2 no usa saveGoogleTokens ni lee RT", async () => {
+  const src = await import("node:fs").then((fs) =>
+    fs.readFileSync(new URL("../src/platform/confirmClassroomPersistence.js", import.meta.url), "utf8"),
   );
-  assert.equal(r.ok, false);
-  assert.equal(r.code, "link_skipped");
-});
-
-test("P2 student: save ok:false no marca vinculado", async () => {
-  let marked = false;
-  const r = await confirmClassroomPersistence(
-    { userId: "u2", mode: "student", refreshToken: "RT_S", expiresIn: 3600 },
-    apiMock({
-      saveStudentGoogleTokens: async () => ({ ok: false, error: "db" }),
-      markStudentClassroomLinked: async () => {
-        marked = true;
-        return { ok: true };
-      },
-    }),
-  );
-  assert.equal(r.ok, false);
-  assert.equal(r.code, "persist_failed");
-  assert.equal(marked, false);
-});
-
-test("P2 student: skipped:true no es válido", async () => {
-  let marked = false;
-  const r = await confirmClassroomPersistence(
-    { userId: "u2", mode: "student", refreshToken: "RT_S", expiresIn: 3600 },
-    apiMock({
-      saveStudentGoogleTokens: async () => ({ ok: true, skipped: true }),
-      markStudentClassroomLinked: async () => {
-        marked = true;
-        return { ok: true };
-      },
-    }),
-  );
-  assert.equal(r.ok, false);
-  assert.equal(r.code, "persist_skipped");
-  assert.equal(marked, false);
-});
-
-test("P2 student: éxito tras save + readback + mark", async () => {
-  const r = await confirmClassroomPersistence(
-    { userId: "u2", mode: "student", refreshToken: "RT_STUDENT", expiresIn: 3600 },
-    apiMock(),
-  );
-  assert.equal(r.ok, true);
-});
-
-test("P2: teacher y student usan APIs separadas", async () => {
-  let teacherSave = false;
-  let studentSave = false;
-  await confirmClassroomPersistence(
-    { userId: "u1", mode: "teacher", refreshToken: "RT_TEACHER", expiresIn: 1 },
-    apiMock({
-      saveGoogleTokens: async () => {
-        teacherSave = true;
-        return { ok: true };
-      },
-      saveStudentGoogleTokens: async () => {
-        studentSave = true;
-        return { ok: true };
-      },
-    }),
-  );
-  assert.equal(teacherSave, true);
-  assert.equal(studentSave, false);
-
-  teacherSave = false;
-  studentSave = false;
-  await confirmClassroomPersistence(
-    { userId: "u2", mode: "student", refreshToken: "RT_STUDENT", expiresIn: 1 },
-    apiMock({
-      saveGoogleTokens: async () => {
-        teacherSave = true;
-        return { ok: true };
-      },
-      saveStudentGoogleTokens: async () => {
-        studentSave = true;
-        return { ok: true };
-      },
-    }),
-  );
-  assert.equal(teacherSave, false);
-  assert.equal(studentSave, true);
+  assert.doesNotMatch(src, /saveGoogleTokens/);
+  assert.doesNotMatch(src, /getStoredGoogleRefreshToken/);
+  assert.doesNotMatch(src, /refreshToken/);
+  assert.doesNotMatch(src, /google_refresh_token/);
 });
 
 test("P1 intacto: classroomToken no usa client secret ni oauth directo", async () => {

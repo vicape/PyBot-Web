@@ -113,7 +113,8 @@ test("P15 disconnect clears tokens only (source contract)", () => {
   const api = readFileSync(join(root, "api/disconnect-classroom.js"), "utf8");
   assert.match(api, /clearClassroomCredentials/);
   assert.match(api, /org_id/);
-  assert.doesNotMatch(api, /signOut/);
+  assert.match(api, /org_scoped_disconnect_unavailable/);
+  assert.doesNotMatch(api, /google_refresh_token/);
   const panel = readFileSync(join(root, "src/components/dashboard/ClassroomPanel.jsx"), "utf8");
   assert.match(panel, /disconnectClassroomIntegration/);
   assert.match(panel, /Desconectar Classroom/);

@@ -103,5 +103,6 @@ test("P1/P2 intactos", () => {
     new URL("../src/platform/confirmClassroomPersistence.js", import.meta.url),
     "utf8",
   );
-  assert.match(persist, /persist_skipped|missing_refresh_token/);
+  assert.match(persist, /persist_unconfirmed|server_persist_required/);
+  assert.doesNotMatch(persist, /saveGoogleTokens/);
 });

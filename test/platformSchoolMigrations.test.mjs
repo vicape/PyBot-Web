@@ -59,5 +59,7 @@ test("CourseActivitiesPage permite roster vacío", () => {
     src,
     /No se encontraron alumnos en este curso de Classroom/,
   );
-  assert.match(src, /Classroom actualmente devuelve 0 alumnos/);
+  // Empty Classroom sync is OK: show counts / pending path, not a hard block.
+  assert.match(src, /alumno\(s\) en Classroom/);
+  assert.match(src, /Ninguno tenía cuenta PyBot todavía/);
 });

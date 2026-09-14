@@ -273,14 +273,20 @@ test("P4 P3 estado intacto", () => {
 
 test("P4 confirmClassroomPersistence teacher sigue ok (smoke P2)", async () => {
   const r = await confirmClassroomPersistence(
-    { userId: "u1", mode: "teacher", refreshToken: "RT", expiresIn: 3600 },
     {
-      saveGoogleTokens: async () => ({ ok: true, skipped: false }),
-      saveStudentGoogleTokens: async () => ({ ok: true }),
-      getStoredGoogleRefreshToken: async () => ({ google_refresh_token: "RT" }),
-      getStoredStudentGoogleRefreshToken: async () => "RT",
-      markClassroomLinked: async () => ({ ok: true, skipped: false }),
-      markStudentClassroomLinked: async () => ({ ok: true }),
+      userId: "u1",
+      mode: "teacher",
+      orgId: "11111111-1111-4111-8111-111111111111",
+      serverPersisted: true,
+      source: "vault",
+    },
+    {
+      fetchOrganizationClassroomLink: async () => ({
+        ok: true,
+        linkedAt: "2026-01-01T00:00:00Z",
+      }),
+      getStoredClassroomLinkMeta: async () => null,
+      getStoredStudentClassroomLink: async () => null,
     },
   );
   assert.equal(r.ok, true);
