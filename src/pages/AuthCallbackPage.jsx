@@ -6,13 +6,8 @@ import {
   clearClassroomTokenCache,
   primeClassroomAccessToken,
 } from "../platform/classroomToken.js";
-import {
-  updatePreferredRole,
-  saveGoogleTokens,
-  saveStudentGoogleTokens,
-  markClassroomLinked,
-  markStudentClassroomLinked,
-} from "../platform/profileApi.js";
+import { updatePreferredRole } from "../platform/profileApi.js";
+import { confirmClassroomPersistence } from "../platform/confirmClassroomPersistence.js";
 import { consumeSignupRole } from "../platform/signupRole.js";
 import {
   wasClassroomOAuthIntent,
@@ -78,6 +73,7 @@ export default function AuthCallbackPage() {
       const isClassroomIntent = wasClassroomOAuthIntent();
       const expected = peekClassroomOAuthExpected();
       const classroomMode = isClassroomIntent ? consumeClassroomOAuthMode() : "teacher";
+      const mode = classroomMode === "student" ? "student" : "teacher";
 
       try {
         await ensureProfileForUser(session.user, signupRole);
@@ -93,7 +89,7 @@ export default function AuthCallbackPage() {
             !idMismatch && expectedEmail && sessionEmail && expectedEmail !== sessionEmail;
 
           if (idMismatch || emailMismatch) {
-            clearClassroomTokenCache();
+            clearClassroomTokenCache(session.user.id, mode);
             clearPendingClassroomTurnIn();
             clearClassroomOAuthExpected();
             setErrorMsg(
@@ -103,46 +99,55 @@ export default function AuthCallbackPage() {
           }
 
           const expiresIn = 3600;
+          const refreshToken = session.provider_refresh_token
+            ? String(session.provider_refresh_token).trim()
+            : "";
+
           if (session.provider_token) {
             primeClassroomAccessToken(
               session.user.id,
-              classroomMode,
+              mode,
               session.provider_token,
               expiresIn,
             );
           }
 
-          if (classroomMode === "student") {
-            if (session.provider_refresh_token) {
-              await saveStudentGoogleTokens(session.user.id, {
-                refreshToken: session.provider_refresh_token,
-                expiresIn,
-              });
-              await markStudentClassroomLinked(session.user.id);
-            }
-          } else if (session.provider_refresh_token || session.provider_token) {
-            clearClassroomTokenCache(session.user.id, "teacher");
-            if (session.provider_token) {
-              primeClassroomAccessToken(
-                session.user.id,
-                "teacher",
-                session.provider_token,
-                expiresIn,
-              );
-            }
-            await saveGoogleTokens(session.user.id, {
-              refreshToken: session.provider_refresh_token,
-              expiresIn,
-            });
-            if (session.provider_refresh_token) {
-              await markClassroomLinked(session.user.id);
-            }
+          const persist = await confirmClassroomPersistence({
+            userId: session.user.id,
+            mode,
+            refreshToken,
+            expiresIn,
+          });
+
+          if (!persist.ok) {
+            clearClassroomTokenCache(session.user.id, mode);
+            clearPendingClassroomTurnIn();
+            clearClassroomOAuthExpected();
+            setErrorMsg(
+              persist.message ||
+                "No se pudo confirmar la conexión permanente con Google Classroom.",
+            );
+            return;
           }
 
           clearClassroomOAuthExpected();
         }
       } catch {
-        // No bloquear la navegación si falla la sincronización del perfil
+        if (isClassroomIntent) {
+          // Fallo crítico de Classroom: no ocultar ni navegar como éxito.
+          try {
+            clearClassroomTokenCache(session.user.id, mode);
+          } catch {
+            /* ignore */
+          }
+          clearPendingClassroomTurnIn();
+          clearClassroomOAuthExpected();
+          setErrorMsg(
+            "No se pudo guardar la autorización permanente de Google Classroom.",
+          );
+          return;
+        }
+        // Login normal: no bloquear la navegación si falla sincronización secundaria.
       }
 
       const explicit = safeInternalNext(storedNext);
