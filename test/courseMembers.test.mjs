@@ -161,13 +161,20 @@ test("alumno Classroom existente se actualiza (status actualizado)", async () =>
   assert.equal(sync.results[0].userId, "u-existing");
 });
 
-test("alumno retirado de Classroom se elimina solo de course_members", async () => {
+test("P7 sync conserva alumnos existentes aunque no vengan en Classroom", async () => {
   const sb = makeMockSupabase({
-    list_course_members: () => ({ data: [], error: null }),
+    list_course_members: () => ({
+      data: [
+        { user_id: "u1", classroom_user_id: "gc-keep", role: "student" },
+        { user_id: "u2", classroom_user_id: "gc-keep-2", role: "student" },
+      ],
+      error: null,
+    }),
     sync_classroom_course_roster: (params) => {
       assert.deepEqual(params.p_enrolled, []);
-      assert.deepEqual(params.p_active_classroom_user_ids, []);
-      return { data: { ok: true, synced: 0, removed: 2 }, error: null };
+      assert.ok(params.p_active_classroom_user_ids.includes("gc-keep"));
+      assert.ok(params.p_active_classroom_user_ids.includes("gc-keep-2"));
+      return { data: { ok: true, synced: 0, removed: 0 }, error: null };
     },
   });
 
@@ -178,7 +185,9 @@ test("alumno retirado de Classroom se elimina solo de course_members", async () 
   });
 
   assert.equal(sync.ok, true);
-  assert.equal(sync.removed, 2);
+  assert.equal(sync.removed, 0);
+  assert.equal(sync.summary.matched, 0);
+  assert.equal(typeof sync.summary.pending, "number");
 });
 
 test("sync no elimina organization_members (RPC solo gestiona course_members)", async () => {

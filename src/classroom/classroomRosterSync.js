@@ -46,16 +46,50 @@ export function resolveClassroomStudent(student, byClassroomUserId, profileByEma
 }
 
 /**
+ * IDs activos conservadores: Classroom actual ∪ miembros ya en PyBot.
+ * Evita que la RPC borre alumnos existentes al sincronizar (P7).
+ * @param {string[]} fromClassroom
+ * @param {string[]} existingMemberClassroomIds
+ * @returns {string[]}
+ */
+export function buildConservativeActiveClassroomUserIds(
+  fromClassroom = [],
+  existingMemberClassroomIds = [],
+) {
+  const set = new Set();
+  for (const id of fromClassroom) {
+    if (id) set.add(String(id));
+  }
+  for (const id of existingMemberClassroomIds) {
+    if (id) set.add(String(id));
+  }
+  return [...set];
+}
+
+/**
  * @param {ReturnType<typeof resolveClassroomStudent>[]} results
  */
 export function summarizeClassroomSyncResults(results) {
   const countBy = (status) => results.filter((r) => r.status === status).length;
+  const imported = countBy("importado");
+  const updated = countBy("actualizado");
+  const noRegistrado = countBy("no_registrado");
+  const sinEmail = countBy("sin_email");
+  const conflicts = countBy("conflict");
+  const errors = countBy("error");
   return {
-    imported: countBy("importado"),
-    updated: countBy("actualizado"),
-    noRegistrado: countBy("no_registrado"),
-    sinEmail: countBy("sin_email"),
+    imported,
+    updated,
+    noRegistrado,
+    sinEmail,
     total: results.length,
+    // Taxonomía P7
+    matched: updated,
+    created: imported,
+    pending: noRegistrado,
+    skipped: sinEmail,
+    conflict: conflicts,
+    error: errors,
   };
 }
 
@@ -124,7 +158,10 @@ export async function syncClassroomRosterToCourse(supabase, { courseId, orgId, c
       display_name: r.name,
     }));
 
-  const activeClassroomUserIds = classroomStudents.map((s) => s.userId).filter(Boolean);
+  const activeClassroomUserIds = buildConservativeActiveClassroomUserIds(
+    classroomStudents.map((s) => s.userId).filter(Boolean),
+    [...byClassroomUserId.keys()],
+  );
 
   let syncData = null;
   let syncErr = null;
@@ -261,7 +298,10 @@ export async function syncClassroomTeachersToCourse(
       display_name: r.name,
     }));
 
-  const activeClassroomUserIds = (classroomTeachers ?? []).map((t) => t.userId).filter(Boolean);
+  const activeClassroomUserIds = buildConservativeActiveClassroomUserIds(
+    (classroomTeachers ?? []).map((t) => t.userId).filter(Boolean),
+    [...byClassroomUserId.keys()],
+  );
 
   const { data: syncData, error: syncErr } = await supabase.rpc("sync_classroom_course_teachers", {
     p_course_id: courseId,
