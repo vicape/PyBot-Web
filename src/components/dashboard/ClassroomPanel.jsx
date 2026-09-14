@@ -4,34 +4,14 @@ import { listTeacherClassroomCourses } from "../../classroom/classroomApi.js";
 import { connectGoogleClassroom } from "../../platform/googleOAuth.js";
 import { fetchProfile, markClassroomLinked } from "../../platform/profileApi.js";
 import { getValidClassroomToken } from "../../platform/classroomToken.js";
+import {
+  CLASSROOM_CONNECTION,
+  classifyClassroomConnectionError,
+  classroomConnectionBadge,
+} from "../../platform/classifyClassroomConnection.js";
 import { getSupabase } from "../../supabaseClient.js";
 import { slugifyOrganizationName } from "../../slugify.js";
 import { track } from "../../telemetry/index.js";
-
-function classroomErrorEs(err) {
-  const code = err?.code;
-  const message = String(err?.message || "");
-  // missing_access_token se muestra como UI vacía (no error), no como mensaje de error
-  if (code === "missing_access_token") return null;
-  if (code === "invalid_grant" || /invalid_grant/i.test(message)) {
-    return "La conexión con Google Classroom venció. Reconectá tu cuenta.";
-  }
-  if (err?.status === 401 || code === 401) {
-    return "La sesión de Google Classroom venció. Reconectá tu cuenta.";
-  }
-  if (
-    /insufficientPermissions|insufficient.?permission|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(
-      message,
-    ) ||
-    err?.reason === "insufficientPermissions"
-  ) {
-    return "Esta conexión no tiene los permisos necesarios de Google Classroom. Reconectá para autorizarlos.";
-  }
-  if (err?.status === 403 || code === 403) {
-    return "No pudimos acceder a Classroom con esta cuenta. Verificá que sea la cuenta docente correcta y que tenga los permisos de Classroom requeridos.";
-  }
-  return err?.message || "No se pudo comunicar con Classroom.";
-}
 
 export default function ClassroomPanel({
   user,
@@ -42,7 +22,9 @@ export default function ClassroomPanel({
   const navigate = useNavigate();
   const [selectedOrgId, setSelectedOrgId] = useState(staffOrgId || staffOrgs[0]?.id || "");
   const effectiveOrgId = selectedOrgId || staffOrgId || "";
+  /** Metadata histórica (última conexión exitosa conocida). No define salud actual. */
   const [linkedAt, setLinkedAt] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState(CLASSROOM_CONNECTION.CHECKING);
   const [courses, setCourses] = useState([]);
   const [importedIds, setImportedIds] = useState(new Set());
   const [importing, setImporting] = useState(null); // classroom_course_id en curso
@@ -62,15 +44,22 @@ export default function ClassroomPanel({
     const sb = getSupabase();
     if (!sb) return;
     setTesting(true);
+    setConnectionStatus(CLASSROOM_CONNECTION.CHECKING);
     setErr("");
     setOkMsg("");
     try {
       const tok = await getValidClassroomToken(user?.id);
+      if (!tok) {
+        setCourses([]);
+        setConnectionStatus(CLASSROOM_CONNECTION.NOT_CONNECTED);
+        return;
+      }
       const list = await listTeacherClassroomCourses(tok);
       setCourses(list);
+      setConnectionStatus(CLASSROOM_CONNECTION.CONNECTED);
       if (user?.id) {
         const mark = await markClassroomLinked(user.id);
-        if (mark.ok) setLinkedAt(new Date().toISOString());
+        if (mark.ok && !mark.skipped) setLinkedAt(new Date().toISOString());
       }
       setOkMsg(`Conectado: ${list.length} curso(s) activo(s) en Classroom.`);
 
@@ -90,8 +79,10 @@ export default function ClassroomPanel({
     } catch (ex) {
       console.error("ClassroomPanel.refreshCourses:", ex);
       setCourses([]);
-      const msg = classroomErrorEs(ex);
-      if (msg) setErr(msg);
+      setOkMsg("");
+      const classified = classifyClassroomConnectionError(ex);
+      setConnectionStatus(classified.status);
+      if (classified.message) setErr(classified.message);
       try {
         track("error", {
           error_code: ex?.code || "classroom_error",
@@ -101,7 +92,6 @@ export default function ClassroomPanel({
       } catch {
         //
       }
-      // si msg es null (missing_access_token) no mostramos error, solo el botón conectar
     } finally {
       setTesting(false);
     }
@@ -125,10 +115,11 @@ export default function ClassroomPanel({
     if (!user?.id) return;
     (async () => {
       setLoading(true);
+      setConnectionStatus(CLASSROOM_CONNECTION.CHECKING);
       const { profile } = await fetchProfile(user.id);
+      // Sólo historial; el estado operativo lo define refreshCourses().
       setLinkedAt(profile?.classroom_linked_at ?? null);
       setLoading(false);
-      // Intentar cargar cursos siempre — si no hay token, refreshCourses lo maneja silenciosamente
       await refreshCourses();
     })();
   }, [user?.id, refreshCourses, canUseClassroom]);
@@ -212,8 +203,16 @@ export default function ClassroomPanel({
   };
 
   if (loading) {
-    return <p className="auth-card__muted">Cargando Classroom…</p>;
+    return <p className="auth-card__muted">Comprobando Classroom…</p>;
   }
+
+  const badge = classroomConnectionBadge(connectionStatus);
+  const badgeClass =
+    badge.tone === "ok" ? "dash-badge dash-badge--ok" : "dash-badge dash-badge--muted";
+  const showReconnect =
+    connectionStatus === CLASSROOM_CONNECTION.RECONNECT_REQUIRED ||
+    connectionStatus === CLASSROOM_CONNECTION.INSUFFICIENT_PERMISSIONS ||
+    connectionStatus === CLASSROOM_CONNECTION.ERROR;
 
   return (
     <section className="dash-panel">
@@ -242,14 +241,10 @@ export default function ClassroomPanel({
       ) : null}
 
       <div className="dash-status-row">
-        <span
-          className={`dash-badge ${linkedAt && courses.length >= 0 && !err ? "dash-badge--ok" : "dash-badge--muted"}`}
-        >
-          {linkedAt ? "Vinculado" : "Sin vincular"}
-        </span>
+        <span className={badgeClass}>{badge.label}</span>
         {linkedAt ? (
           <span className="auth-card__muted auth-card__muted--tight">
-            Última conexión: {new Date(linkedAt).toLocaleString()}
+            Última conexión exitosa: {new Date(linkedAt).toLocaleString()}
           </span>
         ) : null}
       </div>
@@ -257,17 +252,21 @@ export default function ClassroomPanel({
       {err ? (
         <p className="auth-card__notice auth-card__notice--err">
           {err}{" "}
-          <button
-            type="button"
-            className="auth-link"
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
-            onClick={() => void connectGoogleClassroom(undefined, { mode: "teacher" })}
-          >
-            Reconectar →
-          </button>
+          {showReconnect ? (
+            <button
+              type="button"
+              className="auth-link"
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              onClick={() => void connectGoogleClassroom(undefined, { mode: "teacher" })}
+            >
+              Reconectar →
+            </button>
+          ) : null}
         </p>
       ) : null}
-      {okMsg ? <p className="auth-card__notice">{okMsg}</p> : null}
+      {okMsg && connectionStatus === CLASSROOM_CONNECTION.CONNECTED ? (
+        <p className="auth-card__notice">{okMsg}</p>
+      ) : null}
       {importErr ? <p className="auth-card__notice auth-card__notice--err">{importErr}</p> : null}
 
       <div className="auth-org-row__actions" style={{ marginBottom: "1rem" }}>
@@ -279,7 +278,10 @@ export default function ClassroomPanel({
           className="auth-btn auth-btn--primary"
           onClick={() => void connectGoogleClassroom(undefined, { mode: "teacher" })}
         >
-          Conectar Google Classroom
+          {connectionStatus === CLASSROOM_CONNECTION.RECONNECT_REQUIRED ||
+          connectionStatus === CLASSROOM_CONNECTION.INSUFFICIENT_PERMISSIONS
+            ? "Reconectar Google Classroom"
+            : "Conectar Google Classroom"}
         </button>
         <button
           type="button"
@@ -298,7 +300,7 @@ export default function ClassroomPanel({
         </p>
       ) : null}
 
-      {courses.length > 0 ? (
+      {connectionStatus === CLASSROOM_CONNECTION.CONNECTED && courses.length > 0 ? (
         <>
           <h3 className="auth-section__title">Tus cursos en Classroom</h3>
           {staffOrgId ? (
@@ -337,13 +339,17 @@ export default function ClassroomPanel({
         </>
       ) : (
         <p className="auth-card__muted">
-          Tras conectar, acá verás los cursos donde sos docente. Luego importalos en{" "}
-          {staffOrgId ? (
-            <Link to={`/dashboard/org/${staffOrgId}`}>Cursos del colegio</Link>
-          ) : (
-            "la sección Cursos de tu colegio"
-          )}
-          .
+          {connectionStatus === CLASSROOM_CONNECTION.CONNECTED
+            ? "No hay cursos activos donde seas docente en Classroom."
+            : "Tras conectar, acá verás los cursos donde sos docente. Luego importalos en "}
+          {connectionStatus !== CLASSROOM_CONNECTION.CONNECTED ? (
+            staffOrgId ? (
+              <Link to={`/dashboard/org/${staffOrgId}`}>Cursos del colegio</Link>
+            ) : (
+              "la sección Cursos de tu colegio"
+            )
+          ) : null}
+          {connectionStatus !== CLASSROOM_CONNECTION.CONNECTED ? "." : null}
         </p>
       )}
     </section>
