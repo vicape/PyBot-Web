@@ -47,6 +47,57 @@ export function classifyClassroomConnectionError(err) {
     };
   }
 
+  if (
+    status === 429 ||
+    code === 429 ||
+    code === "RESOURCE_EXHAUSTED" ||
+    /rate.?limit|quota|RESOURCE_EXHAUSTED/i.test(message) ||
+    /rate.?limit|RESOURCE_EXHAUSTED/i.test(reason)
+  ) {
+    return {
+      status: CLASSROOM_CONNECTION.ERROR,
+      message: "Google Classroom está limitando peticiones. Probá de nuevo en unos minutos.",
+      kind: "rate_limit",
+    };
+  }
+
+  if (
+    status === 404 ||
+    code === 404 ||
+    code === "NOT_FOUND" ||
+    /not.?found/i.test(String(code || ""))
+  ) {
+    return {
+      status: CLASSROOM_CONNECTION.ERROR,
+      message: "No se encontró el recurso en Google Classroom.",
+      kind: "not_found",
+    };
+  }
+
+  if (
+    code === "associated_with_developer_false" ||
+    code === "coursework_not_associated_with_developer" ||
+    /associatedWithDeveloper/i.test(message)
+  ) {
+    return {
+      status: CLASSROOM_CONNECTION.INSUFFICIENT_PERMISSIONS,
+      message:
+        "Google no permite esta acción porque la actividad no está asociada al proyecto de PyBot.",
+      kind: "associated_with_developer",
+    };
+  }
+
+  if (
+    /Failed to fetch|NetworkError|network|ECONNRESET|ETIMEDOUT|offline/i.test(message) ||
+    code === "network_error"
+  ) {
+    return {
+      status: CLASSROOM_CONNECTION.ERROR,
+      message: "No hay conexión con Google Classroom. Revisá la red e intentá de nuevo.",
+      kind: "network",
+    };
+  }
+
   const scopeInsufficient =
     code === "ACCESS_TOKEN_SCOPE_INSUFFICIENT" ||
     reason === "ACCESS_TOKEN_SCOPE_INSUFFICIENT" ||

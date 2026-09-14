@@ -200,3 +200,37 @@ export async function markStudentClassroomLinked(userId) {
   if (error) return { ok: false, error: error.message };
   return { ok: true, error: null, skipped: false };
 }
+
+/**
+ * Quita credenciales Classroom del perfil (P15). No cierra sesión PyBot ni borra cursos.
+ * @param {string} userId
+ * @param {"teacher"|"student"|"both"} [mode="both"]
+ */
+export async function clearClassroomTokens(userId, mode = "both") {
+  const sb = getSupabase();
+  if (!sb || !userId) return { ok: false, error: "no_client" };
+
+  const patch = {};
+  if (mode === "teacher" || mode === "both") {
+    patch.google_refresh_token = null;
+    patch.google_token_expires_at = null;
+    patch.classroom_linked_at = null;
+  }
+  if (mode === "student" || mode === "both") {
+    patch.google_student_refresh_token = null;
+    patch.google_student_token_expires_at = null;
+    patch.classroom_student_linked_at = null;
+  }
+  if (Object.keys(patch).length === 0) return { ok: true };
+
+  const { error } = await sb.from("profiles").update(patch).eq("id", userId);
+  if (
+    error?.message?.includes("does not exist") ||
+    error?.message?.includes("google_refresh_token") ||
+    error?.message?.includes("google_student")
+  ) {
+    return { ok: true, skipped: true };
+  }
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
