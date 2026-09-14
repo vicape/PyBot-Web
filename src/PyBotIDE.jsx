@@ -2014,7 +2014,6 @@ export default function PyBotIDE() {
                   alt={t("appTitle")}
                   className="brand-logo-full"
                 />
-                <span className="brand-test-dot" aria-hidden="true" />
                 <span className="brand-sub">by VIC</span>
                 <div className="brand-logos">
                   {showSchoolLogo ? (

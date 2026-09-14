@@ -66,7 +66,7 @@ test("#15 EDA6 and protocol stay unchanged", () => {
   const eda6 = readFileSync(join(ROOT, "src/assets/EDA6.py"), "utf8");
   assert.match(eda6, /EDA6_VERSION\s*=\s*"1\.1\.0"/);
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-  assert.equal(pkg.version, "0.3.0");
+  assert.equal(pkg.version, "0.3.1");
 });
 
 test("#15 4.0.6 → 4.0.7: OTA available, not USB", () => {
