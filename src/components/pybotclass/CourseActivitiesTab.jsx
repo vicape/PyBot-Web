@@ -91,7 +91,11 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
             value={maxPoints}
             onChange={(e) => setMaxPoints(e.target.value)}
             disabled={saving}
+            placeholder="Ej. 100"
           />
+          <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
+            Único lugar para definirlo. Requerido para enviar notas a Google Classroom.
+          </p>
         </div>
       </div>
       <label className="auth-org-label" htmlFor="act-starter">

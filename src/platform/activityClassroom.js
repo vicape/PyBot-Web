@@ -8,7 +8,10 @@ import {
   patchStudentSubmissionGrade,
   returnStudentSubmission,
   turnInStudentSubmission,
+  CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED,
 } from "../classroom/classroomApi.js";
+
+export { CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED };
 
 async function tryGetClassroomToken(userId, opts = {}) {
   try {
@@ -321,6 +324,8 @@ export async function syncClassroomSubmissionsForActivity({
 
 /**
  * Envía nota PyBot → Classroom (patch + return) y registra sync en DB.
+ * El feedback de texto se guarda en PyBot; Classroom API v1 no lo acepta
+ * (ver CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED).
  */
 export async function sendGradeToClassroom({
   submission,
@@ -357,6 +362,7 @@ export async function sendGradeToClassroom({
   if (!tok) return { ok: false, error: "missing_access_token" };
 
   try {
+    // Solo nota numérica: feedback no forma parte del payload (limitación API).
     await patchStudentSubmissionGrade(
       tok,
       classroomCourseId,
@@ -384,6 +390,8 @@ export async function sendGradeToClassroom({
           warning:
             "Nota asignada en Classroom, pero no se pudo «devolver» porque el alumno aún no entregó en Classroom (turnIn).",
           error: null,
+          feedbackSynced: false,
+          feedbackSyncUnsupported: !CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED,
         };
       }
       console.warn("returnStudentSubmission:", retEx);
@@ -400,7 +408,12 @@ export async function sendGradeToClassroom({
       .eq("id", submission.id);
 
     if (error) return { ok: false, error: error.message };
-    return { ok: true, error: null };
+    return {
+      ok: true,
+      error: null,
+      feedbackSynced: false,
+      feedbackSyncUnsupported: !CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED,
+    };
   } catch (ex) {
     const msg = ex?.message || "grade_sync_failed";
     const friendly = /FAILED_PRECONDITION|not.?turned.?in/i.test(msg)

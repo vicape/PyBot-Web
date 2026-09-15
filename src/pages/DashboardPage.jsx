@@ -276,7 +276,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!useCloud || !sessionUser) return;
-    // Home / Cuenta / Classroom viven en PyBotClass
+    // Home / Cuenta / Classroom / Mis cursos viven en PyBotClass (UX única)
     if (rawTab === "home" || !VALID_TABS.has(rawTab)) {
       navigate("/dashboard/classes", { replace: true });
       return;
@@ -287,24 +287,27 @@ export default function DashboardPage() {
     }
     if (rawTab === "classroom") {
       navigate("/dashboard/classes?panel=classroom", { replace: true });
+      return;
+    }
+    if (rawTab === "courses") {
+      navigate("/dashboard/classes", { replace: true });
     }
   }, [useCloud, sessionUser, rawTab, navigate]);
 
   useEffect(() => {
     if (!orgsLoaded) return;
     if (rawTab === "schools" && !showSchoolsTab) {
-      setSearchParams(showCoursesTab ? { tab: "courses" } : {}, { replace: true });
+      navigate("/dashboard/classes", { replace: true });
       return;
     }
-    if (rawTab === "courses" && !showCoursesTab) {
-      setSearchParams(showSchoolsTab ? { tab: "schools" } : {}, { replace: true });
+    if (rawTab === "courses") {
+      navigate("/dashboard/classes", { replace: true });
     }
   }, [
     orgsLoaded,
     rawTab,
     showSchoolsTab,
-    showCoursesTab,
-    setSearchParams,
+    navigate,
   ]);
 
   const signOutLegacy = () => {
@@ -386,7 +389,12 @@ export default function DashboardPage() {
     const name = displayName || email?.split("@")[0] || "Usuario";
 
     // Tabs que ya redirigen a PyBotClass: no renderizar shell viejo
-    if (activeTab === "home" || activeTab === "account" || activeTab === "classroom") {
+    if (
+      activeTab === "home" ||
+      activeTab === "account" ||
+      activeTab === "classroom" ||
+      activeTab === "courses"
+    ) {
       return (
         <main className="dash-root dash-root--center">
           <p className="auth-card__muted">Redirigiendo a PyBotClass…</p>
@@ -403,40 +411,6 @@ export default function DashboardPage() {
       >
         <div className="pbc-legacy-panel">
           {profileWarn ? <p className="pbc-alert pbc-alert--info">{profileWarn}</p> : null}
-
-          {activeTab === "courses" && showCoursesTab ? (
-            <section className="pbc-panel-card">
-              <h2 className="pbc-section-head__title">Mis cursos</h2>
-              <p className="pbc-hero-block__subtitle" style={{ marginBottom: "1rem" }}>
-                También podés verlos en{" "}
-                <Link to="/dashboard/classes">PyBotClass</Link>.
-              </p>
-              {coursesError ? <p className="pbc-alert pbc-alert--error">{coursesError}</p> : null}
-              {enrolledCourses.length === 0 ? (
-                <p className="auth-card__muted">
-                  Todavía no estás inscripto en ningún curso. Si tu docente te dio un código,{" "}
-                  <Link to="/join">unite acá</Link>.
-                </p>
-              ) : (
-                <ul className="auth-org-list">
-                  {enrolledCourses.map((c) => (
-                    <li key={c.id} className="auth-org-row auth-org-row--link">
-                      <Link
-                        className="auth-org-row__link"
-                        to={`/dashboard/org/${c.org_id}/course/${c.id}`}
-                      >
-                        <span className="auth-org-row__name">{c.title}</span>
-                        <span className="auth-org-row__meta">
-                          {c.orgName ? `${c.orgName} · ` : ""}
-                          {c.slug ? `@${c.slug}` : "Actividades"}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          ) : null}
 
           {activeTab === "schools" && showSchoolsTab ? (
             <section className="pbc-panel-card">

@@ -81,11 +81,11 @@ export function planRedeemOrgInvite({
   };
 }
 
-/** Destino post-redeem según respuesta de la RPC. */
+/** Destino post-redeem según respuesta de la RPC (UX única PyBotClass). */
 export function joinPathAfterRedeem(out) {
-  if (!out?.org_id) return "/dashboard";
+  if (!out?.org_id) return "/dashboard/classes";
   if (out.course_id) {
-    return `/dashboard/org/${out.org_id}/course/${out.course_id}`;
+    return `/dashboard/classes/${out.course_id}`;
   }
   return `/dashboard/org/${out.org_id}`;
 }

@@ -273,9 +273,6 @@ export default function PyBotClassCoursePage() {
           <Link to="/dashboard/classes" className="auth-link">
             ← Mis clases
           </Link>
-          <Link to={`/dashboard/org/${course?.org_id}/course/${courseId}`} className="auth-link">
-            Vista clásica
-          </Link>
         </div>
       </PbcPage>
     </PyBotClassShell>

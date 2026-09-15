@@ -33,10 +33,10 @@ import {
   classroomTurnInUserMessage,
   classroomTurnInSuccessMessage,
   turnInPybotActivityToClassroom,
+  CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED,
 } from "../platform/activityClassroom.js";
 import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
 import { listLessonBlocks } from "../platform/contentApi.js";
-import { updatePybotclassActivity } from "../platform/pybotClassApi.js";
 import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
 import { fetchMyOrgRole } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
@@ -77,7 +77,6 @@ export default function ActivityPage() {
   const [viewCode, setViewCode] = useState(null);
   const [viewHistoryId, setViewHistoryId] = useState(null);
   const [gradeDraft, setGradeDraft] = useState({});
-  const [maxPointsDraft, setMaxPointsDraft] = useState("");
   const [actionMsg, setActionMsg] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [needsClassroomConnect, setNeedsClassroomConnect] = useState(false);
@@ -151,7 +150,6 @@ export default function ActivityPage() {
     }
 
     setActivity(act);
-    setMaxPointsDraft(act.max_points != null ? String(act.max_points) : "");
     setLessonDoc(null);
     setLessonMeta(null);
     setLessonErr("");
@@ -363,32 +361,6 @@ export default function ActivityPage() {
     });
   };
 
-  const onSaveMaxPoints = async () => {
-    if (!activity || !supabase || busy) return;
-    setBusy(true);
-    setActionErr("");
-    setActionMsg("");
-    const r = await updatePybotclassActivity(supabase, activity.id, {
-      title: activity.title,
-      description: activity.description ?? "",
-      pybotLessonId: activity.pybot_lesson_id ?? "",
-      starterCode: activity.starter_code ?? "",
-      dueAt: activity.due_at || null,
-      maxPoints: maxPointsDraft,
-    });
-    setBusy(false);
-    if (!r.ok) {
-      setActionErr(r.error || "No se pudo guardar el puntaje máximo.");
-      return;
-    }
-    setActionMsg(
-      maxPointsDraft === "" || maxPointsDraft == null
-        ? "Puntaje máximo quitado."
-        : `Puntaje máximo guardado: ${maxPointsDraft}.`,
-    );
-    await load({ preserveActionMsg: true });
-  };
-
   const onPublishClassroom = async () => {
     if (!activity || !classroomCourseId || !user || busy) return;
     setBusy(true);
@@ -487,11 +459,15 @@ export default function ActivityPage() {
       return;
     }
     if (r.warning) {
-      setActionMsg(r.warning);
+      setActionMsg(
+        row.feedback && r.feedbackSyncUnsupported
+          ? `${r.warning} El feedback de texto queda en PyBot: Classroom API no admite sincronizarlo.`
+          : r.warning,
+      );
     } else {
       setActionMsg(
-        row.feedback
-          ? "Nota enviada a Classroom. (El feedback de texto no se puede sincronizar vía API de Google; solo la nota numérica.)"
+        row.feedback && !CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED
+          ? "Nota enviada a Classroom. El feedback de texto queda en PyBot (Classroom API v1 no admite comentarios privados del docente)."
           : "Nota enviada a Classroom.",
       );
     }
@@ -625,36 +601,27 @@ export default function ActivityPage() {
               </p>
             </div>
             <div>
-              <label className="auth-org-label" htmlFor="activity-max-points">
-                Puntaje máximo
-              </label>
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                <input
-                  id="activity-max-points"
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  className="auth-org-input"
-                  style={{ width: "7rem" }}
-                  value={maxPointsDraft}
-                  onChange={(e) => setMaxPointsDraft(e.target.value)}
-                  disabled={busy}
-                  placeholder="—"
-                />
-                <button
-                  type="button"
-                  className="auth-btn auth-btn--ghost auth-btn--sm"
-                  disabled={busy}
-                  onClick={() => void onSaveMaxPoints()}
-                >
-                  Guardar puntaje
-                </button>
-              </div>
-              {activity?.max_points == null ? (
-                <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
-                  Requerido para enviar notas a Classroom.
+              {activity?.max_points != null ? (
+                <p className="auth-card__muted" style={{ margin: 0 }}>
+                  Puntaje máximo: {activity.max_points}
                 </p>
-              ) : null}
+              ) : activity?.course_id ? (
+                <p className="auth-card__muted" style={{ margin: 0, fontSize: "0.9rem" }}>
+                  Definí el puntaje máximo en{" "}
+                  <Link
+                    to={`/dashboard/classes/${activity.course_id}?tab=actividades`}
+                    className="auth-link"
+                  >
+                    Actividades
+                  </Link>
+                  {" "}
+                  (requerido para enviar notas a Classroom).
+                </p>
+              ) : (
+                <p className="auth-card__muted" style={{ margin: 0, fontSize: "0.9rem" }}>
+                  Requerido definir puntaje máximo en Actividades para enviar notas a Classroom.
+                </p>
+              )}
             </div>
           </section>
         ) : activity?.max_points != null || activity?.due_at ? (

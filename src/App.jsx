@@ -6,7 +6,7 @@ import DashboardPage from "./pages/DashboardPage.jsx";
 import AuthCallbackPage from "./pages/AuthCallbackPage.jsx";
 import ClassroomAuthCallbackPage from "./pages/ClassroomAuthCallbackPage.jsx";
 import OrgCoursesPage from "./pages/OrgCoursesPage.jsx";
-import CourseActivitiesPage from "./pages/CourseActivitiesPage.jsx";
+import ClassicCourseRedirect from "./pages/ClassicCourseRedirect.jsx";
 import JoinOrgPage from "./pages/JoinOrgPage.jsx";
 import ActivityPage from "./pages/ActivityPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
@@ -43,7 +43,7 @@ function AppRoutes() {
         <Route path="/dashboard/org/:orgId" element={<OrgCoursesPage />} />
         <Route
           path="/dashboard/org/:orgId/course/:courseId"
-          element={<CourseActivitiesPage />}
+          element={<ClassicCourseRedirect />}
         />
       </Routes>
     </BrowserRouter>

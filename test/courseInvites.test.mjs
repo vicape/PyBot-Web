@@ -172,7 +172,7 @@ test("expiración y max_uses siguen funcionando", () => {
 test("joinPathAfterRedeem y mensaje de éxito según course_id", () => {
   assert.equal(
     joinPathAfterRedeem({ ok: true, org_id: "o1", course_id: "c1" }),
-    "/dashboard/org/o1/course/c1",
+    "/dashboard/classes/c1",
   );
   assert.equal(joinPathAfterRedeem({ ok: true, org_id: "o1", course_id: null }), "/dashboard/org/o1");
   assert.equal(joinSuccessMessage({ course_id: "c1" }, () => "Alumno"), "Listo: te uniste al curso.");

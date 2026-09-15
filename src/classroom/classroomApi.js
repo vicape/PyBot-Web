@@ -258,6 +258,11 @@ export async function listStudentSubmissions(accessToken, classroomCourseId, cou
 
 /**
  * Asigna nota (draftGrade + assignedGrade) a una studentSubmission.
+ *
+ * Limitación comprobada de Google Classroom API v1: el recurso StudentSubmission
+ * solo admite notas numéricas en patch (draftGrade/assignedGrade). No existe campo
+ * ni updateMask para feedback/comentario privado del docente; ese texto permanece
+ * en PyBot y no puede sincronizarse por este endpoint.
  */
 export async function patchStudentSubmissionGrade(
   accessToken,
@@ -279,6 +284,9 @@ export async function patchStudentSubmissionGrade(
     },
   );
 }
+
+/** La API pública de Classroom no permite sincronizar feedback de texto del docente. */
+export const CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED = false;
 
 /**
  * Devuelve la submission al alumno (return).

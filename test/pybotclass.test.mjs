@@ -174,6 +174,40 @@ test("sendGradeToClassroom exige max_points definido", () => {
   assert.match(src, /Definí el puntaje máximo/);
 });
 
+test("Classroom API: patch de nota no incluye feedback (limitación externa)", () => {
+  const api = readFileSync(resolve(root, "src/classroom/classroomApi.js"), "utf8");
+  assert.match(api, /CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED = false/);
+  assert.match(api, /updateMask: "draftGrade,assignedGrade"/);
+  assert.match(api, /draftGrade: Number\(grade\)/);
+  assert.match(api, /assignedGrade: Number\(grade\)/);
+  assert.doesNotMatch(api, /privateComment/);
+  const send = readFileSync(resolve(root, "src/platform/activityClassroom.js"), "utf8");
+  assert.match(send, /feedback no forma parte del payload/);
+});
+
+test("UX única: ruta clásica de curso redirige a PyBotClass", () => {
+  const app = readFileSync(resolve(root, "src/App.jsx"), "utf8");
+  assert.match(app, /ClassicCourseRedirect/);
+  assert.doesNotMatch(app, /CourseActivitiesPage/);
+  const redirect = readFileSync(resolve(root, "src/pages/ClassicCourseRedirect.jsx"), "utf8");
+  assert.match(redirect, /\/dashboard\/classes\/\$\{courseId\}/);
+  const coursePage = readFileSync(resolve(root, "src/pages/PyBotClassCoursePage.jsx"), "utf8");
+  assert.doesNotMatch(coursePage, /Vista clásica/);
+});
+
+test("puntaje máximo se edita en Actividades, no duplicado en ActivityPage", () => {
+  const tab = readFileSync(
+    resolve(root, "src/components/pybotclass/CourseActivitiesTab.jsx"),
+    "utf8",
+  );
+  assert.match(tab, /id="act-points"/);
+  assert.match(tab, /Único lugar para definirlo/);
+  const activity = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
+  assert.doesNotMatch(activity, /id="activity-max-points"/);
+  assert.doesNotMatch(activity, /onSaveMaxPoints/);
+  assert.match(activity, /tab=actividades/);
+});
+
 test("fetchAllClassroomPages pagina correctamente", async () => {
   let calls = 0;
   const items = await fetchAllClassroomPages(async (pageToken) => {

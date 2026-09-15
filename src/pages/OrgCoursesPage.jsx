@@ -214,7 +214,7 @@ export default function OrgCoursesPage() {
           <ul className="auth-org-list">
             {courses.map((c) => (
               <li key={c.id} className="auth-org-row auth-org-row--link">
-                <Link className="auth-org-row__link" to={`/dashboard/org/${orgId}/course/${c.id}`}>
+                <Link className="auth-org-row__link" to={`/dashboard/classes/${c.id}`}>
                   <span className="auth-org-row__name">{c.title}</span>
                   <span className="auth-org-row__meta">
                     {c.slug ? `@${c.slug}` : "Actividades"}

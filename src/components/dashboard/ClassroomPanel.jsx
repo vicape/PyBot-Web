@@ -152,7 +152,7 @@ export default function ClassroomPanel({
     if (existing?.id) {
       setImporting(null);
       setImportedIds((prev) => new Set([...prev, classroomCourse.id]));
-      navigate(`/dashboard/org/${effectiveOrgId}/course/${existing.id}`);
+      navigate(`/dashboard/classes/${existing.id}`);
       return;
     }
 
@@ -199,7 +199,7 @@ export default function ClassroomPanel({
     setImportedIds((prev) => new Set([...prev, classroomCourse.id]));
 
     if (row?.id) {
-      navigate(`/dashboard/org/${effectiveOrgId}/course/${row.id}`);
+      navigate(`/dashboard/classes/${row.id}`);
     }
   };
 
