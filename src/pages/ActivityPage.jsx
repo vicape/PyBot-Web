@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AssignedContentSnapshotViewer from "../components/content-editor/AssignedContentSnapshotViewer.jsx";
 import AssignedLessonViewer from "../components/content-editor/AssignedLessonViewer.jsx";
 import {
@@ -7,6 +7,7 @@ import {
   legacyBlocksToDocument,
   normalizeLessonDocument,
 } from "../components/content-editor/legacyLessonDocument.js";
+import SubmissionCodeViewer from "../components/pybotclass/SubmissionCodeViewer.jsx";
 import {
   ACTIVITY_ID_QUERY,
   ACTIVITY_LAUNCH_STATE_KEY,
@@ -35,6 +36,7 @@ import {
 } from "../platform/activityClassroom.js";
 import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
 import { listLessonBlocks } from "../platform/contentApi.js";
+import { updatePybotclassActivity } from "../platform/pybotClassApi.js";
 import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
 import { fetchMyOrgRole } from "../orgRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
@@ -51,13 +53,14 @@ function fmtTs(v) {
 
 export default function ActivityPage() {
   const { activityId } = useParams();
+  const [searchParams] = useSearchParams();
+  const focusStudentId = searchParams.get("alumno") || "";
   const navigate = useNavigate();
   const loginPath = `/actividad/${activityId}`;
   const { user, loading: authLoading, profileError, supabase } = useRequireSession(loginPath);
 
   const [activity, setActivity] = useState(null);
   const [courseTitle, setCourseTitle] = useState("");
-  const [orgId, setOrgId] = useState(null);
   const [classroomCourseId, setClassroomCourseId] = useState(null);
   const [classroomSubs, setClassroomSubs] = useState([]);
   const [classroomSyncedAt, setClassroomSyncedAt] = useState(null);
@@ -72,7 +75,9 @@ export default function ActivityPage() {
   const [teacherHistoryByUser, setTeacherHistoryByUser] = useState(new Map());
   const [profilesById, setProfilesById] = useState(new Map());
   const [viewCode, setViewCode] = useState(null);
+  const [viewHistoryId, setViewHistoryId] = useState(null);
   const [gradeDraft, setGradeDraft] = useState({});
+  const [maxPointsDraft, setMaxPointsDraft] = useState("");
   const [actionMsg, setActionMsg] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [needsClassroomConnect, setNeedsClassroomConnect] = useState(false);
@@ -82,6 +87,8 @@ export default function ActivityPage() {
   const [lessonMeta, setLessonMeta] = useState(null);
   const [lessonErr, setLessonErr] = useState("");
   const [snapshot, setSnapshot] = useState(null);
+  const focusRowRef = useRef(null);
+  const didFocusStudent = useRef(false);
 
   const canTeach = canTeachCourse({ orgRole, courseRole });
   const isStudent = isCourseStudent({ courseRole });
@@ -144,6 +151,7 @@ export default function ActivityPage() {
     }
 
     setActivity(act);
+    setMaxPointsDraft(act.max_points != null ? String(act.max_points) : "");
     setLessonDoc(null);
     setLessonMeta(null);
     setLessonErr("");
@@ -179,7 +187,6 @@ export default function ActivityPage() {
         .maybeSingle();
       setCourseTitle(course?.title ?? "");
       nextOrgId = course?.org_id ?? null;
-      setOrgId(nextOrgId);
       nextClassroomCourseId = course?.classroom_course_id ?? null;
       setClassroomCourseId(nextClassroomCourseId);
 
@@ -286,6 +293,23 @@ export default function ActivityPage() {
     if (!authLoading && user) void load();
   }, [authLoading, user, load]);
 
+  // Deep-link desde tab Entregas: ?alumno= → abrir código de esa entrega
+  useEffect(() => {
+    didFocusStudent.current = false;
+  }, [focusStudentId, activityId]);
+
+  useEffect(() => {
+    if (loading || !canTeach || !focusStudentId || didFocusStudent.current) return;
+    const row = teacherRows.find((r) => r.user_id === focusStudentId);
+    if (!row) return;
+    didFocusStudent.current = true;
+    setViewCode(row.id);
+    setViewHistoryId(null);
+    requestAnimationFrame(() => {
+      focusRowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [loading, canTeach, focusStudentId, teacherRows]);
+
   // Resume turnIn post-OAuth (sin re-submit)
   useEffect(() => {
     if (authLoading || loading || !user || !activityId || !isStudent) return;
@@ -337,6 +361,32 @@ export default function ActivityPage() {
         state: { [ACTIVITY_LAUNCH_STATE_KEY]: launchCode },
       });
     });
+  };
+
+  const onSaveMaxPoints = async () => {
+    if (!activity || !supabase || busy) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await updatePybotclassActivity(supabase, activity.id, {
+      title: activity.title,
+      description: activity.description ?? "",
+      pybotLessonId: activity.pybot_lesson_id ?? "",
+      starterCode: activity.starter_code ?? "",
+      dueAt: activity.due_at || null,
+      maxPoints: maxPointsDraft,
+    });
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo guardar el puntaje máximo.");
+      return;
+    }
+    setActionMsg(
+      maxPointsDraft === "" || maxPointsDraft == null
+        ? "Puntaje máximo quitado."
+        : `Puntaje máximo guardado: ${maxPointsDraft}.`,
+    );
+    await load({ preserveActionMsg: true });
   };
 
   const onPublishClassroom = async () => {
@@ -415,7 +465,9 @@ export default function ActivityPage() {
       }
     }
     if (!classroomSubmissionId) {
-      setActionErr("No se encontró la entrega Classroom del alumno. Primero «Sincronizar Classroom».");
+      setActionErr(
+        "No se encontró la entrega Classroom del alumno. Primero «Sincronizar entregas Classroom».",
+      );
       return;
     }
     setBusy(true);
@@ -496,7 +548,7 @@ export default function ActivityPage() {
       return;
     }
     setActionMsg("Corrección guardada.");
-    await load();
+    await load({ preserveActionMsg: true });
   };
 
   if (authLoading || loading) {
@@ -528,19 +580,18 @@ export default function ActivityPage() {
           <Link to="/dashboard" className="auth-link">
             Panel
           </Link>
-          {orgId ? (
-            <>
-              <span aria-hidden> / </span>
-              <Link to={`/dashboard/org/${orgId}`} className="auth-link">
-                Colegio
-              </Link>
-            </>
-          ) : null}
           {activity?.course_id ? (
             <>
               <span aria-hidden> / </span>
-              <Link to={`/dashboard/org/${orgId}/course/${activity.course_id}`} className="auth-link">
+              <Link to={`/dashboard/classes/${activity.course_id}`} className="auth-link">
                 {courseTitle || "Curso"}
+              </Link>
+              <span aria-hidden> / </span>
+              <Link
+                to={`/dashboard/classes/${activity.course_id}?tab=entregas`}
+                className="auth-link"
+              >
+                Entregas
               </Link>
             </>
           ) : null}
@@ -553,6 +604,66 @@ export default function ActivityPage() {
         ) : null}
         {actionErr ? <p className="auth-card__notice auth-card__notice--err">{actionErr}</p> : null}
         {actionMsg ? <p className="auth-card__notice">{actionMsg}</p> : null}
+
+        {canTeach ? (
+          <section
+            className="pbc-activity-meta"
+            style={{
+              marginTop: "0.75rem",
+              marginBottom: "0.75rem",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.75rem",
+              alignItems: "flex-end",
+            }}
+            aria-label="Configuración de la actividad"
+          >
+            <div>
+              <p className="auth-card__muted" style={{ margin: 0 }}>
+                Fecha de entrega:{" "}
+                {activity?.due_at ? fmtTs(activity.due_at) : "Sin fecha"}
+              </p>
+            </div>
+            <div>
+              <label className="auth-org-label" htmlFor="activity-max-points">
+                Puntaje máximo
+              </label>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <input
+                  id="activity-max-points"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  className="auth-org-input"
+                  style={{ width: "7rem" }}
+                  value={maxPointsDraft}
+                  onChange={(e) => setMaxPointsDraft(e.target.value)}
+                  disabled={busy}
+                  placeholder="—"
+                />
+                <button
+                  type="button"
+                  className="auth-btn auth-btn--ghost auth-btn--sm"
+                  disabled={busy}
+                  onClick={() => void onSaveMaxPoints()}
+                >
+                  Guardar puntaje
+                </button>
+              </div>
+              {activity?.max_points == null ? (
+                <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
+                  Requerido para enviar notas a Classroom.
+                </p>
+              ) : null}
+            </div>
+          </section>
+        ) : activity?.max_points != null || activity?.due_at ? (
+          <p className="auth-card__muted">
+            {activity?.due_at ? `Entrega: ${fmtTs(activity.due_at)}` : null}
+            {activity?.due_at && activity?.max_points != null ? " · " : null}
+            {activity?.max_points != null ? `Puntaje máximo: ${activity.max_points}` : null}
+          </p>
+        ) : null}
 
         {isStudent && activity?.classroom_coursework_id && classroomCourseId ? (
           <div
@@ -658,11 +769,13 @@ export default function ActivityPage() {
 
         {isCodingActivity ? (
           <p className="auth-card__muted">
-            {savedCode
-              ? "El autosave guarda progreso; «Entregar» registra la entrega formal."
-              : activity?.starter_code
-                ? "PyBot abre con el código inicial. Usá «Entregar» cuando termines."
-                : "Trabajá en el IDE y entregá cuando estés listo."}
+            {canTeach
+              ? "«Abrir PyBot» abre el IDE con el código inicial o tu progreso (para probar la consigna). El código del alumno se ve arriba en cada entrega."
+              : savedCode
+                ? "El autosave guarda progreso; «Entregar» registra la entrega formal."
+                : activity?.starter_code
+                  ? "PyBot abre con el código inicial. Usá «Entregar» cuando termines."
+                  : "Trabajá en el IDE y entregá cuando estés listo."}
           </p>
         ) : (
           <p className="auth-card__muted">Este material es de solo lectura. No requiere entrega de código.</p>
@@ -672,7 +785,7 @@ export default function ActivityPage() {
           <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.75rem" }}>
             {activity?.classroom_coursework_id ? (
               <>
-                <span className="auth-card__muted">Publicada en Classroom</span>
+                <span className="auth-card__muted">Vinculada a Classroom (sincronización externa)</span>
                 {activity.classroom_coursework_url ? (
                   <a
                     className="auth-link"
@@ -689,14 +802,14 @@ export default function ActivityPage() {
                   disabled={busy}
                   onClick={() => void onSyncClassroom()}
                 >
-                  Sincronizar Classroom
+                  Sincronizar entregas Classroom
                 </button>
                 <span className="auth-card__muted" style={{ fontSize: "0.85rem" }}>
                   {classroomSyncedAt
                     ? `Última sincronización: ${fmtTs(classroomSyncedAt)}`
                     : "Sin sincronizar aún"}
                   {classroomSubs.length
-                    ? ` · ${classroomSubs.length} StudentSubmission${classroomSubs.length === 1 ? "" : "s"} registrada${classroomSubs.length === 1 ? "" : "s"}`
+                    ? ` · ${classroomSubs.length} StudentSubmission${classroomSubs.length === 1 ? "" : "s"}`
                     : ""}
                 </span>
               </>
@@ -715,7 +828,11 @@ export default function ActivityPage() {
 
         {canTeach ? (
           <section style={{ marginTop: "1.5rem" }}>
-            <h2 className="auth-section__title">Entregas del curso</h2>
+            <h2 className="auth-section__title">Entregas · revisar y corregir</h2>
+            <p className="auth-card__muted" style={{ marginTop: 0 }}>
+              Seleccioná una entrega, revisá el código (V1/V2/V3 inmutables) y guardá la corrección.
+              Classroom solo sincroniza la nota ya cargada en PyBot.
+            </p>
             {teacherRows.length === 0 ? (
               <p className="auth-card__muted">Todavía no hay entregas.</p>
             ) : (
@@ -730,9 +847,20 @@ export default function ActivityPage() {
                     (h) => h.id !== row.id,
                   );
                   const verLabel = submissionVersionLabel(row.version);
+                  const isFocused = focusStudentId && row.user_id === focusStudentId;
+                  const showingCurrent = viewCode === row.id;
                   return (
-                    <li key={row.id} className="auth-org-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
-                      <div className="auth-org-row--split" style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+                    <li
+                      key={row.id}
+                      ref={isFocused ? focusRowRef : undefined}
+                      className="auth-org-row"
+                      style={{ flexDirection: "column", alignItems: "stretch" }}
+                      id={`entrega-${row.user_id}`}
+                    >
+                      <div
+                        className="auth-org-row--split"
+                        style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}
+                      >
                         <div>
                           <span className="auth-org-row__name">
                             {profile?.display_name || profile?.email || row.user_id.slice(0, 8)}
@@ -742,20 +870,27 @@ export default function ActivityPage() {
                             {submissionStatusLabelEs(row.status)}
                             {row.submitted_at ? ` · ${fmtTs(row.submitted_at)}` : ""}
                             {row.grade != null ? ` · Nota ${row.grade}` : ""}
+                            {row.classroom_grade_synced_at
+                              ? ` · Nota en Classroom ${fmtTs(row.classroom_grade_synced_at)}`
+                              : ""}
                           </span>
                         </div>
                         <button
                           type="button"
                           className="auth-btn auth-btn--ghost auth-btn--sm"
-                          onClick={() => setViewCode(viewCode === row.id ? null : row.id)}
+                          onClick={() => {
+                            setViewHistoryId(null);
+                            setViewCode(showingCurrent ? null : row.id);
+                          }}
                         >
-                          {viewCode === row.id ? "Ocultar código" : "Ver código"}
+                          {showingCurrent ? "Ocultar código" : "Ver código"}
                         </button>
                       </div>
-                      {viewCode === row.id ? (
-                        <pre className="auth-code-area" style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem" }}>
-                          {row.submitted_code || "(vacío)"}
-                        </pre>
+                      {showingCurrent ? (
+                        <SubmissionCodeViewer
+                          code={row.submitted_code}
+                          ariaLabel={`Código ${verLabel || "actual"} de ${profile?.display_name || "alumno"}`}
+                        />
                       ) : null}
                       {history.length > 0 ? (
                         <details style={{ marginTop: "0.5rem" }}>
@@ -764,21 +899,47 @@ export default function ActivityPage() {
                             {history.length === 1 ? "versión anterior" : "versiones anteriores"})
                           </summary>
                           <ul className="auth-org-list" style={{ marginTop: "0.35rem" }}>
-                            {history.map((h) => (
-                              <li key={h.id} className="auth-card__muted" style={{ marginBottom: "0.35rem" }}>
-                                {submissionVersionLabel(h.version) || "V?"}
-                                {" · "}
-                                {submissionStatusLabelEs(h.status)}
-                                {h.submitted_at ? ` · ${fmtTs(h.submitted_at)}` : ""}
-                                {h.grade != null ? ` · Nota ${h.grade}` : ""}
-                                <pre
-                                  className="auth-code-area"
-                                  style={{ whiteSpace: "pre-wrap", marginTop: "0.25rem", fontSize: "0.85em" }}
-                                >
-                                  {h.submitted_code || "(vacío)"}
-                                </pre>
-                              </li>
-                            ))}
+                            {history.map((h) => {
+                              const hLabel = submissionVersionLabel(h.version) || "V?";
+                              const showingHist = viewHistoryId === h.id;
+                              return (
+                                <li key={h.id} className="auth-card__muted" style={{ marginBottom: "0.35rem" }}>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      gap: "0.5rem",
+                                      alignItems: "center",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
+                                    <span>
+                                      {hLabel}
+                                      {" · "}
+                                      {submissionStatusLabelEs(h.status)}
+                                      {h.submitted_at ? ` · ${fmtTs(h.submitted_at)}` : ""}
+                                      {h.grade != null ? ` · Nota ${h.grade}` : ""}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                                      onClick={() =>
+                                        setViewHistoryId(showingHist ? null : h.id)
+                                      }
+                                    >
+                                      {showingHist ? "Ocultar" : "Ver código"}
+                                    </button>
+                                  </div>
+                                  {showingHist ? (
+                                    <SubmissionCodeViewer
+                                      code={h.submitted_code}
+                                      height={220}
+                                      ariaLabel={`Código ${hLabel} (historial)`}
+                                    />
+                                  ) : null}
+                                </li>
+                              );
+                            })}
                           </ul>
                         </details>
                       ) : null}
@@ -786,7 +947,11 @@ export default function ActivityPage() {
                         <input
                           className="auth-org-input"
                           style={{ width: "6rem" }}
-                          placeholder="Nota"
+                          placeholder={
+                            activity?.max_points != null
+                              ? `Nota / ${activity.max_points}`
+                              : "Nota"
+                          }
                           value={draft.grade}
                           onChange={(e) =>
                             setGradeDraft((prev) => ({

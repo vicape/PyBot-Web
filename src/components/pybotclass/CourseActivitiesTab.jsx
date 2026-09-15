@@ -313,8 +313,8 @@ export default function CourseActivitiesTab({
                     >
                       Editar
                     </button>
-                    <Link className="auth-btn auth-btn--ghost auth-btn--sm" to={`/actividad/${a.id}`}>
-                      Abrir
+                    <Link className="auth-btn auth-btn--primary auth-btn--sm" to={`/actividad/${a.id}`}>
+                      Revisar
                     </Link>
                   </>
                 }
