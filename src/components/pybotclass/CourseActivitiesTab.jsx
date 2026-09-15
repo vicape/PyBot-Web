@@ -5,7 +5,7 @@ import {
   formatDueDateEs,
   updatePybotclassActivity,
 } from "../../platform/pybotClassApi.js";
-import { fetchMySubmission } from "../../platform/activitySubmissions.js";
+import { fetchMySubmission, submissionVersionLabel } from "../../platform/activitySubmissions.js";
 import {
   PbcEmpty,
   PbcFormPanel,
@@ -141,11 +141,12 @@ function StudentActivityRow({ activity, userId }) {
 
   const status = submission?.status;
   const due = formatDueDateEs(activity.due_at);
+  const ver = submissionVersionLabel(submission?.version);
   const statusLabel =
     status === "graded" || status === "returned"
-      ? `Corregida · Nota ${submission?.grade ?? "—"}`
+      ? `Corregida${ver ? ` · ${ver}` : ""} · Nota ${submission?.grade ?? "—"}`
       : status === "submitted"
-        ? "Entregada · Esperando corrección"
+        ? `Entregada${ver ? ` · ${ver}` : ""} · Esperando corrección`
         : "Pendiente";
 
   return (

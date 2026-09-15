@@ -143,6 +143,7 @@ export default function CourseSubmissionsTab({ courseId }) {
         <PbcFormPanel title="Corregir entrega" onCancel={() => setSelected(null)}>
           <p className="auth-card__muted">
             {selected.student_name} · {selected.activity_title}
+            {selected.submission_version != null ? ` · V${selected.submission_version}` : ""}
           </p>
           <p className="auth-card__muted">Entregada: {formatDateTimeEs(selected.submitted_at)}</p>
           <label className="auth-org-label" htmlFor="grade">

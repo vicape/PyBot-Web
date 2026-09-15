@@ -19,6 +19,7 @@ import {
   fetchMySubmission,
   gradeSubmission,
   submissionStatusLabelEs,
+  submissionVersionLabel,
   submitActivity,
 } from "../platform/activitySubmissions.js";
 import { connectGoogleClassroom, getPendingClassroomTurnIn, setPendingClassroomTurnIn, clearPendingClassroomTurnIn } from "../platform/googleOAuth.js";
@@ -68,6 +69,7 @@ export default function ActivityPage() {
   const [courseRole, setCourseRole] = useState(null);
   const [mySubmission, setMySubmission] = useState(null);
   const [teacherRows, setTeacherRows] = useState([]);
+  const [teacherHistoryByUser, setTeacherHistoryByUser] = useState(new Map());
   const [profilesById, setProfilesById] = useState(new Map());
   const [viewCode, setViewCode] = useState(null);
   const [gradeDraft, setGradeDraft] = useState({});
@@ -239,6 +241,14 @@ export default function ActivityPage() {
     if (teach) {
       const list = await fetchActivitySubmissions(activityId);
       setTeacherRows(list.rows ?? []);
+      const hist = new Map();
+      for (const row of list.allRows ?? []) {
+        if (!row?.user_id) continue;
+        const arr = hist.get(row.user_id) || [];
+        arr.push(row);
+        hist.set(row.user_id, arr);
+      }
+      setTeacherHistoryByUser(hist);
       const ids = [...new Set((list.rows ?? []).map((r) => r.user_id))];
       if (ids.length) {
         const { data: profiles } = await supabase
@@ -608,6 +618,9 @@ export default function ActivityPage() {
           <div className="auth-card__muted" style={{ marginBottom: "1rem" }}>
             <p>
               Entrega: <strong>{submissionStatusLabelEs(mySubmission.status)}</strong>
+              {submissionVersionLabel(mySubmission.version)
+                ? ` · ${submissionVersionLabel(mySubmission.version)}`
+                : null}
               {mySubmission.submitted_at ? ` · ${fmtTs(mySubmission.submitted_at)}` : null}
             </p>
             {mySubmission.grade != null ? (
@@ -713,6 +726,10 @@ export default function ActivityPage() {
                     grade: row.grade ?? "",
                     feedback: row.feedback ?? "",
                   };
+                  const history = (teacherHistoryByUser.get(row.user_id) || []).filter(
+                    (h) => h.id !== row.id,
+                  );
+                  const verLabel = submissionVersionLabel(row.version);
                   return (
                     <li key={row.id} className="auth-org-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
                       <div className="auth-org-row--split" style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
@@ -721,6 +738,7 @@ export default function ActivityPage() {
                             {profile?.display_name || profile?.email || row.user_id.slice(0, 8)}
                           </span>
                           <span className="auth-org-row__meta">
+                            {verLabel ? `${verLabel} · ` : ""}
                             {submissionStatusLabelEs(row.status)}
                             {row.submitted_at ? ` · ${fmtTs(row.submitted_at)}` : ""}
                             {row.grade != null ? ` · Nota ${row.grade}` : ""}
@@ -738,6 +756,31 @@ export default function ActivityPage() {
                         <pre className="auth-code-area" style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem" }}>
                           {row.submitted_code || "(vacío)"}
                         </pre>
+                      ) : null}
+                      {history.length > 0 ? (
+                        <details style={{ marginTop: "0.5rem" }}>
+                          <summary className="auth-card__muted">
+                            Historial ({history.length}{" "}
+                            {history.length === 1 ? "versión anterior" : "versiones anteriores"})
+                          </summary>
+                          <ul className="auth-org-list" style={{ marginTop: "0.35rem" }}>
+                            {history.map((h) => (
+                              <li key={h.id} className="auth-card__muted" style={{ marginBottom: "0.35rem" }}>
+                                {submissionVersionLabel(h.version) || "V?"}
+                                {" · "}
+                                {submissionStatusLabelEs(h.status)}
+                                {h.submitted_at ? ` · ${fmtTs(h.submitted_at)}` : ""}
+                                {h.grade != null ? ` · Nota ${h.grade}` : ""}
+                                <pre
+                                  className="auth-code-area"
+                                  style={{ whiteSpace: "pre-wrap", marginTop: "0.25rem", fontSize: "0.85em" }}
+                                >
+                                  {h.submitted_code || "(vacío)"}
+                                </pre>
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
                       ) : null}
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.5rem" }}>
                         <input

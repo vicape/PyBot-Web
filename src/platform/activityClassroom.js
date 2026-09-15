@@ -683,9 +683,11 @@ export async function turnInPybotActivityToClassroom(activityId) {
   if (!classroomSubmissionId) {
     const { data: sub } = await sb
       .from("activity_submissions")
-      .select("classroom_submission_id")
+      .select("classroom_submission_id, version")
       .eq("activity_id", activityId)
       .eq("user_id", user.id)
+      .order("version", { ascending: false })
+      .limit(1)
       .maybeSingle();
     classroomSubmissionId = sub?.classroom_submission_id || null;
   }
