@@ -160,10 +160,29 @@ export default function ActivityPage() {
       .eq("id", activityId)
       .maybeSingle();
 
+    // Si falta solo submission_close_at, no perder due_at / max_points.
+    if (
+      eAct &&
+      /submission_close_at/i.test(eAct.message || "") &&
+      /column|schema cache|does not exist|Could not find/i.test(eAct.message || "")
+    ) {
+      const mid = await supabase
+        .from("activities")
+        .select(
+          "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, content_source_id, activity_kind, course_id, due_at, max_points, created_at",
+        )
+        .eq("id", activityId)
+        .maybeSingle();
+      act = mid.data;
+      eAct = mid.error;
+    }
+
     if (eAct) {
       const fb = await supabase
         .from("activities")
-        .select("id, title, description, pybot_lesson_id, course_id, created_at, starter_code, content_lesson_id")
+        .select(
+          "id, title, description, pybot_lesson_id, course_id, created_at, starter_code, content_lesson_id, due_at, max_points",
+        )
         .eq("id", activityId)
         .maybeSingle();
       act = fb.data;

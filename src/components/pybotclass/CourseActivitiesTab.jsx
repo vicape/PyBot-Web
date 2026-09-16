@@ -246,25 +246,28 @@ export default function CourseActivitiesTab({
 
   const handleCreate = async (fields) => {
     setLocalErr("");
-    const { error } = await createPybotclassActivity(supabase, {
+    const { row, error } = await createPybotclassActivity(supabase, {
       courseId,
       createdBy: user.id,
       ...fields,
     });
+    if (row) {
+      setShowCreate(false);
+      await onReload();
+    }
     if (error) {
       setLocalErr(error);
       return;
     }
-    setShowCreate(false);
-    await onReload();
   };
 
   const handleUpdate = async (fields) => {
     if (!editing) return;
     setLocalErr("");
-    const { error } = await updatePybotclassActivity(supabase, editing.id, fields);
-    if (error) {
-      setLocalErr(error);
+    const result = await updatePybotclassActivity(supabase, editing.id, fields);
+    if (!result.ok) {
+      setLocalErr(result.error || "No se pudo guardar la actividad.");
+      if (result.partial) await onReload();
       return;
     }
     setEditing(null);

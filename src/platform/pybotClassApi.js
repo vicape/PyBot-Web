@@ -211,25 +211,65 @@ export async function fetchCourseBasics(courseId) {
   return { course: data, error: null };
 }
 
-export async function fetchCourseActivities(courseId) {
-  const sb = getSupabase();
+const ACTIVITY_LIST_SELECT_FULL =
+  "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, activity_kind, origin, due_at, submission_close_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at";
+
+/** Fallback si falta submission_close_at: conserva due_at + max_points. */
+const ACTIVITY_LIST_SELECT_WITHOUT_CLOSE =
+  "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, activity_kind, origin, due_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at";
+
+/** Último recurso: columnas base + metadatos previos a 046. */
+const ACTIVITY_LIST_SELECT_LEGACY_META =
+  "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, due_at, max_points, created_at";
+
+function isMissingColumnError(message, column) {
+  const msg = String(message || "");
+  if (!column) return false;
+  const re = new RegExp(`\\b${column}\\b`, "i");
+  return re.test(msg) && /column|schema cache|does not exist|Could not find/i.test(msg);
+}
+
+export async function fetchCourseActivities(courseId, supabaseClient = null) {
+  const sb = supabaseClient || getSupabase();
   if (!sb || !courseId) return { rows: [], error: "missing_args" };
-  const { data, error } = await sb
+
+  const full = await sb
     .from("activities")
-    .select(
-      "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, activity_kind, origin, due_at, submission_close_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at",
-    )
+    .select(ACTIVITY_LIST_SELECT_FULL)
     .eq("course_id", courseId)
     .order("created_at", { ascending: false });
-  if (error) {
-    const fb = await sb
+
+  if (!full.error) {
+    return { rows: full.data ?? [], error: null };
+  }
+
+  // Si solo falta submission_close_at, no descartar due_at / max_points.
+  if (isMissingColumnError(full.error.message, "submission_close_at")) {
+    const mid = await sb
       .from("activities")
-      .select("id, title, description, starter_code, pybot_lesson_id, created_at")
+      .select(ACTIVITY_LIST_SELECT_WITHOUT_CLOSE)
       .eq("course_id", courseId)
       .order("created_at", { ascending: false });
-    return { rows: fb.data ?? [], error: fb.error?.message ?? null };
+    if (!mid.error) {
+      return { rows: mid.data ?? [], error: null };
+    }
   }
-  return { rows: data ?? [], error: null };
+
+  const meta = await sb
+    .from("activities")
+    .select(ACTIVITY_LIST_SELECT_LEGACY_META)
+    .eq("course_id", courseId)
+    .order("created_at", { ascending: false });
+  if (!meta.error) {
+    return { rows: meta.data ?? [], error: null };
+  }
+
+  const fb = await sb
+    .from("activities")
+    .select("id, title, description, starter_code, pybot_lesson_id, created_at")
+    .eq("course_id", courseId)
+    .order("created_at", { ascending: false });
+  return { rows: fb.data ?? [], error: fb.error?.message ?? meta.error?.message ?? full.error.message };
 }
 
 /**
@@ -264,7 +304,7 @@ export async function createPybotclassActivity(supabase, fields) {
     .select("id, title, due_at, submission_close_at, max_points, content_lesson_id, created_at")
     .maybeSingle();
 
-  if (error && /submission_close_at/i.test(error.message || "")) {
+  if (error && isMissingColumnError(error.message, "submission_close_at")) {
     delete payload.submission_close_at;
     const fb = await supabase
       .from("activities")
@@ -272,6 +312,13 @@ export async function createPybotclassActivity(supabase, fields) {
       .select("id, title, due_at, max_points, content_lesson_id, created_at")
       .maybeSingle();
     if (fb.error) return { row: null, error: fb.error.message };
+    if (fields.submissionCloseAt) {
+      return {
+        row: fb.data,
+        error:
+          "Se creó la actividad con fecha y puntaje, pero falta la migración 046 (submission_close_at) para persistir el cierre de entregas.",
+      };
+    }
     return { row: fb.data, error: null };
   }
 
@@ -297,18 +344,39 @@ export async function updatePybotclassActivity(supabase, activityId, fields) {
 
   if (rpc.error) return { ok: false, error: rpc.error.message };
 
+  const dueAt = fields.dueAt || null;
+  const submissionCloseAt = fields.submissionCloseAt || null;
+  const maxPoints =
+    fields.maxPoints != null && fields.maxPoints !== "" ? Number(fields.maxPoints) : null;
+
   const meta = {
-    due_at: fields.dueAt || null,
-    submission_close_at: fields.submissionCloseAt || null,
-    max_points:
-      fields.maxPoints != null && fields.maxPoints !== "" ? Number(fields.maxPoints) : null,
+    due_at: dueAt,
+    submission_close_at: submissionCloseAt,
+    max_points: maxPoints,
   };
 
   const { error } = await supabase.from("activities").update(meta).eq("id", activityId);
-  if (error && !/due_at|max_points|submission_close_at/i.test(error.message)) {
-    return { ok: false, error: error.message };
+  if (!error) return { ok: true, error: null };
+
+  // Compat temporal: si solo falta la columna nueva, guardar due_at + max_points
+  // y NO fingir éxito total si el usuario pidió guardar el cierre.
+  if (isMissingColumnError(error.message, "submission_close_at")) {
+    const withoutClose = { due_at: dueAt, max_points: maxPoints };
+    const fb = await supabase.from("activities").update(withoutClose).eq("id", activityId);
+    if (fb.error) return { ok: false, error: fb.error.message };
+    if (submissionCloseAt) {
+      return {
+        ok: false,
+        error:
+          "Se guardaron fecha de entrega y puntaje máximo, pero falta la migración 046 (submission_close_at) para persistir el cierre de entregas.",
+        partial: { due_at: true, max_points: true, submission_close_at: false },
+      };
+    }
+    return { ok: true, error: null };
   }
-  return { ok: true, error: null };
+
+  // Nunca convertir un error de metadata en éxito silencioso.
+  return { ok: false, error: error.message };
 }
 
 /** Deriva id de filtro de bandeja (compat: no_entrego → no_entregadas vía deriveInboxFilterId). */

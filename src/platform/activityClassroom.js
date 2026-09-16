@@ -71,7 +71,7 @@ function activityDueParts(activity) {
   };
 }
 
-function validateGradeForActivity(activity, grade) {
+export function validateGradeForActivity(activity, grade) {
   if (grade == null) return null;
   const n = Number(grade);
   if (!Number.isFinite(n) || n < 0) return "Nota inválida.";
