@@ -208,6 +208,22 @@ test("puntaje máximo se edita en Actividades, no duplicado en ActivityPage", ()
   assert.match(activity, /tab=actividades/);
 });
 
+test("ActivityPage integra shell UX nueva (no auth-root legacy)", () => {
+  const activity = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
+  assert.match(activity, /PyBotClassShell/);
+  assert.match(activity, /PbcPage/);
+  assert.match(activity, /PyBotClassBreadcrumb/);
+  assert.match(activity, /PbcCourseHeader/);
+  assert.match(activity, /SubmissionCodeViewer/);
+  assert.match(activity, /submissionVersionLabel/);
+  assert.match(activity, /sendGradeToClassroom/);
+  assert.match(activity, /get\("alumno"\)|focusStudentId/);
+  assert.doesNotMatch(activity, /className="auth-root"/);
+  assert.doesNotMatch(activity, /auth-card--max/);
+  const app = readFileSync(resolve(root, "src/App.jsx"), "utf8");
+  assert.match(app, /path="\/actividad\/:activityId"/);
+});
+
 test("fetchAllClassroomPages pagina correctamente", async () => {
   let calls = 0;
   const items = await fetchAllClassroomPages(async (pageToken) => {

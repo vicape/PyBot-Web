@@ -8,6 +8,15 @@ import {
   normalizeLessonDocument,
 } from "../components/content-editor/legacyLessonDocument.js";
 import SubmissionCodeViewer from "../components/pybotclass/SubmissionCodeViewer.jsx";
+import PyBotClassShell, { PyBotClassBreadcrumb } from "../components/pybotclass/PyBotClassShell.jsx";
+import {
+  PbcAlert,
+  PbcCourseHeader,
+  PbcEmpty,
+  PbcLoading,
+  PbcPage,
+  PbcSection,
+} from "../components/pybotclass/PyBotClassUi.jsx";
 import {
   ACTIVITY_ID_QUERY,
   ACTIVITY_LAUNCH_STATE_KEY,
@@ -23,8 +32,13 @@ import {
   submissionVersionLabel,
   submitActivity,
 } from "../platform/activitySubmissions.js";
-import { connectGoogleClassroom, getPendingClassroomTurnIn, setPendingClassroomTurnIn, clearPendingClassroomTurnIn } from "../platform/googleOAuth.js";
-import { getStoredStudentClassroomLink } from "../platform/profileApi.js";
+import {
+  connectGoogleClassroom,
+  getPendingClassroomTurnIn,
+  setPendingClassroomTurnIn,
+  clearPendingClassroomTurnIn,
+} from "../platform/googleOAuth.js";
+import { fetchProfile, getStoredStudentClassroomLink } from "../platform/profileApi.js";
 import {
   fetchCachedClassroomSubmissions,
   publishActivityToClassroom,
@@ -39,6 +53,7 @@ import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
 import { listLessonBlocks } from "../platform/contentApi.js";
 import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
 import { fetchMyOrgRole } from "../orgRole.js";
+import { isSuperAdmin } from "../platformRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { track } from "../telemetry/index.js";
 
@@ -86,6 +101,7 @@ export default function ActivityPage() {
   const [lessonMeta, setLessonMeta] = useState(null);
   const [lessonErr, setLessonErr] = useState("");
   const [snapshot, setSnapshot] = useState(null);
+  const [superAdmin, setSuperAdmin] = useState(false);
   const focusRowRef = useRef(null);
   const didFocusStudent = useRef(false);
 
@@ -94,6 +110,11 @@ export default function ActivityPage() {
   const activityKind = activity?.activity_kind || (activity?.content_snapshot ? "material" : "exercise");
   const isMaterial = activityKind === "material";
   const isCodingActivity = activityKind === "exercise" || activityKind === "task";
+
+  const signOut = useCallback(async () => {
+    if (supabase) await supabase.auth.signOut();
+    navigate("/login", { replace: true });
+  }, [supabase, navigate]);
 
   useEffect(() => {
     if (activityId) track("activity_open", { feature: "activity" });
@@ -195,6 +216,9 @@ export default function ActivityPage() {
       nextCourseRole = await fetchMyCourseRole(supabase, act.course_id, user.id);
       setCourseRole(nextCourseRole);
     }
+
+    const { profile } = await fetchProfile(user.id);
+    setSuperAdmin(isSuperAdmin(profile));
 
     const prog = await fetchActivityProgress(activityId, user.id);
     const launchCode = resolveActivityEditorCode({
@@ -527,80 +551,114 @@ export default function ActivityPage() {
     await load({ preserveActionMsg: true });
   };
 
-  if (authLoading || loading) {
+  if (authLoading) {
     return (
-      <main className="auth-root">
-        <p className="auth-card__muted">Cargando actividad…</p>
+      <main className="dash-root dash-root--center">
+        <PbcLoading label="Cargando actividad…" />
       </main>
     );
   }
 
+  if (!user) return null;
+
+  if (loading) {
+    return (
+      <PyBotClassShell user={user} showAdminTab={superAdmin} onSignOut={() => void signOut()}>
+        <PbcPage>
+          <PbcLoading label="Cargando actividad…" />
+        </PbcPage>
+      </PyBotClassShell>
+    );
+  }
+
+  const courseHref = activity?.course_id
+    ? `/dashboard/classes/${activity.course_id}`
+    : "/dashboard/classes";
+  const entregasHref = activity?.course_id
+    ? `/dashboard/classes/${activity.course_id}?tab=entregas`
+    : "/dashboard/classes";
+  const actividadesHref = activity?.course_id
+    ? `/dashboard/classes/${activity.course_id}?tab=actividades`
+    : "/dashboard/classes";
+
+  const breadcrumbItems = [];
+  if (activity?.course_id) {
+    breadcrumbItems.push({ label: courseTitle || "Curso", href: courseHref });
+    if (canTeach) {
+      breadcrumbItems.push({ label: "Entregas", href: entregasHref });
+    }
+  }
+  breadcrumbItems.push({ label: activity?.title || "Actividad" });
+
   if (loadErr) {
     return (
-      <main className="auth-root">
-        <div className="auth-card auth-card--wide">
-          <h1 className="auth-card__title">Actividad</h1>
-          <p className="auth-card__notice auth-card__notice--err">{loadErr}</p>
-          <Link to="/dashboard" className="auth-btn auth-btn--ghost">
-            Volver al panel
-          </Link>
-        </div>
-      </main>
+      <PyBotClassShell user={user} showAdminTab={superAdmin} onSignOut={() => void signOut()}>
+        <PbcPage>
+          <PyBotClassBreadcrumb items={[{ label: "Actividad" }]} />
+          <PbcCourseHeader title="Actividad" />
+          <PbcAlert variant="error">{loadErr}</PbcAlert>
+          <div className="pbc-footer-links">
+            <Link to="/dashboard/classes" className="auth-link">
+              ← Mis clases
+            </Link>
+          </div>
+        </PbcPage>
+      </PyBotClassShell>
     );
   }
 
   return (
-    <main className="auth-root">
-      <div className="auth-card auth-card--wide auth-card--max">
-        <p className="auth-breadcrumb">
-          <Link to="/dashboard" className="auth-link">
-            Panel
-          </Link>
-          {activity?.course_id ? (
-            <>
-              <span aria-hidden> / </span>
-              <Link to={`/dashboard/classes/${activity.course_id}`} className="auth-link">
-                {courseTitle || "Curso"}
+    <PyBotClassShell user={user} showAdminTab={superAdmin} onSignOut={() => void signOut()}>
+      <PbcPage>
+        <PyBotClassBreadcrumb items={breadcrumbItems} />
+
+        <PbcCourseHeader
+          title={activity?.title || "Actividad"}
+          orgName={courseTitle || undefined}
+          roleLabel={canTeach ? "Docente" : isStudent ? "Alumno" : undefined}
+          classroomLinked={!!activity?.classroom_coursework_id}
+        />
+
+        {profileError ? <PbcAlert variant="error">{profileError}</PbcAlert> : null}
+        {actionErr ? <PbcAlert variant="error">{actionErr}</PbcAlert> : null}
+        {actionMsg ? <PbcAlert variant="info">{actionMsg}</PbcAlert> : null}
+
+        <PbcSection
+          className="pbc-activity-overview"
+          title="Detalle"
+          description={
+            canTeach
+              ? "Revisión y corrección de la actividad en el contexto del curso."
+              : "Consigna, material y entrega de la actividad."
+          }
+          actions={
+            <div className="pbc-activity-actions">
+              {isCodingActivity ? (
+                <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" onClick={openPyBot}>
+                  Abrir PyBot
+                </button>
+              ) : null}
+              {isStudent && isCodingActivity ? (
+                <button
+                  type="button"
+                  className="auth-btn auth-btn--ghost auth-btn--sm"
+                  disabled={busy}
+                  onClick={() => void onSubmit()}
+                >
+                  {busy ? "Entregando…" : "Entregar actividad"}
+                </button>
+              ) : null}
+              <Link to={courseHref} className="auth-btn auth-btn--ghost auth-btn--sm">
+                Volver al curso
               </Link>
-              <span aria-hidden> / </span>
-              <Link
-                to={`/dashboard/classes/${activity.course_id}?tab=entregas`}
-                className="auth-link"
-              >
-                Entregas
-              </Link>
-            </>
-          ) : null}
-        </p>
-
-        <h1 className="auth-card__title">{activity?.title || "Actividad"}</h1>
-
-        {profileError ? (
-          <p className="auth-card__notice auth-card__notice--err">{profileError}</p>
-        ) : null}
-        {actionErr ? <p className="auth-card__notice auth-card__notice--err">{actionErr}</p> : null}
-        {actionMsg ? <p className="auth-card__notice">{actionMsg}</p> : null}
-
-        {canTeach ? (
-          <section
-            className="pbc-activity-meta"
-            style={{
-              marginTop: "0.75rem",
-              marginBottom: "0.75rem",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "0.75rem",
-              alignItems: "flex-end",
-            }}
-            aria-label="Configuración de la actividad"
-          >
-            <div>
-              <p className="auth-card__muted" style={{ margin: 0 }}>
-                Fecha de entrega:{" "}
-                {activity?.due_at ? fmtTs(activity.due_at) : "Sin fecha"}
-              </p>
             </div>
-            <div>
+          }
+        >
+          {canTeach ? (
+            <div className="pbc-activity-meta" aria-label="Configuración de la actividad">
+              <p className="auth-card__muted" style={{ margin: 0 }}>
+                Fecha de entrega: {activity?.due_at ? fmtTs(activity.due_at) : "Sin fecha"}
+              </p>
               {activity?.max_points != null ? (
                 <p className="auth-card__muted" style={{ margin: 0 }}>
                   Puntaje máximo: {activity.max_points}
@@ -608,13 +666,9 @@ export default function ActivityPage() {
               ) : activity?.course_id ? (
                 <p className="auth-card__muted" style={{ margin: 0, fontSize: "0.9rem" }}>
                   Definí el puntaje máximo en{" "}
-                  <Link
-                    to={`/dashboard/classes/${activity.course_id}?tab=actividades`}
-                    className="auth-link"
-                  >
+                  <Link to={actividadesHref} className="auth-link">
                     Actividades
-                  </Link>
-                  {" "}
+                  </Link>{" "}
                   (requerido para enviar notas a Classroom).
                 </p>
               ) : (
@@ -623,187 +677,165 @@ export default function ActivityPage() {
                 </p>
               )}
             </div>
-          </section>
-        ) : activity?.max_points != null || activity?.due_at ? (
-          <p className="auth-card__muted">
-            {activity?.due_at ? `Entrega: ${fmtTs(activity.due_at)}` : null}
-            {activity?.due_at && activity?.max_points != null ? " · " : null}
-            {activity?.max_points != null ? `Puntaje máximo: ${activity.max_points}` : null}
-          </p>
-        ) : null}
-
-        {isStudent && activity?.classroom_coursework_id && classroomCourseId ? (
-          <div
-            className="auth-card__actions auth-card__actions--row"
-            style={{ marginTop: "0.5rem", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}
-          >
-            {classroomLinked ? (
-              <span className="auth-card__muted">Cuenta Google Classroom vinculada</span>
-            ) : (
-              <p className="auth-card__muted" style={{ flex: "1 1 100%", margin: 0 }}>
-                Esta actividad está vinculada a Google Classroom. Al entregar, PyBot intentará marcarla
-                también allí (puede pedirte autorización de Google).
-              </p>
-            )}
-          </div>
-        ) : null}
-
-        {activity?.description ? (
-          <p className="auth-card__lead">{activity.description}</p>
-        ) : (
-          <p className="auth-card__muted">Sin descripción.</p>
-        )}
-
-        {activity?.content_snapshot || activity?.content_lesson_id ? (
-          <p className="auth-card__codehint">
-            {isMaterial ? "Material de Mi Contenido" : "Actividad desde Mi Contenido"}
-            {activity?.content_snapshot?.title ? `: ${activity.content_snapshot.title}` : ""}
-            {lessonMeta?.title && !activity?.content_snapshot ? `: ${lessonMeta.title}` : ""}
-          </p>
-        ) : activity?.pybot_lesson_id ? (
-          <p className="auth-card__codehint">
-            Lección PyBot (referencia): <code>{activity.pybot_lesson_id}</code>
-          </p>
-        ) : null}
-
-        {lessonErr ? (
-          <p className="auth-card__notice auth-card__notice--err">
-            No se pudo cargar el documento de la lección: {lessonErr}
-          </p>
-        ) : null}
-
-        {snapshot ? (
-          <section className="pbc-activity-lesson" aria-label="Contenido asignado">
-            <h2 className="pbc-activity-lesson__title">
-              {isMaterial ? "Material" : activityKind === "task" ? "Tarea" : "Ejercicio"}
-            </h2>
-            <AssignedContentSnapshotViewer snapshot={snapshot} />
-          </section>
-        ) : lessonDoc && activity?.content_lesson_id ? (
-          <section className="pbc-activity-lesson" aria-label="Contenido de la lección">
-            <h2 className="pbc-activity-lesson__title">Lección</h2>
-            <AssignedLessonViewer
-              key={activity.content_lesson_id}
-              lessonId={activity.content_lesson_id}
-              initialContent={lessonDoc}
-            />
-          </section>
-        ) : null}
-
-        {!isMaterial ? <p className="auth-card__muted">{progressHint}</p> : null}
-
-        {isStudent && mySubmission && isCodingActivity ? (
-          <div className="auth-card__muted" style={{ marginBottom: "1rem" }}>
-            <p>
-              Entrega: <strong>{submissionStatusLabelEs(mySubmission.status)}</strong>
-              {submissionVersionLabel(mySubmission.version)
-                ? ` · ${submissionVersionLabel(mySubmission.version)}`
-                : null}
-              {mySubmission.submitted_at ? ` · ${fmtTs(mySubmission.submitted_at)}` : null}
+          ) : activity?.max_points != null || activity?.due_at ? (
+            <p className="auth-card__muted">
+              {activity?.due_at ? `Entrega: ${fmtTs(activity.due_at)}` : null}
+              {activity?.due_at && activity?.max_points != null ? " · " : null}
+              {activity?.max_points != null ? `Puntaje máximo: ${activity.max_points}` : null}
             </p>
-            {mySubmission.grade != null ? (
-              <p>
-                Nota: <strong>{mySubmission.grade}</strong>
+          ) : null}
+
+          {isStudent && activity?.classroom_coursework_id && classroomCourseId ? (
+            <div className="pbc-activity-classroom-hint">
+              {classroomLinked ? (
+                <span className="auth-card__muted">Cuenta Google Classroom vinculada</span>
+              ) : (
+                <p className="auth-card__muted" style={{ margin: 0 }}>
+                  Esta actividad está vinculada a Google Classroom. Al entregar, PyBot intentará marcarla
+                  también allí (puede pedirte autorización de Google).
+                </p>
+              )}
+            </div>
+          ) : null}
+
+          {activity?.description ? (
+            <p className="pbc-activity-description">{activity.description}</p>
+          ) : (
+            <p className="auth-card__muted">Sin descripción.</p>
+          )}
+
+          {activity?.content_snapshot || activity?.content_lesson_id ? (
+            <p className="auth-card__muted">
+              {isMaterial ? "Material de Mi Contenido" : "Actividad desde Mi Contenido"}
+              {activity?.content_snapshot?.title ? `: ${activity.content_snapshot.title}` : ""}
+              {lessonMeta?.title && !activity?.content_snapshot ? `: ${lessonMeta.title}` : ""}
+            </p>
+          ) : activity?.pybot_lesson_id ? (
+            <p className="auth-card__muted">
+              Lección PyBot (referencia): <code>{activity.pybot_lesson_id}</code>
+            </p>
+          ) : null}
+
+          {lessonErr ? (
+            <PbcAlert variant="error">No se pudo cargar el documento de la lección: {lessonErr}</PbcAlert>
+          ) : null}
+
+          {snapshot ? (
+            <section className="pbc-activity-lesson" aria-label="Contenido asignado">
+              <h2 className="pbc-activity-lesson__title">
+                {isMaterial ? "Material" : activityKind === "task" ? "Tarea" : "Ejercicio"}
+              </h2>
+              <AssignedContentSnapshotViewer snapshot={snapshot} />
+            </section>
+          ) : lessonDoc && activity?.content_lesson_id ? (
+            <section className="pbc-activity-lesson" aria-label="Contenido de la lección">
+              <h2 className="pbc-activity-lesson__title">Lección</h2>
+              <AssignedLessonViewer
+                key={activity.content_lesson_id}
+                lessonId={activity.content_lesson_id}
+                initialContent={lessonDoc}
+              />
+            </section>
+          ) : null}
+
+          {!isMaterial ? <p className="auth-card__muted">{progressHint}</p> : null}
+
+          {isStudent && mySubmission && isCodingActivity ? (
+            <div className="pbc-activity-my-submission">
+              <p className="auth-card__muted" style={{ margin: 0 }}>
+                Entrega: <strong>{submissionStatusLabelEs(mySubmission.status)}</strong>
+                {submissionVersionLabel(mySubmission.version)
+                  ? ` · ${submissionVersionLabel(mySubmission.version)}`
+                  : null}
+                {mySubmission.submitted_at ? ` · ${fmtTs(mySubmission.submitted_at)}` : null}
               </p>
-            ) : null}
-            {mySubmission.feedback ? <p>Feedback: {mySubmission.feedback}</p> : null}
-          </div>
-        ) : null}
+              {mySubmission.grade != null ? (
+                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                  Nota: <strong>{mySubmission.grade}</strong>
+                </p>
+              ) : null}
+              {mySubmission.feedback ? (
+                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                  Feedback: {mySubmission.feedback}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
-        <div className="auth-card__actions auth-card__actions--row">
           {isCodingActivity ? (
-            <button type="button" className="auth-btn auth-btn--primary" onClick={openPyBot}>
-              Abrir PyBot
-            </button>
-          ) : null}
-          {isStudent && isCodingActivity ? (
-            <button
-              type="button"
-              className="auth-btn auth-btn--ghost"
-              disabled={busy}
-              onClick={() => void onSubmit()}
-            >
-              {busy ? "Entregando…" : "Entregar actividad"}
-            </button>
-          ) : null}
-          <Link
-            to={activity?.course_id ? `/dashboard/classes/${activity.course_id}` : "/dashboard/classes"}
-            className="auth-btn auth-btn--ghost"
-          >
-            Volver al curso
-          </Link>
-        </div>
-
-        {isCodingActivity ? (
-          <p className="auth-card__muted">
-            {canTeach
-              ? "«Abrir PyBot» abre el IDE con el código inicial o tu progreso (para probar la consigna). El código del alumno se ve arriba en cada entrega."
-              : savedCode
-                ? "El autosave guarda progreso; «Entregar» registra la entrega formal."
-                : activity?.starter_code
-                  ? "PyBot abre con el código inicial. Usá «Entregar» cuando termines."
-                  : "Trabajá en el IDE y entregá cuando estés listo."}
-          </p>
-        ) : (
-          <p className="auth-card__muted">Este material es de solo lectura. No requiere entrega de código.</p>
-        )}
+            <p className="auth-card__muted">
+              {canTeach
+                ? "«Abrir PyBot» abre el IDE con el código inicial o tu progreso (para probar la consigna). El código del alumno se ve en cada entrega."
+                : savedCode
+                  ? "El autosave guarda progreso; «Entregar» registra la entrega formal."
+                  : activity?.starter_code
+                    ? "PyBot abre con el código inicial. Usá «Entregar» cuando termines."
+                    : "Trabajá en el IDE y entregá cuando estés listo."}
+            </p>
+          ) : (
+            <p className="auth-card__muted">Este material es de solo lectura. No requiere entrega de código.</p>
+          )}
+        </PbcSection>
 
         {canTeach && classroomCourseId ? (
-          <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.75rem" }}>
-            {activity?.classroom_coursework_id ? (
-              <>
-                <span className="auth-card__muted">Vinculada a Classroom (sincronización externa)</span>
-                {activity.classroom_coursework_url ? (
-                  <a
-                    className="auth-link"
-                    href={activity.classroom_coursework_url}
-                    target="_blank"
-                    rel="noreferrer"
+          <PbcSection
+            title="Google Classroom"
+            description="Publicación, sincronización de entregas y envío de notas (sin reescribir el mecanismo actual)."
+          >
+            <div className="pbc-activity-actions pbc-activity-actions--wrap">
+              {activity?.classroom_coursework_id ? (
+                <>
+                  <span className="auth-card__muted">Vinculada a Classroom (sincronización externa)</span>
+                  {activity.classroom_coursework_url ? (
+                    <a
+                      className="auth-link"
+                      href={activity.classroom_coursework_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Abrir courseWork
+                    </a>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="auth-btn auth-btn--ghost auth-btn--sm"
+                    disabled={busy}
+                    onClick={() => void onSyncClassroom()}
                   >
-                    Abrir courseWork
-                  </a>
-                ) : null}
+                    Sincronizar entregas Classroom
+                  </button>
+                  <span className="auth-card__muted" style={{ fontSize: "0.85rem" }}>
+                    {classroomSyncedAt
+                      ? `Última sincronización: ${fmtTs(classroomSyncedAt)}`
+                      : "Sin sincronizar aún"}
+                    {classroomSubs.length
+                      ? ` · ${classroomSubs.length} StudentSubmission${classroomSubs.length === 1 ? "" : "s"}`
+                      : ""}
+                  </span>
+                </>
+              ) : (
                 <button
                   type="button"
                   className="auth-btn auth-btn--ghost auth-btn--sm"
                   disabled={busy}
-                  onClick={() => void onSyncClassroom()}
+                  onClick={() => void onPublishClassroom()}
                 >
-                  Sincronizar entregas Classroom
+                  Publicar en Classroom
                 </button>
-                <span className="auth-card__muted" style={{ fontSize: "0.85rem" }}>
-                  {classroomSyncedAt
-                    ? `Última sincronización: ${fmtTs(classroomSyncedAt)}`
-                    : "Sin sincronizar aún"}
-                  {classroomSubs.length
-                    ? ` · ${classroomSubs.length} StudentSubmission${classroomSubs.length === 1 ? "" : "s"}`
-                    : ""}
-                </span>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="auth-btn auth-btn--ghost"
-                disabled={busy}
-                onClick={() => void onPublishClassroom()}
-              >
-                Publicar en Classroom
-              </button>
-            )}
-          </div>
+              )}
+            </div>
+          </PbcSection>
         ) : null}
 
         {canTeach ? (
-          <section style={{ marginTop: "1.5rem" }}>
-            <h2 className="auth-section__title">Entregas · revisar y corregir</h2>
-            <p className="auth-card__muted" style={{ marginTop: 0 }}>
-              Seleccioná una entrega, revisá el código (V1/V2/V3 inmutables) y guardá la corrección.
-              Classroom solo sincroniza la nota ya cargada en PyBot.
-            </p>
+          <PbcSection
+            title="Entregas · revisar y corregir"
+            description="Seleccioná una entrega, revisá el código (V1/V2/V3 inmutables) y guardá la corrección. Classroom solo sincroniza la nota ya cargada en PyBot."
+          >
             {teacherRows.length === 0 ? (
-              <p className="auth-card__muted">Todavía no hay entregas.</p>
+              <PbcEmpty title="Todavía no hay entregas" description="Cuando los alumnos entreguen, aparecerán aquí." />
             ) : (
-              <ul className="auth-org-list">
+              <ul className="pbc-list pbc-activity-submissions">
                 {teacherRows.map((row) => {
                   const profile = profilesById.get(row.user_id);
                   const draft = gradeDraft[row.id] || {
@@ -820,19 +852,15 @@ export default function ActivityPage() {
                     <li
                       key={row.id}
                       ref={isFocused ? focusRowRef : undefined}
-                      className="auth-org-row"
-                      style={{ flexDirection: "column", alignItems: "stretch" }}
+                      className={`pbc-list-item pbc-activity-submission${isFocused ? " pbc-activity-submission--focus" : ""}`}
                       id={`entrega-${row.user_id}`}
                     >
-                      <div
-                        className="auth-org-row--split"
-                        style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}
-                      >
-                        <div>
-                          <span className="auth-org-row__name">
+                      <div className="pbc-activity-submission__head">
+                        <div className="pbc-list-item__text">
+                          <span className="pbc-list-item__title">
                             {profile?.display_name || profile?.email || row.user_id.slice(0, 8)}
                           </span>
-                          <span className="auth-org-row__meta">
+                          <span className="pbc-list-item__meta">
                             {verLabel ? `${verLabel} · ` : ""}
                             {submissionStatusLabelEs(row.status)}
                             {row.submitted_at ? ` · ${fmtTs(row.submitted_at)}` : ""}
@@ -860,27 +888,19 @@ export default function ActivityPage() {
                         />
                       ) : null}
                       {history.length > 0 ? (
-                        <details style={{ marginTop: "0.5rem" }}>
+                        <details className="pbc-activity-history">
                           <summary className="auth-card__muted">
                             Historial ({history.length}{" "}
                             {history.length === 1 ? "versión anterior" : "versiones anteriores"})
                           </summary>
-                          <ul className="auth-org-list" style={{ marginTop: "0.35rem" }}>
+                          <ul className="pbc-activity-history__list">
                             {history.map((h) => {
                               const hLabel = submissionVersionLabel(h.version) || "V?";
                               const showingHist = viewHistoryId === h.id;
                               return (
-                                <li key={h.id} className="auth-card__muted" style={{ marginBottom: "0.35rem" }}>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      justifyContent: "space-between",
-                                      gap: "0.5rem",
-                                      alignItems: "center",
-                                      flexWrap: "wrap",
-                                    }}
-                                  >
-                                    <span>
+                                <li key={h.id} className="pbc-activity-history__item">
+                                  <div className="pbc-activity-submission__head">
+                                    <span className="auth-card__muted">
                                       {hLabel}
                                       {" · "}
                                       {submissionStatusLabelEs(h.status)}
@@ -890,9 +910,7 @@ export default function ActivityPage() {
                                     <button
                                       type="button"
                                       className="auth-btn auth-btn--ghost auth-btn--sm"
-                                      onClick={() =>
-                                        setViewHistoryId(showingHist ? null : h.id)
-                                      }
+                                      onClick={() => setViewHistoryId(showingHist ? null : h.id)}
                                     >
                                       {showingHist ? "Ocultar" : "Ver código"}
                                     </button>
@@ -910,14 +928,11 @@ export default function ActivityPage() {
                           </ul>
                         </details>
                       ) : null}
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.5rem" }}>
+                      <div className="pbc-activity-grade-row">
                         <input
-                          className="auth-org-input"
-                          style={{ width: "6rem" }}
+                          className="auth-org-input pbc-activity-grade-input"
                           placeholder={
-                            activity?.max_points != null
-                              ? `Nota / ${activity.max_points}`
-                              : "Nota"
+                            activity?.max_points != null ? `Nota / ${activity.max_points}` : "Nota"
                           }
                           value={draft.grade}
                           onChange={(e) =>
@@ -928,8 +943,7 @@ export default function ActivityPage() {
                           }
                         />
                         <input
-                          className="auth-org-input"
-                          style={{ flex: 1, minWidth: "12rem" }}
+                          className="auth-org-input pbc-activity-feedback-input"
                           placeholder="Feedback"
                           value={draft.feedback}
                           onChange={(e) =>
@@ -963,9 +977,20 @@ export default function ActivityPage() {
                 })}
               </ul>
             )}
-          </section>
+          </PbcSection>
         ) : null}
-      </div>
-    </main>
+
+        <div className="pbc-footer-links">
+          <Link to={courseHref} className="auth-link">
+            ← Volver al curso
+          </Link>
+          {canTeach && activity?.course_id ? (
+            <Link to={entregasHref} className="auth-link">
+              Ver entregas del curso
+            </Link>
+          ) : null}
+        </div>
+      </PbcPage>
+    </PyBotClassShell>
   );
 }

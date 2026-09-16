@@ -9,6 +9,9 @@ function readUiTheme() {
     /* ignore */
   }
   if (typeof document !== "undefined") {
+    const dash = document.querySelector(".pbc-dashboard[data-pbc-theme]");
+    const dashTheme = dash?.getAttribute("data-pbc-theme");
+    if (dashTheme === "light" || dashTheme === "dark") return dashTheme;
     const htmlTheme =
       document.documentElement.getAttribute("data-theme") ||
       document.documentElement.getAttribute("data-pbc-theme");
@@ -41,6 +44,13 @@ export default function SubmissionCodeViewer({
       attributes: true,
       attributeFilter: ["data-theme", "data-pbc-theme"],
     });
+    const dash = document.querySelector(".pbc-dashboard");
+    if (dash) {
+      obs.observe(dash, {
+        attributes: true,
+        attributeFilter: ["data-pbc-theme"],
+      });
+    }
     return () => {
       window.removeEventListener("storage", sync);
       obs.disconnect();
