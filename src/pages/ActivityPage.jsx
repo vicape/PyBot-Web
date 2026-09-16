@@ -44,10 +44,10 @@ import {
   publishActivityToClassroom,
   sendGradeToClassroom,
   syncClassroomSubmissionsForActivity,
+  classroomGradeSyncUserMessage,
   classroomTurnInUserMessage,
   classroomTurnInSuccessMessage,
   turnInPybotActivityToClassroom,
-  CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED,
 } from "../platform/activityClassroom.js";
 import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
 import { listLessonBlocks } from "../platform/contentApi.js";
@@ -482,19 +482,12 @@ export default function ActivityPage() {
       setActionErr(r.error || "No se pudo enviar la nota a Classroom.");
       return;
     }
-    if (r.warning) {
-      setActionMsg(
-        row.feedback && r.feedbackSyncUnsupported
-          ? `${r.warning} El feedback de texto queda en PyBot: Classroom API no admite sincronizarlo.`
-          : r.warning,
-      );
-    } else {
-      setActionMsg(
-        row.feedback && !CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED
-          ? "Nota enviada a Classroom. El feedback de texto queda en PyBot (Classroom API v1 no admite comentarios privados del docente)."
-          : "Nota enviada a Classroom.",
-      );
-    }
+    setActionMsg(
+      classroomGradeSyncUserMessage({
+        warning: r.warning || null,
+        hasFeedback: Boolean(row.feedback) && (r.feedbackSynced !== true),
+      }),
+    );
     await load();
   };
 
@@ -830,7 +823,7 @@ export default function ActivityPage() {
         {canTeach ? (
           <PbcSection
             title="Entregas · revisar y corregir"
-            description="Seleccioná una entrega, revisá el código (V1/V2/V3 inmutables) y guardá la corrección. Classroom solo sincroniza la nota ya cargada en PyBot."
+            description="Seleccioná una entrega, revisá el código (V1/V2/V3 inmutables) y guardá la corrección. Classroom solo sincroniza la nota; el feedback permanece en PyBotClass."
           >
             {teacherRows.length === 0 ? (
               <PbcEmpty title="Todavía no hay entregas" description="Cuando los alumnos entreguen, aparecerán aquí." />

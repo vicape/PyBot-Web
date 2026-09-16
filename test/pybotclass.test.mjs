@@ -174,6 +174,25 @@ test("sendGradeToClassroom exige max_points definido", () => {
   assert.match(src, /Definí el puntaje máximo/);
 });
 
+test("classroomGradeSyncUserMessage distingue nota vs feedback", async () => {
+  const { classroomGradeSyncUserMessage } = await import("../src/platform/activityClassroom.js");
+  assert.equal(
+    classroomGradeSyncUserMessage({}),
+    "Nota sincronizada con Classroom.",
+  );
+  assert.equal(
+    classroomGradeSyncUserMessage({ hasFeedback: true }),
+    "Nota sincronizada con Classroom. El feedback permanece disponible en PyBotClass.",
+  );
+  assert.equal(
+    classroomGradeSyncUserMessage({
+      warning: "Nota asignada en Classroom, pero no se pudo «devolver».",
+      hasFeedback: true,
+    }),
+    "Nota asignada en Classroom, pero no se pudo «devolver». El feedback permanece disponible en PyBotClass.",
+  );
+});
+
 test("Classroom API: patch de nota no incluye feedback (limitación externa)", () => {
   const api = readFileSync(resolve(root, "src/classroom/classroomApi.js"), "utf8");
   assert.match(api, /CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED = false/);
@@ -183,6 +202,15 @@ test("Classroom API: patch de nota no incluye feedback (limitación externa)", (
   assert.doesNotMatch(api, /privateComment/);
   const send = readFileSync(resolve(root, "src/platform/activityClassroom.js"), "utf8");
   assert.match(send, /feedback no forma parte del payload/);
+  assert.match(send, /feedbackSynced: false/);
+  assert.match(send, /classroomGradeSyncUserMessage/);
+  assert.match(send, /El feedback permanece disponible en PyBotClass/);
+  assert.doesNotMatch(send, /Evaluación sincronizada/);
+  const activity = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
+  assert.match(activity, /classroomGradeSyncUserMessage/);
+  assert.match(activity, /el feedback permanece en PyBotClass/);
+  assert.doesNotMatch(activity, /Nota enviada a Classroom\. El feedback de texto queda en PyBot/);
+  assert.doesNotMatch(activity, /Evaluación sincronizada/);
 });
 
 test("UX única: ruta clásica de curso redirige a PyBotClass", () => {

@@ -450,6 +450,21 @@ export function matchClassroomSubmission(
   return false;
 }
 
+/**
+ * Mensaje post-sync de nota a Classroom.
+ * Distingue nota sincronizada vs feedback que permanece solo en PyBotClass
+ * (Classroom API pública no soporta comentarios privados del docente).
+ */
+export function classroomGradeSyncUserMessage({ warning, hasFeedback } = {}) {
+  const feedbackNote = hasFeedback
+    ? " El feedback permanece disponible en PyBotClass."
+    : "";
+  if (warning) {
+    return `${warning}${feedbackNote}`;
+  }
+  return `Nota sincronizada con Classroom.${feedbackNote}`;
+}
+
 /** Mensaje claro post-entrega cuando falla el turnIn de Classroom. */
 export function classroomTurnInUserMessage(classroomResult) {
   if (!classroomResult || classroomResult.skipped || classroomResult.ok) return null;
