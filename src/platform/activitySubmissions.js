@@ -1,11 +1,16 @@
 import { getSupabase } from "../supabaseClient.js";
 import { turnInPybotActivityToClassroom } from "./activityClassroom.js";
+import {
+  deriveProcessStatus,
+  processStatusLabelEs,
+  studentNextActionMessage,
+} from "./submissionWorkflow.js";
 
 const SUBMISSION_SELECT =
-  "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version";
+  "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, returned_at, closed_at";
 
 const SUBMISSION_TEACHER_SELECT =
-  "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, classroom_grade_synced_at, classroom_grade_sync_error, classroom_submission_id";
+  "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, returned_at, closed_at, closed_by, classroom_grade_synced_at, classroom_grade_sync_error, classroom_submission_id";
 
 /** Etiqueta corta de versión formal (V1, V2…). */
 export function submissionVersionLabel(version) {
@@ -83,7 +88,20 @@ export async function fetchMySubmission(activityId, userId) {
     .limit(1)
     .maybeSingle();
 
-  if (error) return { submission: null, error: error.message };
+  if (error) {
+    // Fallback sin columnas 046
+    const fb = await sb
+      .from("activity_submissions")
+      .select(
+        "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version",
+      )
+      .eq("activity_id", activityId)
+      .eq("user_id", userId)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return { submission: fb.data, error: fb.error?.message ?? null };
+  }
   return { submission: data, error: null };
 }
 
@@ -122,13 +140,13 @@ export async function fetchActivitySubmissions(activityId) {
     .order("submitted_at", { ascending: false });
 
   if (error) {
-    // Fallback si aún no está la migración 029 / 045
     const fb = await sb
       .from("activity_submissions")
       .select(
-        "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at",
+        "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, classroom_grade_synced_at, classroom_grade_sync_error, classroom_submission_id",
       )
       .eq("activity_id", activityId)
+      .order("version", { ascending: false })
       .order("submitted_at", { ascending: false });
     const allRows = fb.data ?? [];
     return {
@@ -142,8 +160,8 @@ export async function fetchActivitySubmissions(activityId) {
   return { rows: pickLatestSubmissionPerUser(allRows), allRows, error: null };
 }
 
-/** Corrección docente (actualiza exclusivamente la fila/id objetivo). */
-export async function gradeSubmission(submissionId, grade, feedback) {
+/** Evaluar (nota + feedback + rúbrica opcional). */
+export async function gradeSubmission(submissionId, grade, feedback, rubricScores = null) {
   const sb = getSupabase();
   if (!sb || !submissionId) return { ok: false, error: "missing_args" };
 
@@ -151,24 +169,161 @@ export async function gradeSubmission(submissionId, grade, feedback) {
     p_submission_id: submissionId,
     p_grade: grade == null || grade === "" ? null : Number(grade),
     p_feedback: feedback ?? null,
+    p_rubric_scores: rubricScores,
   });
 
   if (error) return { ok: false, error: error.message };
-  if (!data?.ok) return { ok: false, error: data?.error || "grade_failed" };
+  if (!data?.ok) return { ok: false, error: data?.error || "grade_failed", detail: data };
   return { ok: true, result: data, error: null };
 }
 
-export function submissionStatusLabelEs(status) {
-  switch (status) {
-    case "draft":
-      return "Borrador";
-    case "submitted":
-      return "Entregada";
-    case "graded":
-      return "Corregida";
-    case "returned":
-      return "Devuelta";
-    default:
-      return status || "—";
-  }
+/** Solicitar revisión (returned). No exige nota. */
+export async function requestSubmissionReview(submissionId, feedback = null) {
+  const sb = getSupabase();
+  if (!sb || !submissionId) return { ok: false, error: "missing_args" };
+
+  const { data, error } = await sb.rpc("request_activity_review", {
+    p_submission_id: submissionId,
+    p_feedback: feedback ?? null,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "review_failed" };
+  return { ok: true, result: data, error: null };
 }
+
+/** Cerrar corrección (graded → closed). */
+export async function closeSubmission(submissionId) {
+  const sb = getSupabase();
+  if (!sb || !submissionId) return { ok: false, error: "missing_args" };
+
+  const { data, error } = await sb.rpc("close_activity_submission", {
+    p_submission_id: submissionId,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "close_failed" };
+  return { ok: true, result: data, error: null };
+}
+
+/** Reabrir individualmente para un alumno. */
+export async function reopenSubmissionForStudent(activityId, userId, note = null) {
+  const sb = getSupabase();
+  if (!sb || !activityId || !userId) return { ok: false, error: "missing_args" };
+
+  const { data, error } = await sb.rpc("reopen_activity_submission", {
+    p_activity_id: activityId,
+    p_user_id: userId,
+    p_note: note ?? null,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "reopen_failed" };
+  return { ok: true, result: data, error: null };
+}
+
+export async function fetchActiveReopen(activityId, userId) {
+  const sb = getSupabase();
+  if (!sb || !activityId || !userId) return { reopen: null, error: "missing_args" };
+
+  const { data, error } = await sb
+    .from("activity_submission_reopens")
+    .select("activity_id, user_id, active, reopened_at, note")
+    .eq("activity_id", activityId)
+    .eq("user_id", userId)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (error) return { reopen: null, error: error.message };
+  return { reopen: data, error: null };
+}
+
+export async function fetchActivityRubric(activityId) {
+  const sb = getSupabase();
+  if (!sb || !activityId) return { rubric: null, criteria: [], error: "missing_args" };
+
+  const { data: rubric, error } = await sb
+    .from("activity_rubrics")
+    .select("id, activity_id, updated_at")
+    .eq("activity_id", activityId)
+    .maybeSingle();
+
+  if (error) return { rubric: null, criteria: [], error: error.message };
+  if (!rubric) return { rubric: null, criteria: [], error: null };
+
+  const { data: criteria, error: cErr } = await sb
+    .from("activity_rubric_criteria")
+    .select("id, rubric_id, name, description, max_points, sort_order")
+    .eq("rubric_id", rubric.id)
+    .order("sort_order", { ascending: true });
+
+  if (cErr) return { rubric, criteria: [], error: cErr.message };
+  return { rubric, criteria: criteria ?? [], error: null };
+}
+
+export async function upsertActivityRubric(activityId, criteria) {
+  const sb = getSupabase();
+  if (!sb || !activityId) return { ok: false, error: "missing_args" };
+
+  const payload = (criteria || []).map((c) => ({
+    name: c.name,
+    description: c.description ?? null,
+    max_points: Number(c.max_points ?? c.maxPoints),
+  }));
+
+  const { data, error } = await sb.rpc("upsert_activity_rubric", {
+    p_activity_id: activityId,
+    p_criteria: payload,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "rubric_failed", detail: data };
+  return { ok: true, result: data, error: null };
+}
+
+export async function clearActivityRubric(activityId) {
+  const sb = getSupabase();
+  if (!sb || !activityId) return { ok: false, error: "missing_args" };
+
+  const { data, error } = await sb.rpc("clear_activity_rubric", {
+    p_activity_id: activityId,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "clear_failed" };
+  return { ok: true, error: null };
+}
+
+export async function fetchSubmissionRubricScores(submissionId) {
+  const sb = getSupabase();
+  if (!sb || !submissionId) return { scores: [], error: "missing_args" };
+
+  const { data, error } = await sb
+    .from("activity_submission_rubric_scores")
+    .select("id, submission_id, criterion_id, points, comment")
+    .eq("submission_id", submissionId);
+
+  if (error) return { scores: [], error: error.message };
+  return { scores: data ?? [], error: null };
+}
+
+/** Label DB legacy + proceso visible. */
+export function submissionStatusLabelEs(status, { version } = {}) {
+  const process = deriveProcessStatus({
+    status,
+    version,
+    hasSubmission: Boolean(status),
+  });
+  if (
+    status === "draft" ||
+    status === "submitted" ||
+    status === "returned" ||
+    status === "graded" ||
+    status === "closed"
+  ) {
+    return processStatusLabelEs(process);
+  }
+  return status || "—";
+}
+
+export { deriveProcessStatus, processStatusLabelEs, studentNextActionMessage };

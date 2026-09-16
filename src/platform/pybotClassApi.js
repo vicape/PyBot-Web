@@ -1,8 +1,13 @@
 import { getSupabase } from "../supabaseClient.js";
 import { normalizeCourseRole } from "./courseRole.js";
+import {
+  deriveInboxFilterId,
+  deriveProcessStatus,
+  processStatusLabelEs,
+} from "./submissionWorkflow.js";
 
 export const PYBOTCLASS_MIGRATION_HINT =
-  "Faltan las migraciones PyBotClass en Supabase. Ejecutá en el SQL Editor: 20260831000031_pybotclass_security_fix.sql, 20260831000032_pybotclass_activity_meta.sql y 20260831000033_pybotclass_queries.sql";
+  "Faltan migraciones PyBotClass en Supabase. Ejecutá en el SQL Editor (en orden) hasta 20260915200046_pybotclass_workflow_rubrics.sql (incluye 045 versiones y 046 workflow/rúbricas).";
 
 function isMissingRpcError(message) {
   return /Could not find the function|schema cache|function.*does not exist/i.test(message ?? "");
@@ -212,7 +217,7 @@ export async function fetchCourseActivities(courseId) {
   const { data, error } = await sb
     .from("activities")
     .select(
-      "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, activity_kind, origin, due_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at",
+      "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, activity_kind, origin, due_at, submission_close_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at",
     )
     .eq("course_id", courseId)
     .order("created_at", { ascending: false });
@@ -246,6 +251,7 @@ export async function createPybotclassActivity(supabase, fields) {
     created_by: fields.createdBy,
     origin: "pybot",
     due_at: fields.dueAt || null,
+    submission_close_at: fields.submissionCloseAt || null,
     max_points: fields.maxPoints != null && fields.maxPoints !== "" ? Number(fields.maxPoints) : null,
   };
   if (fields.contentLessonId) {
@@ -255,8 +261,19 @@ export async function createPybotclassActivity(supabase, fields) {
   const { data, error } = await supabase
     .from("activities")
     .insert(payload)
-    .select("id, title, due_at, max_points, content_lesson_id, created_at")
+    .select("id, title, due_at, submission_close_at, max_points, content_lesson_id, created_at")
     .maybeSingle();
+
+  if (error && /submission_close_at/i.test(error.message || "")) {
+    delete payload.submission_close_at;
+    const fb = await supabase
+      .from("activities")
+      .insert(payload)
+      .select("id, title, due_at, max_points, content_lesson_id, created_at")
+      .maybeSingle();
+    if (fb.error) return { row: null, error: fb.error.message };
+    return { row: fb.data, error: null };
+  }
 
   if (error) return { row: null, error: error.message };
   return { row: data, error: null };
@@ -282,37 +299,52 @@ export async function updatePybotclassActivity(supabase, activityId, fields) {
 
   const meta = {
     due_at: fields.dueAt || null,
+    submission_close_at: fields.submissionCloseAt || null,
     max_points:
       fields.maxPoints != null && fields.maxPoints !== "" ? Number(fields.maxPoints) : null,
   };
 
   const { error } = await supabase.from("activities").update(meta).eq("id", activityId);
-  if (error && !/due_at|max_points/i.test(error.message)) {
+  if (error && !/due_at|max_points|submission_close_at/i.test(error.message)) {
     return { ok: false, error: error.message };
   }
   return { ok: true, error: null };
 }
 
-/** Deriva etiqueta de estado para vista de entregas. */
+/** Deriva id de filtro de bandeja (compat: no_entrego → no_entregadas vía deriveInboxFilterId). */
 export function deriveSubmissionOverviewStatus(row) {
-  if (!row?.submission_id) return "no_entrego";
-  if (row.submission_status === "submitted") return "por_corregir";
-  if (row.submission_status === "graded" || row.submission_status === "returned") {
-    return "corregida";
-  }
-  return "no_entrego";
+  const id = deriveInboxFilterId(row);
+  // Compat tests legacy: "no_entrego" / "corregida"
+  if (id === "no_entregadas") return "no_entrego";
+  if (id === "evaluadas" || id === "cerradas") return "corregida";
+  if (id === "revision_solicitada") return "revision_solicitada";
+  if (id === "reentregadas") return "reentregadas";
+  return id;
 }
 
 export function submissionOverviewLabelEs(status) {
   switch (status) {
+    case "no_entregadas":
     case "no_entrego":
       return "No entregó";
     case "por_corregir":
       return "Por corregir";
+    case "revision_solicitada":
+      return "Revisión solicitada";
+    case "reentregadas":
+      return "Reentregada";
+    case "evaluadas":
     case "corregida":
-      return "Corregida";
-    default:
-      return status || "—";
+      return "Evaluada";
+    case "cerradas":
+      return "Cerrada";
+    default: {
+      const process = deriveProcessStatus({
+        status,
+        hasSubmission: Boolean(status),
+      });
+      return processStatusLabelEs(process);
+    }
   }
 }
 

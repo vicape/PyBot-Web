@@ -25,13 +25,31 @@ import {
 import { writeActivityLaunchCache } from "../platform/courseActivityApi.js";
 import { fetchActivityProgress } from "../platform/activityProgress.js";
 import {
+  closeSubmission,
+  fetchActiveReopen,
+  fetchActivityRubric,
   fetchActivitySubmissions,
   fetchMySubmission,
+  fetchSubmissionRubricScores,
   gradeSubmission,
+  reopenSubmissionForStudent,
+  requestSubmissionReview,
   submissionStatusLabelEs,
   submissionVersionLabel,
   submitActivity,
+  upsertActivityRubric,
 } from "../platform/activitySubmissions.js";
+import {
+  canStudentSubmit,
+  deriveProcessStatus,
+  deriveSubmissionWindow,
+  deriveTimeliness,
+  processStatusLabelEs,
+  studentNextActionMessage,
+  sumRubricPoints,
+  timelinessLabelEs,
+  windowLabelEs,
+} from "../platform/submissionWorkflow.js";
 import {
   connectGoogleClassroom,
   getPendingClassroomTurnIn,
@@ -92,6 +110,11 @@ export default function ActivityPage() {
   const [viewCode, setViewCode] = useState(null);
   const [viewHistoryId, setViewHistoryId] = useState(null);
   const [gradeDraft, setGradeDraft] = useState({});
+  const [rubricCriteria, setRubricCriteria] = useState([]);
+  const [rubricDraftBySubmission, setRubricDraftBySubmission] = useState({});
+  const [myRubricScores, setMyRubricScores] = useState([]);
+  const [reopenActive, setReopenActive] = useState(false);
+  const [rubricEditor, setRubricEditor] = useState([]);
   const [actionMsg, setActionMsg] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [needsClassroomConnect, setNeedsClassroomConnect] = useState(false);
@@ -132,7 +155,7 @@ export default function ActivityPage() {
     let { data: act, error: eAct } = await supabase
       .from("activities")
       .select(
-        "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, content_source_id, activity_kind, course_id, due_at, max_points, created_at",
+        "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, content_source_id, activity_kind, course_id, due_at, submission_close_at, max_points, created_at",
       )
       .eq("id", activityId)
       .maybeSingle();
@@ -249,6 +272,16 @@ export default function ActivityPage() {
       const sub = await fetchMySubmission(activityId, user.id);
       setMySubmission(sub.submission);
 
+      const { reopen } = await fetchActiveReopen(activityId, user.id);
+      setReopenActive(Boolean(reopen?.active));
+
+      if (sub.submission?.id && (sub.submission.status === "graded" || sub.submission.status === "closed")) {
+        const { scores } = await fetchSubmissionRubricScores(sub.submission.id);
+        setMyRubricScores(scores);
+      } else {
+        setMyRubricScores([]);
+      }
+
       if (act.classroom_coursework_id && nextClassroomCourseId) {
         const stored = await getStoredStudentClassroomLink(user.id);
         const linked = !!(
@@ -263,9 +296,22 @@ export default function ActivityPage() {
       }
     } else {
       setMySubmission(null);
+      setMyRubricScores([]);
+      setReopenActive(false);
       setClassroomLinked(null);
       setNeedsClassroomConnect(false);
     }
+
+    const { criteria } = await fetchActivityRubric(activityId);
+    setRubricCriteria(criteria || []);
+    setRubricEditor(
+      (criteria || []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description || "",
+        max_points: String(c.max_points),
+      })),
+    );
 
     if (teach) {
       const list = await fetchActivitySubmissions(activityId);
@@ -433,16 +479,13 @@ export default function ActivityPage() {
     );
   };
 
-  const onSendGradeClassroom = async (row) => {
-    if (!activity?.classroom_coursework_id || !classroomCourseId || !user || busy) return;
-    let classroomSubmissionId = row.classroom_submission_id;
-
-    // 1) activity_submissions · 2) cache por user_id · 3) cache/memoria por classroom_user_id
+  const resolveClassroomSubmissionId = async (row) => {
+    let classroomSubmissionId = row.classroom_submission_id || null;
     if (!classroomSubmissionId) {
       const byUserId = classroomSubs.find((cs) => cs.user_id && cs.user_id === row.user_id);
       if (byUserId?.id) classroomSubmissionId = byUserId.id;
     }
-    if (!classroomSubmissionId) {
+    if (!classroomSubmissionId && activity?.course_id) {
       const { data: cm } = await supabase
         .from("course_members")
         .select("classroom_user_id")
@@ -460,6 +503,12 @@ export default function ActivityPage() {
         }
       }
     }
+    return classroomSubmissionId;
+  };
+
+  const onSendGradeClassroom = async (row) => {
+    if (!activity?.classroom_coursework_id || !classroomCourseId || !user || busy) return;
+    const classroomSubmissionId = await resolveClassroomSubmissionId(row);
     if (!classroomSubmissionId) {
       setActionErr(
         "No se encontró la entrega Classroom del alumno. Primero «Sincronizar entregas Classroom».",
@@ -485,10 +534,10 @@ export default function ActivityPage() {
     setActionMsg(
       classroomGradeSyncUserMessage({
         warning: r.warning || null,
-        hasFeedback: Boolean(row.feedback) && (r.feedbackSynced !== true),
+        hasFeedback: Boolean(row.feedback) && r.feedbackSynced !== true,
       }),
     );
-    await load();
+    await load({ preserveActionMsg: true });
   };
 
   const onSubmit = async () => {
@@ -503,7 +552,11 @@ export default function ActivityPage() {
     const r = await submitActivity(activityId, code);
     if (!r.ok) {
       setBusy(false);
-      setActionErr(r.error || "No se pudo entregar.");
+      const msg =
+        r.error === "submissions_closed"
+          ? "Las entregas están cerradas. Pedile al docente una reapertura individual."
+          : r.error || "No se pudo entregar.";
+      setActionErr(msg);
       return;
     }
     await load({ preserveActionMsg: true });
@@ -523,24 +576,148 @@ export default function ActivityPage() {
       return;
     }
     setBusy(false);
+    const lateNote = r.submission?.late ? " (tarde)" : "";
     const okMsg = classroomTurnInSuccessMessage(cr);
     const failMsg = classroomTurnInUserMessage(cr);
-    setActionMsg(failMsg || okMsg || "Actividad entregada.");
+    setActionMsg(failMsg || okMsg || `Actividad entregada${lateNote}.`);
   };
 
-  const onGrade = async (submissionId) => {
+  const onRequestReview = async (submissionId) => {
     if (busy) return;
     const draft = gradeDraft[submissionId] || {};
     setBusy(true);
     setActionErr("");
     setActionMsg("");
-    const r = await gradeSubmission(submissionId, draft.grade, draft.feedback);
+    const r = await requestSubmissionReview(submissionId, draft.feedback || null);
     setBusy(false);
     if (!r.ok) {
-      setActionErr(r.error || "No se pudo guardar la corrección.");
+      setActionErr(r.error || "No se pudo solicitar la revisión.");
       return;
     }
-    setActionMsg("Corrección guardada.");
+    setActionMsg("Revisión solicitada. El alumno puede corregir y reentregar.");
+    await load({ preserveActionMsg: true });
+  };
+
+  const onGrade = async (submissionId) => {
+    if (busy) return;
+    const draft = { ...(gradeDraft[submissionId] || {}) };
+    const row = teacherRows.find((r) => r.id === submissionId);
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+
+    let rubricScores = null;
+    if (rubricCriteria.length > 0) {
+      const rd = rubricDraftBySubmission[submissionId] || {};
+      rubricScores = rubricCriteria.map((c) => ({
+        criterion_id: c.id,
+        points: Number(rd[c.id]?.points ?? 0),
+        comment: rd[c.id]?.comment || null,
+      }));
+      draft.grade = sumRubricPoints(rubricScores);
+    }
+
+    const r = await gradeSubmission(
+      submissionId,
+      draft.grade,
+      draft.feedback,
+      rubricScores,
+    );
+    if (!r.ok) {
+      setBusy(false);
+      setActionErr(r.error || "No se pudo guardar la evaluación.");
+      return;
+    }
+
+    let msg = "Evaluación guardada en PyBotClass.";
+    if (activity?.classroom_coursework_id && classroomCourseId && row) {
+      const gradedRow = {
+        ...row,
+        grade: r.result?.grade ?? Number(draft.grade),
+        feedback: draft.feedback,
+      };
+      const classroomSubmissionId = await resolveClassroomSubmissionId(gradedRow);
+      if (classroomSubmissionId) {
+        const sync = await sendGradeToClassroom({
+          submission: gradedRow,
+          activity,
+          classroomCourseId,
+          courseWorkId: activity.classroom_coursework_id,
+          classroomSubmissionId,
+          userId: user.id,
+        });
+        if (sync.ok) {
+          msg = classroomGradeSyncUserMessage({
+            warning: sync.warning || null,
+            hasFeedback: Boolean(draft.feedback) && sync.feedbackSynced !== true,
+          });
+        } else {
+          msg = `Evaluación guardada en PyBotClass. Sync Classroom pendiente: ${sync.error || "error"}. Podés reintentar.`;
+        }
+      } else {
+        msg =
+          "Evaluación guardada en PyBotClass. Sync Classroom pendiente: falta StudentSubmission (sincronizá entregas).";
+      }
+    }
+
+    setBusy(false);
+    setActionMsg(msg);
+    await load({ preserveActionMsg: true });
+  };
+
+  const onCloseSubmission = async (submissionId) => {
+    if (busy) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await closeSubmission(submissionId);
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo cerrar.");
+      return;
+    }
+    setActionMsg("Corrección cerrada.");
+    await load({ preserveActionMsg: true });
+  };
+
+  const onReopen = async (userId) => {
+    if (busy || !activityId) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await reopenSubmissionForStudent(activityId, userId);
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo reabrir.");
+      return;
+    }
+    setActionMsg("Entrega reabierta para este alumno (revisión solicitada).");
+    await load({ preserveActionMsg: true });
+  };
+
+  const onSaveRubric = async () => {
+    if (busy || !activityId) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const criteria = rubricEditor
+      .filter((c) => String(c.name || "").trim())
+      .map((c) => ({
+        name: String(c.name).trim(),
+        description: c.description || null,
+        max_points: Number(c.max_points),
+      }));
+    const r = await upsertActivityRubric(activityId, criteria);
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(
+        r.error === "rubric_max_mismatch"
+          ? `La suma de la rúbrica debe ser igual al puntaje máximo (${activity?.max_points}).`
+          : r.error || "No se pudo guardar la rúbrica.",
+      );
+      return;
+    }
+    setActionMsg("Rúbrica guardada.");
     await load({ preserveActionMsg: true });
   };
 
@@ -582,6 +759,28 @@ export default function ActivityPage() {
     }
   }
   breadcrumbItems.push({ label: activity?.title || "Actividad" });
+
+  const myProcess = deriveProcessStatus({
+    status: mySubmission?.status,
+    version: mySubmission?.version,
+    hasSubmission: Boolean(mySubmission),
+  });
+  const myTimeliness = deriveTimeliness({
+    submittedAt: mySubmission?.submitted_at,
+    dueAt: activity?.due_at,
+  });
+  const myWindow = deriveSubmissionWindow({
+    closeAt: activity?.submission_close_at,
+    reopenActive,
+  });
+  const studentCanSubmit =
+    isStudent &&
+    isCodingActivity &&
+    canStudentSubmit({
+      processStatus: myProcess,
+      windowStatus: myWindow,
+      reopenActive,
+    });
 
   if (loadErr) {
     return (
@@ -635,7 +834,7 @@ export default function ActivityPage() {
                 <button
                   type="button"
                   className="auth-btn auth-btn--ghost auth-btn--sm"
-                  disabled={busy}
+                  disabled={busy || !studentCanSubmit}
                   onClick={() => void onSubmit()}
                 >
                   {busy ? "Entregando…" : "Entregar actividad"}
@@ -651,6 +850,12 @@ export default function ActivityPage() {
             <div className="pbc-activity-meta" aria-label="Configuración de la actividad">
               <p className="auth-card__muted" style={{ margin: 0 }}>
                 Fecha de entrega: {activity?.due_at ? fmtTs(activity.due_at) : "Sin fecha"}
+              </p>
+              <p className="auth-card__muted" style={{ margin: 0 }}>
+                Cierre de entregas:{" "}
+                {activity?.submission_close_at
+                  ? fmtTs(activity.submission_close_at)
+                  : "Sin cierre (se permite entrega tarde tras la fecha límite)"}
               </p>
               {activity?.max_points != null ? (
                 <p className="auth-card__muted" style={{ margin: 0 }}>
@@ -670,13 +875,26 @@ export default function ActivityPage() {
                 </p>
               )}
             </div>
-          ) : activity?.max_points != null || activity?.due_at ? (
-            <p className="auth-card__muted">
-              {activity?.due_at ? `Entrega: ${fmtTs(activity.due_at)}` : null}
-              {activity?.due_at && activity?.max_points != null ? " · " : null}
-              {activity?.max_points != null ? `Puntaje máximo: ${activity.max_points}` : null}
-            </p>
-          ) : null}
+          ) : (
+            <div className="pbc-activity-meta">
+              <p className="auth-card__muted" style={{ margin: 0 }}>
+                {activity?.due_at ? `Fecha límite: ${fmtTs(activity.due_at)}` : "Sin fecha límite"}
+                {activity?.submission_close_at
+                  ? ` · Cierre: ${fmtTs(activity.submission_close_at)}`
+                  : " · Sin cierre de entregas"}
+                {activity?.max_points != null ? ` · Máximo: ${activity.max_points}` : ""}
+              </p>
+              <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                Ventana: <strong>{windowLabelEs(myWindow)}</strong>
+                {myTimeliness !== "sin_dato" ? (
+                  <>
+                    {" "}
+                    · Puntualidad: <strong>{timelinessLabelEs(myTimeliness)}</strong>
+                  </>
+                ) : null}
+              </p>
+            </div>
+          )}
 
           {isStudent && activity?.classroom_coursework_id && classroomCourseId ? (
             <div className="pbc-activity-classroom-hint">
@@ -733,24 +951,53 @@ export default function ActivityPage() {
 
           {!isMaterial ? <p className="auth-card__muted">{progressHint}</p> : null}
 
-          {isStudent && mySubmission && isCodingActivity ? (
+          {isStudent && isCodingActivity ? (
             <div className="pbc-activity-my-submission">
               <p className="auth-card__muted" style={{ margin: 0 }}>
-                Entrega: <strong>{submissionStatusLabelEs(mySubmission.status)}</strong>
-                {submissionVersionLabel(mySubmission.version)
+                Estado: <strong>{processStatusLabelEs(myProcess)}</strong>
+                {submissionVersionLabel(mySubmission?.version)
                   ? ` · ${submissionVersionLabel(mySubmission.version)}`
                   : null}
-                {mySubmission.submitted_at ? ` · ${fmtTs(mySubmission.submitted_at)}` : null}
+                {mySubmission?.submitted_at ? ` · ${fmtTs(mySubmission.submitted_at)}` : null}
               </p>
-              {mySubmission.grade != null ? (
+              <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                {studentNextActionMessage(myProcess)}
+              </p>
+              {!studentCanSubmit && myWindow === "cerrada" ? (
                 <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  Nota: <strong>{mySubmission.grade}</strong>
+                  Las entregas están cerradas.
                 </p>
               ) : null}
-              {mySubmission.feedback ? (
+              {myProcess === "revision_solicitada" && mySubmission?.feedback ? (
+                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                  Tu docente solicitó una revisión. Feedback: {mySubmission.feedback}
+                </p>
+              ) : null}
+              {(myProcess === "evaluado" || myProcess === "cerrado") && mySubmission?.grade != null ? (
+                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                  Nota: <strong>{mySubmission.grade}</strong>
+                  {activity?.max_points != null ? ` / ${activity.max_points}` : null}
+                </p>
+              ) : null}
+              {(myProcess === "evaluado" || myProcess === "cerrado") && mySubmission?.feedback ? (
                 <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
                   Feedback: {mySubmission.feedback}
                 </p>
+              ) : null}
+              {(myProcess === "evaluado" || myProcess === "cerrado") &&
+              rubricCriteria.length > 0 &&
+              myRubricScores.length > 0 ? (
+                <ul className="pbc-activity-rubric-student" style={{ marginTop: "0.5rem" }}>
+                  {rubricCriteria.map((c) => {
+                    const sc = myRubricScores.find((s) => s.criterion_id === c.id);
+                    return (
+                      <li key={c.id} className="auth-card__muted">
+                        <strong>{c.name}</strong>: {sc?.points ?? "—"} / {c.max_points}
+                        {sc?.comment ? ` — ${sc.comment}` : ""}
+                      </li>
+                    );
+                  })}
+                </ul>
               ) : null}
             </div>
           ) : null}
@@ -822,8 +1069,88 @@ export default function ActivityPage() {
 
         {canTeach ? (
           <PbcSection
+            title="Rúbrica (opcional)"
+            description="La suma de los máximos de cada criterio debe coincidir con el puntaje máximo de la actividad."
+          >
+            {rubricEditor.length === 0 ? (
+              <p className="auth-card__muted">Sin rúbrica. Agregá criterios si querés evaluar por rúbrica.</p>
+            ) : null}
+            {rubricEditor.map((c, idx) => (
+              <div
+                key={c.id || idx}
+                style={{ display: "grid", gridTemplateColumns: "2fr 1fr 2fr auto", gap: "0.5rem", marginBottom: "0.5rem" }}
+              >
+                <input
+                  className="auth-org-input"
+                  placeholder="Criterio"
+                  value={c.name}
+                  onChange={(e) => {
+                    const next = [...rubricEditor];
+                    next[idx] = { ...c, name: e.target.value };
+                    setRubricEditor(next);
+                  }}
+                />
+                <input
+                  className="auth-org-input"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  placeholder="Máx"
+                  value={c.max_points}
+                  onChange={(e) => {
+                    const next = [...rubricEditor];
+                    next[idx] = { ...c, max_points: e.target.value };
+                    setRubricEditor(next);
+                  }}
+                />
+                <input
+                  className="auth-org-input"
+                  placeholder="Descripción (opcional)"
+                  value={c.description}
+                  onChange={(e) => {
+                    const next = [...rubricEditor];
+                    next[idx] = { ...c, description: e.target.value };
+                    setRubricEditor(next);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="auth-btn auth-btn--ghost auth-btn--sm"
+                  onClick={() => setRubricEditor(rubricEditor.filter((_, i) => i !== idx))}
+                >
+                  Quitar
+                </button>
+              </div>
+            ))}
+            <div className="pbc-activity-actions pbc-activity-actions--wrap">
+              <button
+                type="button"
+                className="auth-btn auth-btn--ghost auth-btn--sm"
+                onClick={() =>
+                  setRubricEditor([
+                    ...rubricEditor,
+                    { name: "", description: "", max_points: "" },
+                  ])
+                }
+              >
+                Agregar criterio
+              </button>
+              <button
+                type="button"
+                className="auth-btn auth-btn--primary auth-btn--sm"
+                disabled={busy || rubricEditor.length === 0}
+                onClick={() => void onSaveRubric()}
+              >
+                Guardar rúbrica
+              </button>
+            </div>
+          </PbcSection>
+        ) : null}
+
+        {canTeach ? (
+          <PbcSection
             title="Entregas · revisar y corregir"
-            description="Seleccioná una entrega, revisá el código (V1/V2/V3 inmutables) y guardá la corrección. Classroom solo sincroniza la nota; el feedback permanece en PyBotClass."
+            description="Solicitar revisión y Evaluar son acciones distintas. Classroom solo sincroniza la nota (no el feedback)."
           >
             {teacherRows.length === 0 ? (
               <PbcEmpty title="Todavía no hay entregas" description="Cuando los alumnos entreguen, aparecerán aquí." />
@@ -841,6 +1168,31 @@ export default function ActivityPage() {
                   const verLabel = submissionVersionLabel(row.version);
                   const isFocused = focusStudentId && row.user_id === focusStudentId;
                   const showingCurrent = viewCode === row.id;
+                  const process = deriveProcessStatus({
+                    status: row.status,
+                    version: row.version,
+                    hasSubmission: true,
+                  });
+                  const late =
+                    deriveTimeliness({
+                      submittedAt: row.submitted_at,
+                      dueAt: activity?.due_at,
+                    }) === "tarde";
+                  const rd = rubricDraftBySubmission[row.id] || {};
+                  const canReview = row.status === "submitted" || row.status === "returned";
+                  const canEvaluate =
+                    row.status === "submitted" ||
+                    row.status === "returned" ||
+                    row.status === "graded";
+                  const canClose = row.status === "graded";
+                  const activityWindowClosed =
+                    deriveSubmissionWindow({
+                      closeAt: activity?.submission_close_at,
+                    }) === "cerrada";
+                  const canReopen =
+                    row.status === "closed" ||
+                    row.status === "graded" ||
+                    activityWindowClosed;
                   return (
                     <li
                       key={row.id}
@@ -855,11 +1207,15 @@ export default function ActivityPage() {
                           </span>
                           <span className="pbc-list-item__meta">
                             {verLabel ? `${verLabel} · ` : ""}
-                            {submissionStatusLabelEs(row.status)}
+                            {processStatusLabelEs(process)}
+                            {late ? " · Tarde" : ""}
                             {row.submitted_at ? ` · ${fmtTs(row.submitted_at)}` : ""}
                             {row.grade != null ? ` · Nota ${row.grade}` : ""}
                             {row.classroom_grade_synced_at
                               ? ` · Nota en Classroom ${fmtTs(row.classroom_grade_synced_at)}`
+                              : ""}
+                            {row.classroom_grade_sync_error
+                              ? ` · Sync pendiente: ${row.classroom_grade_sync_error}`
                               : ""}
                           </span>
                         </div>
@@ -896,7 +1252,7 @@ export default function ActivityPage() {
                                     <span className="auth-card__muted">
                                       {hLabel}
                                       {" · "}
-                                      {submissionStatusLabelEs(h.status)}
+                                      {submissionStatusLabelEs(h.status, { version: h.version })}
                                       {h.submitted_at ? ` · ${fmtTs(h.submitted_at)}` : ""}
                                       {h.grade != null ? ` · Nota ${h.grade}` : ""}
                                     </span>
@@ -921,23 +1277,82 @@ export default function ActivityPage() {
                           </ul>
                         </details>
                       ) : null}
+                      {rubricCriteria.length > 0 ? (
+                        <div className="pbc-activity-rubric-grade" style={{ marginTop: "0.5rem" }}>
+                          {rubricCriteria.map((c) => (
+                            <div
+                              key={c.id}
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr 5rem 1fr",
+                                gap: "0.35rem",
+                                marginBottom: "0.35rem",
+                              }}
+                            >
+                              <span className="auth-card__muted">
+                                {c.name} (máx {c.max_points})
+                              </span>
+                              <input
+                                className="auth-org-input"
+                                type="number"
+                                min="0"
+                                max={c.max_points}
+                                step="0.5"
+                                placeholder="Pts"
+                                value={rd[c.id]?.points ?? ""}
+                                onChange={(e) =>
+                                  setRubricDraftBySubmission((prev) => ({
+                                    ...prev,
+                                    [row.id]: {
+                                      ...rd,
+                                      [c.id]: { ...rd[c.id], points: e.target.value },
+                                    },
+                                  }))
+                                }
+                              />
+                              <input
+                                className="auth-org-input"
+                                placeholder="Comentario criterio"
+                                value={rd[c.id]?.comment ?? ""}
+                                onChange={(e) =>
+                                  setRubricDraftBySubmission((prev) => ({
+                                    ...prev,
+                                    [row.id]: {
+                                      ...rd,
+                                      [c.id]: { ...rd[c.id], comment: e.target.value },
+                                    },
+                                  }))
+                                }
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                       <div className="pbc-activity-grade-row">
-                        <input
-                          className="auth-org-input pbc-activity-grade-input"
-                          placeholder={
-                            activity?.max_points != null ? `Nota / ${activity.max_points}` : "Nota"
-                          }
-                          value={draft.grade}
-                          onChange={(e) =>
-                            setGradeDraft((prev) => ({
-                              ...prev,
-                              [row.id]: { ...draft, grade: e.target.value },
-                            }))
-                          }
-                        />
+                        {rubricCriteria.length === 0 ? (
+                          <input
+                            className="auth-org-input pbc-activity-grade-input"
+                            placeholder={
+                              activity?.max_points != null
+                                ? `Nota / ${activity.max_points}`
+                                : "Nota"
+                            }
+                            value={draft.grade}
+                            onChange={(e) =>
+                              setGradeDraft((prev) => ({
+                                ...prev,
+                                [row.id]: { ...draft, grade: e.target.value },
+                              }))
+                            }
+                          />
+                        ) : (
+                          <span className="auth-card__muted" style={{ fontSize: "0.9rem" }}>
+                            Nota = suma de rúbrica
+                          </span>
+                        )}
                         <input
                           className="auth-org-input pbc-activity-feedback-input"
-                          placeholder="Feedback"
+                          placeholder="Feedback general"
                           value={draft.feedback}
                           onChange={(e) =>
                             setGradeDraft((prev) => ({
@@ -946,14 +1361,46 @@ export default function ActivityPage() {
                             }))
                           }
                         />
-                        <button
-                          type="button"
-                          className="auth-btn auth-btn--primary auth-btn--sm"
-                          disabled={busy}
-                          onClick={() => void onGrade(row.id)}
-                        >
-                          Guardar corrección
-                        </button>
+                        {canReview ? (
+                          <button
+                            type="button"
+                            className="auth-btn auth-btn--ghost auth-btn--sm"
+                            disabled={busy}
+                            onClick={() => void onRequestReview(row.id)}
+                          >
+                            Solicitar revisión
+                          </button>
+                        ) : null}
+                        {canEvaluate ? (
+                          <button
+                            type="button"
+                            className="auth-btn auth-btn--primary auth-btn--sm"
+                            disabled={busy}
+                            onClick={() => void onGrade(row.id)}
+                          >
+                            Evaluar
+                          </button>
+                        ) : null}
+                        {canClose ? (
+                          <button
+                            type="button"
+                            className="auth-btn auth-btn--ghost auth-btn--sm"
+                            disabled={busy}
+                            onClick={() => void onCloseSubmission(row.id)}
+                          >
+                            Cerrar
+                          </button>
+                        ) : null}
+                        {canReopen ? (
+                          <button
+                            type="button"
+                            className="auth-btn auth-btn--ghost auth-btn--sm"
+                            disabled={busy}
+                            onClick={() => void onReopen(row.user_id)}
+                          >
+                            Reabrir para este alumno
+                          </button>
+                        ) : null}
                         {activity?.classroom_coursework_id && row.grade != null ? (
                           <button
                             type="button"
@@ -961,7 +1408,9 @@ export default function ActivityPage() {
                             disabled={busy}
                             onClick={() => void onSendGradeClassroom(row)}
                           >
-                            Enviar nota a Classroom
+                            {row.classroom_grade_sync_error
+                              ? "Reintentar sync Classroom"
+                              : "Enviar nota a Classroom"}
                           </button>
                         ) : null}
                       </div>

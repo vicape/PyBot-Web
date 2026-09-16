@@ -7,6 +7,10 @@ import {
 } from "../../platform/pybotClassApi.js";
 import { fetchMySubmission, submissionVersionLabel } from "../../platform/activitySubmissions.js";
 import {
+  deriveProcessStatus,
+  processStatusLabelEs,
+} from "../../platform/submissionWorkflow.js";
+import {
   PbcEmpty,
   PbcFormPanel,
   PbcList,
@@ -21,6 +25,9 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
   const [starterCode, setStarterCode] = useState(initial?.starter_code || "");
   const [dueAt, setDueAt] = useState(
     initial?.due_at ? String(initial.due_at).slice(0, 16) : "",
+  );
+  const [submissionCloseAt, setSubmissionCloseAt] = useState(
+    initial?.submission_close_at ? String(initial.submission_close_at).slice(0, 16) : "",
   );
   const [maxPoints, setMaxPoints] = useState(
     initial?.max_points != null ? String(initial.max_points) : "",
@@ -37,6 +44,9 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
           pybotLessonId,
           starterCode,
           dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+          submissionCloseAt: submissionCloseAt
+            ? new Date(submissionCloseAt).toISOString()
+            : null,
           maxPoints,
         });
       }}
@@ -77,26 +87,46 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
             onChange={(e) => setDueAt(e.target.value)}
             disabled={saving}
           />
-        </div>
-        <div>
-          <label className="auth-org-label" htmlFor="act-points">
-            Puntaje máximo
-          </label>
-          <input
-            id="act-points"
-            type="number"
-            min="0"
-            step="0.5"
-            className="auth-org-input auth-org-input--block"
-            value={maxPoints}
-            onChange={(e) => setMaxPoints(e.target.value)}
-            disabled={saving}
-            placeholder="Ej. 100"
-          />
           <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
-            Único lugar para definirlo. Requerido para enviar notas a Google Classroom.
+            Límite académico (a tiempo / tarde).
           </p>
         </div>
+        <div>
+          <label className="auth-org-label" htmlFor="act-close">
+            Cierre de entregas
+          </label>
+          <input
+            id="act-close"
+            type="datetime-local"
+            className="auth-org-input auth-org-input--block"
+            value={submissionCloseAt}
+            onChange={(e) => setSubmissionCloseAt(e.target.value)}
+            disabled={saving}
+          />
+          <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
+            Opcional. Tras el cierre no se aceptan entregas (salvo reapertura individual).
+          </p>
+        </div>
+      </div>
+      <div>
+        <label className="auth-org-label" htmlFor="act-points">
+          Puntaje máximo
+        </label>
+        <input
+          id="act-points"
+          type="number"
+          min="0"
+          step="0.5"
+          className="auth-org-input auth-org-input--block"
+          value={maxPoints}
+          onChange={(e) => setMaxPoints(e.target.value)}
+          disabled={saving}
+          placeholder="Ej. 100"
+        />
+        <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
+          Único lugar para definirlo. Requerido para enviar notas a Google Classroom. Si hay
+          rúbrica, la suma de criterios debe coincidir con este valor.
+        </p>
       </div>
       <label className="auth-org-label" htmlFor="act-starter">
         Código inicial
@@ -143,31 +173,48 @@ function StudentActivityRow({ activity, userId }) {
 
   if (!loaded) return null;
 
-  const status = submission?.status;
+  const process = deriveProcessStatus({
+    status: submission?.status,
+    version: submission?.version,
+    hasSubmission: Boolean(submission),
+  });
   const due = formatDueDateEs(activity.due_at);
+  const close = formatDueDateEs(activity.submission_close_at);
   const ver = submissionVersionLabel(submission?.version);
-  const statusLabel =
-    status === "graded" || status === "returned"
-      ? `Corregida${ver ? ` · ${ver}` : ""} · Nota ${submission?.grade ?? "—"}`
-      : status === "submitted"
-        ? `Entregada${ver ? ` · ${ver}` : ""} · Esperando corrección`
-        : "Pendiente";
+  const statusLabel = [
+    processStatusLabelEs(process),
+    ver,
+    process === "evaluado" || process === "cerrado"
+      ? `Nota ${submission?.grade ?? "—"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <PbcListItem
       title={activity.title}
-      meta={[statusLabel, due ? `Entrega ${due}` : null, submission?.feedback].filter(Boolean).join(" · ")}
+      meta={[
+        statusLabel,
+        due ? `Entrega ${due}` : null,
+        close ? `Cierre ${close}` : null,
+        submission?.feedback,
+      ]
+        .filter(Boolean)
+        .join(" · ")}
       badges={
         <>
           {activity.content_lesson_id ? (
             <span className="pbc-pill pbc-pill--content">Mi Contenido</span>
           ) : null}
-          {status === "graded" || status === "returned" ? (
-            <span className="pbc-pill pbc-pill--ok">Corregida</span>
-          ) : status === "submitted" ? (
-            <span className="pbc-pill pbc-pill--warn">Entregada</span>
+          {process === "evaluado" || process === "cerrado" ? (
+            <span className="pbc-pill pbc-pill--ok">{processStatusLabelEs(process)}</span>
+          ) : process === "entregado" ||
+            process === "reentregado" ||
+            process === "revision_solicitada" ? (
+            <span className="pbc-pill pbc-pill--warn">{processStatusLabelEs(process)}</span>
           ) : (
-            <span className="pbc-pill pbc-pill--muted">Pendiente</span>
+            <span className="pbc-pill pbc-pill--muted">{processStatusLabelEs(process)}</span>
           )}
         </>
       }
