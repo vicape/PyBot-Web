@@ -20,16 +20,20 @@ export default function EntryProductVisual({ labels }) {
             <span className="entry-visual__tabs">
               <span className="entry-visual__tab entry-visual__tab--active">{python}</span>
               <span className="entry-visual__tab">{blocks}</span>
+              <span className="entry-visual__tab entry-visual__tab--hw">{hardware}</span>
             </span>
           </div>
 
           <div className="entry-visual__workspace">
-            <div className="entry-visual__files" aria-hidden="true">
+            <div className="entry-visual__files">
               <span className="entry-visual__files-item entry-visual__files-item--active">
                 {codeLabel}
               </span>
               <span className="entry-visual__files-item entry-visual__files-item--muted">
                 {blocks}
+              </span>
+              <span className="entry-visual__files-item entry-visual__files-item--muted entry-visual__files-item--hw">
+                {hardware}
               </span>
             </div>
 
@@ -40,11 +44,13 @@ export default function EntryProductVisual({ labels }) {
                   <span className="entry-visual__file">{codeLabel}</span>
                 </div>
                 <div className="entry-visual__code-row">
-                  <div className="entry-visual__gutter" aria-hidden="true">
+                  <div className="entry-visual__gutter">
                     <span className="entry-visual__ln entry-visual__ln--active">1</span>
                     <span className="entry-visual__ln">2</span>
                     <span className="entry-visual__ln">3</span>
                     <span className="entry-visual__ln">4</span>
+                    <span className="entry-visual__ln entry-visual__ln--extra">5</span>
+                    <span className="entry-visual__ln entry-visual__ln--extra">6</span>
                   </div>
                   <pre className="entry-visual__code">
                     <code>
@@ -59,7 +65,15 @@ export default function EntryProductVisual({ labels }) {
                       <span className="entry-visual__cline">
                         <span className="tok-kw">wait</span>
                         <span className="tok-p">(</span>
-                        <span className="tok-num">1</span>
+                        <span className="tok-num">0.5</span>
+                        <span className="tok-p">)</span>
+                      </span>
+                      <span className="entry-visual__cline">
+                        <span className="tok-kw">pin</span>
+                        <span className="tok-p">(</span>
+                        <span className="tok-str">&quot;out&quot;</span>
+                        <span className="tok-p">,</span> <span className="tok-num">2</span>
+                        <span className="tok-p">,</span> <span className="tok-num">0</span>
                         <span className="tok-p">)</span>
                       </span>
                       <span className="entry-visual__cline">
@@ -69,7 +83,13 @@ export default function EntryProductVisual({ labels }) {
                         <span className="tok-p">,</span> <span className="tok-num">90</span>
                         <span className="tok-p">)</span>
                       </span>
-                      <span className="entry-visual__cline">
+                      <span className="entry-visual__cline entry-visual__cline--extra">
+                        <span className="tok-kw">wait</span>
+                        <span className="tok-p">(</span>
+                        <span className="tok-num">1</span>
+                        <span className="tok-p">)</span>
+                      </span>
+                      <span className="entry-visual__cline entry-visual__cline--extra">
                         <span className="tok-fn">print</span>
                         <span className="tok-p">(</span>
                         <span className="tok-str">&quot;Hola PyBot&quot;</span>
@@ -89,17 +109,27 @@ export default function EntryProductVisual({ labels }) {
                     </div>
                     <div className="entry-block entry-block--pin">
                       <span className="entry-block__label">
-                        pin <em>out</em> <strong>2</strong>
+                        pin <em>out</em> <strong>2</strong> <strong>1</strong>
                       </span>
                     </div>
                     <div className="entry-block entry-block--wait">
                       <span className="entry-block__label">
-                        wait <strong>1</strong>
+                        wait <strong>0.5</strong>
+                      </span>
+                    </div>
+                    <div className="entry-block entry-block--pin entry-block--pin-alt">
+                      <span className="entry-block__label">
+                        pin <em>out</em> <strong>2</strong> <strong>0</strong>
                       </span>
                     </div>
                     <div className="entry-block entry-block--servo">
                       <span className="entry-block__label">
                         servo <strong>90°</strong>
+                      </span>
+                    </div>
+                    <div className="entry-block entry-block--print entry-block--extra">
+                      <span className="entry-block__label">
+                        print <em>Hola</em>
                       </span>
                     </div>
                   </div>
@@ -203,6 +233,12 @@ export default function EntryProductVisual({ labels }) {
                         GPIO2
                       </text>
                     </svg>
+                  </div>
+                  <div className="entry-visual__hw-meta">
+                    <span className="entry-visual__hw-chip">GPIO2</span>
+                    <span className="entry-visual__hw-chip entry-visual__hw-chip--servo">
+                      servo · 10
+                    </span>
                   </div>
                 </div>
               </div>

@@ -92,6 +92,8 @@ describe("entry gate files", () => {
     assert.match(visual, /entry-visual__panel-head/);
     assert.match(visual, /entry-visual__workspace/);
     assert.match(visual, /entry-visual__cline--active/);
+    assert.match(visual, /entry-visual__hw-meta/);
+    assert.match(visual, /entry-visual__tab--hw/);
     assert.doesNotMatch(visual, /entry-visual__orbit/);
   });
 
@@ -103,16 +105,19 @@ describe("entry gate files", () => {
     assert.match(i18n, /SUPPORTED_LANGS\.includes/);
   });
 
-  it("mobile landing CSS prefers natural height over single-viewport crush", () => {
+  it("mobile landing CSS uses viewport-aware premium layout V6", () => {
     const css = readFileSync(join(root, "src/styles/entry-gate.css"), "utf8");
-    assert.match(css, /Smartphone strong landing/);
+    assert.match(css, /Smartphone premium landing V6/);
     assert.match(css, /\.entry-eyebrow/);
     assert.match(css, /entry-feature--extended/);
     assert.doesNotMatch(css, /Smartphone single-viewport landing/);
-    // Shell must not force empty viewport fill on phones
+    assert.doesNotMatch(css, /Smartphone strong landing/);
+    // Tall phones: shell fills viewport; product preview flex-grows
     assert.match(
       css,
-      /\.entry-shell \{[\s\S]*?min-height:\s*0;[\s\S]*?height:\s*auto;/,
+      /@media \(max-width: 640px\) \{[\s\S]*?\.entry-shell \{[\s\S]*?min-height:\s*100dvh;/,
     );
+    assert.match(css, /\.entry-hero__visual \{[\s\S]*?flex:\s*1 1 auto;/);
+    assert.match(css, /max-height:\s*740px/);
   });
 });

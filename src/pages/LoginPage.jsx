@@ -181,8 +181,8 @@ export default function LoginPage() {
               src="/branding/pybot-logo-full.svg"
               alt={t("entryBrand")}
               className="entry-top__logo"
-              width={148}
-              height={58}
+              width={168}
+              height={66}
               decoding="async"
             />
           </a>
