@@ -96,8 +96,8 @@
     0 0 0 1px rgba(15, 23, 42, 0.04);
   --entry-code-bg: #0f172a;
   --entry-code-text: #e2e8f0;
-  /* Soft indigo active line — avoids near-1:1 with cyan syntax tokens */
-  --entry-code-active: rgba(99, 102, 241, 0.16);
+  /* Dark indigo active line — keeps blue identity while AA-passing with syntax tokens */
+  --entry-code-active: #2a2660;
   --entry-window: #ffffff;
   --entry-window-bar: #f1f4f8;
   --entry-window-inset: #eef2f7;
@@ -138,7 +138,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --entry-code-bg: #0a101b;
   --entry-code-text: #e2e8f0;
-  --entry-code-active: rgba(99, 102, 241, 0.2);
+  --entry-code-active: #2a2660;
   --entry-window: #111827;
   --entry-window-bar: #0c121d;
   --entry-window-inset: #0a1018;
@@ -603,7 +603,7 @@
 }
 
 .entry-visual__win-title {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 680;
   color: var(--entry-muted);
   letter-spacing: 0.015em;
@@ -624,12 +624,13 @@
 }
 
 .entry-visual__tab {
-  font-size: 0.62rem;
+  font-size: 0.75rem;
   font-weight: 650;
-  padding: 0.2rem 0.45rem;
+  padding: 0.18rem 0.42rem;
   border-radius: 5px;
   color: var(--entry-muted);
   border: 1px solid transparent;
+  line-height: 1.25;
 }
 
 .entry-visual__tab--active {
@@ -662,10 +663,10 @@
 
 .entry-visual__files-item {
   display: block;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 650;
   letter-spacing: 0.01em;
-  padding: 0.28rem 0.28rem;
+  padding: 0.24rem 0.28rem;
   border-radius: 5px;
   color: var(--entry-muted);
   white-space: nowrap;
@@ -727,7 +728,7 @@
 }
 
 .entry-visual__file {
-  font-size: 0.62rem;
+  font-size: 0.75rem;
   font-weight: 650;
   letter-spacing: 0.03em;
   color: #cbd5e1;
@@ -736,7 +737,7 @@
 
 .entry-visual__code-row {
   display: grid;
-  grid-template-columns: 1.75rem 1fr;
+  grid-template-columns: 1.85rem 1fr;
   gap: 0;
   padding: 0.35rem 0.45rem 0.7rem 0.2rem;
   position: relative;
@@ -746,8 +747,8 @@
   display: flex;
   flex-direction: column;
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.66rem;
-  line-height: 1.62;
+  font-size: 0.75rem;
+  line-height: 1.55;
   color: #cbd5e1;
   text-align: right;
   user-select: none;
@@ -763,8 +764,8 @@
 .entry-visual__code {
   margin: 0;
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.66rem;
-  line-height: 1.62;
+  font-size: 0.75rem;
+  line-height: 1.55;
   white-space: pre;
   overflow: hidden;
   position: relative;
@@ -784,20 +785,20 @@
 }
 
 .tok-kw {
-  color: #bfdbfe;
+  color: #dbeafe;
 }
 .tok-fn {
-  /* Brighter cyan for readability on indigo active-line tint */
+  /* Bright cyan — readable on dark indigo active-line */
   color: #a5f3fc;
 }
 .tok-str {
-  color: #86efac;
+  color: #bbf7d0;
 }
 .tok-num {
-  color: #fcd34d;
+  color: #fde68a;
 }
 .tok-p {
-  color: #e2e8f0;
+  color: #f1f5f9;
 }
 
 .entry-visual__side {
@@ -826,7 +827,7 @@
 }
 
 .entry-visual__panel-head {
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 720;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -846,12 +847,14 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-height: 1.35rem;
-  padding: 0.14rem 0.5rem 0.16rem;
-  font-size: 0.64rem;
+  min-height: 1.4rem;
+  padding: 0.16rem 0.5rem 0.18rem;
+  font-size: 0.75rem;
   font-weight: 650;
   letter-spacing: 0.01em;
-  color: #fff;
+  /* Explicit opaque fill so white labels never resolve against the light panel */
+  color: #ffffff;
+  background-color: #3730a3;
   width: fit-content;
   max-width: 100%;
   margin-left: 0.35rem;
@@ -864,7 +867,8 @@
     6px calc(100% - 4px),
     0 calc(100% - 4px)
   );
-  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.12));
+  /* Avoid filter — it can make contrast tools ignore the block fill */
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.14);
 }
 
 .entry-block + .entry-block {
@@ -875,22 +879,26 @@
   position: relative;
   z-index: 1;
   white-space: nowrap;
+  color: #ffffff;
 }
 
 .entry-block__label em {
   font-style: normal;
   font-weight: 550;
-  opacity: 0.88;
+  color: #ffffff;
 }
 
 .entry-block__label strong {
   font-weight: 750;
   letter-spacing: 0.02em;
+  color: #ffffff;
 }
 
 .entry-block--hat {
   margin-left: 0;
-  background: linear-gradient(180deg, #2bb673 0%, #1f9a5f 100%);
+  /* Dark enough solid for white label AA; gradient keeps Blockly look */
+  background-color: #15803d;
+  background-image: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
   border-radius: 8px 8px 0 0;
   clip-path: none;
   padding-top: 0.28rem;
@@ -906,25 +914,29 @@
   bottom: -3px;
   width: 10px;
   height: 6px;
-  background: #1f9a5f;
+  background-color: #15803d;
   clip-path: polygon(0 0, 100% 0, 70% 100%, 30% 100%);
   z-index: 0;
 }
 
 .entry-block--pin {
-  background: linear-gradient(180deg, #e8911a 0%, #d97706 100%);
+  background-color: #9a3412;
+  background-image: linear-gradient(180deg, #ea580c 0%, #9a3412 100%);
 }
 
 .entry-block--wait {
-  background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+  background-color: #0369a1;
+  background-image: linear-gradient(180deg, #0ea5e9 0%, #0369a1 100%);
 }
 
 .entry-block--servo {
-  background: linear-gradient(180deg, #e05a1a 0%, #c2410c 100%);
+  background-color: #9a3412;
+  background-image: linear-gradient(180deg, #f97316 0%, #9a3412 100%);
 }
 
 .entry-block--print {
-  background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
+  background-color: #3730a3;
+  background-image: linear-gradient(180deg, #4f46e5 0%, #3730a3 100%);
   clip-path: polygon(
     0 0,
     6px 0,
@@ -938,7 +950,8 @@
 }
 
 .entry-block--pin-alt {
-  filter: saturate(0.92) brightness(0.96);
+  background-color: #7c2d12;
+  background-image: linear-gradient(180deg, #c2410c 0%, #7c2d12 100%);
 }
 
 .entry-visual__hw-meta {
@@ -952,7 +965,7 @@
 .entry-visual__hw-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1059,7 +1072,7 @@
 
 .entry-board-svg__label {
   fill: #e2e8f0;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 700;
   font-family: ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.02em;
@@ -1072,7 +1085,7 @@
 
 .entry-board-svg__pin-label {
   fill: #e0f2fe;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   font-family: ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.04em;
@@ -1569,7 +1582,7 @@
   }
 
   .entry-visual__win-title {
-    font-size: 0.72rem;
+    font-size: 0.75rem;
   }
 
   .entry-visual__tabs {
@@ -1578,8 +1591,8 @@
   }
 
   .entry-visual__tab {
-    font-size: 0.62rem;
-    padding: 0.2rem 0.38rem;
+    font-size: 0.75rem;
+    padding: 0.18rem 0.36rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1633,8 +1646,8 @@
 
   .entry-visual__code,
   .entry-visual__gutter {
-    font-size: 0.74rem;
-    line-height: 1.58;
+    font-size: 0.75rem;
+    line-height: 1.55;
   }
 
   .entry-visual__cline--active {
@@ -1672,7 +1685,7 @@
   }
 
   .entry-visual__panel-head {
-    font-size: 0.66rem;
+    font-size: 0.75rem;
     padding-bottom: 0.24rem;
   }
 
@@ -1684,8 +1697,8 @@
   }
 
   .entry-block {
-    font-size: 0.64rem;
-    min-height: 1.28rem;
+    font-size: 0.75rem;
+    min-height: 1.32rem;
     padding: 0.12rem 0.4rem 0.14rem;
   }
 
@@ -1820,13 +1833,13 @@
 
   .entry-visual__code,
   .entry-visual__gutter {
-    font-size: 0.78rem;
-    line-height: 1.62;
+    font-size: 0.75rem;
+    line-height: 1.55;
   }
 
   .entry-block {
-    font-size: 0.64rem;
-    min-height: 1.3rem;
+    font-size: 0.75rem;
+    min-height: 1.32rem;
   }
 }
 
@@ -1866,7 +1879,7 @@
 
   .entry-visual__code,
   .entry-visual__gutter {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
   }
 
   .entry-visual__tab--hw {
@@ -1985,7 +1998,7 @@
 
   .entry-visual__code,
   .entry-visual__gutter {
-    font-size: 0.64rem;
+    font-size: 0.75rem;
   }
 
   .entry-hero__visual {
