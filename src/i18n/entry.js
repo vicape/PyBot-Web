@@ -20,7 +20,7 @@ export const ENTRY_STRINGS = {
     entryTitleLine2: "Programa.",
     entryTitleLine3: "Crea el futuro.",
     entryLead:
-      "Python, bloques y hardware real — aprendé, creá y enseñá tecnología desde el navegador.",
+      "Python, bloques y hardware real — aprendé, creá y enseñá desde el navegador.",
     entryJourney: "Aprender → Programar → Construir → Enseñar",
     entryFeatPythonTitle: "Python",
     entryFeatPythonDesc: "Código real, listo para ejecutar.",
@@ -68,7 +68,7 @@ export const ENTRY_STRINGS = {
     entryTitleLine2: "Code.",
     entryTitleLine3: "Build the future.",
     entryLead:
-      "Real Python, blocks, and hardware — learn, create, and teach technology in the browser.",
+      "Real Python, blocks, and hardware — learn, create, and teach in the browser.",
     entryJourney: "Learn → Code → Build → Teach",
     entryFeatPythonTitle: "Python",
     entryFeatPythonDesc: "Real code, ready to run.",
@@ -115,7 +115,7 @@ export const ENTRY_STRINGS = {
     entryTitleLine2: "Programme.",
     entryTitleLine3: "Crée l’avenir.",
     entryLead:
-      "Python, blocs et matériel réels — apprenez, créez et enseignez la technologie dans le navigateur.",
+      "Python, blocs et matériel réels — apprenez, créez et enseignez dans le navigateur.",
     entryJourney: "Apprendre → Programmer → Construire → Enseigner",
     entryFeatPythonTitle: "Python",
     entryFeatPythonDesc: "Du vrai code, prêt à exécuter.",
@@ -163,7 +163,7 @@ export const ENTRY_STRINGS = {
     entryTitleLine2: "Programe.",
     entryTitleLine3: "Crie o futuro.",
     entryLead:
-      "Python, blocos e hardware reais — aprenda, crie e ensine tecnologia no navegador.",
+      "Python, blocos e hardware reais — aprenda, crie e ensine no navegador.",
     entryJourney: "Aprender → Programar → Construir → Ensinar",
     entryFeatPythonTitle: "Python",
     entryFeatPythonDesc: "Código real, pronto para executar.",
@@ -211,7 +211,7 @@ export const ENTRY_STRINGS = {
     entryTitleLine2: "Programmiere.",
     entryTitleLine3: "Gestalte die Zukunft.",
     entryLead:
-      "Echtes Python, Blöcke und Hardware — Technologie lernen, schaffen und unterrichten im Browser.",
+      "Echtes Python, Blöcke und Hardware — lernen, schaffen und unterrichten im Browser.",
     entryJourney: "Lernen → Programmieren → Bauen → Lehren",
     entryFeatPythonTitle: "Python",
     entryFeatPythonDesc: "Echter Code, bereit zum Ausführen.",

@@ -74,6 +74,20 @@ describe("entry gate files", () => {
     assert.doesNotMatch(login, />\s*PB\s*</);
   });
 
+  it("product visual keeps real APIs and no floating orbit labels", () => {
+    const visual = readFileSync(
+      join(root, "src/components/entry/EntryProductVisual.jsx"),
+      "utf8",
+    );
+    assert.match(visual, /pin/);
+    assert.match(visual, /wait/);
+    assert.match(visual, /servo/);
+    assert.match(visual, /print/);
+    assert.match(visual, /ESP32/);
+    assert.match(visual, /entry-visual__panel-head/);
+    assert.doesNotMatch(visual, /entry-visual__orbit/);
+  });
+
   it("i18n.js merges entry strings and persists pybot_lang", () => {
     const i18n = readFileSync(join(root, "src/i18n.js"), "utf8");
     assert.match(i18n, /from "\.\/i18n\/entry\.js"/);
