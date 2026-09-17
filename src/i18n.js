@@ -1237,6 +1237,9 @@ export function setLang(lang) {
   } catch {
     //
   }
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = next;
+  }
   return next;
 }
 

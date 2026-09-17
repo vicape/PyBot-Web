@@ -108,6 +108,10 @@ export default function LoginPage() {
     return () => mq.removeEventListener("change", sync);
   }, [appearance.theme]);
 
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   const onLangChange = (next) => {
     const saved = setLang(next);
     setLangState(saved);
@@ -174,9 +178,16 @@ export default function LoginPage() {
       data-pbc-theme={resolvedTheme}
       data-pbc-theme-pref={appearance.theme}
     >
+      <a className="entry-skip" href="#entry-main">
+        {t("entrySkipToMain")}
+      </a>
       <div className="entry-shell">
         <header className="entry-top">
-          <a className="entry-top__brand" href="#entry-main">
+          <a
+            className="entry-top__brand"
+            href="#entry-main"
+            aria-label={t("entryBrand")}
+          >
             <img
               src="/branding/pybot-logo-full.svg"
               alt={t("entryBrand")}

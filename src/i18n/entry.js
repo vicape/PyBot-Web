@@ -60,6 +60,7 @@ export const ENTRY_STRINGS = {
     entryVisualHardware: "ESP32 / Arduino",
     entryVisualCodeLabel: "main.py",
     entryFeaturesLabel: "Qué podés hacer con PyBot",
+    entrySkipToMain: "Saltar al contenido principal",
   },
   en: {
     entryBrand: "PyBot",
@@ -107,6 +108,7 @@ export const ENTRY_STRINGS = {
     entryVisualHardware: "ESP32 / Arduino",
     entryVisualCodeLabel: "main.py",
     entryFeaturesLabel: "What you can do with PyBot",
+    entrySkipToMain: "Skip to main content",
   },
   fr: {
     entryBrand: "PyBot",
@@ -155,6 +157,7 @@ export const ENTRY_STRINGS = {
     entryVisualHardware: "ESP32 / Arduino",
     entryVisualCodeLabel: "main.py",
     entryFeaturesLabel: "Ce que vous pouvez faire avec PyBot",
+    entrySkipToMain: "Aller au contenu principal",
   },
   pt: {
     entryBrand: "PyBot",
@@ -203,6 +206,7 @@ export const ENTRY_STRINGS = {
     entryVisualHardware: "ESP32 / Arduino",
     entryVisualCodeLabel: "main.py",
     entryFeaturesLabel: "O que você pode fazer com o PyBot",
+    entrySkipToMain: "Ir para o conteúdo principal",
   },
   de: {
     entryBrand: "PyBot",
@@ -251,5 +255,6 @@ export const ENTRY_STRINGS = {
     entryVisualHardware: "ESP32 / Arduino",
     entryVisualCodeLabel: "main.py",
     entryFeaturesLabel: "Was du mit PyBot machen kannst",
+    entrySkipToMain: "Zum Hauptinhalt springen",
   },
 };
