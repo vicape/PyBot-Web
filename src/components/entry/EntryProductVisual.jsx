@@ -83,7 +83,6 @@ export default function EntryProductVisual({ labels }) {
           </div>
         </div>
         <div className="entry-visual__orbit entry-visual__orbit--python">{python}</div>
-        <div className="entry-visual__orbit entry-visual__orbit--blocks">{blocks}</div>
         <div className="entry-visual__orbit entry-visual__orbit--hw">{hardware}</div>
       </div>
     </div>

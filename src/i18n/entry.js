@@ -20,7 +20,7 @@ export const ENTRY_STRINGS = {
     entryTitleLine2: "Programa.",
     entryTitleLine3: "Crea el futuro.",
     entryLead:
-      "Aprendé, enseñá y creá con Python, bloques y hardware. De tu primera idea a un proyecto real.",
+      "Python, bloques y hardware real — aprendé, creá y enseñá tecnología desde el navegador.",
     entryJourney: "Aprender → Programar → Construir → Enseñar",
     entryFeatPythonTitle: "Python",
     entryFeatPythonDesc: "Código real, listo para ejecutar.",
@@ -68,7 +68,7 @@ export const ENTRY_STRINGS = {
     entryTitleLine2: "Code.",
     entryTitleLine3: "Build the future.",
     entryLead:
-      "Learn, teach, and create with Python, blocks, and hardware. From your first idea to a real project.",
+      "Real Python, blocks, and hardware — learn, create, and teach technology in the browser.",
     entryJourney: "Learn → Code → Build → Teach",
     entryFeatPythonTitle: "Python",
     entryFeatPythonDesc: "Real code, ready to run.",
@@ -115,7 +115,7 @@ export const ENTRY_STRINGS = {
     entryTitleLine2: "Programme.",
     entryTitleLine3: "Crée l’avenir.",
     entryLead:
-      "Apprenez, enseignez et créez avec Python, des blocs et du matériel. De la première idée à un vrai projet.",
+      "Python, blocs et matériel réels — apprenez, créez et enseignez la technologie dans le navigateur.",
     entryJourney: "Apprendre → Programmer → Construire → Enseigner",
     entryFeatPythonTitle: "Python",
     entryFeatPythonDesc: "Du vrai code, prêt à exécuter.",
@@ -163,7 +163,7 @@ export const ENTRY_STRINGS = {
     entryTitleLine2: "Programe.",
     entryTitleLine3: "Crie o futuro.",
     entryLead:
-      "Aprenda, ensine e crie com Python, blocos e hardware. Da primeira ideia a um projeto real.",
+      "Python, blocos e hardware reais — aprenda, crie e ensine tecnologia no navegador.",
     entryJourney: "Aprender → Programar → Construir → Ensinar",
     entryFeatPythonTitle: "Python",
     entryFeatPythonDesc: "Código real, pronto para executar.",
@@ -211,7 +211,7 @@ export const ENTRY_STRINGS = {
     entryTitleLine2: "Programmiere.",
     entryTitleLine3: "Gestalte die Zukunft.",
     entryLead:
-      "Lernen, lehren und gestalten mit Python, Blöcken und Hardware — von der ersten Idee zum echten Projekt.",
+      "Echtes Python, Blöcke und Hardware — Technologie lernen, schaffen und unterrichten im Browser.",
     entryJourney: "Lernen → Programmieren → Bauen → Lehren",
     entryFeatPythonTitle: "Python",
     entryFeatPythonDesc: "Echter Code, bereit zum Ausführen.",

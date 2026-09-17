@@ -67,6 +67,9 @@ describe("entry gate files", () => {
     assert.match(login, /pybot-logo-full\.svg/);
     assert.match(login, /EntryProductVisual/);
     assert.match(login, /appearanceApi/);
+    assert.match(login, /entry-top__logo/);
+    assert.doesNotMatch(login, /entry-brand__mark/);
+    assert.doesNotMatch(login, /entry-trust/);
     assert.doesNotMatch(login, /PyBotClass/);
     assert.doesNotMatch(login, />\s*PB\s*</);
   });
