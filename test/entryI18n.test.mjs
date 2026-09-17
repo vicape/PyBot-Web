@@ -68,8 +68,11 @@ describe("entry gate files", () => {
     assert.match(login, /EntryProductVisual/);
     assert.match(login, /appearanceApi/);
     assert.match(login, /entry-top__logo/);
+    assert.match(login, /entry-eyebrow/);
+    assert.match(login, /entryTagline/);
     assert.match(login, /entry-feature__note/);
     assert.match(login, /entryClassroomHint/);
+    assert.match(login, /entry-feature--core/);
     assert.doesNotMatch(login, /entry-brand__mark/);
     assert.doesNotMatch(login, /entry-trust/);
     assert.doesNotMatch(login, /PyBotClass/);
@@ -98,5 +101,18 @@ describe("entry gate files", () => {
     assert.match(i18n, /ENTRY_STRINGS/);
     assert.match(i18n, /pybot_lang/);
     assert.match(i18n, /SUPPORTED_LANGS\.includes/);
+  });
+
+  it("mobile landing CSS prefers natural height over single-viewport crush", () => {
+    const css = readFileSync(join(root, "src/styles/entry-gate.css"), "utf8");
+    assert.match(css, /Smartphone strong landing/);
+    assert.match(css, /\.entry-eyebrow/);
+    assert.match(css, /entry-feature--extended/);
+    assert.doesNotMatch(css, /Smartphone single-viewport landing/);
+    // Shell must not force empty viewport fill on phones
+    assert.match(
+      css,
+      /\.entry-shell \{[\s\S]*?min-height:\s*0;[\s\S]*?height:\s*auto;/,
+    );
   });
 });

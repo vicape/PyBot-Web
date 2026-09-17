@@ -237,6 +237,8 @@ export default function LoginPage() {
 
         <section id="entry-main" className="entry-hero" aria-labelledby="entry-title">
           <div className="entry-hero__copy">
+            <p className="entry-eyebrow">{t("entryTagline")}</p>
+
             <h1 id="entry-title" className="entry-title">
               <span className="entry-title__pair">
                 <span className="entry-title__line">{t("entryTitleLine1")}</span>{" "}
@@ -331,16 +333,25 @@ export default function LoginPage() {
             {t("entryFeaturesLabel")}
           </h2>
           <ul className="entry-features__rail">
-            {FEATURES.map((feat) => (
-              <li key={feat.key} className={`entry-feature entry-feature--${feat.tone}`}>
-                <span className="entry-feature__accent" aria-hidden="true" />
-                <span className="entry-feature__name">{t(feat.title)}</span>
-                <span className="entry-feature__desc">{t(feat.desc)}</span>
-                {feat.key === "classes" && supabaseConfigured ? (
-                  <span className="entry-feature__note">{t("entryClassroomHint")}</span>
-                ) : null}
-              </li>
-            ))}
+            {FEATURES.map((feat) => {
+              const isCore =
+                feat.key === "python" || feat.key === "blocks" || feat.key === "hardware";
+              return (
+                <li
+                  key={feat.key}
+                  className={`entry-feature entry-feature--${feat.tone} ${
+                    isCore ? "entry-feature--core" : "entry-feature--extended"
+                  }`}
+                >
+                  <span className="entry-feature__accent" aria-hidden="true" />
+                  <span className="entry-feature__name">{t(feat.title)}</span>
+                  <span className="entry-feature__desc">{t(feat.desc)}</span>
+                  {feat.key === "classes" && supabaseConfigured ? (
+                    <span className="entry-feature__note">{t("entryClassroomHint")}</span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </section>
       </div>
