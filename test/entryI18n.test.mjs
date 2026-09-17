@@ -30,9 +30,9 @@ function loadEntryModule() {
 }
 
 describe("entry i18n", () => {
-  it("exposes four supported languages with labels", () => {
+  it("exposes five supported languages with labels", () => {
     const { SUPPORTED_LANGS, LANG_LABELS, ENTRY_STRINGS } = loadEntryModule();
-    assert.deepEqual(SUPPORTED_LANGS, ["es", "en", "fr", "pt"]);
+    assert.deepEqual(SUPPORTED_LANGS, ["es", "en", "fr", "pt", "de"]);
     for (const code of SUPPORTED_LANGS) {
       assert.ok(LANG_LABELS[code], `missing label for ${code}`);
       assert.ok(ENTRY_STRINGS[code], `missing strings for ${code}`);
@@ -43,7 +43,9 @@ describe("entry i18n", () => {
     const { SUPPORTED_LANGS, ENTRY_STRINGS } = loadEntryModule();
     const baseKeys = Object.keys(ENTRY_STRINGS.es).sort();
     assert.ok(baseKeys.includes("entryGoogleContinue"));
-    assert.ok(baseKeys.includes("entryTitle"));
+    assert.ok(baseKeys.includes("entryTitleLine1"));
+    assert.ok(baseKeys.includes("entryIdeLink"));
+    assert.ok(baseKeys.includes("entryThemeDark"));
     for (const code of SUPPORTED_LANGS) {
       assert.deepEqual(Object.keys(ENTRY_STRINGS[code]).sort(), baseKeys, code);
       for (const key of baseKeys) {
@@ -55,14 +57,18 @@ describe("entry i18n", () => {
 });
 
 describe("entry gate files", () => {
-  it("LoginPage uses centralized entry i18n and Google mark", () => {
+  it("LoginPage uses centralized entry i18n, real logo, and Google mark", () => {
     const login = readFileSync(join(root, "src/pages/LoginPage.jsx"), "utf8");
     assert.match(login, /from "\.\.\/i18n\.js"/);
     assert.match(login, /SUPPORTED_LANGS/);
     assert.match(login, /entry-google-btn/);
     assert.match(login, /GoogleMark/);
     assert.match(login, /signInWithOAuth/);
+    assert.match(login, /pybot-logo-full\.svg/);
+    assert.match(login, /EntryProductVisual/);
+    assert.match(login, /appearanceApi/);
     assert.doesNotMatch(login, /PyBotClass/);
+    assert.doesNotMatch(login, />\s*PB\s*</);
   });
 
   it("i18n.js merges entry strings and persists pybot_lang", () => {
