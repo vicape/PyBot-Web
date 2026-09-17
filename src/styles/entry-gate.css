@@ -12,14 +12,21 @@
   border: 0;
 }
 
-/* Skip link: visually hidden until keyboard focus */
+/* Skip link: off-screen until keyboard focus (no header hit-area overlap) */
 .entry-skip {
   position: absolute;
-  top: 0;
-  left: 0;
+  /* Park fully above the viewport so the hit box never overlaps the logo */
+  top: -100vh;
+  left: 0.5rem;
   z-index: 1000;
-  padding: 0.55rem 0.85rem;
-  margin: 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 24px;
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  margin: 0;
   font: inherit;
   font-size: 0.875rem;
   font-weight: 650;
@@ -30,21 +37,15 @@
   border-radius: 8px;
   text-decoration: none;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.14);
-  clip: rect(0, 0, 0, 0);
-  clip-path: inset(50%);
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
+  pointer-events: none;
   white-space: nowrap;
 }
 
 .entry-skip:focus,
 .entry-skip:focus-visible {
-  clip: auto;
-  clip-path: none;
-  width: auto;
-  height: auto;
-  overflow: visible;
+  top: 0.5rem;
+  left: 0.5rem;
+  pointer-events: auto;
   outline: none;
 }
 
@@ -95,7 +96,8 @@
     0 0 0 1px rgba(15, 23, 42, 0.04);
   --entry-code-bg: #0f172a;
   --entry-code-text: #e2e8f0;
-  --entry-code-active: rgba(56, 189, 248, 0.08);
+  /* Soft indigo active line — avoids near-1:1 with cyan syntax tokens */
+  --entry-code-active: rgba(99, 102, 241, 0.16);
   --entry-window: #ffffff;
   --entry-window-bar: #f1f4f8;
   --entry-window-inset: #eef2f7;
@@ -136,7 +138,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --entry-code-bg: #0a101b;
   --entry-code-text: #e2e8f0;
-  --entry-code-active: rgba(56, 189, 248, 0.1);
+  --entry-code-active: rgba(99, 102, 241, 0.2);
   --entry-window: #111827;
   --entry-window-bar: #0c121d;
   --entry-window-inset: #0a1018;
@@ -660,7 +662,7 @@
 
 .entry-visual__files-item {
   display: block;
-  font-size: 0.58rem;
+  font-size: 0.68rem;
   font-weight: 650;
   letter-spacing: 0.01em;
   padding: 0.28rem 0.28rem;
@@ -674,9 +676,15 @@
 }
 
 .entry-visual__files-item--active {
-  color: var(--entry-accent);
-  background: var(--entry-accent-soft);
+  /* Solid surface + strong text so active main.py stays clearly legible */
+  color: #0b3d8c;
+  background: #dbeafe;
   font-weight: 720;
+}
+
+.auth-root.entry-root.dash-root[data-pbc-theme="dark"] .entry-visual__files-item--active {
+  color: #e8f1ff;
+  background: #1e3a5f;
 }
 
 .entry-visual__files-item--muted {
@@ -740,7 +748,7 @@
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.66rem;
   line-height: 1.62;
-  color: #94a3b8;
+  color: #cbd5e1;
   text-align: right;
   user-select: none;
   padding-right: 0.4rem;
@@ -748,7 +756,7 @@
 }
 
 .entry-visual__ln--active {
-  color: #e2e8f0;
+  color: #f8fafc;
   font-weight: 650;
 }
 
@@ -772,14 +780,15 @@
   margin: 0 -0.45rem 0 -0.2rem;
   padding: 0 0.45rem 0 0.2rem;
   background: var(--entry-code-active);
-  box-shadow: inset 2px 0 0 #38bdf8;
+  box-shadow: inset 2px 0 0 #818cf8;
 }
 
 .tok-kw {
-  color: #93c5fd;
+  color: #bfdbfe;
 }
 .tok-fn {
-  color: #67e8f9;
+  /* Brighter cyan for readability on indigo active-line tint */
+  color: #a5f3fc;
 }
 .tok-str {
   color: #86efac;
@@ -788,7 +797,7 @@
   color: #fcd34d;
 }
 .tok-p {
-  color: #cbd5e1;
+  color: #e2e8f0;
 }
 
 .entry-visual__side {
@@ -817,7 +826,7 @@
 }
 
 .entry-visual__panel-head {
-  font-size: 0.58rem;
+  font-size: 0.66rem;
   font-weight: 720;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -839,7 +848,7 @@
   align-items: center;
   min-height: 1.35rem;
   padding: 0.14rem 0.5rem 0.16rem;
-  font-size: 0.56rem;
+  font-size: 0.64rem;
   font-weight: 650;
   letter-spacing: 0.01em;
   color: #fff;
@@ -943,33 +952,33 @@
 .entry-visual__hw-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 0.52rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding: 0.18rem 0.38rem;
+  padding: 0.2rem 0.42rem;
   border-radius: 5px;
-  color: #0ea5e9;
-  background: color-mix(in srgb, #0ea5e9 12%, transparent);
-  border: 1px solid color-mix(in srgb, #0ea5e9 28%, transparent);
+  color: #0369a1;
+  background: #e0f2fe;
+  border: 1px solid #7dd3fc;
 }
 
 .entry-visual__hw-chip--servo {
-  color: #ea580c;
-  background: color-mix(in srgb, #ea580c 12%, transparent);
-  border-color: color-mix(in srgb, #ea580c 26%, transparent);
+  color: #9a3412;
+  background: #ffedd5;
+  border-color: #fdba74;
 }
 
 .auth-root.entry-root.dash-root[data-pbc-theme="dark"] .entry-visual__hw-chip {
-  color: #7dd3fc;
-  background: rgba(14, 165, 233, 0.12);
-  border-color: rgba(125, 211, 252, 0.22);
+  color: #e0f2fe;
+  background: rgba(14, 165, 233, 0.28);
+  border-color: rgba(125, 211, 252, 0.45);
 }
 
 .auth-root.entry-root.dash-root[data-pbc-theme="dark"] .entry-visual__hw-chip--servo {
-  color: #fdba74;
-  background: rgba(234, 88, 12, 0.14);
-  border-color: rgba(251, 146, 60, 0.24);
+  color: #fff7ed;
+  background: rgba(234, 88, 12, 0.32);
+  border-color: rgba(251, 146, 60, 0.5);
 }
 
 .entry-visual__board {
@@ -1050,20 +1059,20 @@
 
 .entry-board-svg__label {
   fill: #e2e8f0;
-  font-size: 8px;
+  font-size: 9.5px;
   font-weight: 700;
   font-family: ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.02em;
 }
 
 .entry-board-svg__label--muted {
-  fill: #94a3b8;
+  fill: #cbd5e1;
   font-weight: 600;
 }
 
 .entry-board-svg__pin-label {
-  fill: #7dd3fc;
-  font-size: 6.5px;
+  fill: #e0f2fe;
+  font-size: 9px;
   font-weight: 700;
   font-family: ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.04em;
@@ -1663,7 +1672,7 @@
   }
 
   .entry-visual__panel-head {
-    font-size: 0.58rem;
+    font-size: 0.66rem;
     padding-bottom: 0.24rem;
   }
 
@@ -1675,9 +1684,9 @@
   }
 
   .entry-block {
-    font-size: 0.56rem;
-    min-height: 1.22rem;
-    padding: 0.12rem 0.38rem 0.14rem;
+    font-size: 0.64rem;
+    min-height: 1.28rem;
+    padding: 0.12rem 0.4rem 0.14rem;
   }
 
   .entry-block--hat {
@@ -1816,7 +1825,7 @@
   }
 
   .entry-block {
-    font-size: 0.6rem;
+    font-size: 0.64rem;
     min-height: 1.3rem;
   }
 }
