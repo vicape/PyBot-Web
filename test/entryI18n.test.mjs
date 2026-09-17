@@ -68,6 +68,8 @@ describe("entry gate files", () => {
     assert.match(login, /EntryProductVisual/);
     assert.match(login, /appearanceApi/);
     assert.match(login, /entry-top__logo/);
+    assert.match(login, /entry-feature__note/);
+    assert.match(login, /entryClassroomHint/);
     assert.doesNotMatch(login, /entry-brand__mark/);
     assert.doesNotMatch(login, /entry-trust/);
     assert.doesNotMatch(login, /PyBotClass/);
@@ -85,6 +87,8 @@ describe("entry gate files", () => {
     assert.match(visual, /print/);
     assert.match(visual, /ESP32/);
     assert.match(visual, /entry-visual__panel-head/);
+    assert.match(visual, /entry-visual__workspace/);
+    assert.match(visual, /entry-visual__cline--active/);
     assert.doesNotMatch(visual, /entry-visual__orbit/);
   });
 

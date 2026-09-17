@@ -256,59 +256,61 @@ export default function LoginPage() {
             ) : null}
 
             <div className="entry-actions">
-              {supabaseConfigured ? (
-                <button
-                  type="button"
-                  className="entry-google-btn"
-                  onClick={oauthSupabaseGoogle}
-                  disabled={oauthBusy}
-                  aria-busy={oauthBusy ? "true" : "false"}
-                >
-                  <span className="entry-google-btn__icon">
-                    <GoogleMark />
-                  </span>
-                  <span className="entry-google-btn__label">
-                    {oauthBusy ? t("entryGoogleLoading") : googleLabel}
-                  </span>
-                </button>
-              ) : null}
-
-              {showGIS ? (
-                <div className="entry-google-wrap auth-google-wrap">
-                  <GoogleLogin
-                    onSuccess={(res) => {
-                      const cred = res.credential;
-                      if (cred && saveGoogleProfile(cred)) {
-                        navigate("/dashboard/classes", { replace: true });
-                      }
-                    }}
-                    onError={() => {}}
-                    theme="outline"
-                    size="large"
-                    text="continue_with"
-                    shape="rectangular"
-                    width={320}
-                  />
-                </div>
-              ) : null}
-
-              {showStub ? (
-                <>
-                  <p className="entry-stub-hint">{t("entryStubHint")}</p>
-                  <button type="button" className="entry-google-btn" disabled>
+              <div className="entry-actions__primary">
+                {supabaseConfigured ? (
+                  <button
+                    type="button"
+                    className="entry-google-btn"
+                    onClick={oauthSupabaseGoogle}
+                    disabled={oauthBusy}
+                    aria-busy={oauthBusy ? "true" : "false"}
+                  >
                     <span className="entry-google-btn__icon">
                       <GoogleMark />
                     </span>
-                    <span className="entry-google-btn__label">{t("entryGoogleDisabled")}</span>
+                    <span className="entry-google-btn__label">
+                      {oauthBusy ? t("entryGoogleLoading") : googleLabel}
+                    </span>
                   </button>
-                </>
-              ) : null}
+                ) : null}
 
-              {existing && !supabaseConfigured ? (
-                <Link to="/dashboard/classes" className="entry-link entry-link--primary">
-                  {t("entryDashboardLink")}
-                </Link>
-              ) : null}
+                {showGIS ? (
+                  <div className="entry-google-wrap auth-google-wrap">
+                    <GoogleLogin
+                      onSuccess={(res) => {
+                        const cred = res.credential;
+                        if (cred && saveGoogleProfile(cred)) {
+                          navigate("/dashboard/classes", { replace: true });
+                        }
+                      }}
+                      onError={() => {}}
+                      theme="outline"
+                      size="large"
+                      text="continue_with"
+                      shape="rectangular"
+                      width={320}
+                    />
+                  </div>
+                ) : null}
+
+                {showStub ? (
+                  <>
+                    <p className="entry-stub-hint">{t("entryStubHint")}</p>
+                    <button type="button" className="entry-google-btn" disabled>
+                      <span className="entry-google-btn__icon">
+                        <GoogleMark />
+                      </span>
+                      <span className="entry-google-btn__label">{t("entryGoogleDisabled")}</span>
+                    </button>
+                  </>
+                ) : null}
+
+                {existing && !supabaseConfigured ? (
+                  <Link to="/dashboard/classes" className="entry-link entry-link--primary">
+                    {t("entryDashboardLink")}
+                  </Link>
+                ) : null}
+              </div>
 
               <Link to="/" className="entry-ide-btn">
                 <span className="entry-ide-btn__icon" aria-hidden="true">
@@ -331,14 +333,15 @@ export default function LoginPage() {
           <ul className="entry-features__rail">
             {FEATURES.map((feat) => (
               <li key={feat.key} className={`entry-feature entry-feature--${feat.tone}`}>
+                <span className="entry-feature__accent" aria-hidden="true" />
                 <span className="entry-feature__name">{t(feat.title)}</span>
                 <span className="entry-feature__desc">{t(feat.desc)}</span>
+                {feat.key === "classes" && supabaseConfigured ? (
+                  <span className="entry-feature__note">{t("entryClassroomHint")}</span>
+                ) : null}
               </li>
             ))}
           </ul>
-          {supabaseConfigured ? (
-            <p className="entry-hint">{t("entryClassroomHint")}</p>
-          ) : null}
         </section>
       </div>
     </main>
