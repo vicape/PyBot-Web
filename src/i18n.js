@@ -1,3 +1,7 @@
+import { ENTRY_STRINGS, SUPPORTED_LANGS, LANG_LABELS } from "./i18n/entry.js";
+
+export { SUPPORTED_LANGS, LANG_LABELS };
+
 const STRINGS = {
   es: {
     appTitle: "PyBot Web",
@@ -1213,17 +1217,39 @@ Built by VIC.`,
   },
 };
 
+function normalizeLang(lang) {
+  const raw = String(lang || "").toLowerCase().slice(0, 2);
+  return SUPPORTED_LANGS.includes(raw) ? raw : "en";
+}
+
 export function getLang() {
-  return localStorage.getItem("pybot_lang") || "en";
+  try {
+    return normalizeLang(localStorage.getItem("pybot_lang") || "en");
+  } catch {
+    return "en";
+  }
 }
 
 export function setLang(lang) {
-  localStorage.setItem("pybot_lang", lang);
+  const next = normalizeLang(lang);
+  try {
+    localStorage.setItem("pybot_lang", next);
+  } catch {
+    //
+  }
+  return next;
 }
 
 export function t(key) {
   const lang = getLang();
-  return STRINGS[lang]?.[key] ?? STRINGS.es[key] ?? key;
+  return (
+    ENTRY_STRINGS[lang]?.[key] ??
+    STRINGS[lang]?.[key] ??
+    ENTRY_STRINGS.en?.[key] ??
+    STRINGS.en?.[key] ??
+    STRINGS.es?.[key] ??
+    key
+  );
 }
 
 /**

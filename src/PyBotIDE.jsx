@@ -17,7 +17,15 @@ const FlowchartEditor = lazy(() => import("./rosetta/FlowchartEditor.jsx"));
 // cuando el usuario elige el modo PyBlock, así el modo Python no se ve afectado.
 const PyBlockEditor = lazy(() => import("./pyblock/PyBlockEditor.jsx"));
 import { DEFAULT_CODE, EXAMPLES } from "./examplesData.js";
-import { t, getLang, setLang, formatHardwareError, formatPythonError } from "./i18n.js";
+import {
+  t,
+  getLang,
+  setLang,
+  formatHardwareError,
+  formatPythonError,
+  SUPPORTED_LANGS,
+  LANG_LABELS,
+} from "./i18n.js";
 import {
   hardwareConnect,
   hardwareDisconnect,
@@ -2812,8 +2820,11 @@ export default function PyBotIDE() {
                   }}
                   className="modal-select"
                 >
-                  <option value="es">Español</option>
-                  <option value="en">English</option>
+                  {SUPPORTED_LANGS.map((code) => (
+                    <option key={code} value={code}>
+                      {LANG_LABELS[code]}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="modal-row">
