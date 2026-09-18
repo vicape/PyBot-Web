@@ -81,6 +81,13 @@ import { parseActivityId, readActivityLaunchCode, isGenericIdeTemplate } from ".
 import { saveActivityProgress } from "./platform/activityProgress.js";
 import { submitActivity } from "./platform/activitySubmissions.js";
 import {
+  PYBLOCK_WORKSPACE_STORAGE_KEY,
+  buildDocumentReplacePatch,
+  createProgramSnapshot,
+  getCurrentProgramSnapshot,
+  nextDocumentIdentity,
+} from "./documentSnapshot.js";
+import {
   classroomTurnInSuccessMessage,
   classroomTurnInUserMessage,
   turnInPybotActivityToClassroom,
@@ -177,6 +184,20 @@ export default function PyBotIDE() {
   const activityLastSavedRef = useRef("");
   const appliedActivityLoadRef = useRef(null);
   const pendingActivityCodeRef = useRef(null);
+  // Identidad del documento lógico (ejemplo / archivo / actividad). Se incrementa
+  // al reemplazar el programa para invalidar representaciones obsoletas.
+  const documentIdentityRef = useRef({ revision: 0, documentId: 0 });
+  const [documentId, setDocumentId] = useState(0);
+  const replaceLogicalDocumentRef = useRef(null);
+  const pendingDocumentReplaceRef = useRef(null);
+  const latestSnapshotRef = useRef(
+    createProgramSnapshot({
+      source: readInitialEditorCode(activityId, activityLaunchCode),
+      representation: "python",
+      revision: 0,
+      documentId: 0,
+    }),
+  );
   const [theme, setTheme] = useState(() => readInitialTheme());
 
   useEffect(() => {
@@ -208,38 +229,8 @@ export default function PyBotIDE() {
     };
   }, [activityId, activityContext?.course_id, sessionUser, sessionSupabase]);
 
-  const onSubmitActivity = useCallback(async () => {
-    if (!activityId || !sessionUser || sessionUser._legacy || !activityIsStudent) return;
-    if (!window.confirm("¿Entregar esta actividad?")) return;
-    setActivitySubmitStatus("saving");
-    const r = await submitActivity(activityId, code);
-    if (!r.ok) {
-      setActivitySubmitStatus("error");
-      window.alert(r.error || "No se pudo entregar la actividad.");
-      return;
-    }
-    const cr = r.classroom;
-    if (cr?.ok === false && cr?.needsConnect && !cr?.needsAdmin) {
-      setPendingClassroomTurnIn({
-        activityId,
-        userId: sessionUser.id,
-        returnPath: `${window.location.pathname}${window.location.search}`,
-      });
-      setActivitySubmitStatus("saved");
-      window.alert(
-        classroomTurnInUserMessage(cr) ||
-          "Actividad entregada en PyBot. Autorizá Google Classroom para completar la entrega.",
-      );
-      void connectGoogleClassroom(`${window.location.pathname}${window.location.search}`, {
-        mode: "student",
-      });
-      return;
-    }
-    setActivitySubmitStatus("saved");
-    const failMsg = classroomTurnInUserMessage(cr);
-    const okMsg = classroomTurnInSuccessMessage(cr);
-    window.alert(failMsg || okMsg || "Actividad entregada en PyBot.");
-  }, [activityId, sessionUser, activityIsStudent, code]);
+  // onSubmitActivity se define más abajo junto al snapshot canónico del documento
+  // para que Submit no lea un `code` distinto de lo que el alumno ve.
 
   // Resume turnIn post-OAuth (sin re-submit)
   useEffect(() => {
@@ -299,6 +290,12 @@ export default function PyBotIDE() {
       setReady: setActivityCodeReady,
       editorRef,
     });
+    // Invalidar representaciones del documento anterior (ref listo o pendiente).
+    if (replaceLogicalDocumentRef.current) {
+      replaceLogicalDocumentRef.current(nextCode, { syncCode: false });
+    } else {
+      pendingDocumentReplaceRef.current = nextCode;
+    }
 
     if (activityContext) {
       track("activity_ide_open", { feature: "activity" });
@@ -312,40 +309,7 @@ export default function PyBotIDE() {
     }
   }, [activityId, activityLoading, activityError, activityInitialCode]);
 
-  useEffect(() => {
-    if (
-      !activityId ||
-      !sessionUser ||
-      sessionUser._legacy ||
-      appliedActivityLoadRef.current == null ||
-      activityLoading
-    ) {
-      return;
-    }
-
-    if (code === activityLastSavedRef.current) return;
-    if (isGenericIdeTemplate(code)) return;
-
-    setActivitySaveStatus("pending");
-    setActivitySaveError("");
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        setActivitySaveStatus("saving");
-        const result = await saveActivityProgress(activityId, sessionUser.id, code);
-        if (result.ok) {
-          activityLastSavedRef.current = code;
-          setActivitySaveStatus("saved");
-          setActivitySaveError("");
-        } else {
-          setActivitySaveStatus("error");
-          setActivitySaveError(result.error || "No se pudo guardar");
-          console.warn("saveActivityProgress:", result.error);
-        }
-      })();
-    }, 2000);
-
-    return () => window.clearTimeout(timer);
-  }, [code, activityId, sessionUser, activityLoading]);
+  // Autosave de actividad se define más abajo con getCurrentProgramSnapshot.
 
   const activityLoginPath =
     activityId != null
@@ -511,14 +475,171 @@ export default function PyBotIDE() {
 
   const lang = getLang();
 
-  // --- Rosetta: conversion entre representaciones (Python es el canonico) ---
-  // Devuelve el Python "real" de lo que el alumno tiene armado en el modo actual.
-  const currentPythonCode = useCallback(() => {
-    if (editorMode === "pyblock") return pyblockCode;
-    if (editorMode === "pseudo") return pseudocodeToPython(pseudoCode);
-    if (editorMode === "flow") return flowAst ? astToPython(flowAst) : code;
-    return code; // python
-  }, [editorMode, code, pyblockCode, pseudoCode, flowAst]);
+  // --- Documento lógico único (IDE-01 / IDE-02) ---
+  // Un snapshot inmutable alimenta Run / Save / Submit / persistencia / hardware.
+  const captureProgramSnapshot = useCallback(() => {
+    const identity = documentIdentityRef.current;
+    const snap = getCurrentProgramSnapshot({
+      editorMode,
+      code,
+      pyblockCode,
+      pseudoCode,
+      flowAst,
+      filename: currentFileName,
+      revision: identity.revision,
+      documentId: identity.documentId,
+      convertPseudoToPython: pseudocodeToPython,
+      convertFlowToPython: astToPython,
+    });
+    latestSnapshotRef.current = snap;
+    return snap;
+  }, [editorMode, code, pyblockCode, pseudoCode, flowAst, currentFileName]);
+
+  useEffect(() => {
+    captureProgramSnapshot();
+  }, [captureProgramSnapshot]);
+
+  /**
+   * Reemplaza atómicamente el documento lógico (ejemplo, .py, actividad).
+   * Invalida estado stale de Pseudo / Flow / Blocks y limpia el workspace
+   * Blockly en localStorage para que no resucite el programa anterior.
+   */
+  const replaceLogicalDocument = useCallback(
+    (pythonSource, options = {}) => {
+      const { syncCode = true, filename } = options;
+      const identity = nextDocumentIdentity(documentIdentityRef.current);
+      documentIdentityRef.current = identity;
+      setDocumentId(identity.documentId);
+
+      const patch = buildDocumentReplacePatch(pythonSource, editorMode, {
+        pythonToPseudocode,
+        pythonToAst,
+        astToBlockly,
+      });
+
+      if (syncCode) {
+        setCode(patch.code);
+      }
+      setPseudoCode(patch.pseudoCode);
+      setFlowAst(patch.flowAst);
+      setPyblockCode(patch.pyblockCode);
+      setPyblockIncoming(patch.pyblockIncoming);
+      viewEditedRef.current = { ...patch.viewEdited };
+
+      if (filename) {
+        setCurrentFileName(filename);
+      }
+
+      if (patch.clearPyblockWorkspaceStorage) {
+        try {
+          localStorage.removeItem(PYBLOCK_WORKSPACE_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+      }
+
+      latestSnapshotRef.current = createProgramSnapshot({
+        source: patch.code,
+        filename: filename || currentFileName,
+        representation: editorMode,
+        revision: identity.revision,
+        documentId: identity.documentId,
+      });
+    },
+    [editorMode, currentFileName],
+  );
+
+  useEffect(() => {
+    replaceLogicalDocumentRef.current = replaceLogicalDocument;
+    const pending = pendingDocumentReplaceRef.current;
+    if (pending != null) {
+      pendingDocumentReplaceRef.current = null;
+      replaceLogicalDocument(pending, { syncCode: false });
+    }
+  }, [replaceLogicalDocument]);
+
+  const onSubmitActivity = useCallback(async () => {
+    if (!activityId || !sessionUser || sessionUser._legacy || !activityIsStudent) return;
+    if (!window.confirm("¿Entregar esta actividad?")) return;
+    setActivitySubmitStatus("saving");
+    const snapshot = captureProgramSnapshot();
+    if (snapshot.source !== code) setCode(snapshot.source);
+    const r = await submitActivity(activityId, snapshot.source);
+    if (!r.ok) {
+      setActivitySubmitStatus("error");
+      window.alert(r.error || "No se pudo entregar la actividad.");
+      return;
+    }
+    const cr = r.classroom;
+    if (cr?.ok === false && cr?.needsConnect && !cr?.needsAdmin) {
+      setPendingClassroomTurnIn({
+        activityId,
+        userId: sessionUser.id,
+        returnPath: `${window.location.pathname}${window.location.search}`,
+      });
+      setActivitySubmitStatus("saved");
+      window.alert(
+        classroomTurnInUserMessage(cr) ||
+          "Actividad entregada en PyBot. Autorizá Google Classroom para completar la entrega.",
+      );
+      void connectGoogleClassroom(`${window.location.pathname}${window.location.search}`, {
+        mode: "student",
+      });
+      return;
+    }
+    setActivitySubmitStatus("saved");
+    const failMsg = classroomTurnInUserMessage(cr);
+    const okMsg = classroomTurnInSuccessMessage(cr);
+    window.alert(failMsg || okMsg || "Actividad entregada en PyBot.");
+  }, [activityId, sessionUser, activityIsStudent, captureProgramSnapshot, code]);
+
+  // Autosave / persistencia de actividad: captura el snapshot ANTES del await.
+  useEffect(() => {
+    if (
+      !activityId ||
+      !sessionUser ||
+      sessionUser._legacy ||
+      appliedActivityLoadRef.current == null ||
+      activityLoading
+    ) {
+      return;
+    }
+
+    const snapshot = captureProgramSnapshot();
+    const source = snapshot.source;
+    if (source === activityLastSavedRef.current) return;
+    if (isGenericIdeTemplate(source)) return;
+
+    setActivitySaveStatus("pending");
+    setActivitySaveError("");
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setActivitySaveStatus("saving");
+        const result = await saveActivityProgress(activityId, sessionUser.id, source);
+        if (result.ok) {
+          activityLastSavedRef.current = source;
+          setActivitySaveStatus("saved");
+          setActivitySaveError("");
+        } else {
+          setActivitySaveStatus("error");
+          setActivitySaveError(result.error || "No se pudo guardar");
+          console.warn("saveActivityProgress:", result.error);
+        }
+      })();
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    code,
+    pyblockCode,
+    pseudoCode,
+    flowAst,
+    editorMode,
+    activityId,
+    sessionUser,
+    activityLoading,
+    captureProgramSnapshot,
+  ]);
 
   // Cambia de representacion. Regla clave para evitar que "solo navegar" altere
   // el codigo: al SALIR de una vista, unicamente bajamos esa vista a Python si
@@ -1035,8 +1156,9 @@ export default function PyBotIDE() {
 
   const onRun = useCallback(async () => {
     if (running || stopping) return;
-    // En PyBlock se ejecuta el Python generado por los bloques.
-    const activeCode = currentPythonCode();
+    // Snapshot inmutable: lo que se ve = lo que se ejecuta.
+    const snapshot = captureProgramSnapshot();
+    const activeCode = snapshot.source;
     if (!activeCode.trim()) {
       appendConsole(t("pyblockEmpty") + "\n", "err");
       return;
@@ -1131,7 +1253,7 @@ export default function PyBotIDE() {
       setInputPrompt("");
       inputResolveRef.current = null;
     }
-  }, [running, stopping, code, editorMode, pyblockCode, currentPythonCode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, bleConnected, applySyntaxResult]);
+  }, [running, stopping, captureProgramSnapshot, editorMode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, bleConnected, applySyntaxResult]);
 
   const onInstallEda6 = useCallback(async () => {
     if (!connected) {
@@ -1168,7 +1290,8 @@ export default function PyBotIDE() {
     if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") {
       return;
     }
-    const activeCode = currentPythonCode();
+    const snapshot = captureProgramSnapshot();
+    const activeCode = snapshot.source;
     if (!activeCode.trim()) {
       appendConsole(t("pyblockEmpty") + "\n", "err");
       return;
@@ -1198,12 +1321,13 @@ export default function PyBotIDE() {
     } catch (e) {
       appendConsole(formatPythonError(e?.message) + "\n", "err");
     }
-  }, [connected, code, editorMode, pyblockCode, currentPythonCode, appendConsole, boardType, eda6Profile]);
+  }, [connected, captureProgramSnapshot, appendConsole, boardType, eda6Profile]);
 
   const onDownloadToArduino = useCallback(async () => {
     if (boardType !== "arduino-firmata") return;
     if (downloadingArduino) return;
-    const activeCode = currentPythonCode();
+    const snapshot = captureProgramSnapshot();
+    const activeCode = snapshot.source;
     if (!activeCode.trim()) {
       appendConsole(t("pyblockEmpty") + "\n", "err");
       return;
@@ -1243,7 +1367,7 @@ export default function PyBotIDE() {
     } finally {
       setDownloadingArduino(false);
     }
-  }, [boardType, downloadingArduino, code, editorMode, pyblockCode, currentPythonCode, appendConsole]);
+  }, [boardType, downloadingArduino, captureProgramSnapshot, appendConsole]);
 
   const onInstallBleRuntime = useCallback(async () => {
     if (!connected) {
@@ -1453,7 +1577,8 @@ export default function PyBotIDE() {
       return;
     }
     if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") return;
-    const activeCode = currentPythonCode();
+    const snapshot = captureProgramSnapshot();
+    const activeCode = snapshot.source;
     if (!activeCode.trim()) {
       appendConsole(t("pyblockEmpty") + "\n", "err");
       return;
@@ -1501,7 +1626,7 @@ export default function PyBotIDE() {
     } finally {
       setBleDeploying(false);
     }
-  }, [bleDeploying, bleConnected, boardType, currentPythonCode, appendConsole, refreshBleAppStatus, streamSavedApp]);
+  }, [bleDeploying, bleConnected, boardType, captureProgramSnapshot, appendConsole, refreshBleAppStatus, streamSavedApp]);
 
   const onBleRunSaved = useCallback(async () => {
     if (running || stopping) return;
@@ -1645,21 +1770,23 @@ export default function PyBotIDE() {
       if (!file) return;
       try {
         const text = await file.text();
-        setCode(String(text ?? ""));
-        setCurrentFileName(file.name || "programa.py");
-        appendConsole(`${t("fileLoaded")} ${file.name || "programa.py"}\n`, "info");
+        const name = file.name || "programa.py";
+        replaceLogicalDocument(String(text ?? ""), { filename: name });
+        appendConsole(`${t("fileLoaded")} ${name}\n`, "info");
       } catch {
         appendConsole(`${t("fileLoaded")} ERROR\n`, "err");
       }
     },
-    [appendConsole],
+    [appendConsole, replaceLogicalDocument],
   );
 
   const onSaveLocal = useCallback(async () => {
+    const snapshot = captureProgramSnapshot();
+    if (snapshot.source !== code) setCode(snapshot.source);
     const fallbackName =
-      currentFileName && currentFileName.toLowerCase().endsWith(".py")
-        ? currentFileName
-        : `${currentFileName || "programa"}.py`;
+      snapshot.filename && snapshot.filename.toLowerCase().endsWith(".py")
+        ? snapshot.filename
+        : `${snapshot.filename || "programa"}.py`;
     try {
       if (typeof window.showSaveFilePicker === "function") {
         const handle = await window.showSaveFilePicker({
@@ -1672,7 +1799,7 @@ export default function PyBotIDE() {
           ],
         });
         const writable = await handle.createWritable();
-        await writable.write(code);
+        await writable.write(snapshot.source);
         await writable.close();
         const savedName = handle.name || fallbackName;
         setCurrentFileName(savedName);
@@ -1683,7 +1810,7 @@ export default function PyBotIDE() {
       if (e?.name === "AbortError") return;
     }
 
-    const blob = new Blob([code], { type: "text/x-python;charset=utf-8" });
+    const blob = new Blob([snapshot.source], { type: "text/x-python;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1693,15 +1820,15 @@ export default function PyBotIDE() {
     a.remove();
     URL.revokeObjectURL(url);
     appendConsole(`${t("fileSaved")} ${fallbackName}\n`, "info");
-  }, [code, currentFileName, appendConsole]);
+  }, [captureProgramSnapshot, code, appendConsole]);
 
   const loadExample = useCallback(
     (ex) => {
-      setCode(ex.code);
+      replaceLogicalDocument(ex.code);
       appendConsole(`Cargado: ${ex.file}\n`, "info");
       if (isCompactMobile) setSidebarOpen(false);
     },
-    [appendConsole, isCompactMobile],
+    [appendConsole, isCompactMobile, replaceLogicalDocument],
   );
 
   const monacoTheme = theme === "dark" ? "vs-dark" : "light";
@@ -1841,6 +1968,7 @@ export default function PyBotIDE() {
     editorSurface = (
       <Suspense fallback={<div className="pyblock-loading">{t("pyblockLoading")}</div>}>
         <PyBlockEditor
+          key={`pyblock-doc-${documentId}`}
           theme={theme}
           lang={lang}
           boardType={boardType}

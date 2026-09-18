@@ -18,9 +18,8 @@ import { getPyblockToolbox } from "./pyblockToolbox.js";
 import { pyblockWorkspaceToPython } from "./pyblockGenerator.js";
 import { definePyblockBlocks } from "./pyblockBlocks.js";
 import { t } from "../i18n.js";
+import { PYBLOCK_WORKSPACE_STORAGE_KEY as WORKSPACE_KEY } from "../documentSnapshot.js";
 import "./pyblock.css";
-
-const WORKSPACE_KEY = "pybot_pyblock_workspace";
 
 export default function PyBlockEditor({
   theme,
