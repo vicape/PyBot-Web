@@ -13,6 +13,7 @@ import {
 import { t, getLang, setLang, SUPPORTED_LANGS, LANG_LABELS } from "../i18n.js";
 import GoogleMark from "../components/GoogleMark.jsx";
 import EntryProductVisual from "../components/entry/EntryProductVisual.jsx";
+import { EntryFeatureIcon } from "../components/entry/EntryFeatureIcons.jsx";
 import "../styles/dashboard-theme.css";
 import "../styles/entry-gate.css";
 
@@ -354,7 +355,9 @@ export default function LoginPage() {
                     isCore ? "entry-feature--core" : "entry-feature--extended"
                   }`}
                 >
-                  <span className="entry-feature__accent" aria-hidden="true" />
+                  <span className="entry-feature__icon" aria-hidden="true">
+                    <EntryFeatureIcon id={feat.key} />
+                  </span>
                   <span className="entry-feature__name">{t(feat.title)}</span>
                   <span className="entry-feature__desc">{t(feat.desc)}</span>
                   {feat.key === "classes" && supabaseConfigured ? (

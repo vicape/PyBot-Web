@@ -17,17 +17,18 @@ body,
   -webkit-overflow-scrolling: touch;
 }
 
-/* Rutas fuera del IDE: permiten scroll vertical */
-body:has(.auth-root),
-body:has(.dash-root),
+/* Rutas fuera del IDE: permiten scroll vertical.
+   Excluye /login (.entry-root): esa landing debe caber sin scroll. */
+body:has(.auth-root):not(:has(.entry-root)),
+body:has(.dash-root):not(:has(.entry-root)),
 body:has(.pbc-dashboard) {
   overflow: auto;
   height: auto;
   min-height: 100%;
 }
 
-#root:has(.auth-root),
-#root:has(.dash-root),
+#root:has(.auth-root):not(:has(.entry-root)),
+#root:has(.dash-root):not(:has(.entry-root)),
 #root:has(.pbc-dashboard) {
   overflow: visible;
   height: auto;
