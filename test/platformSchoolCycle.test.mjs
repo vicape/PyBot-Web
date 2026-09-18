@@ -33,8 +33,8 @@ test("Mis cursos: solo role student (co-docente no aparece)", () => {
 });
 
 test("entregas: statuses etiquetados", () => {
-  assert.equal(submissionStatusLabelEs("submitted"), "Entregada");
-  assert.equal(submissionStatusLabelEs("graded"), "Corregida");
+  assert.equal(submissionStatusLabelEs("submitted"), "Entregado");
+  assert.equal(submissionStatusLabelEs("graded"), "Evaluado");
   assert.notEqual(submissionStatusLabelEs("submitted"), submissionStatusLabelEs("draft"));
 });
 

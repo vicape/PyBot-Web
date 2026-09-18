@@ -3,35 +3,12 @@ import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import vm from "node:vm";
+import { SUPPORTED_LANGS, LANG_LABELS, ENTRY_STRINGS } from "../src/i18n/entry.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-function loadEntryModule() {
-  const entryPath = join(root, "src/i18n/entry.js");
-  const source = readFileSync(entryPath, "utf8");
-  const context = { module: { exports: {} }, exports: {}, console };
-  // Convert ESM export to CommonJS-ish eval for node:test without a bundler.
-  const cjs = source
-    .replace(/export const (\w+)/g, "exports.$1 =")
-    .replace(/export \{([^}]+)\}/g, (_, names) =>
-      names
-        .split(",")
-        .map((n) => n.trim())
-        .filter(Boolean)
-        .map((n) => {
-          const [orig, alias] = n.split(/\s+as\s+/).map((s) => s.trim());
-          return `exports.${alias || orig} = ${orig};`;
-        })
-        .join("\n"),
-    );
-  vm.runInNewContext(cjs, context, { filename: entryPath });
-  return context.exports;
-}
-
 describe("entry i18n", () => {
   it("exposes five supported languages with labels", () => {
-    const { SUPPORTED_LANGS, LANG_LABELS, ENTRY_STRINGS } = loadEntryModule();
     assert.deepEqual(SUPPORTED_LANGS, ["es", "en", "fr", "pt", "de"]);
     for (const code of SUPPORTED_LANGS) {
       assert.ok(LANG_LABELS[code], `missing label for ${code}`);
@@ -40,7 +17,6 @@ describe("entry i18n", () => {
   });
 
   it("keeps the same entry keys across all languages", () => {
-    const { SUPPORTED_LANGS, ENTRY_STRINGS } = loadEntryModule();
     const baseKeys = Object.keys(ENTRY_STRINGS.es).sort();
     assert.ok(baseKeys.includes("entryGoogleContinue"));
     assert.ok(baseKeys.includes("entryTitleLine1"));
@@ -105,19 +81,22 @@ describe("entry gate files", () => {
     assert.match(i18n, /SUPPORTED_LANGS\.includes/);
   });
 
-  it("mobile landing CSS uses viewport-aware premium layout V6", () => {
+  it("mobile landing CSS uses single-screen compact contract", () => {
     const css = readFileSync(join(root, "src/styles/entry-gate.css"), "utf8");
-    assert.match(css, /Smartphone premium landing V6/);
+    assert.match(css, /Smartphone: single-screen compact landing/);
     assert.match(css, /\.entry-eyebrow/);
     assert.match(css, /entry-feature--extended/);
-    assert.doesNotMatch(css, /Smartphone single-viewport landing/);
+    assert.doesNotMatch(css, /Smartphone premium landing V6/);
     assert.doesNotMatch(css, /Smartphone strong landing/);
-    // Tall phones: shell fills viewport; product preview flex-grows
+    // Compact mobile: shell fills available height without forcing 100dvh
     assert.match(
       css,
-      /@media \(max-width: 640px\) \{[\s\S]*?\.entry-shell \{[\s\S]*?min-height:\s*100dvh;/,
+      /\/\* —— Smartphone: single-screen compact landing —— \*\/\s*@media \(max-width: 640px\) \{[\s\S]*?\.entry-shell \{[\s\S]*?height:\s*100%;[\s\S]*?min-height:\s*0;/,
     );
-    assert.match(css, /\.entry-hero__visual \{[\s\S]*?flex:\s*1 1 auto;/);
-    assert.match(css, /max-height:\s*740px/);
+    assert.match(
+      css,
+      /\/\* —— Smartphone: single-screen compact landing —— \*\/\s*@media \(max-width: 640px\) \{[\s\S]*?\.entry-hero__visual \{[\s\S]*?flex:\s*1 1 auto;/,
+    );
+    assert.doesNotMatch(css, /min-height:\s*100dvh/);
   });
 });

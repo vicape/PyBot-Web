@@ -88,7 +88,7 @@ test("I/J/K/L/M: Evaluar guarda nota/feedback/rúbrica; total = suma", () => {
   assert.match(mig046, /grade_activity_submission/);
   assert.match(mig046, /activity_submission_rubric_scores/);
   assert.match(mig046, /v_final_grade := v_total/);
-  assert.match(activityPage, />Evaluar</);
+  assert.match(activityPage, />\s*Evaluar\s*</);
   assert.equal(sumRubricPoints([{ points: 3 }, { points: 4 }]), 7);
   assert.ok(rubricMatchesActivityMax([{ max_points: 4 }, { max_points: 6 }], 10));
   assert.ok(!rubricMatchesActivityMax([{ max_points: 4 }, { max_points: 6 }], 9));

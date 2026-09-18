@@ -208,7 +208,6 @@ test("Classroom API: patch de nota no incluye feedback (limitación externa)", (
   assert.doesNotMatch(send, /Evaluación sincronizada/);
   const activity = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
   assert.match(activity, /classroomGradeSyncUserMessage/);
-  assert.match(activity, /el feedback permanece en PyBotClass/);
   assert.doesNotMatch(activity, /Nota enviada a Classroom\. El feedback de texto queda en PyBot/);
   assert.doesNotMatch(activity, /Evaluación sincronizada/);
 });

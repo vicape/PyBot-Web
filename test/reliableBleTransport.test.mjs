@@ -70,7 +70,9 @@ function fakeClock() {
   return {
     now: () => t,
     setTimeout(fn, ms) {
-      const id = { fn, at: t + ms, alive: true };
+      // Plain handle without unref(): production calls unref() when present,
+      // which lets node:test drain the event loop while Promises still wait.
+      const id = { fn, at: t + Number(ms) || 0, alive: true };
       timers.push(id);
       return id;
     },
@@ -78,15 +80,68 @@ function fakeClock() {
       if (id) id.alive = false;
     },
     advance(ms) {
-      t += ms;
-      for (const id of timers) {
-        if (id.alive && id.at <= t) {
-          id.alive = false;
-          id.fn();
+      const end = t + (Number(ms) || 0);
+      t = end;
+      // Fire due timers in order; newly scheduled due timers run in later passes.
+      for (let guard = 0; guard < 10_000; guard++) {
+        let next = null;
+        for (const id of timers) {
+          if (!id.alive || id.at > t) continue;
+          if (!next || id.at < next.at) next = id;
         }
+        if (!next) break;
+        next.alive = false;
+        next.fn();
       }
     },
   };
+}
+
+/** Drain microtask queue so ACK/NACK/retransmit chains can progress. */
+async function flushMicrotasks(count = 24) {
+  for (let i = 0; i < count; i++) await Promise.resolve();
+}
+
+/** Advance virtual time then flush microtasks (ACK/retransmit paths). */
+async function advanceClockAndFlush(clock, ms, flushCount = 24) {
+  clock.advance(ms);
+  await flushMicrotasks(flushCount);
+}
+
+/**
+ * Await an async BLE operation while driving the fake clock.
+ * Does not use real wall-clock timers. Fails if unsettled within a bounded budget.
+ */
+async function settleWithClock(
+  promise,
+  clock,
+  { stepMs = RBLE_ACK_TIMEOUT_MS, maxSteps = 80, flushCount = 24 } = {},
+) {
+  let settled = false;
+  let value;
+  let error;
+  const tracked = Promise.resolve(promise).then(
+    (v) => {
+      settled = true;
+      value = v;
+    },
+    (e) => {
+      settled = true;
+      error = e;
+    },
+  );
+  await flushMicrotasks(flushCount);
+  for (let step = 0; !settled && step < maxSteps; step++) {
+    await advanceClockAndFlush(clock, stepMs, flushCount);
+  }
+  if (!settled) {
+    throw new Error(
+      `settleWithClock: promise still pending after ${maxSteps * stepMs}ms virtual time`,
+    );
+  }
+  await tracked;
+  if (error) throw error;
+  return value;
 }
 
 function makeLink(opts = {}) {
@@ -194,23 +249,22 @@ function makeLink(opts = {}) {
 
 async function pair(opts = {}) {
   const link = makeLink(opts);
-  const clock = opts.clock;
+  const clock = opts.clock ?? fakeClock();
   const payload = opts.maxPayload ?? RBLE_MIN_PAYLOAD;
   const deps = {
     autoStart: false,
     ackTimeoutMs: opts.ackTimeoutMs ?? RBLE_ACK_TIMEOUT_MS,
     maxPayload: payload,
+    now: clock.now,
+    setTimeout: clock.setTimeout.bind(clock),
+    clearTimeout: clock.clearTimeout.bind(clock),
   };
   if (opts.advertisedPayload != null) deps.advertisedPayload = opts.advertisedPayload;
-  if (clock) {
-    deps.now = clock.now;
-    deps.setTimeout = clock.setTimeout.bind(clock);
-    deps.clearTimeout = clock.clearTimeout.bind(clock);
-  }
+  if (opts.syncTimeoutMs != null) deps.syncTimeoutMs = opts.syncTimeoutMs;
   const esp = new ReliableBleTransport(link.sideA, deps);
   const browser = new ReliableBleTransport(link.sideB, deps);
-  await esp.start();
-  await browser.start();
+  await settleWithClock(esp.start(), clock);
+  await settleWithClock(browser.start(), clock);
   const received = [];
   browser.onReplData((chunk) => received.push(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk)));
   return { esp, browser, received, link, clock, got: () => concat(received) };
@@ -302,17 +356,17 @@ test("window is 2; payload floor 14 / ceiling 50; seqLte handles wrap", () => {
 });
 
 test("DATA+ACK round trip delivers original bytes once", async () => {
-  const { esp, got } = await pair();
+  const { esp, got, clock } = await pair();
   const original = new TextEncoder().encode("hello-repl");
-  await esp.writeRepl(original);
+  await settleWithClock(esp.writeRepl(original), clock);
   assert.deepEqual([...got()], [...original]);
 });
 
 test("drop DATA seq 7: reconstructed stream equals original", async () => {
   const original = new Uint8Array(14 * 12);
   for (let i = 0; i < original.length; i++) original[i] = (i * 7 + 3) & 0xff;
-  const { esp, got, link } = await pair({ dropDataOnce: [7] });
-  await esp.writeRepl(original);
+  const { esp, got, link, clock } = await pair({ dropDataOnce: [7] });
+  await settleWithClock(esp.writeRepl(original), clock);
   assert.equal(link.stats.dropped, 1);
   assert.deepEqual([...got()], [...original]);
 });
@@ -320,8 +374,8 @@ test("drop DATA seq 7: reconstructed stream equals original", async () => {
 test("drop ACK does not duplicate delivered payload", async () => {
   const original = new Uint8Array(14 * 4);
   original.fill(0x42);
-  const { esp, got, link } = await pair({ dropAckOnce: [0] });
-  await esp.writeRepl(original);
+  const { esp, got, link, clock } = await pair({ dropAckOnce: [0] });
+  await settleWithClock(esp.writeRepl(original), clock);
   assert.ok(link.stats.dropped >= 1);
   assert.deepEqual([...got()], [...original]);
 });
@@ -370,12 +424,13 @@ test("gap (seq 2 before 0) sends NACK and does not reorder", async () => {
 test("corrupted DATA is NACKed and later good frame delivers", async () => {
   const original = new Uint8Array(14 * 3);
   for (let i = 0; i < original.length; i++) original[i] = i & 0xff;
-  const { esp, got } = await pair({ corruptOnce: [1] });
-  await esp.writeRepl(original);
+  const { esp, got, clock } = await pair({ corruptOnce: [1] });
+  await settleWithClock(esp.writeRepl(original), clock);
   assert.deepEqual([...got()], [...original]);
 });
 
 test("window full applies backpressure until ACK", async () => {
+  const clock = fakeClock();
   const pending = [];
   const bt = {
     isConnected: () => true,
@@ -387,7 +442,13 @@ test("window full applies backpressure until ACK", async () => {
       pending.push(new Uint8Array(data));
     },
   };
-  const t = new ReliableBleTransport(bt, { autoStart: false, ackTimeoutMs: 30_000 });
+  const t = new ReliableBleTransport(bt, {
+    autoStart: false,
+    ackTimeoutMs: 30_000,
+    now: clock.now,
+    setTimeout: clock.setTimeout.bind(clock),
+    clearTimeout: clock.clearTimeout.bind(clock),
+  });
   t._synced = true;
   const chunk = new Uint8Array(RBLE_MAX_PAYLOAD * 3);
   chunk.fill(0x55);
@@ -412,9 +473,11 @@ test("window full applies backpressure until ACK", async () => {
   assert.equal(t._window.length, RBLE_WINDOW);
   assert.equal(settled, false, "write waits for ACK when the window is full");
   t.reset("test-done");
+  await flushMicrotasks(8);
 });
 
 test("delayed RESET reply does not drop the first raw REPL byte", async () => {
+  const clock = fakeClock();
   const gattWrites = [];
   const espPayloads = [];
   let espRxExpected = 0;
@@ -448,7 +511,13 @@ test("delayed RESET reply does not drop the first raw REPL byte", async () => {
     },
   };
 
-  const t = new ReliableBleTransport(bt, { autoStart: false, syncTimeoutMs: 5_000 });
+  const t = new ReliableBleTransport(bt, {
+    autoStart: false,
+    syncTimeoutMs: 5_000,
+    now: clock.now,
+    setTimeout: clock.setTimeout.bind(clock),
+    clearTimeout: clock.clearTimeout.bind(clock),
+  });
   const startP = t.start();
   for (let i = 0; i < 20; i++) {
     await Promise.resolve();
@@ -485,11 +554,11 @@ test("delayed RESET reply does not drop the first raw REPL byte", async () => {
   // Delayed ESP32 RESET reply (the race: used to rewind seq after TX started).
   espSynced = true;
   replHandler(encodeFrame(RBLE_TYPE_RESET, 0, u8(RBLE_WINDOW, 7)));
-  await startP;
+  await settleWithClock(startP, clock);
   assert.equal(t._synced, true);
   assert.equal(t._handshakePending, false);
 
-  await writeP;
+  await settleWithClock(writeP, clock);
   assert.equal(writeSettled, true);
   const dataFrames = gattWrites.filter((w) => w && w.type === RBLE_TYPE_DATA);
   assert.equal(dataFrames.length, 1);
@@ -518,15 +587,15 @@ test("native BLE path waits for reliable sync before MicroPython raw REPL", () =
 });
 
 test("RESET/RESYNC after reconnect does not deliver old session bytes", async () => {
-  const { esp, browser, received } = await pair();
-  await esp.writeRepl(u8(1, 2, 3));
+  const { esp, browser, received, clock } = await pair();
+  await settleWithClock(esp.writeRepl(u8(1, 2, 3)), clock);
   assert.ok(concat(received).length >= 3);
   received.length = 0;
   browser.reset("disconnect");
-  await browser.start();
+  await settleWithClock(browser.start(), clock);
   assert.equal(concat(received).length, 0);
-  await esp.start();
-  await esp.writeRepl(u8(9, 9));
+  await settleWithClock(esp.start(), clock);
+  await settleWithClock(esp.writeRepl(u8(9, 9)), clock);
   assert.deepEqual([...concat(received)], [9, 9]);
 });
 
@@ -534,10 +603,10 @@ test("lost frame then consecutive writes keep order", async () => {
   const a = new TextEncoder().encode("A".repeat(40));
   const b = new TextEncoder().encode("B".repeat(40));
   const c = new TextEncoder().encode("C".repeat(40));
-  const { esp, got } = await pair({ dropDataOnce: [2] });
-  await esp.writeRepl(a);
-  await esp.writeRepl(b);
-  await esp.writeRepl(c);
+  const { esp, got, clock } = await pair({ dropDataOnce: [2] });
+  await settleWithClock(esp.writeRepl(a), clock);
+  await settleWithClock(esp.writeRepl(b), clock);
+  await settleWithClock(esp.writeRepl(c), clock);
   assert.deepEqual([...got()], [...a, ...b, ...c]);
 });
 
@@ -545,14 +614,14 @@ test("stdout + 0x04 + stderr + 0x04 preserved exactly", async () => {
   const stdout = new TextEncoder().encode("line1\nline2\n");
   const stderr = new TextEncoder().encode("Traceback (most recent call last):\n  File \"<stdin>\"\n");
   const stream = concat([stdout, u8(BYTE_CTRL_D), stderr, u8(BYTE_CTRL_D)]);
-  const { esp, got } = await pair({ dropDataOnce: [1] });
-  await esp.writeRepl(stream);
+  const { esp, got, clock } = await pair({ dropDataOnce: [1] });
+  await settleWithClock(esp.writeRepl(stream), clock);
   assert.deepEqual([...got()], [...stream]);
 });
 
 test("Ctrl+C 0x03 is a DATA payload, not a control type collision", async () => {
-  const { esp, got } = await pair();
-  await esp.writeRepl(u8(BYTE_CTRL_C));
+  const { esp, got, clock } = await pair();
+  await settleWithClock(esp.writeRepl(u8(BYTE_CTRL_C)), clock);
   assert.deepEqual([...got()], [BYTE_CTRL_C]);
   const framed = encodeFrame(RBLE_TYPE_DATA, 0, u8(BYTE_CTRL_C));
   assert.notEqual(framed[0] & 0x0f, BYTE_CTRL_C);
@@ -560,19 +629,19 @@ test("Ctrl+C 0x03 is a DATA payload, not a control type collision", async () => 
 
 test("timeout retransmits unacked DATA without duplicating delivery", async () => {
   const original = u8(0x10, 0x11, 0x12);
-  const { esp, got, link } = await pair({ dropAckOnce: [0], ackTimeoutMs: 40 });
-  await esp.writeRepl(original);
+  const { esp, got, link, clock } = await pair({ dropAckOnce: [0], ackTimeoutMs: 40 });
+  await settleWithClock(esp.writeRepl(original), clock, { stepMs: 40 });
   assert.ok(link.stats.dropped >= 1);
   assert.deepEqual([...got()], [...original]);
 });
 
 test("BleReplTransport over ReliableBleTransport is still a byte stream", async () => {
-  const { esp, browser, received } = await pair();
+  const { esp, browser, received, clock } = await pair();
   const ble = new BleReplTransport(browser);
   const chunks = [];
   ble.onData((c) => chunks.push(c));
   const payload = new TextEncoder().encode("raw-repl-bytes\n");
-  await esp.writeRepl(payload);
+  await settleWithClock(esp.writeRepl(payload), clock);
   assert.deepEqual([...concat(chunks.length ? chunks : received)], [...payload]);
   await ble.close();
 });
@@ -628,6 +697,7 @@ test("firmware pybot_repl drain does not treat gatts_notify as delivery", () => 
 });
 
 test("RESET 2-byte (4.0.5) keeps payload at floor 14", async () => {
+  const clock = fakeClock();
   const writes = [];
   const bt = {
     isConnected: () => true,
@@ -639,7 +709,12 @@ test("RESET 2-byte (4.0.5) keeps payload at floor 14", async () => {
       writes.push(decodeFrame(data));
     },
   };
-  const t = new ReliableBleTransport(bt, { autoStart: false });
+  const t = new ReliableBleTransport(bt, {
+    autoStart: false,
+    now: clock.now,
+    setTimeout: clock.setTimeout.bind(clock),
+    clearTimeout: clock.clearTimeout.bind(clock),
+  });
   const startP = t.start();
   for (let i = 0; i < 20; i++) {
     await Promise.resolve();
@@ -651,7 +726,7 @@ test("RESET 2-byte (4.0.5) keeps payload at floor 14", async () => {
   assert.equal(reset.payload[2], RBLE_MAX_PAYLOAD);
   assert.equal(t._maxPayload, RBLE_MIN_PAYLOAD);
   t._onRaw(encodeFrame(RBLE_TYPE_RESET, 0, u8(RBLE_WINDOW, 3)));
-  await startP;
+  await settleWithClock(startP, clock);
   assert.equal(t._maxPayload, RBLE_MIN_PAYLOAD);
   assert.equal(t._synced, true);
 });
@@ -695,8 +770,8 @@ test("encode/decode accepts compiled ceiling payload", () => {
 test("throughput: 400 bytes exact reconstruct at payload 50", async () => {
   const original = new Uint8Array(400);
   for (let i = 0; i < original.length; i++) original[i] = (i * 3 + 1) & 0xff;
-  const { esp, got } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
-  await esp.writeRepl(original);
+  const { esp, got, clock } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
+  await settleWithClock(esp.writeRepl(original), clock);
   assert.deepEqual([...got()], [...original]);
 });
 
@@ -704,8 +779,8 @@ test("throughput: 20 blocks x 200 chars consecutive at payload 50", async () => 
   const enc = new TextEncoder();
   const blocks = [];
   for (let i = 0; i < 20; i++) blocks.push(enc.encode(String.fromCharCode(65 + (i % 26)).repeat(200)));
-  const { esp, got } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
-  for (const b of blocks) await esp.writeRepl(b);
+  const { esp, got, clock } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
+  for (const b of blocks) await settleWithClock(esp.writeRepl(b), clock);
   assert.deepEqual([...got()], [...concat(blocks)]);
 });
 
@@ -713,18 +788,18 @@ test("throughput: consecutive writes keep order at payload 50", async () => {
   const a = new TextEncoder().encode("A".repeat(120));
   const b = new TextEncoder().encode("B".repeat(120));
   const c = new TextEncoder().encode("C".repeat(120));
-  const { esp, got } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
-  await esp.writeRepl(a);
-  await esp.writeRepl(b);
-  await esp.writeRepl(c);
+  const { esp, got, clock } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
+  await settleWithClock(esp.writeRepl(a), clock);
+  await settleWithClock(esp.writeRepl(b), clock);
+  await settleWithClock(esp.writeRepl(c), clock);
   assert.deepEqual([...got()], [...a, ...b, ...c]);
 });
 
 test("throughput: lost DATA then reconstruct at payload 50", async () => {
   const original = new Uint8Array(RBLE_MAX_PAYLOAD * 8);
   for (let i = 0; i < original.length; i++) original[i] = (i * 5 + 9) & 0xff;
-  const { esp, got, link } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, dropDataOnce: [3] });
-  await esp.writeRepl(original);
+  const { esp, got, link, clock } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, dropDataOnce: [3] });
+  await settleWithClock(esp.writeRepl(original), clock);
   assert.equal(link.stats.dropped, 1);
   assert.deepEqual([...got()], [...original]);
 });
@@ -732,8 +807,8 @@ test("throughput: lost DATA then reconstruct at payload 50", async () => {
 test("throughput: lost ACK does not duplicate at payload 50", async () => {
   const original = new Uint8Array(RBLE_MAX_PAYLOAD * 4);
   original.fill(0x31);
-  const { esp, got, link } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, dropAckOnce: [0] });
-  await esp.writeRepl(original);
+  const { esp, got, link, clock } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, dropAckOnce: [0] });
+  await settleWithClock(esp.writeRepl(original), clock);
   assert.ok(link.stats.dropped >= 1);
   assert.deepEqual([...got()], [...original]);
 });
@@ -741,12 +816,13 @@ test("throughput: lost ACK does not duplicate at payload 50", async () => {
 test("throughput: CRC corrupt then good frame at payload 50", async () => {
   const original = new Uint8Array(RBLE_MAX_PAYLOAD * 3);
   for (let i = 0; i < original.length; i++) original[i] = i & 0xff;
-  const { esp, got } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, corruptOnce: [1] });
-  await esp.writeRepl(original);
+  const { esp, got, clock } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, corruptOnce: [1] });
+  await settleWithClock(esp.writeRepl(original), clock);
   assert.deepEqual([...got()], [...original]);
 });
 
 test("throughput: window full still caps outstanding DATA at window=2", async () => {
+  const clock = fakeClock();
   const pending = [];
   const bt = {
     isConnected: () => true,
@@ -762,6 +838,9 @@ test("throughput: window full still caps outstanding DATA at window=2", async ()
     autoStart: false,
     ackTimeoutMs: 30_000,
     maxPayload: RBLE_MAX_PAYLOAD,
+    now: clock.now,
+    setTimeout: clock.setTimeout.bind(clock),
+    clearTimeout: clock.clearTimeout.bind(clock),
   });
   t._synced = true;
   const chunk = new Uint8Array(RBLE_MAX_PAYLOAD * 3);
@@ -788,17 +867,18 @@ test("throughput: window full still caps outstanding DATA at window=2", async ()
   assert.equal(settled, false);
   assert.equal(dataFrames[0].payload.length, RBLE_MAX_PAYLOAD);
   t.reset("test-done");
+  await flushMicrotasks(8);
 });
 
 test("throughput: reconnect RESET/RESYNC at payload 50", async () => {
-  const { esp, browser, received } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
-  await esp.writeRepl(u8(1, 2, 3));
+  const { esp, browser, received, clock } = await pair({ maxPayload: RBLE_MAX_PAYLOAD });
+  await settleWithClock(esp.writeRepl(u8(1, 2, 3)), clock);
   received.length = 0;
   browser.reset("disconnect");
-  await browser.start();
+  await settleWithClock(browser.start(), clock);
   assert.equal(concat(received).length, 0);
-  await esp.start();
-  await esp.writeRepl(u8(9, 9));
+  await settleWithClock(esp.start(), clock);
+  await settleWithClock(esp.writeRepl(u8(9, 9)), clock);
   assert.deepEqual([...concat(received)], [9, 9]);
 });
 
@@ -806,26 +886,27 @@ test("throughput: stdout + EOF + stderr + EOF at payload 50", async () => {
   const stdout = new TextEncoder().encode("line1\nline2\n");
   const stderr = new TextEncoder().encode('Traceback (most recent call last):\n  File "<stdin>"\n');
   const stream = concat([stdout, u8(BYTE_CTRL_D), stderr, u8(BYTE_CTRL_D)]);
-  const { esp, got } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, dropDataOnce: [1] });
-  await esp.writeRepl(stream);
+  const { esp, got, clock } = await pair({ maxPayload: RBLE_MAX_PAYLOAD, dropDataOnce: [1] });
+  await settleWithClock(esp.writeRepl(stream), clock);
   assert.deepEqual([...got()], [...stream]);
 });
 
 test("throughput: timeout retransmits at payload 50 without duplicating", async () => {
   const original = new Uint8Array(RBLE_MAX_PAYLOAD);
   original.fill(0x22);
-  const { esp, got, link } = await pair({
+  const { esp, got, link, clock } = await pair({
     maxPayload: RBLE_MAX_PAYLOAD,
     dropAckOnce: [0],
     ackTimeoutMs: 40,
   });
-  await esp.writeRepl(original);
+  await settleWithClock(esp.writeRepl(original), clock, { stepMs: 40 });
   assert.ok(link.stats.dropped >= 1);
   assert.deepEqual([...got()], [...original]);
 });
 
 test("CASO1: lost firmware RESET then browser RESET still syncs", async () => {
   // Firmware already sent RESET before browser listened; only browser→fw→browser path.
+  const clock = fakeClock();
   let browserHandler = null;
   const fwWrites = [];
   const btBrowser = {
@@ -850,8 +931,11 @@ test("CASO1: lost firmware RESET then browser RESET still syncs", async () => {
   const browser = new ReliableBleTransport(btBrowser, {
     autoStart: false,
     syncTimeoutMs: 500,
+    now: clock.now,
+    setTimeout: clock.setTimeout.bind(clock),
+    clearTimeout: clock.clearTimeout.bind(clock),
   });
-  await browser.start();
+  await settleWithClock(browser.start(), clock, { stepMs: 50, maxSteps: 20 });
   assert.equal(browser._synced, true);
   assert.ok(fwWrites.some((w) => w && w.type === RBLE_TYPE_RESET));
 });
@@ -863,27 +947,28 @@ test("CASO2: browser initiates first and syncs on firmware RESET reply", async (
 });
 
 test("CASO3: duplicate RESET does not break synced session", async () => {
-  const { esp, browser } = await pair();
+  const { esp, browser, clock } = await pair();
   const seq = browser._txNext;
   browser._onRaw(encodeFrame(RBLE_TYPE_RESET, 0, u8(RBLE_WINDOW, browser._peerEpoch, RBLE_MIN_PAYLOAD)));
   assert.equal(browser._synced, true);
   assert.equal(browser._txNext, seq);
-  await esp.writeRepl(u8(0xab));
+  await settleWithClock(esp.writeRepl(u8(0xab)), clock);
 });
 
 test("CASO4: reconnect resync reaches synced without old state", async () => {
-  const { esp, browser, received } = await pair();
-  await esp.writeRepl(u8(1, 2, 3));
+  const { esp, browser, received, clock } = await pair();
+  await settleWithClock(esp.writeRepl(u8(1, 2, 3)), clock);
   received.length = 0;
   browser.reset("disconnect");
-  await browser.start();
+  await settleWithClock(browser.start(), clock);
   assert.equal(browser._synced, true);
   assert.equal(concat(received).length, 0);
-  await esp.writeRepl(u8(9));
+  await settleWithClock(esp.writeRepl(u8(9)), clock);
   assert.deepEqual([...concat(received)], [9]);
 });
 
 test("CASO5: handshake write failure is not RBLE_SYNC_TIMEOUT", async () => {
+  const clock = fakeClock();
   const bt = {
     isConnected: () => true,
     hasRepl: () => true,
@@ -894,8 +979,14 @@ test("CASO5: handshake write failure is not RBLE_SYNC_TIMEOUT", async () => {
       throw new Error("BLE_REPL_TX_FAIL");
     },
   };
-  const t = new ReliableBleTransport(bt, { autoStart: false, syncTimeoutMs: 2000 });
-  await assert.rejects(() => t.start(), (err) => {
+  const t = new ReliableBleTransport(bt, {
+    autoStart: false,
+    syncTimeoutMs: 2000,
+    now: clock.now,
+    setTimeout: clock.setTimeout.bind(clock),
+    clearTimeout: clock.clearTimeout.bind(clock),
+  });
+  await assert.rejects(() => settleWithClock(t.start(), clock, { stepMs: 50, maxSteps: 5 }), (err) => {
     assert.match(String(err?.message ?? err), /BLE_REPL_TX_FAIL|BLE_REPL_NOT_CONNECTED/);
     assert.doesNotMatch(String(err?.message ?? err), /RBLE_SYNC_TIMEOUT/);
     return true;
@@ -903,6 +994,7 @@ test("CASO5: handshake write failure is not RBLE_SYNC_TIMEOUT", async () => {
 });
 
 test("CASO6: real missing RESET reply still times out as RBLE_SYNC_TIMEOUT", async () => {
+  const clock = fakeClock();
   const bt = {
     isConnected: () => true,
     hasRepl: () => true,
@@ -913,7 +1005,16 @@ test("CASO6: real missing RESET reply still times out as RBLE_SYNC_TIMEOUT", asy
       /* RESET sent, no peer reply */
     },
   };
-  const t = new ReliableBleTransport(bt, { autoStart: false, syncTimeoutMs: 30 });
-  await assert.rejects(() => t.start(), /RBLE_SYNC_TIMEOUT/);
+  const t = new ReliableBleTransport(bt, {
+    autoStart: false,
+    syncTimeoutMs: 30,
+    now: clock.now,
+    setTimeout: clock.setTimeout.bind(clock),
+    clearTimeout: clock.clearTimeout.bind(clock),
+  });
+  await assert.rejects(
+    () => settleWithClock(t.start(), clock, { stepMs: 10, maxSteps: 20 }),
+    /RBLE_SYNC_TIMEOUT/,
+  );
 });
 
