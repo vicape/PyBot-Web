@@ -2,7 +2,7 @@
 # Perfil de placa: WEMOS (default) o ESP32
 
 PLACA_ACTUAL = "WEMOS"
-EDA6_VERSION = "1.1.0"
+EDA6_VERSION = "1.1.1"
 
 PIN_MAPS = {
     "WEMOS": {
@@ -20,6 +20,9 @@ PIN_MAPS = {
         "I2C": (22, 21),
     },
 }
+
+# ESP32 clásico: GPIO2/GPIO4 son ADC2 y conflictúan con Wi-Fi activo.
+_ADC2_GPIOS = (2, 4)
 
 CAL_LEIDO_PIN2_RAW = [
     0, 120, 215, 300, 410, 570, 680, 832, 950, 1215, 1600, 2060, 4095,
@@ -61,6 +64,57 @@ def _check_port(n):
         raise ValueError("EDA6_PORT_RANGE")
 
 
+def _invalidate_adc(gpio=None):
+    if gpio is None:
+        _adc_cache.clear()
+        return
+    try:
+        del _adc_cache[gpio]
+    except KeyError:
+        pass
+
+
+def _wifi_sta_snapshot():
+    """Estado STA: connected | active | off | unknown. No toca ADC1."""
+    try:
+        import network
+        wlan = network.WLAN(network.STA_IF)
+        if wlan.isconnected():
+            return "connected"
+        if wlan.active():
+            return "active"
+        return "off"
+    except Exception:
+        pass
+    try:
+        if wifi_conectado():
+            return "connected"
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _ensure_adc2_usable(gpio):
+    """ADC2 (GPIO2/4): no devolver valores engañosos si Wi-Fi está en uso."""
+    if gpio not in _ADC2_GPIOS:
+        return
+    status = _wifi_sta_snapshot()
+    if status == "connected":
+        raise RuntimeError("EDA6_ADC2_WIFI_CONFLICT")
+    if status == "active":
+        try:
+            import network
+            wlan = network.WLAN(network.STA_IF)
+            try:
+                wlan.disconnect()
+            except Exception:
+                pass
+            wlan.active(False)
+            _invalidate_adc(gpio)
+        except Exception:
+            raise RuntimeError("EDA6_ADC2_WIFI_CONFLICT")
+
+
 def _pwm(gpio, freq=50):
     p = _pwm_cache.get(gpio)
     if p is not None:
@@ -100,6 +154,7 @@ def _set_pwm_duty(gpio, duty_val):
 
 
 def _adc_read(gpio):
+    _ensure_adc2_usable(gpio)
     a = _adc_cache.get(gpio)
     if a is None:
         a = machine.ADC(machine.Pin(gpio))
@@ -115,7 +170,25 @@ def _adc_read(gpio):
     try:
         return int(a.read())
     except Exception:
-        return int(a.read_u16()) * 4095 // 65535
+        try:
+            return int(a.read_u16()) * 4095 // 65535
+        except Exception:
+            # Caché inválida tras reuso del pin (p.ej. sensorDistancia).
+            _invalidate_adc(gpio)
+            a = machine.ADC(machine.Pin(gpio))
+            try:
+                a.atten(machine.ADC.ATTN_11DB)
+            except Exception:
+                pass
+            try:
+                a.width(machine.ADC.WIDTH_12BIT)
+            except Exception:
+                pass
+            _adc_cache[gpio] = a
+            try:
+                return int(a.read())
+            except Exception:
+                return int(a.read_u16()) * 4095 // 65535
 
 
 def _raw_to_percent(gpio, raw):
@@ -191,6 +264,8 @@ def sensorDistancia(n_entrada):
     pins = _pins()
     trig = pins["digital_inputs"][n_entrada - 1]
     echo = pins["adc_inputs"][n_entrada - 1]
+    # Echo reusa un pin ADC: invalidar caché antes y después del modo digital.
+    _invalidate_adc(echo)
     t_pin = machine.Pin(trig, machine.Pin.OUT)
     e_pin = machine.Pin(echo, machine.Pin.IN)
     t_pin.value(0)
@@ -201,13 +276,16 @@ def sensorDistancia(n_entrada):
     timeout = time.ticks_us() + 30000
     while e_pin.value() == 0:
         if time.ticks_diff(timeout, time.ticks_us()) <= 0:
+            _invalidate_adc(echo)
             return -1
     start = time.ticks_us()
     timeout = time.ticks_us() + 30000
     while e_pin.value() == 1:
         if time.ticks_diff(timeout, time.ticks_us()) <= 0:
+            _invalidate_adc(echo)
             return -1
     elapsed = time.ticks_diff(time.ticks_us(), start)
+    _invalidate_adc(echo)
     return round(elapsed * 0.034 / 2, 1)
 
 
@@ -243,11 +321,14 @@ def _pybot_cleanup_normal():
     # Fin normal WEMOS/EDA6: apaga motorRC y salidas digitales; conserva PWM de servos.
     _stop_pwm(True)
     _clear_digital_outputs()
+    # ADC: liberar caché para que un Run siguiente no reutilice instancias rotas.
+    _invalidate_adc()
 
 
 def detenerTodo():
     _stop_pwm(False)
     _clear_digital_outputs()
+    _invalidate_adc()
     if _lcd_available:
         try:
             limpiarLCD()

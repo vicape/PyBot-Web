@@ -70,6 +70,7 @@ import {
 import { runPythonAsync, signalStop } from "./pyodideRunner.js";
 import { checkPythonSyntax } from "./pythonSyntaxDiagnostics.js";
 import { hasCanvasCode } from "./canvasCodeDetect.js";
+import { resolveEsp32ExecutionTarget } from "./esp32RunTarget.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
 import PrepareEsp32Modal from "./PrepareEsp32Modal.jsx";
@@ -1175,18 +1176,26 @@ export default function PyBotIDE() {
     const needsHw = codeNeedsHardware(activeCode);
     const canvasCode = hasCanvasCode(activeCode);
 
-    // ESP32 MicroPython / EDA6: el programa corre EN la placa (no en Pyodide).
+    // ESP32 MicroPython / EDA6: APIs de hardware NUNCA caen a Pyodide.
     // Canvas/dibujo solo corre en pantalla (Pyodide), nunca en la placa.
-    if (
-      !pythonOnly &&
-      !canvasCode &&
-      (boardType === "esp32-micropython" || boardType === "esp32-eda6")
-    ) {
-      // La placa puede estar conectada por USB (serial) o por Bluetooth (BLE).
-      if (!hardwareIsConnected() && !bleConnected) {
-        appendConsole(t("needConnect") + "\n", "err");
-        return;
-      }
+    // pythonOnly obsoleto (p.ej. BLE sin setPythonOnly(false)) no debe
+    // enrutar entradaDigital/entradaAnalogica al navegador.
+    const esp32Target = resolveEsp32ExecutionTarget({
+      boardType,
+      pythonOnly,
+      needsHardware: needsHw,
+      canvasCode,
+      usbConnected: hardwareIsConnected(),
+      bleConnected,
+    });
+    if (esp32Target.switchToHardwareMode) {
+      setPythonOnly(false);
+    }
+    if (esp32Target.target === "needConnect") {
+      appendConsole(t("needConnect") + "\n", "err");
+      return;
+    }
+    if (esp32Target.target === "board") {
       if (boardType === "esp32-micropython" && /\bpin\s*\([^)]*["'][Aa]\d/.test(activeCode)) {
         appendConsole(formatPythonError("ESP32_GPIO_ONLY") + "\n", "err");
         return;
@@ -1684,6 +1693,11 @@ export default function PyBotIDE() {
         //
       }
       if (isConnected) {
+        // Misma coherencia que USB: conectar hardware sale de Solo Python.
+        if (pythonOnly) {
+          appendConsole(t("needHardwareMode") + "\n", "info");
+          setPythonOnly(false);
+        }
         appendConsole(
           t("bleRunConnected").replace("{name}", name ?? "PYBOT") + "\n",
           "info",
@@ -1712,7 +1726,7 @@ export default function PyBotIDE() {
         setBleAppStatus(null);
       }
     },
-    [appendConsole, refreshBleAppStatus],
+    [appendConsole, refreshBleAppStatus, pythonOnly],
   );
 
   const onStop = useCallback(() => {
@@ -2739,7 +2753,7 @@ export default function PyBotIDE() {
 
       <footer className="status-bar">
         <span
-          className={`status-pill ${running || stopping ? "status-pill--busy" : connected ? "status-pill--ok" : "status-pill--idle"}`}
+          className={`status-pill ${running || stopping ? "status-pill--busy" : connected || bleConnected ? "status-pill--ok" : "status-pill--idle"}`}
           aria-hidden
         />
         <span className="status-main">
@@ -2747,7 +2761,7 @@ export default function PyBotIDE() {
           <span className="status-sep">·</span>
           {pythonOnly
             ? t("pythonOnlyOn")
-            : connected
+            : connected || bleConnected
               ? boardType === "arduino-firmata"
                 ? t("statusConn")
                 : t("statusConnEsp32")

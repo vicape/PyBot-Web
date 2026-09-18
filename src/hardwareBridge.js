@@ -38,7 +38,7 @@ import {
   prepareMainPyForFlash,
   detectPybotGpioUsage,
 } from "./eda6Profile.js";
-import { ensureEda6OnSession } from "./eda6Ensure.js";
+import { ensureEda6OnSession, buildEda6VersionGuard } from "./eda6Ensure.js";
 import {
   getPybotHwLibrarySource,
   prepareMainPyForGpioFlash,
@@ -693,7 +693,11 @@ export async function runOnBoard(code, cb = {}) {
       const body = prepareUserCodeForExec(code);
       const probe = buildEda6ModuleProbe();
       const userCode = probe + wrapEda6UserCodeForRun(body);
-      const prelude = BLE_NATIVE_PRELUDE + buildEda6ImportedPrelude(profile);
+      // BLE no puede refrescar EDA6.py: rechazar librería vieja con mensaje claro.
+      const prelude =
+        BLE_NATIVE_PRELUDE +
+        buildEda6ImportedPrelude(profile) +
+        buildEda6VersionGuard();
       return _bleMpSession.runProgram(userCode, { ...cb, prelude });
     }
     return _bleMpSession.runProgram(code, { ...cb, prelude: BLE_NATIVE_PRELUDE });
@@ -729,7 +733,11 @@ async function runOnBoardBle(code, cb = {}) {
   // El firmware hace `from EDA6 import *`; el import del alumno es redundante e
   // inofensivo. Enviamos el codigo tal cual (sin el wrap/prelude serial). La
   // libreria EDA6/pybot_mpy NO viaja por BLE: vive en la placa (instalada por USB).
-  const userCode = mode === "eda6" ? prepareUserCodeForExec(code) : String(code ?? "");
+  // Si la versión instalada no coincide, fallar explícito (no ejecutar EDA6 viejo).
+  let userCode = mode === "eda6" ? prepareUserCodeForExec(code) : String(code ?? "");
+  if (mode === "eda6") {
+    userCode = buildEda6VersionGuard() + userCode;
+  }
   return _bleRun.runProgram(userCode, { ...cb, mode, profile });
 }
 

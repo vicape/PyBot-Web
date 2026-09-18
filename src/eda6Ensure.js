@@ -3,7 +3,7 @@
  * Sin source de EDA6.py: el bundle declara la versión esperada.
  */
 
-export const EDA6_LIBRARY_VERSION = "1.1.0";
+export const EDA6_LIBRARY_VERSION = "1.1.1";
 
 export function buildEda6ImportedPrelude(profile) {
   const placa = profile === "ESP32" ? "ESP32" : "WEMOS";
@@ -15,6 +15,21 @@ export function buildEda6ImportedPrelude(profile) {
     "    _pybot_cleanup_normal = EDA6._pybot_cleanup_normal",
     "except Exception:",
     "    pass",
+    "",
+  ].join("\n");
+}
+
+/**
+ * Guardia de versión para Run BLE: la placa usa el EDA6.py instalado (USB).
+ * No actualizar por BLE; exigir refresco USB si la versión no coincide.
+ */
+export function buildEda6VersionGuard(expected = EDA6_LIBRARY_VERSION) {
+  const ver = String(expected ?? EDA6_LIBRARY_VERSION);
+  return [
+    "import EDA6",
+    `_eda6_ver = getattr(EDA6, "EDA6_VERSION", "")`,
+    `if _eda6_ver != "${ver}":`,
+    `    raise RuntimeError("EDA6_BLE_STALE_LIB:" + str(_eda6_ver or "MISSING"))`,
     "",
   ].join("\n");
 }

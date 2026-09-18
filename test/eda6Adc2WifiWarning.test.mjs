@@ -108,10 +108,10 @@ test("string literal no dispara falso positivo", () => {
   assert.equal(detectEda6Adc2Risk('print("entradaAnalogica(1)")\n', "WEMOS"), false);
 });
 
-test("EDA6.py y versiones no cambiaron en este ticket", () => {
+test("EDA6.py declares ADC2 Wi-Fi conflict; IDE warning still present", () => {
   const eda6 = read("src/assets/EDA6.py");
-  assert.match(eda6, /EDA6_VERSION\s*=\s*"1\.1\.0"/);
-  assert.doesNotMatch(eda6, /ADC2|Wi-Fi está activo|entradaAnalogica\(3\)/);
+  assert.match(eda6, /EDA6_VERSION\s*=\s*"1\.1\.1"/);
+  assert.match(eda6, /EDA6_ADC2_WIFI_CONFLICT/);
   const ensure = read("src/eda6Ensure.js");
-  assert.match(ensure, /1\.1\.0/);
+  assert.match(ensure, /1\.1\.1/);
 });

@@ -7,6 +7,7 @@ import eda6LibraryRaw from "./assets/EDA6.py?raw";
 
 export {
   buildEda6ImportedPrelude,
+  buildEda6VersionGuard,
   EDA6_LIBRARY_VERSION,
 } from "./eda6Ensure.js";
 
