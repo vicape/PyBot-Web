@@ -1,9 +1,7 @@
 /**
  * Verificación liviana de EDA6 instalada y prelude por import.
- * Sin source de EDA6.py: el bundle declara la versión esperada.
+ * Sin versionado artificial: si EDA6 ya está en la placa, no se sobrescribe.
  */
-
-export const EDA6_LIBRARY_VERSION = "1.1.1";
 
 export function buildEda6ImportedPrelude(profile) {
   const placa = profile === "ESP32" ? "ESP32" : "WEMOS";
@@ -19,27 +17,13 @@ export function buildEda6ImportedPrelude(profile) {
   ].join("\n");
 }
 
-/**
- * Guardia de versión para Run BLE: la placa usa el EDA6.py instalado (USB).
- * No actualizar por BLE; exigir refresco USB si la versión no coincide.
- */
-export function buildEda6VersionGuard(expected = EDA6_LIBRARY_VERSION) {
-  const ver = String(expected ?? EDA6_LIBRARY_VERSION);
-  return [
-    "import EDA6",
-    `_eda6_ver = getattr(EDA6, "EDA6_VERSION", "")`,
-    `if _eda6_ver != "${ver}":`,
-    `    raise RuntimeError("EDA6_BLE_STALE_LIB:" + str(_eda6_ver or "MISSING"))`,
-    "",
-  ].join("\n");
-}
-
-export const EDA6_VERSION_QUERY_SCRIPT = [
+/** Probe de presencia (no exige EDA6_VERSION). */
+export const EDA6_PRESENCE_QUERY_SCRIPT = [
   "try:",
   "    import EDA6",
-  "    print('EDA6_VER', getattr(EDA6, 'EDA6_VERSION', ''))",
+  "    print('EDA6_OK')",
   "except Exception:",
-  "    print('EDA6_VER', 'MISSING')",
+  "    print('EDA6_MISSING')",
 ].join("\n");
 
 export const EDA6_INVALIDATE_SCRIPT = [
@@ -53,39 +37,35 @@ export const EDA6_INVALIDATE_SCRIPT = [
   "gc.collect()",
 ].join("\n");
 
-export function parseEda6VersionProbe(stdout) {
-  const m = String(stdout ?? "").match(/EDA6_VER\s+(\S*)/);
-  if (!m) return { present: false, version: null };
-  const token = m[1];
-  if (!token || token === "MISSING") return { present: false, version: null };
-  return { present: true, version: token };
+export function parseEda6PresenceProbe(stdout) {
+  return /EDA6_OK/.test(String(stdout ?? ""));
 }
 
-export function eda6NeedsInstall(probe, expected = EDA6_LIBRARY_VERSION) {
-  return !probe?.present || !probe.version || probe.version !== expected;
+/** true solo si falta el módulo; una EDA6 original presente no se reinstala. */
+export function eda6NeedsInstall(present) {
+  return !present;
 }
 
 /**
- * Instala EDA6.py solo si falta o la versión no coincide.
+ * Instala EDA6.py solo si falta en la placa.
  * Tras escribir, invalida sys.modules["EDA6"] para no retener el módulo viejo.
  *
  * @param {{ execRaw: Function, installFile: Function }} session
- * @param {{ getSource: () => string, expectedVersion?: string, timeout?: number }} options
+ * @param {{ getSource: () => string, timeout?: number }} options
  */
 export async function ensureEda6OnSession(session, options) {
-  const expected = options.expectedVersion ?? EDA6_LIBRARY_VERSION;
   const timeout = options.timeout ?? 8000;
-  let probe = { present: false, version: null };
+  let present = false;
   try {
-    const { stdout } = await session.execRaw(EDA6_VERSION_QUERY_SCRIPT, { timeout });
-    probe = parseEda6VersionProbe(stdout);
+    const { stdout } = await session.execRaw(EDA6_PRESENCE_QUERY_SCRIPT, { timeout });
+    present = parseEda6PresenceProbe(stdout);
   } catch {
-    probe = { present: false, version: null };
+    present = false;
   }
-  if (!eda6NeedsInstall(probe, expected)) {
-    return { updated: false, version: probe.version };
+  if (!eda6NeedsInstall(present)) {
+    return { updated: false, present: true };
   }
   await session.installFile("EDA6.py", options.getSource());
   await session.execRaw(EDA6_INVALIDATE_SCRIPT, { timeout });
-  return { updated: true, version: expected };
+  return { updated: true, present: true };
 }

@@ -38,7 +38,7 @@ import {
   prepareMainPyForFlash,
   detectPybotGpioUsage,
 } from "./eda6Profile.js";
-import { ensureEda6OnSession, buildEda6VersionGuard } from "./eda6Ensure.js";
+import { ensureEda6OnSession } from "./eda6Ensure.js";
 import {
   getPybotHwLibrarySource,
   prepareMainPyForGpioFlash,
@@ -127,13 +127,13 @@ function sleepMs(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** SHA-256 esperado de los sources que PyBot instala por USB (sin hardcode). */
-function buildProvisionExpectedHashes(profile = getEda6Profile()) {
+/** SHA-256 esperado de los sources del runtime BLE (sin EDA6: original en placa es válida). */
+function buildProvisionExpectedHashes(_profile = getEda6Profile()) {
   const expectedHashes = {};
   for (const { name, source } of getBleRuntimeInstallFiles()) {
     expectedHashes[name] = sha256HexUtf8(String(source ?? ""));
   }
-  expectedHashes["EDA6.py"] = sha256HexUtf8(getEda6LibrarySource(profile));
+  // No incluir EDA6.py: presencia basta; no rechazar/forzar por hash de bundle.
   return expectedHashes;
 }
 
@@ -693,11 +693,8 @@ export async function runOnBoard(code, cb = {}) {
       const body = prepareUserCodeForExec(code);
       const probe = buildEda6ModuleProbe();
       const userCode = probe + wrapEda6UserCodeForRun(body);
-      // BLE no puede refrescar EDA6.py: rechazar librería vieja con mensaje claro.
-      const prelude =
-        BLE_NATIVE_PRELUDE +
-        buildEda6ImportedPrelude(profile) +
-        buildEda6VersionGuard();
+      // BLE no refresca EDA6.py: usa la librería ya instalada en la placa (USB).
+      const prelude = BLE_NATIVE_PRELUDE + buildEda6ImportedPrelude(profile);
       return _bleMpSession.runProgram(userCode, { ...cb, prelude });
     }
     return _bleMpSession.runProgram(code, { ...cb, prelude: BLE_NATIVE_PRELUDE });
@@ -733,11 +730,8 @@ async function runOnBoardBle(code, cb = {}) {
   // El firmware hace `from EDA6 import *`; el import del alumno es redundante e
   // inofensivo. Enviamos el codigo tal cual (sin el wrap/prelude serial). La
   // libreria EDA6/pybot_mpy NO viaja por BLE: vive en la placa (instalada por USB).
-  // Si la versión instalada no coincide, fallar explícito (no ejecutar EDA6 viejo).
-  let userCode = mode === "eda6" ? prepareUserCodeForExec(code) : String(code ?? "");
-  if (mode === "eda6") {
-    userCode = buildEda6VersionGuard() + userCode;
-  }
+  // No se exige versión inventada: EDA6 original en placa es válida.
+  const userCode = mode === "eda6" ? prepareUserCodeForExec(code) : String(code ?? "");
   return _bleRun.runProgram(userCode, { ...cb, mode, profile });
 }
 
@@ -1532,10 +1526,12 @@ export async function installBleRuntime(hooks = {}) {
   onProgress?.({ phase: "start" });
   await _mpSession.interruptAndRecoverRepl();
 
-  // EDA6.py no viaja en el pack OTA; se instala una vez por USB.
-  // pybot_mpy.py y pybot_net.py salen SOLO de getBleRuntimeInstallFiles().
+  // EDA6.py no viaja en el pack OTA; se instala por USB solo si falta.
+  // No sobrescribir una EDA6 original ya presente en la placa.
   onProgress?.({ phase: "installing-libs" });
-  await _mpSession.installFile(EDA6_FILENAME, getEda6LibrarySource(getEda6Profile()));
+  await ensureEda6OnSession(_mpSession, {
+    getSource: () => getEda6LibrarySource(getEda6Profile()),
+  });
 
   // Runtime 4.0.0: boot.py + main.py + módulos (ble/repl/mpy/net/run/deploy/update).
   const files = getBleRuntimeInstallFiles();

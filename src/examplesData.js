@@ -466,7 +466,6 @@ export const EXAMPLES = [
       "from EDA6 import *",
       "from time import sleep",
       "",
-      'print("EDA6_VERSION:", EDA6_VERSION)',
       'print("PLACA_ACTUAL:", PLACA_ACTUAL)',
       'print("digital_inputs:", PIN_MAPS[PLACA_ACTUAL]["digital_inputs"])',
       'print("adc_inputs:", PIN_MAPS[PLACA_ACTUAL]["adc_inputs"])',

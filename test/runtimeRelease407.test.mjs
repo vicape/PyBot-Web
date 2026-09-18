@@ -61,10 +61,11 @@ test("#15 firmware pybot_ble.py declares 4.0.7 / protocol 3.2", () => {
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.2");
 });
 
-test("#15 EDA6 library version is current; protocol stays 3.2", () => {
+test("#15 EDA6 library is original (no artificial version); protocol stays 3.2", () => {
   assert.equal(PYBOT_PROTOCOL_VERSION, "3.2");
   const eda6 = readFileSync(join(ROOT, "src/assets/EDA6.py"), "utf8");
-  assert.match(eda6, /EDA6_VERSION\s*=\s*"1\.1\.1"/);
+  assert.doesNotMatch(eda6, /EDA6_VERSION/);
+  assert.doesNotMatch(eda6, /1\.1\.0|1\.1\.1/);
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
   assert.equal(pkg.version, "0.3.0");
 });

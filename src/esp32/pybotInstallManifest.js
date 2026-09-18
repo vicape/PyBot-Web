@@ -208,6 +208,11 @@ export function parseSelftestOutput(
       continue;
     }
     const expectedRaw = expectedHashes[name];
+    // EDA6 original en placa: si no hay hash esperado del bundle, basta presencia.
+    if (name === "EDA6.py" && (expectedRaw == null || expectedRaw === "")) {
+      if (typeof actualRaw !== "string" || actualRaw.length === 0) hashesOk = false;
+      continue;
+    }
     const expectedNorm = String(expectedRaw ?? "").trim().toLowerCase();
     const actualValid = SHA256_HEX_RE.test(actual);
     const expectedValid = SHA256_HEX_RE.test(expectedNorm);

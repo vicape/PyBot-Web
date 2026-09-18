@@ -63,10 +63,6 @@ const STRINGS = {
       "Perfil WEMOS activo: puerto 1 servo = GPIO 25.",
     eda6Adc2WifiWarning:
       "Aviso WEMOS: las entradas analógicas 1 y 2 usan ADC2 (GPIO2/GPIO4). Si Wi-Fi está activo, la lectura puede fallar. Con Wi-Fi usá entradaAnalogica(3) o entradaAnalogica(4).",
-    eda6Adc2WifiConflict:
-      "EDA6: Wi-Fi conectado bloquea ADC2 (entradas analógicas 1 y 2 / GPIO2 y GPIO4). Desconectá Wi-Fi o usá entradaAnalogica(3) o entradaAnalogica(4).",
-    eda6BleStaleLib:
-      "La librería EDA6 en la placa está desactualizada para BLE. Conectá por USB y ejecutá de nuevo (o instalá EDA6) para refrescarla.",
     statusConnEsp32: "ESP32 conectada",
     eda6ConnectedWemos: "Perfil EDA6/WEMOS conectado. Puertos 1–4 listos.",
     eda6ConnectedEsp32: "Perfil EDA6/ESP32 conectado. Puertos 1–4 listos.",
@@ -673,10 +669,6 @@ Creado por VIC.`,
       "WEMOS profile active: servo port 1 = GPIO 25.",
     eda6Adc2WifiWarning:
       "WEMOS warning: analog inputs 1 and 2 use ADC2 (GPIO2/GPIO4). If Wi-Fi is active, the reading may fail. With Wi-Fi, use entradaAnalogica(3) or entradaAnalogica(4).",
-    eda6Adc2WifiConflict:
-      "EDA6: connected Wi-Fi blocks ADC2 (analog inputs 1 and 2 / GPIO2 and GPIO4). Disconnect Wi-Fi or use entradaAnalogica(3) or entradaAnalogica(4).",
-    eda6BleStaleLib:
-      "The EDA6 library on the board is outdated for BLE. Connect via USB and run again (or install EDA6) to refresh it.",
     statusConnEsp32: "ESP32 connected",
     eda6ConnectedWemos: "EDA6/WEMOS profile connected. Ports 1–4 ready.",
     eda6ConnectedEsp32: "EDA6/ESP32 profile connected. Ports 1–4 ready.",
@@ -1451,12 +1443,6 @@ export function formatPythonError(message) {
       "En ESP32 usá número de GPIO, por ejemplo 34 (no A0–A5).",
       "On ESP32 use a GPIO number, e.g. 34 (not A0–A5).",
     );
-  }
-  if (/EDA6_ADC2_WIFI_CONFLICT/.test(m)) {
-    return pick(t("eda6Adc2WifiConflict"), t("eda6Adc2WifiConflict"));
-  }
-  if (/EDA6_BLE_STALE_LIB/.test(m)) {
-    return pick(t("eda6BleStaleLib"), t("eda6BleStaleLib"));
   }
   if (/EDA6_PORT_RANGE/.test(m)) {
     return pick(t("eda6PortOutOfRange"), t("eda6PortOutOfRange"));
