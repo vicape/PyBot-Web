@@ -1,6 +1,6 @@
 /**
- * Regresión P0: rutas de entradas EDA6 + enrutamiento USB/BLE vs Pyodide.
- * EDA6 original sin versionado artificial 1.1.x.
+ * Regresión P0: rutas de entradas EDA6 + semántica original + sync canónico.
+ * Sin versionado artificial 1.1.x.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,8 +13,11 @@ import { PIN_MAPS, detectEda6Adc2Risk } from "../src/eda6PinMaps.js";
 import {
   buildEda6ImportedPrelude,
   eda6NeedsInstall,
-  parseEda6PresenceProbe,
+  eda6FileHash,
+  eda6CanonicalHash,
+  parseEda6HashProbe,
   ensureEda6OnSession,
+  assertEda6CanonicalOnSession,
 } from "../src/eda6Ensure.js";
 import { resolveEsp32ExecutionTarget } from "../src/esp32RunTarget.js";
 import { EXAMPLES } from "../src/examplesData.js";
@@ -63,11 +66,27 @@ test("EDA6 original has no EDA6_VERSION / no 1.1.x", () => {
   assert.doesNotMatch(ensure, /EDA6_LIBRARY_VERSION|buildEda6VersionGuard|EDA6_BLE_STALE_LIB/);
 });
 
-test("entradaDigital has no blind PULL_UP/PULL_DOWN", () => {
+test("entradaDigital uses preinit PULL_DOWN objects (original semantics)", () => {
   const eda6 = read("src/assets/EDA6.py");
+  assert.match(eda6, /Pin\(p,\s*Pin\.IN,\s*Pin\.PULL_DOWN\)/);
+  assert.match(eda6, /_digital_inputs\s*=\s*\[Pin\(p,\s*Pin\.IN,\s*Pin\.PULL_DOWN\)/);
   const dig = eda6.slice(eda6.indexOf("def entradaDigital"), eda6.indexOf("def entradaAnalogica"));
-  assert.match(dig, /machine\.Pin\(gpio,\s*machine\.Pin\.IN\)\.value\(\)/);
-  assert.doesNotMatch(dig, /PULL_UP|PULL_DOWN/);
+  assert.match(dig, /_digital_inputs\[n_entrada\s*-\s*1\]\.value\(\)/);
+  assert.doesNotMatch(dig, /PULL_UP/);
+  assert.doesNotMatch(dig, /machine\.Pin\(gpio,\s*machine\.Pin\.IN\)\.value\(\)/);
+});
+
+test("entradaAnalogica uses preinit ADC, ATTN_11DB, /4050, WEMOS E1 cal", () => {
+  const eda6 = read("src/assets/EDA6.py");
+  assert.match(eda6, /adc\.atten\(ADC\.ATTN_11DB\)/);
+  assert.match(eda6, /_adc_inputs\.append\(adc\)/);
+  assert.match(eda6, /\/ 4050\)\s*\*\s*100/);
+  assert.match(eda6, /CAL_LEIDO_PIN2_RAW/);
+  assert.match(eda6, /CAL_REAL_PIN2_RAW/);
+  assert.match(eda6, /def _interpolar\(/);
+  assert.match(eda6, /return -1/);
+  assert.doesNotMatch(eda6, /_adc_cache/);
+  assert.doesNotMatch(eda6, /\/ 4095/);
 });
 
 test("ADC2 risk detector still separates E1/E2 from E3/E4 (IDE, not EDA6.py)", () => {
@@ -156,18 +175,21 @@ test("pure Python + hardware mode + BLE → board", () => {
   assert.equal(r.target, "board");
 });
 
-test("USB/BLE EDA6 prelude applies WEMOS profile; no version guard", () => {
-  assert.match(buildEda6ImportedPrelude("WEMOS"), /EDA6\.PLACA_ACTUAL = "WEMOS"/);
+test("USB/BLE EDA6 prelude applies profile via _aplicar_placa; no version guard", () => {
+  assert.match(buildEda6ImportedPrelude("WEMOS"), /EDA6\._aplicar_placa\("WEMOS"\)/);
+  assert.match(buildEda6ImportedPrelude("ESP32"), /EDA6\._aplicar_placa\("ESP32"\)/);
   const bridge = read("src/hardwareBridge.js");
   assert.match(bridge, /buildEda6ImportedPrelude\(profile\)/);
   assert.match(bridge, /ensureEda6OnSession/);
+  assert.match(bridge, /assertEda6CanonicalOnSession/);
   assert.doesNotMatch(bridge, /buildEda6VersionGuard/);
   assert.doesNotMatch(bridge, /EDA6_BLE_STALE_LIB/);
 });
 
-test("BLE Run does not inject version mismatch guard", () => {
+test("BLE Run verifies canonical hash (no silent accept of any EDA6.py)", () => {
   const bridge = read("src/hardwareBridge.js");
   const native = bridge.slice(bridge.indexOf("if (isNativeBleEnabled() && _bleMpSession)"));
+  assert.match(native, /assertEda6CanonicalOnSession/);
   assert.doesNotMatch(native, /buildEda6VersionGuard/);
   assert.doesNotMatch(bridge, /userCode = buildEda6VersionGuard/);
 });
@@ -184,9 +206,11 @@ test("diagnostic example isolates per-port errors and prints maps", () => {
   assert.match(ex.code, /except Exception as e:/);
 });
 
-test("i18n keeps IDE ADC2 warning; no BLE stale / EDA6 conflict codes", () => {
+test("i18n keeps IDE ADC2 warning; BLE sync error uses hash not version", () => {
   const i18n = read("src/i18n.js");
   assert.match(i18n, /eda6Adc2WifiWarning:/);
+  assert.match(i18n, /eda6NeedUsbSync:/);
+  assert.match(i18n, /EDA6_NEED_USB_SYNC/);
   assert.doesNotMatch(i18n, /EDA6_BLE_STALE_LIB/);
   assert.doesNotMatch(i18n, /EDA6_ADC2_WIFI_CONFLICT/);
 });
@@ -202,30 +226,64 @@ test("from EDA6 import * + while True covered by runnable wrap", () => {
   assert.match(program, /_pybot_cleanup_normal/);
 });
 
-test("USB presence probe: original EDA6 present → no reinstall", async () => {
-  assert.equal(parseEda6PresenceProbe("EDA6_OK"), true);
-  assert.equal(parseEda6PresenceProbe("EDA6_MISSING"), false);
-  assert.equal(eda6NeedsInstall(true), false);
-  assert.equal(eda6NeedsInstall(false), true);
+test("USB hash sync: matching exact file → no reinstall; stale → install", async () => {
+  const bundled = read("src/assets/EDA6.py");
+  const want = eda6FileHash(bundled);
+  assert.equal(eda6NeedsInstall(want, want), false);
+  assert.equal(eda6NeedsInstall(null, want), true);
+  assert.equal(eda6NeedsInstall("aa".repeat(32), want), true);
 
   const calls = [];
-  const session = {
+  const sessionMatch = {
     async execRaw(code) {
       calls.push({ op: "execRaw", code });
-      return { stdout: "EDA6_OK" };
+      return { stdout: `EDA6_HASH:${want}` };
     },
     async installFile(name, source) {
       calls.push({ op: "installFile", name, source });
     },
   };
-  const result = await ensureEda6OnSession(session, {
-    getSource: () => "# bundled\n",
-  });
-  assert.equal(result.updated, false);
+  const ok = await ensureEda6OnSession(sessionMatch, { getSource: () => bundled });
+  assert.equal(ok.updated, false);
   assert.equal(calls.some((c) => c.op === "installFile"), false);
+
+  const calls2 = [];
+  const sessionStale = {
+    async execRaw(code) {
+      calls2.push({ op: "execRaw", code });
+      if (String(code).includes("EDA6_HASH") || String(code).includes("open('EDA6.py'")) {
+        return { stdout: "EDA6_HASH:" + "11".repeat(32) };
+      }
+      return { stdout: "" };
+    },
+    async installFile(name, source) {
+      calls2.push({ op: "installFile", name, source });
+    },
+  };
+  const stale = await ensureEda6OnSession(sessionStale, { getSource: () => bundled });
+  assert.equal(stale.updated, true);
+  assert.equal(calls2.some((c) => c.op === "installFile" && c.name === "EDA6.py"), true);
 });
 
-test("EDA6 input simulation (fake machine): dig/analog 1..4, servo, Run-Stop-Run", () => {
+test("BLE assert rejects non-canonical EDA6 silently present", async () => {
+  const bundled = read("src/assets/EDA6.py");
+  assert.ok(eda6CanonicalHash(bundled));
+  const session = {
+    async execRaw() {
+      return { stdout: "EDA6_HASH:" + "00".repeat(32) };
+    },
+    async installFile() {
+      throw new Error("should_not_install_over_ble");
+    },
+  };
+  await assert.rejects(
+    () => assertEda6CanonicalOnSession(session, { getSource: () => bundled }),
+    /EDA6_NEED_USB_SYNC/,
+  );
+  assert.equal(parseEda6HashProbe("EDA6_HASH:" + "ab".repeat(32)), "ab".repeat(32));
+});
+
+test("EDA6 input simulation (fake machine): dig/analog original + profile + Run-Stop-Run", () => {
   const py = findPython();
   assert.ok(py, "python required for EDA6 input simulation");
   const sim = join(__dirname, "helpers", "eda6InputSim.py");
@@ -237,6 +295,8 @@ test("EDA6 input simulation (fake machine): dig/analog 1..4, servo, Run-Stop-Run
   assert.equal(data.hasVersion, false);
   assert.deepEqual(data.dig, [1, 0, 1, 0]);
   assert.equal(data.a3, 100);
+  assert.equal(data.pullDown, true);
+  assert.equal(data.profileOk, true);
   assert.equal(data.servoOk, true);
   assert.equal(data.motorOk, true);
   assert.equal(data.runStopRunOk, true);

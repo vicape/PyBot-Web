@@ -617,7 +617,11 @@ def _prepare_student_ns():
         try:
             mod_eda6 = __import__(_EDA6_LIB)
             try:
-                mod_eda6.PLACA_ACTUAL = profile
+                aplicar = getattr(mod_eda6, "_aplicar_placa", None)
+                if aplicar:
+                    aplicar(profile)
+                else:
+                    mod_eda6.PLACA_ACTUAL = profile
             except Exception:
                 pass
             for k in dir(mod_eda6):

@@ -16,9 +16,13 @@ def _map_val(value, in_min, in_max, out_min, out_max):
 class FakePin:
     IN = 0
     OUT = 1
+    PULL_DOWN = 2
+    PULL_UP = 3
 
-    def __init__(self, gpio, mode=None):
+    def __init__(self, gpio, mode=None, pull=None):
         self.gpio = int(gpio)
+        self.mode = mode
+        self.pull = pull
         self._value = 0
 
     def value(self, v=None):
@@ -65,8 +69,10 @@ class FakeADC:
 
     def __init__(self, pin):
         self.gpio = pin.gpio
+        self.atten_set = None
 
-    def atten(self, *_a):
+    def atten(self, a):
+        self.atten_set = a
         return None
 
     def width(self, *_a):
@@ -236,7 +242,7 @@ def main():
         "in_cache": 25 in ns_mix.get("_pwm_cache", {}),
     }
 
-    # 6) Módulo EDA6 quedó ESP32; el prelude aplica WEMOS → servo 1 = GPIO 25.
+    # 6) Módulo EDA6 quedó ESP32; el prelude aplica WEMOS vía _aplicar_placa → servo 1 = GPIO 25.
     install_mocks()
     mod = types.ModuleType("EDA6")
     load_eda6(eda6_path, mod.__dict__, "ESP32")
@@ -246,7 +252,10 @@ def main():
     star_ns = {}
     exec("from EDA6 import *", star_ns)
     pins_imported = "_pins" in star_ns
-    mod.PLACA_ACTUAL = "WEMOS"
+    if hasattr(mod, "_aplicar_placa"):
+        mod._aplicar_placa("WEMOS")
+    else:
+        mod.PLACA_ACTUAL = "WEMOS"
     gpio = mod._pins()["servo_pins"][0]
     star_ns["servomotor"] = mod.servomotor
     star_ns["_pybot_cleanup_normal"] = mod._pybot_cleanup_normal
@@ -259,6 +268,7 @@ def main():
         "alive": bool(p_ble and p_ble.alive),
         "duty": None if p_ble is None else p_ble._duty,
         "student_placa_unchanged": star_ns.get("PLACA_ACTUAL") == "ESP32",
+        "module_placa": mod.PLACA_ACTUAL,
     }
 
     ok = (

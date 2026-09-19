@@ -1,4 +1,5 @@
 # EDA6 — librería educativa ESP32/WEMOS (compatible Thonny)
+# Semántica de entradas alineada a la fuente original (libreria-EDA6-original).
 # Perfil de placa: WEMOS (default) o ESP32
 
 PLACA_ACTUAL = "WEMOS"
@@ -28,7 +29,10 @@ CAL_REAL_PIN2_RAW = [
 ]
 
 import machine
+from machine import Pin, ADC, PWM
 import time
+
+PINS = PIN_MAPS[PLACA_ACTUAL]
 
 try:
     _pwm_cache
@@ -38,8 +42,10 @@ try:
     _pwm_role
 except NameError:
     _pwm_role = {}
-_out_pins = {}
-_adc_cache = {}
+
+_digital_outputs = []
+_digital_inputs = []
+_adc_inputs = []
 _lcd = None
 _lcd_ready = False
 _lcd_available = None
@@ -51,13 +57,69 @@ def _map_val(value, in_min, in_max, out_min, out_max):
     return int((value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)
 
 
+def _interpolar(x, x_points, y_points):
+    if x <= x_points[0]:
+        return y_points[0]
+    if x >= x_points[-1]:
+        return y_points[-1]
+    for i in range(len(x_points) - 1):
+        if x_points[i] <= x <= x_points[i + 1]:
+            x0, x1 = x_points[i], x_points[i + 1]
+            y0, y1 = y_points[i], y_points[i + 1]
+            if x1 == x0:
+                return y0
+            return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+    return y_points[-1]
+
+
 def _pins():
-    return PIN_MAPS[PLACA_ACTUAL]
+    return PINS
 
 
 def _check_port(n):
     if n < 1 or n > 4:
         raise ValueError("EDA6_PORT_RANGE")
+
+
+def _init_io():
+    """Crea Pin/ADC del perfil actual exactamente como la EDA6 original."""
+    global _digital_outputs, _digital_inputs, _adc_inputs
+    _digital_outputs = [Pin(p, Pin.OUT) for p in PINS["digital_outputs"]]
+    _digital_inputs = [Pin(p, Pin.IN, Pin.PULL_DOWN) for p in PINS["digital_inputs"]]
+    _adc_inputs = []
+    for p in PINS["adc_inputs"]:
+        adc = ADC(Pin(p))
+        adc.atten(ADC.ATTN_11DB)
+        _adc_inputs.append(adc)
+
+
+def _aplicar_placa(placa):
+    """Reinicializa I/O al perfil WEMOS/ESP32 (selector PyBot). No cambia PIN_MAPS."""
+    global PLACA_ACTUAL, PINS, _lcd, _lcd_ready, _lcd_available
+    nombre = "ESP32" if placa == "ESP32" else "WEMOS"
+    if (
+        nombre == PLACA_ACTUAL
+        and _digital_inputs
+        and len(_digital_inputs) == 4
+        and _adc_inputs
+        and len(_adc_inputs) == 4
+        and _digital_outputs
+        and len(_digital_outputs) == 4
+    ):
+        return
+    try:
+        _stop_pwm(False)
+    except Exception:
+        pass
+    PLACA_ACTUAL = nombre
+    PINS = PIN_MAPS[PLACA_ACTUAL]
+    _lcd = None
+    _lcd_ready = False
+    _lcd_available = None
+    _init_io()
+
+
+_init_io()
 
 
 def _pwm(gpio, freq=50):
@@ -72,7 +134,7 @@ def _pwm(gpio, freq=50):
             except Exception:
                 pass
         return p
-    p = machine.PWM(machine.Pin(gpio))
+    p = PWM(Pin(gpio))
     try:
         p.freq(freq)
     except Exception:
@@ -98,65 +160,46 @@ def _set_pwm_duty(gpio, duty_val):
             p.duty_u16(d * 65535 // 255)
 
 
-def _adc_read(gpio):
-    a = _adc_cache.get(gpio)
-    if a is None:
-        a = machine.ADC(machine.Pin(gpio))
-        try:
-            a.atten(machine.ADC.ATTN_11DB)
-        except Exception:
-            pass
-        try:
-            a.width(machine.ADC.WIDTH_12BIT)
-        except Exception:
-            pass
-        _adc_cache[gpio] = a
-    try:
-        return int(a.read())
-    except Exception:
-        return int(a.read_u16()) * 4095 // 65535
-
-
-def _raw_to_percent(gpio, raw):
-    if PLACA_ACTUAL == "WEMOS" and gpio == 2:
-        leido = CAL_LEIDO_PIN2_RAW
-        real = CAL_REAL_PIN2_RAW
-        if raw <= leido[0]:
-            pct_raw = 0
-        elif raw >= leido[-1]:
-            pct_raw = real[-1]
-        else:
-            pct_raw = raw
-            for i in range(len(leido) - 1):
-                if leido[i] <= raw <= leido[i + 1]:
-                    pct_raw = _map_val(raw, leido[i], leido[i + 1], real[i], real[i + 1])
-                    break
-        return max(0, min(100, pct_raw * 100 // 4095))
-    return max(0, min(100, raw * 100 // 4095))
-
-
 def entradaDigital(n_entrada):
-    _check_port(n_entrada)
-    gpio = _pins()["digital_inputs"][n_entrada - 1]
-    return machine.Pin(gpio, machine.Pin.IN).value()
+    if 1 <= n_entrada <= 4:
+        return _digital_inputs[n_entrada - 1].value()
+    print(f"Error: entradaDigital número {n_entrada} fuera de rango (1-4).")
+    return None
 
 
 def entradaAnalogica(n_entrada):
-    _check_port(n_entrada)
-    gpio = _pins()["adc_inputs"][n_entrada - 1]
-    raw = _adc_read(gpio)
-    return _raw_to_percent(gpio, raw)
+    if not (1 <= n_entrada <= 4):
+        print(f"Error: entradaAnalogica número {n_entrada} fuera de rango (1-4).")
+        return None
+    porcentaje = 0.0
+    try:
+        if PLACA_ACTUAL == "WEMOS" and n_entrada == 1:
+            valor_leido_raw = _adc_inputs[n_entrada - 1].read()
+            valor_corregido_raw = _interpolar(
+                valor_leido_raw,
+                CAL_LEIDO_PIN2_RAW,
+                CAL_REAL_PIN2_RAW,
+            )
+            porcentaje = (valor_corregido_raw / 4050) * 100
+        else:
+            valor_leido_raw = _adc_inputs[n_entrada - 1].read()
+            porcentaje = (valor_leido_raw / 4050) * 100
+    except Exception as e:
+        print(f"Error en ADC (Pin {PINS['adc_inputs'][n_entrada - 1]}): {e}.")
+        return -1
+
+    if porcentaje > 100:
+        return 100
+    elif porcentaje < 0:
+        return 0
+    else:
+        return int(porcentaje)
 
 
 def salidaDigital(n_salida, estado):
     _check_port(n_salida)
-    gpio = _pins()["digital_outputs"][n_salida - 1]
     val = 1 if estado else 0
-    p = _out_pins.get(gpio)
-    if p is None:
-        p = machine.Pin(gpio, machine.Pin.OUT)
-        _out_pins[gpio] = p
-    p.value(val)
+    _digital_outputs[n_salida - 1].value(val)
 
 
 def servomotor(nsalida, angulo):
@@ -166,7 +209,7 @@ def servomotor(nsalida, angulo):
         a = 0
     if a > 180:
         a = 180
-    gpio = _pins()["servo_pins"][nsalida - 1]
+    gpio = PINS["servo_pins"][nsalida - 1]
     duty = _map_val(a, 0, 180, 31, 120)
     _set_pwm_duty(gpio, duty)
     _pwm_role[gpio] = "servo"
@@ -179,7 +222,7 @@ def motorRC(n_salida, valor):
         v = -100
     if v > 100:
         v = 100
-    gpio = _pins()["servo_pins"][n_salida - 1]
+    gpio = PINS["servo_pins"][n_salida - 1]
     duty = _map_val(v, -100, 100, 31, 120)
     _set_pwm_duty(gpio, duty)
     _pwm_role[gpio] = "motor"
@@ -187,11 +230,10 @@ def motorRC(n_salida, valor):
 
 def sensorDistancia(n_entrada):
     _check_port(n_entrada)
-    pins = _pins()
-    trig = pins["digital_inputs"][n_entrada - 1]
-    echo = pins["adc_inputs"][n_entrada - 1]
-    t_pin = machine.Pin(trig, machine.Pin.OUT)
-    e_pin = machine.Pin(echo, machine.Pin.IN)
+    trig = PINS["digital_inputs"][n_entrada - 1]
+    echo = PINS["adc_inputs"][n_entrada - 1]
+    t_pin = Pin(trig, Pin.OUT)
+    e_pin = Pin(echo, Pin.IN)
     t_pin.value(0)
     time.sleep_us(2)
     t_pin.value(1)
@@ -229,13 +271,11 @@ def _stop_pwm(keep_positional=False):
 
 
 def _clear_digital_outputs():
-    pins = _pins()
-    for gpio in pins["digital_outputs"]:
+    for p in _digital_outputs:
         try:
-            machine.Pin(gpio, machine.Pin.OUT).value(0)
+            p.value(0)
         except Exception:
             pass
-    _out_pins.clear()
 
 
 def _pybot_cleanup_normal():
@@ -322,9 +362,9 @@ def _lcd_try_init():
     if _lcd_ready:
         return _lcd_available
     _lcd_ready = True
-    scl, sda = _pins()["I2C"]
+    scl, sda = PINS["I2C"]
     try:
-        i2c = machine.I2C(0, scl=machine.Pin(scl), sda=machine.Pin(sda), freq=400000)
+        i2c = machine.I2C(0, scl=Pin(scl), sda=Pin(sda), freq=400000)
         addrs = i2c.scan()
         addr = None
         for candidate in (0x27, 0x3F):

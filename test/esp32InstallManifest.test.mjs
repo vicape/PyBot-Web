@@ -353,12 +353,12 @@ test("CASO11: current runtime with old file content fails by hash", () => {
   assert.equal(parsed.ok, false);
 });
 
-test("CASO12: hardwareBridge verifyPybotFiles passes expectedHashes (EDA6 omitido)", () => {
+test("CASO12: hardwareBridge verifyPybotFiles passes expectedHashes including EDA6", () => {
   const bridge = read("src/hardwareBridge.js");
   assert.match(bridge, /buildProvisionExpectedHashes/);
   assert.match(bridge, /getBleRuntimeInstallFiles\(\)/);
   assert.match(bridge, /sha256HexUtf8/);
-  assert.doesNotMatch(
+  assert.match(
     bridge.slice(
       bridge.indexOf("function buildProvisionExpectedHashes"),
       bridge.indexOf("return expectedHashes", bridge.indexOf("function buildProvisionExpectedHashes")) + 40,
@@ -371,7 +371,7 @@ test("CASO12: hardwareBridge verifyPybotFiles passes expectedHashes (EDA6 omitid
   );
 });
 
-test("EDA6 original: omitted from expectedHashes still hashesOk if present", () => {
+test("EDA6 omitted from expectedHashes still hashesOk if present (parser compat)", () => {
   const expectedHashes = buildExpectedFromSources("WEMOS");
   delete expectedHashes["EDA6.py"];
   const payload = payloadMatchingExpected({
@@ -388,10 +388,9 @@ test("EDA6 original: omitted from expectedHashes still hashesOk if present", () 
   assert.equal(parsed.ok, true);
 });
 
-test("expected hashes cover every provision .py file except EDA6 may be omitted", () => {
+test("expected hashes cover every provision .py file including EDA6", () => {
   const expectedHashes = buildExpectedFromSources("ESP32");
   for (const name of expectedProvisionFiles().filter((n) => n.endsWith(".py"))) {
-    if (name === "EDA6.py") continue;
     assert.match(expectedHashes[name], /^[0-9a-f]{64}$/, name);
   }
 });

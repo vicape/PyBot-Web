@@ -38,7 +38,7 @@ import {
   prepareMainPyForFlash,
   detectPybotGpioUsage,
 } from "./eda6Profile.js";
-import { ensureEda6OnSession } from "./eda6Ensure.js";
+import { ensureEda6OnSession, assertEda6CanonicalOnSession } from "./eda6Ensure.js";
 import {
   getPybotHwLibrarySource,
   prepareMainPyForGpioFlash,
@@ -127,13 +127,13 @@ function sleepMs(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** SHA-256 esperado de los sources del runtime BLE (sin EDA6: original en placa es válida). */
+/** SHA-256 esperado de los sources del runtime BLE + EDA6 canónica del perfil. */
 function buildProvisionExpectedHashes(_profile = getEda6Profile()) {
   const expectedHashes = {};
   for (const { name, source } of getBleRuntimeInstallFiles()) {
     expectedHashes[name] = sha256HexUtf8(String(source ?? ""));
   }
-  // No incluir EDA6.py: presencia basta; no rechazar/forzar por hash de bundle.
+  expectedHashes["EDA6.py"] = sha256HexUtf8(getEda6LibrarySource(_profile));
   return expectedHashes;
 }
 
@@ -690,10 +690,13 @@ export async function runOnBoard(code, cb = {}) {
     }
     if (getBoardType() === "esp32-eda6") {
       const profile = getEda6Profile();
+      // BLE no sube EDA6.py: exige contenido canónico (instalado por USB).
+      await assertEda6CanonicalOnSession(_bleMpSession, {
+        getSource: () => getEda6LibrarySource(profile),
+      });
       const body = prepareUserCodeForExec(code);
       const probe = buildEda6ModuleProbe();
       const userCode = probe + wrapEda6UserCodeForRun(body);
-      // BLE no refresca EDA6.py: usa la librería ya instalada en la placa (USB).
       const prelude = BLE_NATIVE_PRELUDE + buildEda6ImportedPrelude(profile);
       return _bleMpSession.runProgram(userCode, { ...cb, prelude });
     }
@@ -730,7 +733,7 @@ async function runOnBoardBle(code, cb = {}) {
   // El firmware hace `from EDA6 import *`; el import del alumno es redundante e
   // inofensivo. Enviamos el codigo tal cual (sin el wrap/prelude serial). La
   // libreria EDA6/pybot_mpy NO viaja por BLE: vive en la placa (instalada por USB).
-  // No se exige versión inventada: EDA6 original en placa es válida.
+  // Integridad canónica se verifica en el camino BLE native REPL (assertEda6CanonicalOnSession).
   const userCode = mode === "eda6" ? prepareUserCodeForExec(code) : String(code ?? "");
   return _bleRun.runProgram(userCode, { ...cb, mode, profile });
 }
@@ -1526,8 +1529,7 @@ export async function installBleRuntime(hooks = {}) {
   onProgress?.({ phase: "start" });
   await _mpSession.interruptAndRecoverRepl();
 
-  // EDA6.py no viaja en el pack OTA; se instala por USB solo si falta.
-  // No sobrescribir una EDA6 original ya presente en la placa.
+  // EDA6.py no viaja en el pack OTA; se asegura contenido canónico por hash.
   onProgress?.({ phase: "installing-libs" });
   await ensureEda6OnSession(_mpSession, {
     getSource: () => getEda6LibrarySource(getEda6Profile()),

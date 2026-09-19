@@ -225,7 +225,11 @@ class ProgramManager:
             if self._mode == "eda6":
                 mod_eda6 = __import__(_EDA6_LIB)
                 try:
-                    mod_eda6.PLACA_ACTUAL = self._profile
+                    aplicar = getattr(mod_eda6, "_aplicar_placa", None)
+                    if aplicar:
+                        aplicar(self._profile)
+                    else:
+                        mod_eda6.PLACA_ACTUAL = self._profile
                 except Exception:
                     pass
                 for k in dir(mod_eda6):

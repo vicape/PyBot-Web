@@ -98,13 +98,13 @@ test("BLE_NATIVE_PRELUDE aliases _pybot_cleanup (star-import skips private names
   assert.doesNotMatch(MPY_PRELUDE, /import pybot_mpy/);
 });
 
-test("BLE prelude imports EDA6, applies profile, and does not call bare _pins()", () => {
+test("BLE prelude imports EDA6, applies profile via _aplicar_placa, and does not call bare _pins()", () => {
   const profile = readFileSync(join(root, "src", "eda6Profile.js"), "utf8");
   const preludeMod = readFileSync(join(root, "src", "eda6Ensure.js"), "utf8");
   assert.match(profile, /buildEda6ImportedPrelude/);
   assert.match(profile, /export function buildEda6ModuleProbe/);
   assert.match(preludeMod, /export function buildEda6ImportedPrelude/);
-  assert.match(preludeMod, /EDA6\.PLACA_ACTUAL = "\$\{placa\}"/);
+  assert.match(preludeMod, /EDA6\._aplicar_placa\("\$\{placa\}"\)/);
   assert.match(preludeMod, /_pybot_cleanup_normal = EDA6\._pybot_cleanup_normal/);
   assert.match(profile, /EDA6\._pins\(\)/);
   assert.match(profile, /servo_pins/);
@@ -115,9 +115,11 @@ test("BLE prelude imports EDA6, applies profile, and does not call bare _pins()"
   const bleNative = bridge.slice(bridge.indexOf("if (isNativeBleEnabled() && _bleMpSession)"));
   assert.match(bleNative, /buildEda6ImportedPrelude\(profile\)/);
   assert.match(bleNative, /buildEda6ModuleProbe\(\)/);
+  assert.match(bleNative, /assertEda6CanonicalOnSession/);
   assert.doesNotMatch(bleNative, /BLE_NATIVE_PRELUDE \+ "from EDA6 import \*\\n"/);
   assert.match(bridge, /releaseHeldHardware/);
   assert.match(readFileSync(RUN_PY, "utf8"), /keep_servos=\(outcome == "done"\)/);
+  assert.match(readFileSync(RUN_PY, "utf8"), /_aplicar_placa/);
 });
 
 test("Stop UI and session release held hardware when idle", async () => {

@@ -1,5 +1,5 @@
 """Simula EDA6 entradas digitales/analógicas sin placa (fake machine).
-Cubre API pública original sin EDA6_VERSION / sin lógica 1.1.x.
+Verifica semántica original: PULL_DOWN, ADC preinit, /4050, perfil, sin EDA6_VERSION.
 """
 from __future__ import annotations
 
@@ -12,11 +12,14 @@ from pathlib import Path
 class FakePin:
     IN = 0
     OUT = 1
+    PULL_DOWN = 2
+    PULL_UP = 3
     values = {}  # gpio -> level
 
-    def __init__(self, gpio, mode=None):
+    def __init__(self, gpio, mode=None, pull=None):
         self.gpio = int(gpio)
         self.mode = mode
+        self.pull = pull
         FakePin.created.append(self)
 
     def value(self, v=None):
@@ -34,18 +37,23 @@ class FakeADC:
     WIDTH_12BIT = 0
     raw_by_gpio = {}
     instances = []
+    fail_gpio = None
 
     def __init__(self, pin):
         self.gpio = pin.gpio
+        self.atten_set = None
         FakeADC.instances.append(self)
 
-    def atten(self, *_a):
+    def atten(self, a):
+        self.atten_set = a
         return None
 
     def width(self, *_a):
         return None
 
     def read(self):
+        if FakeADC.fail_gpio is not None and self.gpio == FakeADC.fail_gpio:
+            raise OSError("adc_fail")
         return int(FakeADC.raw_by_gpio.get(self.gpio, 0))
 
     def read_u16(self):
@@ -79,6 +87,7 @@ def install_mocks():
     FakePin.values = {}
     FakeADC.instances = []
     FakeADC.raw_by_gpio = {}
+    FakeADC.fail_gpio = None
 
     machine = types.ModuleType("machine")
     machine.Pin = FakePin
@@ -106,17 +115,18 @@ def load_eda6(path: Path):
     for name in list(sys.modules):
         if name == "EDA6" or name.endswith(".EDA6"):
             del sys.modules[name]
-    ns = {"__name__": "EDA6", "__file__": str(path)}
+    mod = types.ModuleType("EDA6")
+    mod.__file__ = str(path)
     code = path.read_text(encoding="utf-8")
-    exec(compile(code, str(path), "exec"), ns)
-    return types.SimpleNamespace(**{k: v for k, v in ns.items() if not k.startswith("__")})
+    exec(compile(code, str(path), "exec"), mod.__dict__)
+    sys.modules["EDA6"] = mod
+    return mod
 
 
 def main():
     eda6_path = Path(sys.argv[1])
     install_mocks()
     E = load_eda6(eda6_path)
-    E.PLACA_ACTUAL = "WEMOS"
 
     assert not hasattr(E, "EDA6_VERSION")
     assert list(E.PIN_MAPS["WEMOS"]["digital_inputs"]) == [5, 23, 19, 18]
@@ -128,22 +138,46 @@ def main():
     assert list(E.PIN_MAPS["ESP32"]["digital_outputs"]) == [32, 25, 27, 12]
     assert list(E.PIN_MAPS["ESP32"]["servo_pins"]) == [33, 26, 14, 13]
 
-    # Digital 1..4
+    # DIGITAL: preinicializados WEMOS E1..E4 -> [5,23,19,18], IN+PULL_DOWN
+    assert E.PLACA_ACTUAL == "WEMOS"
+    dig_pins = list(E._digital_inputs)
+    assert [p.gpio for p in dig_pins] == [5, 23, 19, 18]
+    assert all(p.mode == FakePin.IN for p in dig_pins)
+    assert all(p.pull == FakePin.PULL_DOWN for p in dig_pins)
+    assert all(p.pull != FakePin.PULL_UP for p in dig_pins)
+
+    created_before = len(FakePin.created)
     FakePin.values = {5: 1, 23: 0, 19: 1, 18: 0}
     dig = [E.entradaDigital(n) for n in range(1, 5)]
     assert dig == [1, 0, 1, 0]
-    used = [p.gpio for p in FakePin.created[-4:]]
-    assert used == [5, 23, 19, 18]
+    # No crea Pin nuevos en cada lectura
+    assert len(FakePin.created) == created_before
+    assert E.entradaDigital(0) is None
+    assert E.entradaDigital(5) is None
 
-    # Analog 1..4
-    FakeADC.raw_by_gpio = {2: 0, 4: 2047, 35: 4095, 34: 0}
+    # ANALÓGICO: ADC preinicializado, ATTN_11DB, /4050
+    assert [a.gpio for a in E._adc_inputs] == [2, 4, 35, 34]
+    assert all(a.atten_set == FakeADC.ATTN_11DB for a in E._adc_inputs)
+    FakeADC.raw_by_gpio = {2: 0, 4: 2025, 35: 4095, 34: 0}
     a1 = E.entradaAnalogica(1)
     a2 = E.entradaAnalogica(2)
     a3 = E.entradaAnalogica(3)
     a4 = E.entradaAnalogica(4)
-    assert 0 <= a1 <= 100 and 0 <= a2 <= 100 and 0 <= a3 <= 100 and 0 <= a4 <= 100
-    assert a3 == 100
+    assert a1 == 0
+    assert a2 == int((2025 / 4050) * 100)
+    assert a3 == 100  # clamp >100
     assert a4 == 0
+
+    # E1 WEMOS usa interpolación (punto de cal 120 -> 429)
+    FakeADC.raw_by_gpio[2] = 120
+    a1_cal = E.entradaAnalogica(1)
+    assert a1_cal == int((429 / 4050) * 100)
+
+    FakeADC.fail_gpio = 35
+    assert E.entradaAnalogica(3) == -1
+    FakeADC.fail_gpio = None
+    assert E.entradaAnalogica(0) is None
+    assert E.entradaAnalogica(9) is None
 
     # salida + entrada digital
     E.salidaDigital(1, 1)
@@ -161,10 +195,10 @@ def main():
     servo_ok = True
     motor_ok = True
 
-    # Run -> Stop -> Run: cleanup normal conserva servo; detenerTodo limpia
+    # Run -> Stop -> Run
     E._pybot_cleanup_normal()
-    assert 25 in E._pwm_cache  # servo positional retained
-    assert 16 not in E._pwm_cache  # motor cleared
+    assert 25 in E._pwm_cache
+    assert 16 not in E._pwm_cache
     E.detenerTodo()
     assert E._pwm_cache == {}
     FakeADC.raw_by_gpio[35] = 4095
@@ -174,7 +208,24 @@ def main():
     assert 25 in E._pwm_cache
     run_stop_run_ok = True
 
-    # star-import style: public names exist
+    # PERFIL: cambio no deja hardware del perfil anterior
+    wemos_dig_ids = [id(p) for p in E._digital_inputs]
+    wemos_adc_ids = [id(a) for a in E._adc_inputs]
+    E._aplicar_placa("ESP32")
+    assert E.PLACA_ACTUAL == "ESP32"
+    assert [p.gpio for p in E._digital_inputs] == [4, 2, 15, 0]
+    assert [a.gpio for a in E._adc_inputs] == [35, 34, 39, 36]
+    assert [p.gpio for p in E._digital_outputs] == [32, 25, 27, 12]
+    assert all(p.pull == FakePin.PULL_DOWN for p in E._digital_inputs)
+    assert [id(p) for p in E._digital_inputs] != wemos_dig_ids
+    assert [id(a) for a in E._adc_inputs] != wemos_adc_ids
+    FakePin.values = {4: 1, 2: 0, 15: 1, 0: 0}
+    assert [E.entradaDigital(n) for n in range(1, 5)] == [1, 0, 1, 0]
+    E._aplicar_placa("WEMOS")
+    assert E.PLACA_ACTUAL == "WEMOS"
+    assert [p.gpio for p in E._digital_inputs] == [5, 23, 19, 18]
+    profile_ok = True
+
     for name in (
         "entradaDigital",
         "entradaAnalogica",
@@ -193,9 +244,13 @@ def main():
                 "hasVersion": hasattr(E, "EDA6_VERSION"),
                 "dig": dig,
                 "a3": a3,
+                "a1Cal": a1_cal,
                 "servoOk": servo_ok,
                 "motorOk": motor_ok,
                 "runStopRunOk": run_stop_run_ok,
+                "profileOk": profile_ok,
+                "pullDown": True,
+                "attn": True,
             }
         )
     )

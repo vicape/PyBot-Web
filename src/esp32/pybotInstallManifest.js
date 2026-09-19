@@ -208,7 +208,7 @@ export function parseSelftestOutput(
       continue;
     }
     const expectedRaw = expectedHashes[name];
-    // EDA6 original en placa: si no hay hash esperado del bundle, basta presencia.
+    // Si el caller omite EDA6.py del mapa, no forzar mismatch (tests históricos).
     if (name === "EDA6.py" && (expectedRaw == null || expectedRaw === "")) {
       if (typeof actualRaw !== "string" || actualRaw.length === 0) hashesOk = false;
       continue;

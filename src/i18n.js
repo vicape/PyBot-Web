@@ -84,6 +84,8 @@ const STRINGS = {
       "main.py borrado. Tras reiniciar la placa, no ejecutará programa autónomo.",
     eda6VerifyOk: "EDA6.py está instalada en la placa.",
     eda6VerifyMissing: "EDA6.py no está en la placa. Instalala antes de grabar.",
+    eda6NeedUsbSync:
+      "La EDA6.py de la placa no coincide con la librería canónica. Conectá por USB e instalá/sincronizá EDA6 antes de ejecutar por Bluetooth.",
     eda6FlashBtn: "Dejar programa en la placa",
     esp32FlashBtn: "Dejar programa en la placa",
     arduinoDownloadBtn: "Bajar a Arduino (correr solo)",
@@ -690,6 +692,8 @@ Creado por VIC.`,
       "main.py deleted. After reset, the board will not run an autonomous program.",
     eda6VerifyOk: "EDA6.py is installed on the board.",
     eda6VerifyMissing: "EDA6.py is not on the board. Install it before flashing.",
+    eda6NeedUsbSync:
+      "The board EDA6.py does not match the canonical library. Connect via USB and install/sync EDA6 before running over Bluetooth.",
     eda6FlashBtn: "Save program to board",
     esp32FlashBtn: "Save program to board",
     arduinoDownloadBtn: "Download to Arduino (run standalone)",
@@ -1452,6 +1456,9 @@ export function formatPythonError(message) {
   }
   if (/EDA6_MISSING_LIB|No module named 'EDA6'|No module named EDA6/.test(m)) {
     return pick(t("eda6MissingLib"), t("eda6MissingLib"));
+  }
+  if (/EDA6_NEED_USB_SYNC/.test(m)) {
+    return pick(t("eda6NeedUsbSync"), t("eda6NeedUsbSync"));
   }
   if (/INSTALL_FAIL/.test(m)) {
     return pick(t("eda6InstallFail"), t("eda6InstallFail"));
