@@ -119,3 +119,17 @@ test("buildEda6ImportedPrelude applies WEMOS and ESP32 profiles; bundled has no 
   assert.doesNotMatch(BUNDLED_SOURCE, /1\.1\.0|1\.1\.1/);
   assert.match(BUNDLED_SOURCE, /def _aplicar_placa\(/);
 });
+
+test("bundled EDA6.py has no trailing whitespace (git diff --check hygiene)", () => {
+  const normalized = BUNDLED_SOURCE.replace(/\r\n/g, "\n");
+  assert.equal(normalized.includes("\r"), false);
+  const lines = normalized.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    assert.equal(
+      line,
+      line.replace(/[ \t]+$/, ""),
+      `EDA6.py line ${i + 1} has trailing whitespace`,
+    );
+  }
+});
