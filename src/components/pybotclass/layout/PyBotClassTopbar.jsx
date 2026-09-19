@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { UI_THEMES } from "../../../platform/appearanceApi.js";
+import { getLang, setLang, SUPPORTED_LANGS, LANG_LABELS } from "../../../i18n.js";
 
 const THEME_ICONS = { system: "◐", light: "☀", dark: "☾" };
 
@@ -14,6 +16,13 @@ export default function PyBotClassTopbar({
   onSignOut,
   onMenuOpen,
 }) {
+  const [lang, setLangState] = useState(() => getLang());
+  const onLangChange = (next) => {
+    const saved = setLang(next);
+    setLangState(saved);
+    window.location.reload();
+  };
+
   return (
     <header className="pbc-topbar">
       <button
@@ -43,6 +52,20 @@ export default function PyBotClassTopbar({
       )}
 
       <div className="pbc-topbar__actions">
+        <label className="pbc-topbar__lang">
+          <span className="sr-only">Idioma</span>
+          <select
+            value={lang}
+            onChange={(e) => onLangChange(e.target.value)}
+            aria-label="Idioma"
+            title="Idioma"
+          >
+            {SUPPORTED_LANGS.map((code) => (
+              <option key={code} value={code}>{LANG_LABELS[code]}</option>
+            ))}
+          </select>
+        </label>
+
         <div className="pbc-theme-toggle" role="group" aria-label="Tema">
           {UI_THEMES.map((t) => (
             <button
