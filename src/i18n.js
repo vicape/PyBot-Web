@@ -1221,21 +1221,41 @@ Built by VIC.`,
   },
 };
 
-function normalizeLang(lang) {
-  const raw = String(lang || "").toLowerCase().slice(0, 2);
-  return SUPPORTED_LANGS.includes(raw) ? raw : "en";
+function normalizeLang(lang, fallback = "es") {
+  const raw = String(lang || "").trim().toLowerCase().replace("_", "-");
+  if (!raw) return fallback;
+  if (SUPPORTED_LANGS.includes(raw)) return raw;
+  const family = raw.split("-")[0];
+  return SUPPORTED_LANGS.includes(family) ? family : fallback;
+}
+
+function detectBrowserLang() {
+  if (typeof navigator === "undefined") return "es";
+  const candidates = [
+    ...(Array.isArray(navigator.languages) ? navigator.languages : []),
+    navigator.language,
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    const resolved = normalizeLang(candidate, "");
+    if (resolved) return resolved;
+  }
+  return "es";
 }
 
 export function getLang() {
   try {
-    return normalizeLang(localStorage.getItem("pybot_lang") || "en");
+    const stored = localStorage.getItem("pybot_lang");
+    if (stored && SUPPORTED_LANGS.includes(String(stored).toLowerCase())) {
+      return String(stored).toLowerCase();
+    }
   } catch {
-    return "en";
+    //
   }
+  return detectBrowserLang();
 }
 
 export function setLang(lang) {
-  const next = normalizeLang(lang);
+  const next = normalizeLang(lang, "es");
   try {
     localStorage.setItem("pybot_lang", next);
   } catch {
