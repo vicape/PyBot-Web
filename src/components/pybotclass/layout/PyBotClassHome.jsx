@@ -1,3 +1,4 @@
+import { t } from "../../../i18n.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { countryNameByCode } from "../../../data/countries.js";
@@ -20,8 +21,8 @@ import { GoogleClassroomIcon } from "../illustrations/SidebarIcons.jsx";
 import RoleBadges from "./RoleBadges.jsx";
 
 const ROLE_BADGE = {
-  teacher: { label: "Docente", variant: "purple" },
-  student: { label: "Alumno", variant: "teal" },
+  teacher: { label: t("pcTeacher"), variant: "purple" },
+  student: { label: t("pcStudent"), variant: "teal" },
 };
 
 export default function PyBotClassHome({
@@ -72,7 +73,7 @@ export default function PyBotClassHome({
 
   const meta = user?.user_metadata || {};
   const firstName =
-    (meta.full_name || meta.name || user?.email?.split("@")[0] || "Usuario").split(" ")[0];
+    (meta.full_name || meta.name || user?.email?.split("@")[0] || t("pcUser")).split(" ")[0];
 
   const orgMemberships = useMemo(
     () =>
@@ -91,11 +92,26 @@ export default function PyBotClassHome({
         orgs: orgMemberships,
         courses,
         isSuperAdmin,
-      }),
+      }).map((b) => ({
+        ...b,
+        label:
+          b.id === "gestion" ? t("pcManagement") :
+          b.id === "docente" ? t("pcTeacher") :
+          b.id === "alumno" ? t("pcStudent") : b.label,
+      })),
     [orgMemberships, courses, isSuperAdmin],
   );
 
-  const summary = useMemo(() => computeQuickSummary({ courses, isSuperAdmin }), [courses, isSuperAdmin]);
+  const summary = useMemo(() => computeQuickSummary({ courses, isSuperAdmin }).map((s) => ({
+    ...s,
+    label:
+      s.id === "courses" ? t("pcCourses") :
+      s.id === "teacher" ? t("pcAsTeacher") :
+      s.id === "student" ? t("pcAsStudent") :
+      s.id === "pending" ? t("pcFilterToGrade") :
+      s.id === "students" ? t("pcStudentsYourCourses") :
+      s.id === "activities" ? t("pcActivities") : s.label,
+  })), [courses, isSuperAdmin]);
 
   const filtered = useMemo(() => {
     let rows = courses;
@@ -116,15 +132,15 @@ export default function PyBotClassHome({
   };
 
   const classroomStatusLabel =
-    classroomLinked == null ? "…" : classroomLinked ? "Vinculado" : "No vinculado";
+    classroomLinked == null ? "…" : classroomLinked ? t("pcLinked") : t("pcNotLinked");
 
   return (
     <div className="pbc-home">
       <div className="pbc-home__main">
         <header className="pbc-hero-block pbc-hero-block--with-classroom">
           <div className="pbc-hero-block__text">
-            <h1 className="pbc-hero-block__title">Hola, {firstName} 👋</h1>
-            <p className="pbc-hero-block__subtitle">Elegí cómo querés trabajar hoy</p>
+            <h1 className="pbc-hero-block__title">{t("pcHello")}, {firstName} 👋</h1>
+            <p className="pbc-hero-block__subtitle">{t("pcChooseWork")}</p>
           </div>
           <button
             type="button"
@@ -134,13 +150,13 @@ export default function PyBotClassHome({
             onClick={onClassroomConnect}
             title={
               classroomLinked
-                ? "Google Classroom vinculado. Clic para volver a autorizar."
-                : "Google Classroom no vinculado. Clic para vincular."
+                ? t("pcClassroomLinkedReauth")
+                 : t("pcClassroomNotLinkedClick")
             }
             aria-label={
               classroomLinked
-                ? "Google Classroom vinculado. Volver a autorizar."
-                : "Vincular Google Classroom"
+                ? t("pcClassroomLinkedReauthLabel")
+                 : t("pcLinkClassroom")
             }
           >
             <span className="pbc-classroom-status__icon" aria-hidden>
@@ -170,9 +186,9 @@ export default function PyBotClassHome({
               <CoursesActionIcon />
             </span>
             <span className="pbc-action-card__body">
-              <span className="pbc-action-card__title">Mis cursos</span>
+              <span className="pbc-action-card__title">{t("pcMyCourses")}</span>
               <span className="pbc-action-card__desc">
-                {courses.length} curso{courses.length === 1 ? "" : "s"} en total
+                {courses.length} {t("pcCourses")}
               </span>
             </span>
             <span className="pbc-action-card__arrow" aria-hidden>
@@ -191,8 +207,8 @@ export default function PyBotClassHome({
               <CreateCourseActionIcon />
             </span>
             <span className="pbc-action-card__body">
-              <span className="pbc-action-card__title">Crear curso</span>
-              <span className="pbc-action-card__desc">Para trabajar como docente</span>
+              <span className="pbc-action-card__title">{t("pcCreateCourse")}</span>
+              <span className="pbc-action-card__desc">{t("pcWorkAsTeacher")}</span>
             </span>
             <span className="pbc-action-card__arrow" aria-hidden>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
@@ -210,8 +226,8 @@ export default function PyBotClassHome({
               <JoinCourseActionIcon />
             </span>
             <span className="pbc-action-card__body">
-              <span className="pbc-action-card__title">Unirme a un curso</span>
-              <span className="pbc-action-card__desc">Ingresá con código o enlace</span>
+              <span className="pbc-action-card__title">{t("pcJoinCourse")}</span>
+              <span className="pbc-action-card__desc">{t("pcJoinByCodeOrLink")}</span>
             </span>
             <span className="pbc-action-card__arrow" aria-hidden>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
@@ -229,8 +245,8 @@ export default function PyBotClassHome({
               <IdeActionIcon />
             </span>
             <span className="pbc-action-card__body">
-              <span className="pbc-action-card__title">Abrir IDE</span>
-              <span className="pbc-action-card__desc">Proyectos y práctica en PyBot</span>
+              <span className="pbc-action-card__title">{t("pcOpenIde")}</span>
+              <span className="pbc-action-card__desc">{t("pcOpenIdeDesc")}</span>
             </span>
             <span className="pbc-action-card__arrow" aria-hidden>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
@@ -242,16 +258,16 @@ export default function PyBotClassHome({
 
         <section id="mis-cursos">
           <div className="pbc-section-head">
-            <h2 className="pbc-section-head__title">Mis cursos</h2>
+            <h2 className="pbc-section-head__title">{t("pcMyCourses")}</h2>
             {orgMemberships.length > 1 ? (
               <select
                 className="pbc-select"
                 style={{ width: "auto", minWidth: "160px" }}
                 value={orgFilter}
                 onChange={(e) => setOrgFilter(e.target.value)}
-                aria-label="Filtrar por institución"
+                aria-label={t("pcFilterInstitution")}
               >
-                <option value="">Todas las instituciones</option>
+                <option value="">{t("pcAllInstitutions")}</option>
                 {orgMemberships.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.name}
@@ -261,11 +277,11 @@ export default function PyBotClassHome({
             ) : null}
           </div>
 
-          <div className="pbc-filter-tabs" role="tablist" aria-label="Filtrar por rol">
+          <div className="pbc-filter-tabs" role="tablist" aria-label={t("pcFilterByRole")}>
             {[
-              { id: "all", label: "Todos" },
-              { id: "teacher", label: "Docente" },
-              { id: "student", label: "Alumno" },
+              { id: "all", label: t("pcAll") },
+              { id: "teacher", label: t("pcTeacher") },
+              { id: "student", label: t("pcStudent") },
             ].map((t) => (
               <button
                 key={t.id}
@@ -285,21 +301,21 @@ export default function PyBotClassHome({
               <span className="pbc-empty-state__illus" aria-hidden>
                 <EmptyCoursesIllustration />
               </span>
-              <h3 className="pbc-empty-state__title">Todavía no participás en cursos</h3>
+              <h3 className="pbc-empty-state__title">{t("pcNoCoursesYet")}</h3>
               <p className="pbc-empty-state__desc">
                 {hasStaffAccess
-                  ? "Creá un curso, unite con un código o importá desde Google Classroom."
-                  : "Unite a un curso con un código o enlace."}
+                  ? t("pcNoCoursesStaffDesc")
+                   : t("pcNoCoursesStudentDesc")}
               </p>
               <div className="pbc-empty-state__actions">
                 <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
-                  Crear curso
+                  {t("pcCreateCourse")}
                 </button>
                 <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onJoinCourse}>
-                  Unirme a un curso
+                  {t("pcJoinCourse")}
                 </button>
                 <a href="/" className="pbc-btn pbc-btn--ghost">
-                  Abrir IDE
+                  {t("pcOpenIde")}
                 </a>
               </div>
             </div>
@@ -326,16 +342,16 @@ export default function PyBotClassHome({
                     </div>
                     <div className="pbc-course-card__body">
                       <p className="pbc-course-card__title">{c.course_title}</p>
-                      <p className="pbc-course-card__meta">{c.org_name || "Institución"}</p>
+                      <p className="pbc-course-card__meta">{c.org_name || t("pcInstitution")}</p>
                       <div className="pbc-course-card__footer">
                         {rb ? (
                           <span className={`pbc-badge pbc-badge--${rb.variant}`}>{rb.label}</span>
                         ) : null}
                         {role === "teacher" && c.student_count > 0 ? (
-                          <span className="pbc-course-card__stat">{c.student_count} alumnos</span>
+                          <span className="pbc-course-card__stat">{c.student_count} {t("pcTabStudents")}</span>
                         ) : null}
                         {c.pending_grade_count > 0 ? (
-                          <span className="pbc-course-card__stat">{c.pending_grade_count} por corregir</span>
+                          <span className="pbc-course-card__stat">{c.pending_grade_count} {t("pcFilterToGrade")}</span>
                         ) : null}
                       </div>
                     </div>
@@ -349,7 +365,7 @@ export default function PyBotClassHome({
 
       <aside className="pbc-home__aside">
         <div className="pbc-panel-card">
-          <h3 className="pbc-panel-card__title">Mi cuenta</h3>
+          <h3 className="pbc-panel-card__title">{t("pcMyAccount")}</h3>
           <div className="pbc-account-card__profile">
             {meta.avatar_url || meta.picture ? (
               <img
@@ -377,26 +393,26 @@ export default function PyBotClassHome({
 
         {orgMemberships.length > 0 ? (
           <div className="pbc-panel-card">
-            <h3 className="pbc-panel-card__title">Institución</h3>
+            <h3 className="pbc-panel-card__title">{t("pcInstitution")}</h3>
             <div className="pbc-institution-block">
               {orgMemberships.length === 1 ? (
                 <p className="pbc-institution-block__name">{orgMemberships[0].name}</p>
               ) : (
-                <p className="pbc-institution-block__name">{orgMemberships.length} instituciones</p>
+                <p className="pbc-institution-block__name">{orgMemberships.length} {t("pcInstitutions")}</p>
               )}
               {primaryCountry ? (
                 <p className="pbc-institution-block__meta">{countryNameByCode(primaryCountry)}</p>
               ) : null}
             </div>
             <Link to="/dashboard?tab=schools" className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-panel-card__action">
-              Gestionar
+              {t("pcManage")}
             </Link>
           </div>
         ) : null}
 
         {summary.length > 0 ? (
           <div className="pbc-panel-card">
-            <h3 className="pbc-panel-card__title">Resumen rápido</h3>
+            <h3 className="pbc-panel-card__title">{t("pcQuickSummary")}</h3>
             <div className="pbc-stat-grid">
               {summary.map((s) => (
                 <div
@@ -412,7 +428,7 @@ export default function PyBotClassHome({
         ) : null}
 
         <div className="pbc-panel-card pbc-panel-card--quick">
-          <h3 className="pbc-panel-card__title">Google Classroom</h3>
+          <h3 className="pbc-panel-card__title">{t("pcGoogleClassroom")}</h3>
           <div
             className={`pbc-classroom-status pbc-classroom-status--panel${
               classroomLinked ? " pbc-classroom-status--on" : " pbc-classroom-status--off"
@@ -422,7 +438,7 @@ export default function PyBotClassHome({
               <GoogleClassroomIcon />
             </span>
             <span className="pbc-classroom-status__meta">
-              <span className="pbc-classroom-status__name">Estado</span>
+              <span className="pbc-classroom-status__name">{t("pcStatus")}</span>
               <span className="pbc-classroom-status__state">
                 <span className="pbc-classroom-status__dot" aria-hidden />
                 {classroomStatusLabel}
@@ -433,12 +449,12 @@ export default function PyBotClassHome({
             <span className="pbc-btn--classroom__icon" aria-hidden>
               <GoogleClassroomIcon />
             </span>
-            {classroomLinked ? "Volver a autorizar Google Classroom" : "Vincular Google Classroom"}
+            {classroomLinked ? t("pcReauthorizeClassroom") : t("pcLinkClassroom")}
           </button>
           <p className="pbc-panel-card__hint">
             {hasStaffAccess
-              ? "Vinculá la cuenta Google que usás para Classroom. Puede ser distinta de tu cuenta de PyBotClass."
-              : "Necesario para marcar entregas también en Classroom. Puede ser una cuenta Google distinta de PyBotClass."}
+              ? t("pcClassroomAccountHintStaff")
+               : t("pcClassroomAccountHintStudent")}
           </p>
         </div>
       </aside>
