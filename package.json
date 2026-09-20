@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test \"test/*.test.mjs\""
+    "test": "npm run test:fast",
+    "test:fast": "node test/run-suite.mjs fast",
+    "test:contracts": "node test/run-suite.mjs contracts",
+    "test:architecture": "node test/run-suite.mjs architecture",
+    "test:full": "node test/run-suite.mjs full",
+    "qa:full": "npm run test:full && npm run build"
   },
   "dependencies": {
     "@blocknote/core": "^0.54.0",
