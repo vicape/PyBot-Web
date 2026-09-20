@@ -1,3 +1,4 @@
+import { t } from "../../../i18n.js";
 import { useState } from "react";
 import { deleteContent } from "../../../platform/contentApi.js";
 
@@ -16,7 +17,7 @@ export default function DeleteContentModal({ open, content, onClose, onDeleted }
     setBusy(false);
 
     if (!ok) {
-      setErr(error || "No se pudo eliminar el contenido.");
+      setErr(error || t("pcDeleteContentFail"));
       return;
     }
 
@@ -33,23 +34,23 @@ export default function DeleteContentModal({ open, content, onClose, onDeleted }
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="delete-content-title" className="pbc-modal__title">
-          Eliminar contenido
+          {t("pcDeleteContent")}
         </h2>
         <p className="pbc-modal--create-content__subtitle">
-          ¿Seguro que querés eliminar «{content.title}»?
+          {t("pcDeleteContentQuestion")} «{content.title}»?
         </p>
         <p className="pbc-modal--create-content__subtitle">
-          Esta acción eliminará también sus unidades, lecciones y bloques de contenido.
+          {t("pcDeleteContentCascade")}
         </p>
         <p className="pbc-modal--create-content__subtitle pbc-modal--create-content__subtitle--warn">
-          Esta acción no se puede deshacer.
+          {t("pcCannotUndo")}
         </p>
 
         {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
 
         <div className="pbc-modal__actions">
           <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose} disabled={busy}>
-            Cancelar
+            {t("pcCancel")}
           </button>
           <button
             type="button"
@@ -57,7 +58,7 @@ export default function DeleteContentModal({ open, content, onClose, onDeleted }
             onClick={() => void confirmDelete()}
             disabled={busy}
           >
-            {busy ? "Eliminando…" : "Eliminar contenido"}
+            {busy ? t("pcDeleting") : t("pcDeleteContent")}
           </button>
         </div>
       </div>
