@@ -86,13 +86,12 @@ test("P3: PyBotClassHome usa Vinculado/No vinculado, no Conectado por persistenc
     new URL("../src/components/pybotclass/layout/PyBotClassHome.jsx", import.meta.url),
     "utf8",
   );
-  assert.match(src, /Vinculado/);
-  assert.match(src, /No vinculado/);
+  assert.match(src, /t\("pcLinked"\)/);
+  assert.match(src, /t\("pcNotLinked"\)/);
   assert.doesNotMatch(src, /classroomLinked \? "Conectado"/);
   assert.doesNotMatch(src, /"No conectado"/);
-  assert.doesNotMatch(src, /Google Classroom conectado/);
-  assert.match(src, /Google Classroom vinculado/);
-  assert.match(src, /Google Classroom no vinculado/);
+  assert.match(src, /t\("pcClassroomLinkedReauth"\)/);
+  assert.match(src, /t\("pcClassroomNotLinkedClick"\)/);
 });
 
 test("P1/P2 intactos", () => {
