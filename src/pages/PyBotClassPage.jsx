@@ -1,3 +1,4 @@
+import { t } from "../i18n.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AccountSettings from "../components/dashboard/AccountSettings.jsx";
@@ -23,7 +24,7 @@ import { isStaffRole } from "../orgRole.js";
 function PyBotClassLoading() {
   return (
     <main className="dash-root dash-root--center">
-      <p>Cargando PyBotClass…</p>
+      <p>{t("pcLoading")}</p>
     </main>
   );
 }
@@ -34,7 +35,7 @@ function PyBotClassAccountPanel({ user, onProfileUpdated }) {
   return (
     <div style={{ maxWidth: 560 }}>
       <h1 className="pbc-hero-block__title" style={{ marginBottom: "1rem" }}>
-        Cuenta
+        {t("pcAccount")}
       </h1>
       <AccountSettings user={user} onProfileUpdated={onProfileUpdated} />
       {ctx ? (
@@ -121,7 +122,7 @@ export default function PyBotClassPage() {
         .filter((o) => isStaffRole(o.role))
         .map((o) => ({
           id: o.org_id || o.id,
-          name: o.org_name || o.name || "Institución",
+          name: o.org_name || o.name || t("pcInstitution"),
           role: o.role,
         }))
         .filter((o) => o.id),
@@ -168,11 +169,10 @@ export default function PyBotClassPage() {
       content = (
         <div style={{ maxWidth: 900 }}>
           <h1 className="pbc-hero-block__title" style={{ marginBottom: "0.5rem" }}>
-            Google Classroom
+            {t("pcGoogleClassroom")}
           </h1>
           <p className="pbc-hero-block__subtitle" style={{ marginBottom: "1rem" }}>
-            Conectá tu cuenta Google para importar cursos. Puede ser distinta de tu cuenta de
-            PyBotClass.
+            {t("pcClassroomConnectHint")}
           </p>
           <ClassroomPanel
             user={user}
