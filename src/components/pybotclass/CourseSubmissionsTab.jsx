@@ -1,18 +1,20 @@
+import { t } from "../../i18n.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  fetchCourseSubmissionOverview,
-  formatDateTimeEs,
-  submissionOverviewLabelEs,
-} from "../../platform/pybotClassApi.js";
+import { fetchCourseSubmissionOverview } from "../../platform/pybotClassApi.js";
 import { reopenSubmissionForStudent } from "../../platform/activitySubmissions.js";
 import {
   INBOX_FILTERS,
   deriveInboxFilterId,
   deriveSubmissionWindow,
   deriveTimeliness,
-  timelinessLabelEs,
 } from "../../platform/submissionWorkflow.js";
+import {
+  formatDateTime,
+  localizeInboxFilters,
+  submissionOverviewLabel,
+  timelinessLabel,
+} from "./pyclassI18n.js";
 import {
   PbcAlert,
   PbcLoading,
@@ -21,7 +23,7 @@ import {
 } from "./PyBotClassUi.jsx";
 
 function statusPill(filterId) {
-  const label = submissionOverviewLabelEs(filterId);
+  const label = submissionOverviewLabel(filterId);
   if (filterId === "por_corregir" || filterId === "reentregadas") {
     return <span className="pbc-pill pbc-pill--warn">{label}</span>;
   }
@@ -87,33 +89,33 @@ export default function CourseSubmissionsTab({ courseId }) {
     const out = await reopenSubmissionForStudent(r.activity_id, r.student_user_id);
     setBusyId("");
     if (!out.ok) {
-      setErr(out.error || "No se pudo reabrir.");
+      setErr(out.error || t("pcReopenFail"));
       return;
     }
     setActionMsg(`Reabierto: ${r.student_name} · ${r.activity_title}`);
     await load();
   };
 
-  if (loading) return <PbcLoading label="Cargando entregas…" />;
+  if (loading) return <PbcLoading label={t("pcLoadingSubmissions")} />;
   if (err) return <PbcAlert variant="error">{err}</PbcAlert>;
 
   return (
-    <PbcSection title="Entregas del curso" description={`${filtered.length} fila(s) con el filtro actual`}>
+    <PbcSection title={t("pcCourseSubmissions")} description={`${filtered.length} ${t("pcRowsCurrentFilter")}`}>
       {actionMsg ? <PbcAlert variant="info">{actionMsg}</PbcAlert> : null}
-      <PbcSubTabs tabs={INBOX_FILTERS} active={filter} onChange={setFilter} />
+      <PbcSubTabs tabs={localizeInboxFilters(INBOX_FILTERS)} active={filter} onChange={setFilter} />
 
       {filtered.length === 0 ? (
-        <p className="auth-card__muted">No hay entregas con este filtro.</p>
+        <p className="auth-card__muted">{t("pcNoSubmissionsFilter")}</p>
       ) : (
         <div className="dash-table-wrap">
           <table className="dash-table">
             <thead>
               <tr>
-                <th>Alumno</th>
-                <th>Actividad</th>
-                <th>Estado</th>
-                <th>Puntualidad</th>
-                <th>Última actividad</th>
+                <th>{t("pcStudent")}</th>
+                <th>{t("pcActivity")}</th>
+                <th>{t("pcStatus")}</th>
+                <th>{t("pcTimeliness")}</th>
+                <th>{t("pcLastActivity")}</th>
                 <th />
               </tr>
             </thead>
@@ -132,30 +134,30 @@ export default function CourseSubmissionsTab({ courseId }) {
                     <td>{statusPill(r.derivedStatus)}</td>
                     <td>
                       {r.late ? (
-                        <span className="pbc-pill pbc-pill--warn">{timelinessLabelEs("tarde")}</span>
+                        <span className="pbc-pill pbc-pill--warn">{timelinessLabel("tarde")}</span>
                       ) : r.submitted_at ? (
                         <span className="pbc-pill pbc-pill--muted">
-                          {timelinessLabelEs("a_tiempo") || "—"}
+                          {timelinessLabel("a_tiempo") || "—"}
                         </span>
                       ) : (
                         "—"
                       )}
                     </td>
-                    <td>{formatDateTimeEs(r.progress_updated_at || r.submitted_at)}</td>
+                    <td>{formatDateTime(r.progress_updated_at || r.submitted_at)}</td>
                     <td style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
                       {r.submission_id ? (
                         <Link
                           className="auth-btn auth-btn--ghost auth-btn--sm"
                           to={`/actividad/${r.activity_id}?alumno=${encodeURIComponent(r.student_user_id)}`}
                         >
-                          Revisar
+                          {t("pcReview")}
                         </Link>
                       ) : (
                         <Link
                           className="auth-btn auth-btn--ghost auth-btn--sm"
                           to={`/actividad/${r.activity_id}?alumno=${encodeURIComponent(r.student_user_id)}`}
                         >
-                          Abrir
+                          {t("pcOpen")}
                         </Link>
                       )}
                       {showReopen ? (
@@ -165,7 +167,7 @@ export default function CourseSubmissionsTab({ courseId }) {
                           disabled={busyId === key}
                           onClick={() => void onReopenRow(r)}
                         >
-                          Reabrir
+                          {t("pcReopen")}
                         </button>
                       ) : null}
                     </td>
