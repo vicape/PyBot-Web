@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { CONTENT_STATUS_LABELS } from "../../../platform/contentApi.js";
+import { getLang, t } from "../../../i18n.js";
 
 function formatDate(iso) {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleDateString("es-AR", {
+    return new Date(iso).toLocaleDateString({ es: "es-AR", en: "en-US", fr: "fr-FR", pt: "pt-BR", de: "de-DE" }[getLang()] || "es-AR", {
       day: "numeric",
       month: "short",
       year: "numeric",
@@ -53,15 +53,15 @@ export default function ContentCard({ content, onEdit, onDelete, onShare, onAssi
 
         <div className="pbc-content-card__header-right">
           <span className="pbc-badge pbc-badge--blue">
-            {CONTENT_STATUS_LABELS[content.status] || "Borrador"}
+            {content.status === "published" ? t("pcPublished") : t("pcDraft")}
           </span>
           {content.visibility && content.visibility !== "private" ? (
-            <span className="pbc-badge pbc-badge--blue" title="Visibilidad">
+            <span className="pbc-badge pbc-badge--blue" title={t("pcVisibility")}>
               {content.visibility === "community"
-                ? "Comunidad"
+                ? t("pcCommunity")
                 : content.visibility === "courses"
-                  ? "Cursos"
-                  : "Privado"}
+                  ? t("pcCourses")
+                   : t("pcPrivate")}
             </span>
           ) : null}
 
@@ -69,7 +69,7 @@ export default function ContentCard({ content, onEdit, onDelete, onShare, onAssi
             <button
               type="button"
               className="pbc-content-card__menu-btn"
-              aria-label="Más opciones"
+              aria-label={t("pcMoreOptions")}
               aria-expanded={menuOpen}
               aria-haspopup="menu"
               onClick={(e) => {
@@ -98,7 +98,7 @@ export default function ContentCard({ content, onEdit, onDelete, onShare, onAssi
                     onShare?.(content);
                   }}
                 >
-                  Compartir
+                  {t("pcShare")}
                 </button>
                 <button
                   type="button"
@@ -111,7 +111,7 @@ export default function ContentCard({ content, onEdit, onDelete, onShare, onAssi
                     onAssign?.(content);
                   }}
                 >
-                  Asignar
+                  {t("pcAssign")}
                 </button>
                 <button
                   type="button"
@@ -138,7 +138,7 @@ export default function ContentCard({ content, onEdit, onDelete, onShare, onAssi
                       strokeLinejoin="round"
                     />
                   </svg>
-                  Editar
+                  {t("pcEdit")}
                 </button>
                 <button
                   type="button"
@@ -165,7 +165,7 @@ export default function ContentCard({ content, onEdit, onDelete, onShare, onAssi
                       strokeLinejoin="round"
                     />
                   </svg>
-                  Eliminar
+                  {t("pcDelete")}
                 </button>
               </div>
             ) : null}
@@ -177,12 +177,12 @@ export default function ContentCard({ content, onEdit, onDelete, onShare, onAssi
       {content.description ? <p className="pbc-content-card__desc">{content.description}</p> : null}
       <div className="pbc-content-card__meta">
         <span>
-          {content.unit_count} unidad{content.unit_count === 1 ? "" : "es"}
+          {content.unit_count} {t("pcUnits")}
         </span>
-        <span>Modificado {formatDate(content.updated_at)}</span>
+        <span>{t("pcModified")} {formatDate(content.updated_at)}</span>
       </div>
       <Link to={`/dashboard/content/${content.id}`} className="pbc-content-card__link">
-        Abrir →
+        {t("pcOpen")} →
       </Link>
     </article>
   );
