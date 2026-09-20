@@ -1,3 +1,4 @@
+import { t } from "../../../i18n.js";
 import { useEffect, useState } from "react";
 import { createContent } from "../../../platform/contentApi.js";
 
@@ -29,7 +30,7 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
     setBusy(false);
 
     if (error || !content) {
-      setErr(error || "No se pudo crear el contenido.");
+      setErr(error || t("pcCreateContentFail"));
       return;
     }
 
@@ -47,22 +48,22 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
         onSubmit={submit}
       >
         <h2 id="create-content-title" className="pbc-modal__title">
-          Crear contenido
+          {t("pcCreateContent")}
         </h2>
         <p className="pbc-modal--create-content__subtitle">
-          Creá un contenido que después podrás organizar en unidades y lecciones.
+          {t("pcCreateContentDesc")}
         </p>
 
         <div className="pbc-modal__field">
           <label className="pbc-label" htmlFor="content-title">
-            Título *
+            {t("pcTitleRequired")}
           </label>
           <input
             id="content-title"
             className="pbc-input"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Introducción a Python"
+            placeholder={t("pcContentTitlePlaceholder")}
             required
             autoFocus
           />
@@ -70,14 +71,14 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
 
         <div className="pbc-modal__field">
           <label className="pbc-label" htmlFor="content-desc">
-            Descripción
+            {t("pcDescription")}
           </label>
           <textarea
             id="content-desc"
             className="pbc-input pbc-input--textarea"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Contenido inicial de programación para alumnos sin experiencia."
+            placeholder={t("pcContentDescriptionPlaceholder")}
             rows={3}
           />
         </div>
@@ -86,10 +87,10 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
 
         <div className="pbc-modal__actions">
           <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose} disabled={busy}>
-            Cancelar
+            {t("pcCancel")}
           </button>
           <button type="submit" className="pbc-btn pbc-btn--primary" disabled={busy || !title.trim()}>
-            {busy ? "Creando…" : "Crear contenido"}
+            {busy ? t("pcCreatingContent") : t("pcCreateContent")}
           </button>
         </div>
       </form>
