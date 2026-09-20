@@ -21,15 +21,15 @@ export default function AppearanceSettings({ appearance, onChange, disabled = fa
       <div>
         <span className="pbc-label">{t("pcTheme")}</span>
         <div className="pbc-appearance-options" role="group" aria-label={t("pcTheme")}>
-          {UI_THEMES.map((t) => (
+          {UI_THEMES.map((theme) => (
             <button
-              key={t}
+              key={theme}
               type="button"
-              className={`pbc-filter-tab${appearance.theme === t ? " pbc-filter-tab--active" : ""}`}
-              onClick={() => set({ theme: t })}
+              className={`pbc-filter-tab${appearance.theme === theme ? " pbc-filter-tab--active" : ""}`}
+              onClick={() => set({ theme })}
               disabled={disabled}
             >
-              {t(THEME_KEYS[t])}
+              {t(THEME_KEYS[theme])}
             </button>
           ))}
         </div>
