@@ -1,3 +1,4 @@
+import { t } from "../../../i18n.js";
 import { useEffect, useState } from "react";
 import { updateContent } from "../../../platform/contentApi.js";
 
@@ -31,7 +32,7 @@ export default function EditContentModal({ open, content, onClose, onSaved }) {
     setBusy(false);
 
     if (error || !updated) {
-      setErr(error || "No se pudo guardar el contenido.");
+      setErr(error || t("pcEditContentFail"));
       return;
     }
 
@@ -49,15 +50,15 @@ export default function EditContentModal({ open, content, onClose, onSaved }) {
         onSubmit={submit}
       >
         <h2 id="edit-content-title" className="pbc-modal__title">
-          Editar contenido
+          {t("pcEditContent")}
         </h2>
         <p className="pbc-modal--create-content__subtitle">
-          Actualizá el título y la descripción de este contenido.
+          {t("pcEditContentDesc")}
         </p>
 
         <div className="pbc-modal__field">
           <label className="pbc-label" htmlFor="edit-content-title-input">
-            Título *
+            {t("pcTitleRequired")}
           </label>
           <input
             id="edit-content-title-input"
@@ -71,7 +72,7 @@ export default function EditContentModal({ open, content, onClose, onSaved }) {
 
         <div className="pbc-modal__field">
           <label className="pbc-label" htmlFor="edit-content-desc">
-            Descripción
+            {t("pcDescription")}
           </label>
           <textarea
             id="edit-content-desc"
@@ -86,10 +87,10 @@ export default function EditContentModal({ open, content, onClose, onSaved }) {
 
         <div className="pbc-modal__actions">
           <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose} disabled={busy}>
-            Cancelar
+            {t("pcCancel")}
           </button>
           <button type="submit" className="pbc-btn pbc-btn--primary" disabled={busy || !title.trim()}>
-            {busy ? "Guardando…" : "Guardar cambios"}
+            {busy ? t("pcSaving") : t("pcSaveChanges")}
           </button>
         </div>
       </form>
