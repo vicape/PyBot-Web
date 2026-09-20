@@ -1,15 +1,13 @@
+import { t } from "../../i18n.js";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   createPybotclassActivity,
-  formatDueDateEs,
   updatePybotclassActivity,
 } from "../../platform/pybotClassApi.js";
 import { fetchMySubmission, submissionVersionLabel } from "../../platform/activitySubmissions.js";
-import {
-  deriveProcessStatus,
-  processStatusLabelEs,
-} from "../../platform/submissionWorkflow.js";
+import { deriveProcessStatus } from "../../platform/submissionWorkflow.js";
+import { formatDueDate, processStatusLabel } from "./pyclassI18n.js";
 import {
   PbcEmpty,
   PbcFormPanel,
@@ -53,7 +51,7 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
     >
       {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
       <label className="auth-org-label" htmlFor="act-title">
-        Título
+        {t("pcTitle")}
       </label>
       <input
         id="act-title"
@@ -64,7 +62,7 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
         disabled={saving}
       />
       <label className="auth-org-label" htmlFor="act-desc">
-        Descripción
+        {t("pcDescription")}
       </label>
       <textarea
         id="act-desc"
@@ -77,7 +75,7 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
         <div>
           <label className="auth-org-label" htmlFor="act-due">
-            Fecha de entrega
+            {t("pcDueDate")}
           </label>
           <input
             id="act-due"
@@ -88,12 +86,12 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
             disabled={saving}
           />
           <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
-            Límite académico (a tiempo / tarde).
+            {t("pcDueDateHint")}
           </p>
         </div>
         <div>
           <label className="auth-org-label" htmlFor="act-close">
-            Cierre de entregas
+            {t("pcSubmissionClose")}
           </label>
           <input
             id="act-close"
@@ -104,13 +102,13 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
             disabled={saving}
           />
           <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
-            Opcional. Tras el cierre no se aceptan entregas (salvo reapertura individual).
+            {t("pcSubmissionCloseHint")}
           </p>
         </div>
       </div>
       <div>
         <label className="auth-org-label" htmlFor="act-points">
-          Puntaje máximo
+          {t("pcMaxPoints")}
         </label>
         <input
           id="act-points"
@@ -124,12 +122,11 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
           placeholder="Ej. 100"
         />
         <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
-          Único lugar para definirlo. Requerido para enviar notas a Google Classroom. Si hay
-          rúbrica, la suma de criterios debe coincidir con este valor.
+          {t("pcMaxPointsHint")}
         </p>
       </div>
       <label className="auth-org-label" htmlFor="act-starter">
-        Código inicial
+        {t("pcStarterCode")}
       </label>
       <textarea
         id="act-starter"
@@ -141,11 +138,11 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
       />
       <div className="auth-card__actions auth-card__actions--row">
         <button type="submit" className="auth-btn auth-btn--primary" disabled={saving}>
-          {saving ? "Guardando…" : "Guardar"}
+          {saving ? t("pcSaving") : t("pcSave")}
         </button>
         {onCancel ? (
           <button type="button" className="auth-btn auth-btn--ghost" onClick={onCancel} disabled={saving}>
-            Cancelar
+            {t("pcCancel")}
           </button>
         ) : null}
       </div>
@@ -178,14 +175,14 @@ function StudentActivityRow({ activity, userId }) {
     version: submission?.version,
     hasSubmission: Boolean(submission),
   });
-  const due = formatDueDateEs(activity.due_at);
+  const due = formatDueDate(activity.due_at);
   const close = formatDueDateEs(activity.submission_close_at);
   const ver = submissionVersionLabel(submission?.version);
   const statusLabel = [
-    processStatusLabelEs(process),
+    processStatusLabel(process),
     ver,
     process === "evaluado" || process === "cerrado"
-      ? `Nota ${submission?.grade ?? "—"}`
+      ? `${t("pcGradePrefix")} ${submission?.grade ?? "—"}`
       : null,
   ]
     .filter(Boolean)
@@ -196,8 +193,8 @@ function StudentActivityRow({ activity, userId }) {
       title={activity.title}
       meta={[
         statusLabel,
-        due ? `Entrega ${due}` : null,
-        close ? `Cierre ${close}` : null,
+        due ? `${t("pcDuePrefix")} ${due}` : null,
+        close ? `${t("pcClosePrefix")} ${close}` : null,
         submission?.feedback,
       ]
         .filter(Boolean)
@@ -205,7 +202,7 @@ function StudentActivityRow({ activity, userId }) {
       badges={
         <>
           {activity.content_lesson_id ? (
-            <span className="pbc-pill pbc-pill--content">Mi Contenido</span>
+            <span className="pbc-pill pbc-pill--content">{t("pcMyContent")}</span>
           ) : null}
           {process === "evaluado" || process === "cerrado" ? (
             <span className="pbc-pill pbc-pill--ok">{processStatusLabelEs(process)}</span>
@@ -220,7 +217,7 @@ function StudentActivityRow({ activity, userId }) {
       }
       actions={
         <Link className="auth-btn auth-btn--primary auth-btn--sm" to={`/actividad/${activity.id}`}>
-          Abrir
+          {t("pcOpen")}
         </Link>
       }
     />
@@ -266,7 +263,7 @@ export default function CourseActivitiesTab({
     setLocalErr("");
     const result = await updatePybotclassActivity(supabase, editing.id, fields);
     if (!result.ok) {
-      setLocalErr(result.error || "No se pudo guardar la actividad.");
+      setLocalErr(result.error || t("pcSaveActivityFail"));
       if (result.partial) await onReload();
       return;
     }
@@ -276,9 +273,9 @@ export default function CourseActivitiesTab({
 
   if (isStudent) {
     return (
-      <PbcSection title="Actividades">
+      <PbcSection title={t("pcActivities")}>
         {activities.length === 0 ? (
-          <PbcEmpty title="Sin actividades" description="Tu docente todavía no publicó actividades en esta clase." />
+          <PbcEmpty title={t("pcNoActivities")} description={t("pcNoActivitiesStudentDesc")} />
         ) : (
           <PbcList>
             {activities.map((a) => (
@@ -293,8 +290,8 @@ export default function CourseActivitiesTab({
   return (
     <>
       <PbcSection
-        title="Actividades"
-        description={`${activities.length} actividad${activities.length === 1 ? "" : "es"} en esta clase`}
+        title={t("pcActivities")}
+        description={`${activities.length} ${t("pcActivities")}`}
         actions={
           <>
             <button
@@ -305,7 +302,7 @@ export default function CourseActivitiesTab({
                 setEditing(null);
               }}
             >
-              + Nueva
+              + {t("pcNew")}
             </button>
             {onImportClassroom ? (
               <button
@@ -314,7 +311,7 @@ export default function CourseActivitiesTab({
                 disabled={importBusy}
                 onClick={() => void onImportClassroom()}
               >
-                {importBusy ? "Importando…" : "Importar Classroom"}
+                {importBusy ? t("pcImporting") : t("pcImportClassroom")}
               </button>
             ) : null}
           </>
@@ -322,8 +319,8 @@ export default function CourseActivitiesTab({
       >
         {activities.length === 0 ? (
           <PbcEmpty
-            title="Creá la primera actividad"
-            description="Publicá una tarea para que los alumnos trabajen en PyBot y entreguen desde acá."
+            title={t("pcCreateFirstActivity")}
+            description={t("pcCreateFirstActivityDesc")}
           />
         ) : (
           <PbcList>
@@ -342,10 +339,10 @@ export default function CourseActivitiesTab({
                     {a.content_lesson_id || a.content_snapshot || a.content_source_type ? (
                       <span className="pbc-pill pbc-pill--content">
                         {a.activity_kind === "exercise"
-                          ? "Ejercicio"
+                          ? t("pcExercise")
                           : a.activity_kind === "task"
-                            ? "Tarea"
-                            : "Desde Mi Contenido"}
+                            ? t("pcTask")
+                            : t("pcFromMyContent")}
                       </span>
                     ) : null}
                     {a.classroom_coursework_id ? (
@@ -365,10 +362,10 @@ export default function CourseActivitiesTab({
                         setShowCreate(false);
                       }}
                     >
-                      Editar
+                      {t("pcEdit")}
                     </button>
                     <Link className="auth-btn auth-btn--primary auth-btn--sm" to={`/actividad/${a.id}`}>
-                      Revisar
+                      {t("pcReview")}
                     </Link>
                   </>
                 }
@@ -379,7 +376,7 @@ export default function CourseActivitiesTab({
       </PbcSection>
 
       {showCreate ? (
-        <PbcFormPanel title="Nueva actividad" onCancel={() => setShowCreate(false)}>
+        <PbcFormPanel title={t("pcNewActivity")} onCancel={() => setShowCreate(false)}>
           <ActivityForm
             saving={saving}
             err={localErr || err}
@@ -390,7 +387,7 @@ export default function CourseActivitiesTab({
       ) : null}
 
       {editing ? (
-        <PbcFormPanel title="Editar actividad" onCancel={() => setEditing(null)}>
+        <PbcFormPanel title={t("pcEditActivity")} onCancel={() => setEditing(null)}>
           <ActivityForm
             initial={editing}
             saving={saving}
