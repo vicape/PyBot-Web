@@ -67,7 +67,7 @@ test("#15 EDA6 library is original (no artificial version); protocol stays 3.2",
   assert.doesNotMatch(eda6, /EDA6_VERSION/);
   assert.doesNotMatch(eda6, /1\.1\.0|1\.1\.1/);
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-  assert.equal(pkg.version, "0.3.0");
+  assert.equal(pkg.version, "0.3.1");
 });
 
 test("#15 4.0.6 → 4.0.7: OTA available, not USB", () => {

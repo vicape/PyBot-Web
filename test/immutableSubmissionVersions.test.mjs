@@ -116,7 +116,7 @@ test("ActivityPage muestra etiqueta de versión formal", () => {
   assert.match(src, /Historial/);
 });
 
-test("package.json permanece en 0.3.0", () => {
+test("package.json permanece en 0.3.1", () => {
   const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
-  assert.equal(pkg.version, "0.3.0");
+  assert.equal(pkg.version, "0.3.1");
 });
