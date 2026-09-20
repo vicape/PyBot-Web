@@ -1,8 +1,8 @@
+import { t } from "../../i18n.js";
 import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "../../supabaseClient.js";
 import { listCourseStudents, listCourseTeachers } from "../../classroom/classroomApi.js";
 import {
-  classroomSyncErrorMessage,
   syncClassroomRosterToCourse,
   syncClassroomTeachersToCourse,
 } from "../../classroom/classroomRosterSync.js";
@@ -19,7 +19,7 @@ import {
 
 function MemberList({ rows, onRemove, removingId, badge }) {
   if (!rows.length) {
-    return <p className="auth-card__muted">Sin registros en esta sección.</p>;
+    return <p className="auth-card__muted">{t("pcNoRecords")}</p>;
   }
   return (
     <PbcList>
@@ -37,7 +37,7 @@ function MemberList({ rows, onRemove, removingId, badge }) {
                 disabled={removingId === m.userId}
                 onClick={() => void onRemove(m.userId)}
               >
-                {removingId === m.userId ? "…" : "Quitar"}
+                {removingId === m.userId ? "…" : t("pcRemove")}
               </button>
             ) : null
           }
@@ -108,7 +108,7 @@ export default function CourseRosterTab({
 
   const syncStudents = async () => {
     if (!classroomCourseId) {
-      setSyncErr("Este curso no tiene Classroom vinculado.");
+      setSyncErr(t("pcClassroomNotLinkedCourse"));
       return;
     }
     setSyncBusy(true);
@@ -121,7 +121,7 @@ export default function CourseRosterTab({
       if (!sync.ok) throw { message: sync.error };
       await load();
     } catch (ex) {
-      setSyncErr(classroomSyncErrorMessage(ex));
+      setSyncErr(ex?.message || t("pcClassroomSyncError"));
     } finally {
       setSyncBusy(false);
     }
@@ -147,7 +147,7 @@ export default function CourseRosterTab({
       if (!sync.ok) throw { message: sync.error };
       await load();
     } catch (ex) {
-      setSyncErr(classroomSyncErrorMessage(ex));
+      setSyncErr(ex?.message || t("pcClassroomSyncError"));
     } finally {
       setSyncBusy(false);
     }
@@ -178,13 +178,13 @@ export default function CourseRosterTab({
   };
 
   const studentRows = [
-    ...students.map((s) => ({ ...s, badge: () => "Activo" })),
+    ...students.map((s) => ({ ...s, badge: () => t("pcActive") })),
     ...pendingStudents.map((p) => ({
       key: p.classroom_user_id || p.email,
       userId: null,
       name: p.display_name || p.email,
       meta: p.email,
-      badge: () => "Sin login",
+      badge: () => t("pcNoLogin"),
     })),
   ];
 
@@ -193,26 +193,26 @@ export default function CourseRosterTab({
       ...t,
       badge: () =>
         isStaffRole(orgRole) && t.userId === user?.id
-          ? "Docente institucional"
+          ? t("pcInstitutionalTeacher")
           : t.source === "manual"
-            ? "Co-docente"
-            : "Co-docente",
+            ? t("pcCoTeacher")
+            : t("pcCoTeacher"),
     })),
     ...pendingTeachers.map((p) => ({
       key: p.classroom_user_id || p.email,
       userId: null,
       name: p.display_name || p.email,
       meta: p.email,
-      badge: () => "Sin login",
+      badge: () => t("pcNoLogin"),
     })),
   ];
 
   return (
-    <PbcSection title="Personas de la clase">
+    <PbcSection title={t("pcPeopleClass")}>
       <PbcSubTabs
         tabs={[
-          { id: "alumnos", label: "Alumnos" },
-          { id: "docentes", label: "Docentes" },
+          { id: "alumnos", label: t("pcTabStudents") },
+          { id: "docentes", label: t("pcTeachers") },
         ]}
         active={subTab}
         onChange={setSubTab}
@@ -229,7 +229,7 @@ export default function CourseRosterTab({
               disabled={generatingInvite}
               onClick={() => void generateInvite()}
             >
-              {generatingInvite ? "…" : "Invitar alumnos"}
+              {generatingInvite ? "…" : t("pcInviteStudents")}
             </button>
             <button
               type="button"
@@ -237,16 +237,16 @@ export default function CourseRosterTab({
               disabled={syncBusy}
               onClick={() => void syncStudents()}
             >
-              {syncBusy ? "Sincronizando…" : "Sincronizar Classroom"}
+              {syncBusy ? t("pcSyncing") : t("pcSyncClassroom")}
             </button>
           </div>
           {inviteLink ? (
             <p className="pbc-alert pbc-alert--info" style={{ marginBottom: "1rem" }}>
-              Link de invitación: <code>{inviteLink}</code>
+              {t("pcInvitationLink")} <code>{inviteLink}</code>
             </p>
           ) : null}
           {loading ? (
-            <PbcLoading label="Cargando alumnos…" />
+            <PbcLoading label={t("pcLoadingStudents")} />
           ) : (
             <MemberList rows={studentRows} onRemove={removeMember} removingId={removingId} badge={(m) => m.badge?.()} />
           )}
@@ -260,11 +260,11 @@ export default function CourseRosterTab({
               disabled={syncBusy}
               onClick={() => void syncTeachers()}
             >
-              {syncBusy ? "Sincronizando…" : "Sincronizar Classroom"}
+              {syncBusy ? t("pcSyncing") : t("pcSyncClassroom")}
             </button>
           </div>
           {loading ? (
-            <PbcLoading label="Cargando docentes…" />
+            <PbcLoading label={t("pcLoadingTeachers")} />
           ) : (
             <MemberList rows={teacherRows} badge={(m) => m.badge?.()} />
           )}
