@@ -1,26 +1,27 @@
+import { t } from "../../../i18n.js";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { IconSuperAdmin, SidebarIcon } from "../illustrations/SidebarIcons.jsx";
 
 const ALL_NAV = [
-  { id: "home", label: "Inicio", to: "/dashboard/classes" },
-  { id: "courses", label: "Mis cursos", to: "/dashboard/classes#mis-cursos" },
-  { id: "content", label: "Mi Contenido", to: "/dashboard/content", teacherOnly: true },
-  { id: "community", label: "Comunidad", to: "/dashboard/community" },
-  { id: "ide", label: "Abrir IDE", to: "/", external: true },
+  { id: "home", label: t("pcHome"), to: "/dashboard/classes" },
+  { id: "courses", label: t("pcMyCourses"), to: "/dashboard/classes#mis-cursos" },
+  { id: "content", label: t("pcMyContent"), to: "/dashboard/content", teacherOnly: true },
+  { id: "community", label: t("pcCommunity"), to: "/dashboard/community" },
+  { id: "ide", label: t("pcOpenIde"), to: "/", external: true },
   {
     id: "classroom",
-    label: "Google Classroom",
+    label: t("pcGoogleClassroom"),
     to: "/dashboard/classes?panel=classroom",
     teacherOnly: true,
   },
   {
     id: "institutions",
-    label: "Instituciones",
+    label: t("pcInstitutions"),
     to: "/dashboard?tab=schools",
     teacherOnly: true,
   },
-  { id: "account", label: "Cuenta", to: "/dashboard/classes?panel=account" },
+  { id: "account", label: t("pcAccount"), to: "/dashboard/classes?panel=account" },
 ];
 
 export default function PyBotClassSidebar({
@@ -117,14 +118,14 @@ export default function PyBotClassSidebar({
   };
 
   return (
-    <aside className={`pbc-sidebar${open ? " pbc-sidebar--open" : ""}`} aria-label="Navegación PyBotClass">
+    <aside className={`pbc-sidebar${open ? " pbc-sidebar--open" : ""}`} aria-label={t("pcNavigation")}>
       <Link to="/dashboard/classes" className="pbc-sidebar__brand" onClick={onClose}>
         <span className="pbc-sidebar__logo" aria-hidden>
           {"</>"}
         </span>
         <span>
           <div className="pbc-sidebar__title">PyBotClass</div>
-          <div className="pbc-sidebar__subtitle">Tecnología · Educación</div>
+          <div className="pbc-sidebar__subtitle">{t("pcTechnologyEducation")}</div>
         </span>
       </Link>
 
@@ -132,7 +133,7 @@ export default function PyBotClassSidebar({
 
       {showAdmin ? (
         <>
-          <div className="pbc-sidebar__section">Administración</div>
+          <div className="pbc-sidebar__section">{t("pcAdministration")}</div>
           <Link
             to="/dashboard/admin"
             className={`pbc-sidebar__link pbc-sidebar__link--admin${adminActive ? " pbc-sidebar__link--active" : ""}`}
@@ -141,7 +142,7 @@ export default function PyBotClassSidebar({
             <span className="pbc-sidebar__icon" aria-hidden>
               <IconSuperAdmin />
             </span>
-            Panel SuperAdmin
+            {t("pcSuperAdminPanel")}
           </Link>
         </>
       ) : null}
