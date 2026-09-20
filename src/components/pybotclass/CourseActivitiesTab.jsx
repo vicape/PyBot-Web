@@ -119,7 +119,7 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
           value={maxPoints}
           onChange={(e) => setMaxPoints(e.target.value)}
           disabled={saving}
-          placeholder="Ej. 100"
+          placeholder="100"
         />
         <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
           {t("pcMaxPointsHint")}
@@ -176,7 +176,7 @@ function StudentActivityRow({ activity, userId }) {
     hasSubmission: Boolean(submission),
   });
   const due = formatDueDate(activity.due_at);
-  const close = formatDueDateEs(activity.submission_close_at);
+  const close = formatDueDate(activity.submission_close_at);
   const ver = submissionVersionLabel(submission?.version);
   const statusLabel = [
     processStatusLabel(process),
