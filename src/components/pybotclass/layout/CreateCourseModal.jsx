@@ -1,3 +1,4 @@
+import { t } from "../../../i18n.js";
 import { useEffect, useState } from "react";
 import { COUNTRIES } from "../../../data/countries.js";
 import {
@@ -55,7 +56,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
           countryCode,
         });
         if (error || !newId) {
-          setErr(error || "No se pudo crear la institución.");
+          setErr(error || t("pcCreateOrgFail"));
           setBusy(false);
           return;
         }
@@ -63,7 +64,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
       } else {
         const access = await ensureOrgTeacherAccess(orgId);
         if (!access.ok) {
-          setErr(access.error || "Sin permiso para crear curso en esa institución.");
+          setErr(access.error || t("pcNoCourseCreatePermission"));
           setBusy(false);
           return;
         }
@@ -71,7 +72,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
 
       const title = courseTitle.trim();
       if (!title) {
-        setErr("Ingresá el nombre del curso.");
+        setErr(t("pcEnterCourseName"));
         setBusy(false);
         return;
       }
@@ -106,18 +107,18 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="create-course-title" className="pbc-modal__title">
-          Crear curso
+          {t("pcCreateCourse")}
         </h2>
         {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
 
         <form onSubmit={submit}>
           {step === 1 ? (
             <>
-              <p className="pbc-modal__step-label">Paso 1 — Institución</p>
+              <p className="pbc-modal__step-label">{t("pcStep1Institution")}</p>
               {orgs.length > 0 ? (
                 <div className="pbc-modal__field">
                   <label className="pbc-label" htmlFor="org-select">
-                    Elegir institución existente
+                    {t("pcChooseExistingInstitution")}
                   </label>
                   <select
                     id="org-select"
@@ -144,14 +145,14 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                 className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                 onClick={() => setCreateOrg((v) => !v)}
               >
-                {createOrg ? "Usar institución existente" : "+ Crear nueva institución"}
+                {createOrg ? t("pcUseExistingInstitution") : t("pcCreateNewInstitution")}
               </button>
 
               {createOrg || orgs.length === 0 ? (
                 <>
                   <div className="pbc-modal__field">
                     <label className="pbc-label" htmlFor="org-name">
-                      Nombre de la institución
+                      {t("pcInstitutionName")}
                     </label>
                     <input
                       id="org-name"
@@ -164,7 +165,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                   </div>
                   <div className="pbc-modal__field">
                     <label className="pbc-label" htmlFor="org-country">
-                      País
+                      {t("pcCountry")}
                     </label>
                     <select
                       id="org-country"
@@ -185,7 +186,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
 
               <div className="pbc-modal__actions">
                 <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose}>
-                  Cancelar
+                  {t("pcCancel")}
                 </button>
                 <button
                   type="button"
@@ -193,11 +194,11 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                   onClick={() => {
                     if (createOrg || orgs.length === 0) {
                       if (!orgName.trim()) {
-                        setErr("Ingresá el nombre de la institución.");
+                        setErr(t("pcEnterInstitutionName"));
                         return;
                       }
                     } else if (!selectedOrgId) {
-                      setErr("Elegí una institución.");
+                      setErr(t("pcChooseInstitution"));
                       return;
                     }
                     setErr("");
@@ -210,10 +211,10 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
             </>
           ) : (
             <>
-              <p className="pbc-modal__step-label">Paso 2 — Curso</p>
+              <p className="pbc-modal__step-label">{t("pcStep2Course")}</p>
               <div className="pbc-modal__field">
                 <label className="pbc-label" htmlFor="course-title">
-                  Nombre del curso
+                  {t("pcCourseName")}
                 </label>
                 <input
                   id="course-title"
@@ -227,10 +228,10 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
               </div>
               <div className="pbc-modal__actions">
                 <button type="button" className="pbc-btn pbc-btn--ghost" onClick={() => setStep(1)}>
-                  Atrás
+                  {t("pcBack")}
                 </button>
                 <button type="submit" className="pbc-btn pbc-btn--primary" disabled={busy}>
-                  {busy ? "Creando…" : "Crear curso"}
+                  {busy ? "Creando…" : "{t("pcCreateCourse")}"}
                 </button>
               </div>
             </>
