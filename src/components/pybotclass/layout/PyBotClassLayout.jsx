@@ -1,3 +1,4 @@
+import { t } from "../../../i18n.js";
 import { useRef, useState } from "react";
 import { useAppearance } from "../../../platform/useAppearance.js";
 import "../../../styles/dashboard-theme.css";
@@ -29,7 +30,7 @@ export default function PyBotClassLayout({
 
   const meta = user?.user_metadata || {};
   const name =
-    meta.full_name || meta.name || meta.display_name || user?.email?.split("@")[0] || "Usuario";
+    meta.full_name || meta.name || meta.display_name || user?.email?.split("@")[0] || t("pcUser");
   const picture = meta.avatar_url || meta.picture || null;
 
   return (
@@ -38,7 +39,7 @@ export default function PyBotClassLayout({
         <button
           type="button"
           className={`pbc-dashboard__overlay${sidebarOpen ? " pbc-dashboard__overlay--open" : ""}`}
-          aria-label="Cerrar menú"
+          aria-label={t("pcCloseMenu")}
           onClick={() => setSidebarOpen(false)}
         />
 
