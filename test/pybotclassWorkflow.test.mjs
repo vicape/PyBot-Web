@@ -166,7 +166,7 @@ test("S/T/U: a tiempo / tarde / bloqueada por close", () => {
   assert.match(mig046, /submission_close_at/);
   assert.match(mig046, /submissions_closed/);
   assert.match(activitiesTab, /act-close/);
-  assert.match(activitiesTab, /Cierre de entregas/);
+  assert.match(activitiesTab, /t\("pcSubmissionClose"\)/);
 });
 
 test("V/W/X: Classroom note auto + retry; feedback never synced", () => {
@@ -199,7 +199,7 @@ test("Bandeja: filtros proceso completos + puntualidad separada", () => {
   assert.match(submissionsTab, /reentregadas/);
   assert.match(submissionsTab, /evaluadas/);
   assert.match(submissionsTab, /cerradas/);
-  assert.match(submissionsTab, /Puntualidad/);
+  assert.match(submissionsTab, /t\("pcTimeliness"\)/);
   assert.equal(
     deriveInboxFilterId({
       submission_id: "s",
