@@ -34,7 +34,7 @@ function LegacyDashboard({ profile, onSignOut }) {
         </div>
         <div className="auth-card__actions auth-card__actions--row">
           <Link to="/" className="auth-btn auth-btn--ghost">
-            Abrir IDE
+            Abrir IDE de PyBot
           </Link>
           <button type="button" className="auth-btn auth-btn--primary" onClick={onSignOut}>
             Cerrar sesión
