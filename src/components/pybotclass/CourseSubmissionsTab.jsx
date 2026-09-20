@@ -92,7 +92,7 @@ export default function CourseSubmissionsTab({ courseId }) {
       setErr(out.error || t("pcReopenFail"));
       return;
     }
-    setActionMsg(`Reabierto: ${r.student_name} · ${r.activity_title}`);
+    setActionMsg(`${t("pcReopened")}: ${r.student_name} · ${r.activity_title}`);
     await load();
   };
 
