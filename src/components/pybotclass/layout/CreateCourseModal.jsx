@@ -93,7 +93,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
       onCreated?.();
       onClose?.();
     } catch (ex) {
-      setErr(ex?.message || "Error inesperado.");
+      setErr(ex?.message || t("pcUnexpectedError"));
     }
     setBusy(false);
   };
@@ -130,7 +130,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                     }}
                     disabled={createOrg}
                   >
-                    <option value="">— Seleccionar —</option>
+                    <option value="">— {t("pcSelect")} —</option>
                     {orgs.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.name}
@@ -159,7 +159,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                       className="pbc-input"
                       value={orgName}
                       onChange={(e) => setOrgName(e.target.value)}
-                      placeholder="Ej. St. Andrew's Scots School"
+                      placeholder={t("pcOrgPlaceholder")}
                       required
                     />
                   </div>
@@ -205,7 +205,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                     setStep(2);
                   }}
                 >
-                  Siguiente
+                  {t("pcNext")}
                 </button>
               </div>
             </>
@@ -221,7 +221,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                   className="pbc-input"
                   value={courseTitle}
                   onChange={(e) => setCourseTitle(e.target.value)}
-                  placeholder="Ej. Python 8A"
+                  placeholder={t("pcCoursePlaceholder")}
                   required
                   autoFocus
                 />
@@ -231,7 +231,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                   {t("pcBack")}
                 </button>
                 <button type="submit" className="pbc-btn pbc-btn--primary" disabled={busy}>
-                  {busy ? "Creando…" : "{t("pcCreateCourse")}"}
+                  {busy ? t("pcCreating") : t("pcCreateCourse")}
                 </button>
               </div>
             </>
