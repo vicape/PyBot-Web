@@ -1,13 +1,14 @@
+import { t } from "../../../i18n.js";
 import { UI_BACKGROUNDS, UI_THEMES, isValidHexColor } from "../../../platform/appearanceApi.js";
 
-const THEME_LABELS = { system: "Sistema", light: "Claro", dark: "Oscuro" };
-const BG_LABELS = {
-  default: "Predeterminado",
-  clean: "Limpio",
-  "deep-blue": "Azul profundo",
-  indigo: "Índigo",
-  graphite: "Grafito",
-  custom: "Color personalizado",
+const THEME_KEYS = { system: "pcThemeSystem", light: "pcThemeLight", dark: "pcThemeDark" };
+const BG_KEYS = {
+  default: "pcBackgroundDefault",
+  clean: "pcBackgroundClean",
+  "deep-blue": "pcBackgroundDeepBlue",
+  indigo: "pcBackgroundIndigo",
+  graphite: "pcBackgroundGraphite",
+  custom: "pcBackgroundCustom",
 };
 
 export default function AppearanceSettings({ appearance, onChange, disabled = false }) {
@@ -15,11 +16,11 @@ export default function AppearanceSettings({ appearance, onChange, disabled = fa
 
   return (
     <section className="pbc-panel-card pbc-appearance-grid">
-      <h3 className="pbc-panel-card__title">Apariencia</h3>
+      <h3 className="pbc-panel-card__title">{t("pcAppearance")}</h3>
 
       <div>
-        <span className="pbc-label">Tema</span>
-        <div className="pbc-appearance-options" role="group" aria-label="Tema">
+        <span className="pbc-label">{t("pcTheme")}</span>
+        <div className="pbc-appearance-options" role="group" aria-label={t("pcTheme")}>
           {UI_THEMES.map((t) => (
             <button
               key={t}
@@ -28,15 +29,15 @@ export default function AppearanceSettings({ appearance, onChange, disabled = fa
               onClick={() => set({ theme: t })}
               disabled={disabled}
             >
-              {THEME_LABELS[t]}
+              {t(THEME_KEYS[t])}
             </button>
           ))}
         </div>
       </div>
 
       <div>
-        <span className="pbc-label">Fondo</span>
-        <div className="pbc-appearance-options" role="group" aria-label="Fondo">
+        <span className="pbc-label">{t("pcBackground")}</span>
+        <div className="pbc-appearance-options" role="group" aria-label={t("pcBackground")}>
           {UI_BACKGROUNDS.filter((b) => b !== "custom").map((b) => (
             <button
               key={b}
@@ -45,7 +46,7 @@ export default function AppearanceSettings({ appearance, onChange, disabled = fa
               onClick={() => set({ background: b })}
               disabled={disabled}
             >
-              {BG_LABELS[b]}
+              {t(BG_KEYS[b])}
             </button>
           ))}
         </div>
@@ -53,7 +54,7 @@ export default function AppearanceSettings({ appearance, onChange, disabled = fa
 
       <div>
         <label className="pbc-label" htmlFor="pbc-custom-color">
-          Color personalizado
+          {t("pcCustomColor")}
         </label>
         <input
           id="pbc-custom-color"
