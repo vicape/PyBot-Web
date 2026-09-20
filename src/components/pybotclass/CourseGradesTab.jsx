@@ -1,3 +1,4 @@
+import { t } from "../../i18n.js";
 import { useEffect, useMemo, useState } from "react";
 import { fetchPybotclassGradebook } from "../../platform/pybotClassApi.js";
 import { PbcAlert, PbcEmpty, PbcLoading, PbcSection } from "./PyBotClassUi.jsx";
@@ -38,7 +39,7 @@ export default function CourseGradesTab({ courseId, canTeach }) {
     return set;
   }, [gradebook]);
 
-  if (loading) return <PbcLoading label="Cargando notas…" />;
+  if (loading) return <PbcLoading label={t("pcLoadingGrades")} />;
   if (err) return <PbcAlert variant="error">{err}</PbcAlert>;
 
   const students = gradebook?.students || [];
@@ -47,19 +48,19 @@ export default function CourseGradesTab({ courseId, canTeach }) {
   if (!students.length || !activities.length) {
     return (
       <PbcEmpty
-        title="Sin notas todavía"
-        description="Cuando haya actividades y entregas corregidas, el cuadro de notas aparecerá acá."
+        title={t("pcNoGrades")}
+        description={t("pcNoGradesDesc")}
       />
     );
   }
 
   return (
-    <PbcSection title="Cuadro de notas" description={`${students.length} alumnos · ${activities.length} actividades`}>
+    <PbcSection title={t("pcGradebook")} description={`${students.length} ${t("pcTabStudents")} · ${activities.length} ${t("pcActivities")}`}>
       <div className="dash-table-wrap">
         <table className="dash-table">
           <thead>
             <tr>
-              <th>Alumno</th>
+              <th>{t("pcStudent")}</th>
               {activities.map((a) => (
                 <th key={a.id}>{a.title}</th>
               ))}
@@ -74,7 +75,7 @@ export default function CourseGradesTab({ courseId, canTeach }) {
                   const applies = !gradebook?.applicable || applicableSet.has(key);
                   if (!applies) {
                     return (
-                      <td key={a.id} title="No asignada a este alumno">
+                      <td key={a.id} title={t("pcNotAssigned")}>
                         <span className="auth-card__muted">N/A</span>
                       </td>
                     );
@@ -87,13 +88,13 @@ export default function CourseGradesTab({ courseId, canTeach }) {
                     <td key={a.id}>
                       <strong>{grade != null ? grade : "—"}</strong>
                       {canTeach && synced ? (
-                        <span className="pbc-pill pbc-pill--ok pbc-pill--sm" title="Sincronizada">
+                        <span className="pbc-pill pbc-pill--ok pbc-pill--sm" title={t("pcSynced")}>
                           {" "}
                           ✓
                         </span>
                       ) : null}
                       {canTeach && pendingSync ? (
-                        <span className="pbc-pill pbc-pill--warn pbc-pill--sm" title="Pendiente Classroom">
+                        <span className="pbc-pill pbc-pill--warn pbc-pill--sm" title={t("pcPendingClassroom")}>
                           {" "}
                           ↻
                         </span>
