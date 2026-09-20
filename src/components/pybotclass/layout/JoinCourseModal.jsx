@@ -1,26 +1,27 @@
+import { t } from "../../../i18n.js";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { joinPathAfterRedeem, joinSuccessMessage } from "../../../platform/redeemOrgInvitePlan.js";
 import { roleLabelEs } from "../../../orgRole.js";
 
-function redeemErrorEs(code) {
+function redeemError(code) {
   switch (code) {
     case "not_found":
-      return "El código no es válido.";
+      return t("pcJoinInvalidCode");
     case "expired":
-      return "Este código expiró.";
+      return t("pcJoinExpiredCode");
     case "max_uses":
-      return "Este código ya no tiene usos disponibles.";
+      return t("pcJoinNoUses");
     case "already_member":
-      return "Ya sos miembro de esta institución.";
+      return t("pcJoinAlreadyMember");
     case "curso_invalido":
-      return "El curso de esta invitación no es válido.";
+      return t("pcJoinInvalidCourse");
     case "empty_code":
-      return "Ingresá un código.";
+      return t("pcJoinEnterCode");
     case "no_session":
-      return "Tenés que iniciar sesión primero.";
+      return t("pcJoinNeedLogin");
     default:
-      return "No se pudo unir al curso.";
+      return t("pcJoinFail");
   }
 }
 
@@ -51,7 +52,7 @@ export default function JoinCourseModal({ open, onClose, supabase, onJoined }) {
       return;
     }
     if (!out?.ok) {
-      setErr(redeemErrorEs(out?.error));
+      setErr(redeemError(out?.error));
       return;
     }
 
@@ -72,10 +73,10 @@ export default function JoinCourseModal({ open, onClose, supabase, onJoined }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="join-course-title" className="pbc-modal__title">
-          Unirme a un curso
+          {t("pcJoinCourse")}
         </h2>
         <p className="pbc-modal__step-label">
-          Ingresá el código o enlace de invitación. La institución se asigna automáticamente.
+          {t("pcJoinIntro")}
         </p>
 
         {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
@@ -84,7 +85,7 @@ export default function JoinCourseModal({ open, onClose, supabase, onJoined }) {
         <form onSubmit={redeem}>
           <div className="pbc-modal__field">
             <label className="pbc-label" htmlFor="join-code">
-              Código de invitación
+              {t("pcInvitationCode")}
             </label>
             <input
               id="join-code"
@@ -97,10 +98,10 @@ export default function JoinCourseModal({ open, onClose, supabase, onJoined }) {
           </div>
           <div className="pbc-modal__actions">
             <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose}>
-              Cancelar
+              {t("pcCancel")}
             </button>
             <button type="submit" className="pbc-btn pbc-btn--primary" disabled={busy}>
-              {busy ? "Uniendo…" : "Unirme"}
+              {busy ? t("pcJoining") : t("pcJoinCourse")}
             </button>
           </div>
         </form>
