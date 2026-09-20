@@ -1,3 +1,4 @@
+import { t } from "../../i18n.js";
 import { Link } from "react-router-dom";
 import { normalizeCourseRole } from "../../platform/courseRole.js";
 
@@ -50,7 +51,7 @@ export function PbcEmpty({ title, description, action }) {
   );
 }
 
-export function PbcLoading({ label = "Cargando…" }) {
+export function PbcLoading({ label = t("pcLoadingGeneric") }) {
   return (
     <div className="pbc-loading" role="status">
       <span className="pbc-loading__spinner" aria-hidden />
@@ -81,14 +82,14 @@ export function PbcClassCard({ course, showOrg }) {
       </div>
       <div className="pbc-class-card__stats">
         <span className="pbc-class-card__stat">
-          <strong>{course.student_count ?? 0}</strong> alumnos
+          <strong>{course.student_count ?? 0}</strong> {t("pcTabStudents")}
         </span>
         <span className="pbc-class-card__stat">
-          <strong>{course.activity_count ?? 0}</strong> actividades
+          <strong>{course.activity_count ?? 0}</strong> {t("pcActivities")}
         </span>
         {pending > 0 ? (
           <span className="pbc-class-card__stat pbc-class-card__stat--warn">
-            <strong>{pending}</strong> por corregir
+            <strong>{pending}</strong> {t("pcFilterToGrade")}
           </span>
         ) : null}
       </div>
@@ -99,9 +100,9 @@ export function PbcClassCard({ course, showOrg }) {
           <span className="pbc-pill pbc-pill--muted">PyBotClass</span>
         )}
         {role === "student" ? (
-          <span className="pbc-pill pbc-pill--muted">Alumno</span>
+          <span className="pbc-pill pbc-pill--muted">{t("pcStudent")}</span>
         ) : role === "teacher" ? (
-          <span className="pbc-pill pbc-pill--role">Docente</span>
+          <span className="pbc-pill pbc-pill--role">{t("pcTeacher")}</span>
         ) : null}
       </div>
     </Link>
@@ -128,7 +129,7 @@ export function PbcCourseHeader({ title, orgName, roleLabel, classroomLinked, ba
 
 export function PbcTabs({ tabs, activeTab, onTabChange }) {
   return (
-    <nav className="pbc-tabs" aria-label="Secciones de la clase">
+    <nav className="pbc-tabs" aria-label={t("pcClassSections")}>
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -200,7 +201,7 @@ export function PbcListItem({ title, meta, badges, actions, children }) {
 
 export function PbcBreadcrumb({ items }) {
   return (
-    <nav className="pbc-breadcrumb" aria-label="Ruta">
+    <nav className="pbc-breadcrumb" aria-label={t("pcRoute")}>
       <Link to="/dashboard/classes">PyBotClass</Link>
       {items.map((item, i) => (
         <span key={item.href || item.label || i}>
@@ -220,7 +221,7 @@ export function PbcFormPanel({ title, onCancel, children }) {
       <div className="pbc-form-panel__head">
         <h3 className="pbc-form-panel__title">{title}</h3>
         {onCancel ? (
-          <button type="button" className="pbc-icon-btn" onClick={onCancel} aria-label="Cerrar">
+          <button type="button" className="pbc-icon-btn" onClick={onCancel} aria-label={t("pcClose")}>
             ×
           </button>
         ) : null}
