@@ -228,7 +228,7 @@ test("puntaje máximo se edita en Actividades, no duplicado en ActivityPage", ()
     "utf8",
   );
   assert.match(tab, /id="act-points"/);
-  assert.match(tab, /Único lugar para definirlo/);
+  assert.match(tab, /t\("pcMaxPointsHint"\)/);
   const activity = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
   assert.doesNotMatch(activity, /id="activity-max-points"/);
   assert.doesNotMatch(activity, /onSaveMaxPoints/);
