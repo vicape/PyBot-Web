@@ -1,3 +1,4 @@
+import { t } from "../../i18n.js";
 import { useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
 
@@ -31,7 +32,7 @@ export default function SubmissionCodeViewer({
   code,
   height = 280,
   language = "python",
-  ariaLabel = "Código entregado",
+  ariaLabel = t("pcDeliveredCode"),
 }) {
   const [theme, setTheme] = useState(() => readUiTheme());
 
@@ -57,7 +58,7 @@ export default function SubmissionCodeViewer({
     };
   }, []);
 
-  const value = code && String(code).length > 0 ? String(code) : "# (vacío)";
+  const value = code && String(code).length > 0 ? String(code) : t("pcEmptyCode");
   const monacoTheme = theme === "dark" ? "vs-dark" : "light";
 
   return (
