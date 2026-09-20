@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { UI_THEMES } from "../../../platform/appearanceApi.js";
-import { getLang, setLang, SUPPORTED_LANGS, LANG_LABELS } from "../../../i18n.js";
+import { getLang, setLang, SUPPORTED_LANGS, LANG_LABELS, t } from "../../../i18n.js";
 
 const THEME_ICONS = { system: "◐", light: "☀", dark: "☾" };
 
@@ -29,7 +29,7 @@ export default function PyBotClassTopbar({
         type="button"
         className="pbc-topbar__menu-btn"
         onClick={onMenuOpen}
-        aria-label="Abrir menú"
+        aria-label={t("pcOpenMenu")}
       >
         ☰
       </button>
@@ -41,10 +41,10 @@ export default function PyBotClassTopbar({
           </span>
           <input
             type="search"
-            placeholder="Buscar cursos…"
+            placeholder={t("pcSearchCourses")}
             value={search}
             onChange={(e) => onSearchChange?.(e.target.value)}
-            aria-label="Buscar cursos"
+            aria-label={t("pcSearchCoursesLabel")}
           />
         </div>
       ) : (
@@ -53,12 +53,12 @@ export default function PyBotClassTopbar({
 
       <div className="pbc-topbar__actions">
         <label className="pbc-topbar__lang">
-          <span className="sr-only">Idioma</span>
+          <span className="sr-only">{t("pcLanguage")}</span>
           <select
             value={lang}
             onChange={(e) => onLangChange(e.target.value)}
-            aria-label="Idioma"
-            title="Idioma"
+            aria-label={t("pcLanguage")}
+            title={t("pcLanguage")}
           >
             {SUPPORTED_LANGS.map((code) => (
               <option key={code} value={code}>{LANG_LABELS[code]}</option>
@@ -66,15 +66,15 @@ export default function PyBotClassTopbar({
           </select>
         </label>
 
-        <div className="pbc-theme-toggle" role="group" aria-label="Tema">
+        <div className="pbc-theme-toggle" role="group" aria-label={t("pcTheme")}>
           {UI_THEMES.map((t) => (
             <button
               key={t}
               type="button"
               className={`pbc-theme-toggle__btn${appearance?.theme === t ? " pbc-theme-toggle__btn--active" : ""}`}
               onClick={() => onThemeChange?.({ theme: t })}
-              title={t === "system" ? "Sistema" : t === "light" ? "Claro" : "Oscuro"}
-              aria-label={t === "system" ? "Tema sistema" : t === "light" ? "Tema claro" : "Tema oscuro"}
+              title={t === "system" ? t("pcThemeSystem") : t === "light" ? t("pcThemeLight") : t("pcThemeDark")}
+              aria-label={t === "system" ? t("pcThemeSystemLabel") : t === "light" ? t("pcThemeLightLabel") : t("pcThemeDarkLabel")}
             >
               {THEME_ICONS[t]}
             </button>
@@ -94,7 +94,7 @@ export default function PyBotClassTopbar({
             {userEmail ? <span>{userEmail}</span> : null}
           </div>
           <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={onSignOut}>
-            Salir
+            {t("pcSignOut")}
           </button>
         </div>
       </div>
