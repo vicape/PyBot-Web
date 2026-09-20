@@ -1,4 +1,5 @@
 import { ENTRY_STRINGS, SUPPORTED_LANGS, LANG_LABELS } from "./i18n/entry.js";
+import { PYBOTCLASS_STRINGS } from "./i18n/pybotclass.js";
 
 export { SUPPORTED_LANGS, LANG_LABELS };
 
@@ -1270,8 +1271,10 @@ export function setLang(lang) {
 export function t(key) {
   const lang = getLang();
   return (
+    PYBOTCLASS_STRINGS[lang]?.[key] ??
     ENTRY_STRINGS[lang]?.[key] ??
     STRINGS[lang]?.[key] ??
+    PYBOTCLASS_STRINGS.en?.[key] ??
     ENTRY_STRINGS.en?.[key] ??
     STRINGS.en?.[key] ??
     STRINGS.es?.[key] ??
