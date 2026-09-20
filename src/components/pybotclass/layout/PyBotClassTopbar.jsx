@@ -67,16 +67,16 @@ export default function PyBotClassTopbar({
         </label>
 
         <div className="pbc-theme-toggle" role="group" aria-label={t("pcTheme")}>
-          {UI_THEMES.map((t) => (
+          {UI_THEMES.map((theme) => (
             <button
-              key={t}
+              key={theme}
               type="button"
-              className={`pbc-theme-toggle__btn${appearance?.theme === t ? " pbc-theme-toggle__btn--active" : ""}`}
-              onClick={() => onThemeChange?.({ theme: t })}
-              title={t === "system" ? t("pcThemeSystem") : t === "light" ? t("pcThemeLight") : t("pcThemeDark")}
-              aria-label={t === "system" ? t("pcThemeSystemLabel") : t === "light" ? t("pcThemeLightLabel") : t("pcThemeDarkLabel")}
+              className={`pbc-theme-toggle__btn${appearance?.theme === theme ? " pbc-theme-toggle__btn--active" : ""}`}
+              onClick={() => onThemeChange?.({ theme })}
+              title={theme === "system" ? t("pcThemeSystem") : theme === "light" ? t("pcThemeLight") : t("pcThemeDark")}
+              aria-label={theme === "system" ? t("pcThemeSystemLabel") : theme === "light" ? t("pcThemeLightLabel") : t("pcThemeDarkLabel")}
             >
-              {THEME_ICONS[t]}
+              {THEME_ICONS[theme]}
             </button>
           ))}
         </div>
