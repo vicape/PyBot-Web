@@ -1,8 +1,7 @@
 import { t } from "../../../i18n.js";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { joinPathAfterRedeem, joinSuccessMessage } from "../../../platform/redeemOrgInvitePlan.js";
-import { roleLabelEs } from "../../../orgRole.js";
+import { joinPathAfterRedeem } from "../../../platform/redeemOrgInvitePlan.js";
 
 function redeemError(code) {
   switch (code) {
@@ -56,7 +55,7 @@ export default function JoinCourseModal({ open, onClose, supabase, onJoined }) {
       return;
     }
 
-    setMsg(joinSuccessMessage(out, roleLabelEs));
+    setMsg(t("pcJoinSuccess"));
     onJoined?.();
     window.setTimeout(() => {
       onClose?.();
@@ -92,7 +91,7 @@ export default function JoinCourseModal({ open, onClose, supabase, onJoined }) {
               className="pbc-input"
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder="Ej. ABC123"
+              placeholder={t("pcCodePlaceholder")}
               autoFocus
             />
           </div>
