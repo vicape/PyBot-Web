@@ -1,3 +1,4 @@
+import { t } from "../i18n.js";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PyBotClassShell, { CourseTabs, PyBotClassBreadcrumb } from "../components/pybotclass/PyBotClassShell.jsx";
@@ -14,7 +15,7 @@ import CourseRosterTab from "../components/pybotclass/CourseRosterTab.jsx";
 import CourseSubmissionsTab from "../components/pybotclass/CourseSubmissionsTab.jsx";
 import CourseGradesTab from "../components/pybotclass/CourseGradesTab.jsx";
 import CourseIntegrationsTab from "../components/pybotclass/CourseIntegrationsTab.jsx";
-import { fetchMyOrgRole, isStaffRole, roleLabelEs } from "../orgRole.js";
+import { fetchMyOrgRole, isStaffRole } from "../orgRole.js";
 import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
@@ -29,18 +30,18 @@ import { listCourseWork } from "../classroom/classroomApi.js";
 import { getValidClassroomToken } from "../platform/classroomToken.js";
 
 const TEACHER_TABS = [
-  { id: "resumen", label: "Resumen" },
-  { id: "actividades", label: "Actividades" },
-  { id: "alumnos", label: "Alumnos" },
-  { id: "entregas", label: "Entregas" },
-  { id: "notas", label: "Notas" },
-  { id: "integraciones", label: "Integraciones" },
+  { id: "resumen", label: t("pcTabSummary") },
+  { id: "actividades", label: t("pcTabActivities") },
+  { id: "alumnos", label: t("pcTabStudents") },
+  { id: "entregas", label: t("pcTabSubmissions") },
+  { id: "notas", label: t("pcTabGrades") },
+  { id: "integraciones", label: t("pcTabIntegrations") },
 ];
 
 const STUDENT_TABS = [
-  { id: "resumen", label: "Resumen" },
-  { id: "actividades", label: "Actividades" },
-  { id: "notas", label: "Notas" },
+  { id: "resumen", label: t("pcTabSummary") },
+  { id: "actividades", label: t("pcTabActivities") },
+  { id: "notas", label: t("pcTabGrades") },
 ];
 
 export default function PyBotClassCoursePage() {
@@ -70,10 +71,10 @@ export default function PyBotClassCoursePage() {
   const setTab = (tabId) => setSearchParams(tabId === "resumen" ? {} : { tab: tabId }, { replace: true });
 
   const roleDisplay = orgStaff
-    ? roleLabelEs(myRole)
+    ? (myRole === "owner" ? t("pcManagement") : t("pcTeacher"))
     : courseRole === "teacher"
-      ? "Co-docente"
-      : roleLabelEs(courseRole || myRole);
+      ? t("pcCoTeacher")
+      : t("pcStudent");
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -92,7 +93,7 @@ export default function PyBotClassCoursePage() {
     setSuperAdmin(isSuperAdmin(profile));
 
     if (cErr || !c) {
-      setErr(cErr || "Clase no encontrada.");
+      setErr(cErr || t("pcCourseNotFound"));
       setLoading(false);
       return;
     }
@@ -124,18 +125,18 @@ export default function PyBotClassCoursePage() {
 
   const importFromClassroom = async () => {
     if (!course?.classroom_course_id) {
-      setErr("Esta clase no tiene Classroom vinculado.");
+      setErr(t("pcClassroomNotLinkedCourse"));
       return;
     }
     setImportBusy(true);
     setErr("");
     try {
       const tok = await getValidClassroomToken(user?.id);
-      if (!tok) throw new Error("Classroom no conectado.");
+      if (!tok) throw new Error(t("pcClassroomNotConnected"));
       const list = await listCourseWork(tok, course.classroom_course_id);
       setImportPicker({ list, selected: new Set(list.map((cw) => cw.id)) });
     } catch (ex) {
-      setErr(ex?.message || "No se pudo listar Classroom.");
+      setErr(ex?.message || t("pcClassroomListFail"));
     } finally {
       setImportBusy(false);
     }
@@ -158,12 +159,12 @@ export default function PyBotClassCoursePage() {
     }
   };
 
-  const orgName = course?.organizations?.name || "Colegio";
+  const orgName = course?.organizations?.name || t("pcInstitution");
 
   if (authLoading || loading) {
     return (
       <main className="dash-root dash-root--center">
-        <PbcLoading label="Cargando clase…" />
+        <PbcLoading label={t("pcLoadingClass")} />
       </main>
     );
   }
@@ -173,12 +174,12 @@ export default function PyBotClassCoursePage() {
   return (
     <PyBotClassShell user={user} showAdminTab={superAdmin} onSignOut={() => void signOut()}>
       <PbcPage>
-        <PyBotClassBreadcrumb items={[{ label: course?.title || "Clase" }]} />
+        <PyBotClassBreadcrumb items={[{ label: course?.title || t("pcClass") }]} />
 
         <PbcCourseHeader
           title={course?.title || "Clase"}
           orgName={orgName}
-          roleLabel={canTeach ? roleDisplay : `Tu rol: ${roleDisplay}`}
+          roleLabel={canTeach ? roleDisplay : `${t("pcYourRole")} ${roleDisplay}`}
           classroomLinked={!!course?.classroom_course_id}
         />
 
@@ -236,7 +237,7 @@ export default function PyBotClassCoursePage() {
         ) : null}
 
         {importPicker ? (
-          <PbcFormPanel title="Importar desde Classroom" onCancel={() => setImportPicker(null)}>
+          <PbcFormPanel title={t("pcImportFromClassroom")} onCancel={() => setImportPicker(null)}>
             <ul className="pbc-list">
               {importPicker.list.map((cw) => (
                 <li key={cw.id} className="pbc-list-item">
@@ -263,7 +264,7 @@ export default function PyBotClassCoursePage() {
                 disabled={importBusy}
                 onClick={() => void confirmImport()}
               >
-                {importBusy ? "Importando…" : "Importar seleccionadas"}
+                {importBusy ? t("pcImporting") : t("pcImportSelected")}
               </button>
             </div>
           </PbcFormPanel>
@@ -271,7 +272,7 @@ export default function PyBotClassCoursePage() {
 
         <div className="pbc-footer-links">
           <Link to="/dashboard/classes" className="auth-link">
-            ← Mis clases
+            {t("pcMyClassesBack")}
           </Link>
         </div>
       </PbcPage>
