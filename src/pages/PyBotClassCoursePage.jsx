@@ -74,7 +74,9 @@ export default function PyBotClassCoursePage() {
     ? (myRole === "owner" ? t("pcManagement") : t("pcTeacher"))
     : courseRole === "teacher"
       ? t("pcCoTeacher")
-      : t("pcStudent");
+      : courseRole === "student"
+        ? t("pcStudent")
+        : (courseRole || myRole || "—");
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
