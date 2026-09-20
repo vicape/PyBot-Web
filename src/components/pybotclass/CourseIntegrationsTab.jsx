@@ -1,3 +1,4 @@
+import { t } from "../../i18n.js";
 import { useEffect, useState } from "react";
 import { listCourseWork } from "../../classroom/classroomApi.js";
 import { getValidClassroomToken } from "../../platform/classroomToken.js";
@@ -17,7 +18,6 @@ import {
 import { fetchActivitySubmissions } from "../../platform/activitySubmissions.js";
 import { getSupabase } from "../../supabaseClient.js";
 import {
-  classroomSyncErrorMessage,
   syncClassroomRosterToCourse,
   syncClassroomTeachersToCourse,
 } from "../../classroom/classroomRosterSync.js";
@@ -68,7 +68,7 @@ export default function CourseIntegrationsTab({
     setMsg("");
     const tok = await getValidClassroomToken(user?.id);
     if (!tok) {
-      setErr("Classroom no conectado. Conectalo desde tu cuenta.");
+      setErr(t("pcClassroomConnectFromAccount"));
       return null;
     }
     return fn(tok);
@@ -81,11 +81,11 @@ export default function CourseIntegrationsTab({
         const classroomStudents = await listCourseStudents(tok, classroomCourseId);
         const sync = await syncClassroomRosterToCourse(sb, { courseId, orgId, classroomStudents });
         if (!sync.ok) throw { message: sync.error };
-        setMsg(`Alumnos sincronizados (${classroomStudents.length} en Classroom).`);
+        setMsg(`${t("pcStudentsSynced")} (${classroomStudents.length} ${t("pcInClassroom")}).`);
       });
       await loadStats();
     } catch (ex) {
-      setErr(classroomSyncErrorMessage(ex));
+      setErr(ex?.message || t("pcClassroomSyncError"));
     } finally {
       setBusy("");
     }
@@ -103,11 +103,11 @@ export default function CourseIntegrationsTab({
           currentUserId: user?.id,
         });
         if (!sync.ok) throw { message: sync.error };
-        setMsg("Docentes sincronizados.");
+        setMsg(t("pcTeachersSynced"));
       });
       await loadStats();
     } catch (ex) {
-      setErr(classroomSyncErrorMessage(ex));
+      setErr(ex?.message || t("pcClassroomSyncError"));
     } finally {
       setBusy("");
     }
@@ -124,7 +124,7 @@ export default function CourseIntegrationsTab({
         setShowImport(true);
       });
     } catch (ex) {
-      setErr(ex?.message || "No se pudo listar actividades de Classroom.");
+      setErr(ex?.message || t("pcClassroomListFail"));
     } finally {
       setBusy("");
     }
@@ -143,7 +143,7 @@ export default function CourseIntegrationsTab({
       setErr(error);
       return;
     }
-    setMsg(`Importadas: ${imported} nuevas, ${updated} actualizadas.`);
+    setMsg(`${t("pcImportedLabel")}: ${imported} · ${t("pcUpdatedLabel")}: ${updated}.`);
     setShowImport(false);
     await onReloadActivities?.();
     await loadStats();
@@ -163,10 +163,10 @@ export default function CourseIntegrationsTab({
         });
         if (res.ok) count += 1;
       }
-      setMsg(`Publicadas/actualizadas ${count} actividad(es) en Classroom.`);
+      setMsg(`${t("pcPublishedUpdated")}: ${count} ${t("pcActivities")} ${t("pcInClassroom")}.`);
       await onReloadActivities?.();
     } catch (ex) {
-      setErr(ex?.message || "Error al publicar.");
+      setErr(ex?.message || t("pcPublishError"));
     } finally {
       setBusy("");
     }
@@ -176,10 +176,10 @@ export default function CourseIntegrationsTab({
     const { gradebook } = await fetchPybotclassGradebook(courseId);
     const pending = countPendingClassroomGrades(gradebook);
     if (!pending) {
-      setMsg("No hay notas pendientes de envío.");
+      setMsg(t("pcNoPendingGrades"));
       return;
     }
-    const ok = window.confirm(`Se enviarán ${pending} notas a Google Classroom.`);
+    const ok = window.confirm(`${t("pcGradesWillSend")} ${pending} ${t("pcTabGrades")} ${t("pcInClassroom")}.`);
     if (!ok) return;
 
     setBusy("grades");
@@ -243,10 +243,10 @@ export default function CourseIntegrationsTab({
         });
         if (res.ok) sent += 1;
       }
-      setMsg(`Se enviaron ${sent} nota(s) a Classroom.`);
+      setMsg(`${t("pcGradesSent")}: ${sent} ${t("pcTabGrades")} ${t("pcInClassroom")}.`);
       await loadStats();
     } catch (ex) {
-      setErr(ex?.message || "Error al enviar notas.");
+      setErr(ex?.message || t("pcSendGradesError"));
     } finally {
       setBusy("");
     }
@@ -255,24 +255,24 @@ export default function CourseIntegrationsTab({
   if (!classroomCourseId) {
     return (
       <PbcEmpty
-        title="Classroom no vinculado"
-        description="Esta clase no está conectada a Google Classroom. Importala desde Mis clases o desde el panel de Classroom."
+        title={t("pcClassroomNotLinked")}
+        description={t("pcClassroomNotLinkedDesc")}
       />
     );
   }
 
   return (
     <PbcSection
-      title="Google Classroom"
-      description="Sincronización manual con tu curso de Classroom"
-      actions={<span className="pbc-pill pbc-pill--classroom">Conectado</span>}
+      title={t("pcGoogleClassroom")}
+      description={t("pcClassroomSyncDesc")}
+      actions={<span className="pbc-pill pbc-pill--classroom">{t("pcConnected")}</span>}
     >
       <PbcStatGrid
         items={[
-          { label: "Alumnos", value: stats.students, highlight: true },
-          { label: "Docentes", value: stats.teachers },
-          { label: "Actividades", value: stats.activities },
-          { label: "Notas pendientes", value: stats.pendingGrades, warn: stats.pendingGrades > 0 },
+          { label: t("pcTabStudents"), value: stats.students, highlight: true },
+          { label: t("pcTeachers"), value: stats.teachers },
+          { label: t("pcActivities"), value: stats.activities },
+          { label: t("pcPendingGrades"), value: stats.pendingGrades, warn: stats.pendingGrades > 0 },
         ]}
       />
 
@@ -281,24 +281,24 @@ export default function CourseIntegrationsTab({
 
       <div className="pbc-section__actions" style={{ marginTop: "1rem" }}>
         <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" disabled={!!busy} onClick={() => void syncStudents()}>
-          {busy === "students" ? "…" : "Sincronizar alumnos"}
+          {busy === "students" ? "…" : t("pcSyncStudents")}
         </button>
         <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" disabled={!!busy} onClick={() => void syncTeachers()}>
-          {busy === "teachers" ? "…" : "Sincronizar docentes"}
+          {busy === "teachers" ? "…" : t("pcSyncTeachers")}
         </button>
         <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" disabled={!!busy} onClick={() => void openImport()}>
-          {busy === "import-list" ? "…" : "Importar actividades"}
+          {busy === "import-list" ? "…" : t("pcImportActivities")}
         </button>
         <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" disabled={!!busy} onClick={() => void publishAll()}>
-          {busy === "publish" ? "…" : "Publicar actividades"}
+          {busy === "publish" ? "…" : t("pcPublishActivities")}
         </button>
         <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" disabled={!!busy} onClick={() => void sendPendingGrades()}>
-          {busy === "grades" ? "…" : "Enviar notas pendientes"}
+          {busy === "grades" ? "…" : t("pcSendPendingGrades")}
         </button>
       </div>
 
       {showImport ? (
-        <PbcFormPanel title="Importar desde Classroom" onCancel={() => setShowImport(false)}>
+        <PbcFormPanel title={t("pcImportFromClassroom")} onCancel={() => setShowImport(false)}>
           <ul className="pbc-list">
             {importList.map((cw) => (
               <li key={cw.id} className="pbc-list-item">
@@ -320,7 +320,7 @@ export default function CourseIntegrationsTab({
           </ul>
           <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.85rem" }}>
             <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" disabled={busy === "import"} onClick={() => void doImport()}>
-              {busy === "import" ? "Importando…" : "Importar seleccionadas"}
+              {busy === "import" ? t("pcImporting") : t("pcImportSelected")}
             </button>
           </div>
         </PbcFormPanel>
