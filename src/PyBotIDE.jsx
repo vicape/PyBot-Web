@@ -425,6 +425,9 @@ export default function PyBotIDE() {
   const [isCompactMobile, setIsCompactMobile] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches,
   );
+  const [consoleCollapsed, setConsoleCollapsed] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches,
+  );
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 640px)");
@@ -433,7 +436,10 @@ export default function PyBotIDE() {
       setIsCompactMobile(next);
       if (next) {
         setSidebarOpen(false);
-        setTerminalPosition("bottom");
+        // No mutar terminalPosition: se apila por CSS y se preserva pybot_terminal_pos.
+        setConsoleCollapsed(true);
+      } else {
+        setConsoleCollapsed(false);
       }
     };
     apply();
@@ -1940,8 +1946,9 @@ export default function PyBotIDE() {
 
   // Desplegable "Ver como" en la barra superior (reemplaza la fila de pestañas
   // para no ocupar espacio; misma logica switchRepresentation).
+  // En anchos estrechos el disparador se oculta por CSS y se abre desde Menu.
   const viewMenu = (
-    <div className="tb-group tb-group--muted" ref={viewMenuRef}>
+    <div className="tb-group tb-group--muted tb-group--view" ref={viewMenuRef}>
       <button
         type="button"
         className="tb-btn tb-btn--ghost tb-btn--menu"
@@ -1974,6 +1981,29 @@ export default function PyBotIDE() {
           ))}
         </div>
       ) : null}
+    </div>
+  );
+
+  const consoleHead = (
+    <div className="console-head">
+      <span className="console-head__title">{t("terminal")}</span>
+      <span className="console-head__hint">{t("terminalOutput")}</span>
+      <button
+        type="button"
+        className="console-collapse-btn"
+        aria-expanded={!consoleCollapsed}
+        aria-controls="ide-console-out"
+        title={consoleCollapsed ? t("terminal") : t("close")}
+        aria-label={consoleCollapsed ? t("terminal") : t("close")}
+        onClick={() => setConsoleCollapsed((v) => !v)}
+      >
+        <IconChevron
+          width={18}
+          height={18}
+          className={`console-collapse-btn__chev${consoleCollapsed ? "" : " console-collapse-btn__chev--open"}`}
+          aria-hidden
+        />
+      </button>
     </div>
   );
 
@@ -2069,7 +2099,7 @@ export default function PyBotIDE() {
           </button>
           <button
             type="button"
-            className="act-icon"
+            className="act-icon act-icon--run"
             title={t("run")}
             aria-label={t("run")}
             onClick={onRun}
@@ -2079,7 +2109,7 @@ export default function PyBotIDE() {
           </button>
           <button
             type="button"
-            className="act-icon"
+            className="act-icon act-icon--stop"
             title={t("stop")}
             aria-label={t("stop")}
             onClick={onStop}
@@ -2246,12 +2276,12 @@ export default function PyBotIDE() {
                   </Link>
                 ) : null}
               </div>
+              <IdeUserChip
+                user={sessionUser}
+                loading={sessionLoading}
+                onSignOut={sessionSignOut}
+              />
               <div className="toolbar-actions">
-                <IdeUserChip
-                  user={sessionUser}
-                  loading={sessionLoading}
-                  onSignOut={sessionSignOut}
-                />
                 <div className="tb-group">
                   <button
                     type="button"
@@ -2268,7 +2298,7 @@ export default function PyBotIDE() {
                   </button>
                 </div>
                 {viewMenu}
-                <div className="tb-group tb-group--muted" ref={boardMenuRef}>
+                <div className="tb-group tb-group--muted tb-group--board" ref={boardMenuRef}>
                   <button
                     type="button"
                     className={`tb-btn tb-btn--ghost tb-btn--menu ${connected ? "tb-btn--connected" : ""}`}
@@ -2561,6 +2591,30 @@ export default function PyBotIDE() {
                   </button>
                   {toolbarMenuOpen ? (
                     <div className="toolbar-menu" role="menu" aria-label={t("menuActions")}>
+                      <button
+                        type="button"
+                        className="toolbar-menu-item toolbar-menu-item--compact-only"
+                        onClick={() => {
+                          setToolbarMenuOpen(false);
+                          setBoardMenuOpen(false);
+                          setViewMenuOpen(true);
+                        }}
+                      >
+                        {t("viewAsLabel")}: {currentRepLabel}
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-menu-item toolbar-menu-item--compact-only"
+                        onClick={() => {
+                          setToolbarMenuOpen(false);
+                          setViewMenuOpen(false);
+                          setBoardMenuOpen(true);
+                        }}
+                      >
+                        {t("boardMenuTitle")}
+                      </button>
+                      <div className="toolbar-menu-divider toolbar-menu-divider--compact-only" />
+
                       <button type="button" className="toolbar-menu-item" onClick={() => { onOpenLocal(); setToolbarMenuOpen(false); }}>
                         {t("openFile")}
                       </button>
@@ -2649,7 +2703,10 @@ export default function PyBotIDE() {
                   aria-orientation="vertical"
                   onMouseDown={startConsoleWidthResize}
                 />
-                <div className="console-panel console-panel--side" style={{ width: `${consoleWidth}px` }}>
+                <div
+                  className={`console-panel console-panel--side${consoleCollapsed ? " console-panel--collapsed" : ""}`}
+                  style={{ width: `${consoleWidth}px` }}
+                >
                   {canvasSize ? (
                     <div className="canvas-wrap">
                       <button type="button" className="canvas-close" onClick={() => setCanvasSize(null)} title="Cerrar canvas">&times;</button>
@@ -2661,11 +2718,8 @@ export default function PyBotIDE() {
                       />
                     </div>
                   ) : null}
-                  <div className="console-head">
-                    <span className="console-head__title">{t("terminal")}</span>
-                    <span className="console-head__hint">{t("terminalOutput")}</span>
-                  </div>
-                  <pre className="console-out" role="log" aria-live="polite">
+                  {consoleHead}
+                  <pre id="ide-console-out" className="console-out" role="log" aria-live="polite" hidden={consoleCollapsed && isCompactMobile}>
                     {consoleLines.map((line, i) => (
                       <span key={i} className={`co-line co-${line.kind}`}>
                         {line.text}
@@ -2705,7 +2759,10 @@ export default function PyBotIDE() {
                   aria-orientation="horizontal"
                   onMouseDown={startConsoleResize}
                 />
-                <div className="console-panel" style={{ height: `${consoleHeight}px` }}>
+                <div
+                  className={`console-panel${consoleCollapsed ? " console-panel--collapsed" : ""}`}
+                  style={{ height: consoleCollapsed && isCompactMobile ? undefined : `${consoleHeight}px` }}
+                >
                   {canvasSize ? (
                     <div className="canvas-wrap">
                       <button type="button" className="canvas-close" onClick={() => setCanvasSize(null)} title="Cerrar canvas">&times;</button>
@@ -2717,11 +2774,8 @@ export default function PyBotIDE() {
                       />
                     </div>
                   ) : null}
-                  <div className="console-head">
-                    <span className="console-head__title">{t("terminal")}</span>
-                    <span className="console-head__hint">{t("terminalOutput")}</span>
-                  </div>
-                  <pre className="console-out" role="log" aria-live="polite">
+                  {consoleHead}
+                  <pre id="ide-console-out" className="console-out" role="log" aria-live="polite" hidden={consoleCollapsed && isCompactMobile}>
                     {consoleLines.map((line, i) => (
                       <span key={i} className={`co-line co-${line.kind}`}>
                         {line.text}

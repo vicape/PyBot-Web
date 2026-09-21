@@ -332,7 +332,9 @@
 .toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* flex-start + brand flex:1: chip junto a acciones a la derecha (evita
+     space-between con 3 hijos, que centraba el avatar en PC). */
+  justify-content: flex-start;
   gap: 16px;
   flex-wrap: nowrap;
   padding: 2px 18px;
@@ -506,7 +508,7 @@
   color: var(--warn);
 }
 
-/* Acceso a PyBotClass: solo móvil (<=640px); en desktop no altera el layout. */
+/* Acceso a PyBotClass: oculto en PC ancho; visible cuando la cabecera pasa a 2 filas. */
 .brand-pybotclass {
   display: none;
 }
@@ -518,7 +520,7 @@
   gap: 8px;
   justify-content: flex-end;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
 }
 
 .ide-user-chip {
@@ -531,12 +533,36 @@
   border: 1px solid var(--ide-border);
   background: rgba(255, 255, 255, 0.04);
   min-height: 36px;
-  flex-shrink: 1;
+  flex-shrink: 0;
   min-width: 0;
+  position: relative;
 }
 
 .ide-root[data-theme="light"] .ide-user-chip {
   background: rgba(0, 0, 0, 0.03);
+}
+
+.ide-user-chip__avatar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: default;
+  border-radius: 50%;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.ide-user-chip__avatar-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ide-user-chip__popover {
+  display: none;
 }
 
 .ide-user-chip--login {
@@ -1117,6 +1143,11 @@
   color: var(--fg-muted);
   opacity: 0.9;
   font-family: var(--font-mono);
+  margin-left: auto;
+}
+
+.console-collapse-btn {
+  display: none;
 }
 
 .console-out {
@@ -2026,22 +2057,32 @@
   color: var(--fg-bright);
 }
 
-/* Responsive: toolbar */
+/* Entradas de Menu solo visibles cuando Ver como / Placa salen de la barra */
+.toolbar-menu-item--compact-only,
+.toolbar-menu-divider--compact-only {
+  display: none;
+}
+
+/* Responsive: toolbar — ≤1220px: 2 filas (logo+PyBotClass+avatar / Ejecutar+Detener+Menu) */
 @media (max-width: 1220px) {
   .toolbar {
     flex-wrap: wrap;
-    align-items: flex-start;
+    align-items: center;
+    row-gap: 8px;
   }
   .toolbar-brand {
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+  }
+  .ide-user-chip {
+    flex: 0 0 auto;
   }
   .toolbar-actions {
+    flex: 1 1 100%;
     width: 100%;
     justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-  .tb-group {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
   .tb-group--muted {
     border-left: none;
@@ -2049,6 +2090,85 @@
   }
   .brand-sub {
     max-width: min(240px, 24vw);
+  }
+
+  .brand-pybotclass {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 6px 10px;
+    min-height: 36px;
+    border-radius: 6px;
+    border: 1px solid var(--ide-border);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    white-space: nowrap;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .brand-pybotclass:hover,
+  .brand-pybotclass:focus-visible {
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.14);
+    outline: none;
+  }
+
+  .ide-root[data-theme="light"] .brand-pybotclass {
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  .ide-root[data-theme="light"] .brand-pybotclass:hover,
+  .ide-root[data-theme="light"] .brand-pybotclass:focus-visible {
+    background: rgba(0, 0, 0, 0.08);
+  }
+
+  /* Ver como / Placa → Menu (misma lógica; evita 3.ª fila en cabecera) */
+  .tb-group--view,
+  .tb-group--board {
+    position: fixed;
+    width: 0;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  .tb-group--view > .tb-btn,
+  .tb-group--board > .tb-btn {
+    display: none;
+  }
+
+  /* Menús abiertos desde Menu: anclaje fijo, no absolute sobre caja 0×0 */
+  .tb-group--view .toolbar-menu,
+  .tb-group--board .toolbar-menu {
+    pointer-events: auto;
+    position: fixed;
+    left: max(8px, env(safe-area-inset-left, 0px));
+    right: max(8px, env(safe-area-inset-right, 0px));
+    top: auto;
+    bottom: max(10px, env(safe-area-inset-bottom, 0px));
+    width: auto;
+    max-height: min(72dvh, 520px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    z-index: 80;
+    box-shadow: var(--shadow-md);
+  }
+
+  .toolbar-menu-item--compact-only {
+    display: block;
+  }
+
+  .toolbar-menu-divider--compact-only {
+    display: block;
   }
 }
 
@@ -2071,22 +2191,103 @@
   .brand-sub {
     display: none;
   }
+  .brand-activity {
+    display: none;
+  }
+  .ide-user-chip {
+    max-width: none;
+    padding: 0;
+    border: none;
+    background: transparent;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+  .ide-root[data-theme="light"] .ide-user-chip {
+    background: transparent;
+  }
+  .ide-user-chip__text,
   .ide-user-chip__panel,
+  .ide-user-chip__signout,
   .ide-user-chip__email {
     display: none;
   }
+  .ide-user-chip__avatar-btn {
+    cursor: pointer;
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ide-user-chip__popover {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 60;
+    min-width: 160px;
+    padding: 8px;
+    border-radius: 10px;
+    border: 1px solid var(--ide-border);
+    background: var(--ide-surface);
+    box-shadow: var(--shadow-md);
+  }
+  .ide-user-chip__popover[hidden] {
+    display: none !important;
+  }
+  .ide-user-chip__popover-name {
+    padding: 8px 10px 4px;
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--fg-bright);
+    word-break: break-word;
+  }
+  .ide-user-chip__popover-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--fg-bright);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 12px 10px;
+    min-height: 44px;
+    cursor: pointer;
+    text-decoration: none;
+    touch-action: manipulation;
+  }
+  .ide-user-chip__popover-item:hover,
+  .ide-user-chip__popover-item:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+    outline: none;
+  }
+  .ide-root[data-theme="light"] .ide-user-chip__popover-item:hover,
+  .ide-root[data-theme="light"] .ide-user-chip__popover-item:focus-visible {
+    background: rgba(0, 0, 0, 0.06);
+  }
   .toolbar-actions {
     width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    justify-content: stretch;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .toolbar-actions > .tb-group:not(.tb-group--view):not(.tb-group--board) {
+    flex: 1 1 auto;
+  }
+  .toolbar-actions > .tb-group:not(.tb-group--view):not(.tb-group--board) .tb-btn {
+    flex: 1 1 auto;
   }
   .tb-group {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
   .tb-group--muted {
     border-left: none;
     padding-left: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
   .brand-logos {
     display: none;
@@ -2110,8 +2311,8 @@
     height: 36px;
   }
   .brand-logo-full {
-    height: 59px;
-    max-width: min(264px, 50vw);
+    height: 48px;
+    max-width: min(180px, 42vw);
   }
   .brand-robot {
     width: 38px;
@@ -2162,11 +2363,24 @@
     display: none;
   }
 
+  .act-icon--run,
+  .act-icon--stop {
+    display: none;
+  }
+
   .act-icon--active {
     box-shadow: inset 0 -3px 0 0 var(--accent);
     border-radius: var(--radius-sm);
     margin-right: 0;
     width: 44px;
+  }
+
+  .act-icon {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation;
   }
 
   .ide-body {
@@ -2243,52 +2457,83 @@
     max-height: min(42dvh, 320px);
   }
 
-  .toolbar {
-    padding: 8px max(10px, env(safe-area-inset-left, 0px)) 8px
-      max(10px, env(safe-area-inset-right, 0px));
-    gap: 8px;
-    flex-wrap: wrap;
-    align-items: center;
+  .console-panel--collapsed,
+  .console-panel--side.console-panel--collapsed {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: 0 0 auto;
   }
 
-  .toolbar-brand {
-    gap: 8px;
+  .console-panel--collapsed .console-out,
+  .console-panel--collapsed .canvas-wrap {
+    display: none !important;
   }
 
-  .brand-pybotclass {
+  .console-panel--collapsed .console-head {
+    border-bottom: none;
+  }
+
+  .console-head__hint {
+    display: none;
+  }
+
+  .console-collapse-btn {
     display: inline-flex;
     align-items: center;
-    flex-shrink: 0;
+    justify-content: center;
     margin-left: auto;
-    padding: 6px 10px;
-    min-height: 36px;
-    border-radius: 6px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
     border: 1px solid var(--ide-border);
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--accent);
-    font-size: 12px;
-    font-weight: 650;
-    letter-spacing: 0.01em;
-    text-decoration: none;
-    white-space: nowrap;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--fg-bright);
+    cursor: pointer;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
   }
 
-  .brand-pybotclass:hover,
-  .brand-pybotclass:focus-visible {
-    text-decoration: none;
-    background: rgba(255, 255, 255, 0.14);
+  .console-collapse-btn:hover,
+  .console-collapse-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.12);
     outline: none;
   }
 
-  .ide-root[data-theme="light"] .brand-pybotclass {
+  .ide-root[data-theme="light"] .console-collapse-btn {
     background: rgba(0, 0, 0, 0.04);
   }
 
-  .ide-root[data-theme="light"] .brand-pybotclass:hover,
-  .ide-root[data-theme="light"] .brand-pybotclass:focus-visible {
-    background: rgba(0, 0, 0, 0.08);
+  .console-collapse-btn__chev {
+    transform: rotate(90deg);
+    transition: transform 0.15s ease;
+  }
+
+  .console-collapse-btn__chev--open {
+    transform: rotate(-90deg);
+  }
+
+  .toolbar {
+    padding: 6px max(10px, env(safe-area-inset-right, 0px)) 8px
+      max(10px, env(safe-area-inset-left, 0px));
+    gap: 8px;
+    row-gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    min-height: 0;
+  }
+
+  .toolbar-brand {
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .brand-pybotclass {
+    display: inline-flex;
+    min-height: 44px;
+    padding: 8px 12px;
   }
 
   .toolbar-menu {
@@ -2364,6 +2609,15 @@
     min-height: 44px;
     padding-top: 12px;
     padding-bottom: 12px;
+  }
+
+  .ide-root,
+  .ide-workbench,
+  .main-stack,
+  .toolbar,
+  .toolbar-actions {
+    max-width: 100%;
+    overflow-x: hidden;
   }
 }
 
