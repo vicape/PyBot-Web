@@ -506,6 +506,11 @@
   color: var(--warn);
 }
 
+/* Acceso a PyBotClass: solo móvil (<=640px); en desktop no altera el layout. */
+.brand-pybotclass {
+  display: none;
+}
+
 .toolbar-actions {
   display: flex;
   flex-wrap: nowrap;
@@ -2244,6 +2249,46 @@
     gap: 8px;
     flex-wrap: wrap;
     align-items: center;
+  }
+
+  .toolbar-brand {
+    gap: 8px;
+  }
+
+  .brand-pybotclass {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 6px 10px;
+    min-height: 36px;
+    border-radius: 6px;
+    border: 1px solid var(--ide-border);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    white-space: nowrap;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .brand-pybotclass:hover,
+  .brand-pybotclass:focus-visible {
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.14);
+    outline: none;
+  }
+
+  .ide-root[data-theme="light"] .brand-pybotclass {
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  .ide-root[data-theme="light"] .brand-pybotclass:hover,
+  .ide-root[data-theme="light"] .brand-pybotclass:focus-visible {
+    background: rgba(0, 0, 0, 0.08);
   }
 
   .toolbar-menu {

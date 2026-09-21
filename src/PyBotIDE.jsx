@@ -2240,6 +2240,11 @@ export default function PyBotIDE() {
                     ) : null}
                   </div>
                 ) : null}
+                {sessionUser ? (
+                  <Link to="/dashboard/classes" className="brand-pybotclass">
+                    PyBotClass
+                  </Link>
+                ) : null}
               </div>
               <div className="toolbar-actions">
                 <IdeUserChip
