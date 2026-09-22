@@ -355,6 +355,7 @@ export default function PyBotIDE() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   const [boardMenuOpen, setBoardMenuOpen] = useState(false);
+  const [boardMenuFloatStyle, setBoardMenuFloatStyle] = useState(null);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [viewMenuFloatStyle, setViewMenuFloatStyle] = useState(null);
   const [helpModuleIdx, setHelpModuleIdx] = useState(0);
@@ -384,6 +385,7 @@ export default function PyBotIDE() {
   const fileInputRef = useRef(null);
   const toolbarMenuRef = useRef(null);
   const boardMenuRef = useRef(null);
+  const boardMenuPanelRef = useRef(null);
   const viewMenuRef = useRef(null);
   const viewMenuPanelRef = useRef(null);
   const editorRef = useRef(null);
@@ -834,7 +836,9 @@ export default function PyBotIDE() {
   useEffect(() => {
     if (!boardMenuOpen) return;
     const onDocPointerDown = (event) => {
-      if (!boardMenuRef.current?.contains(event.target)) {
+      const inTrigger = boardMenuRef.current?.contains(event.target);
+      const inPanel = boardMenuPanelRef.current?.contains(event.target);
+      if (!inTrigger && !inPanel) {
         setBoardMenuOpen(false);
       }
     };
@@ -924,6 +928,75 @@ export default function PyBotIDE() {
       compactMq.removeEventListener("change", place);
     };
   }, [viewMenuOpen]);
+
+  // Mobile/compact: portal + flip del menú Placa (mismo criterio que "Ver como").
+  useLayoutEffect(() => {
+    if (!boardMenuOpen) {
+      setBoardMenuFloatStyle(null);
+      return;
+    }
+    const compactMq = window.matchMedia("(max-width: 1220px)");
+    if (!compactMq.matches) {
+      setBoardMenuFloatStyle(null);
+      return;
+    }
+
+    const place = () => {
+      if (!compactMq.matches) {
+        setBoardMenuFloatStyle(null);
+        return;
+      }
+      const panel = boardMenuPanelRef.current;
+      if (!panel) return;
+
+      const anchor =
+        toolbarMenuRef.current?.querySelector(".tb-btn--menu") ||
+        boardMenuRef.current?.querySelector(".tb-btn--menu") ||
+        boardMenuRef.current;
+      if (!anchor) return;
+
+      const rect = anchor.getBoundingClientRect();
+      const gap = 8;
+      const edge = 8;
+      const vh = window.innerHeight;
+      const menuHeight = panel.offsetHeight || 0;
+      const spaceBelow = vh - rect.bottom - edge;
+      const spaceAbove = rect.top - edge;
+      const openUp = menuHeight > spaceBelow && spaceAbove > spaceBelow;
+      const maxH = Math.max(
+        120,
+        Math.min(openUp ? spaceAbove - gap : spaceBelow - gap, Math.min(vh * 0.72, 520)),
+      );
+
+      const next = {
+        position: "fixed",
+        left: `max(8px, env(safe-area-inset-left, 0px))`,
+        right: `max(8px, env(safe-area-inset-right, 0px))`,
+        width: "auto",
+        maxHeight: `${maxH}px`,
+        overflowY: "auto",
+        zIndex: 200,
+        visibility: "visible",
+        top: openUp ? "auto" : `${Math.round(rect.bottom + gap)}px`,
+        bottom: openUp
+          ? `${Math.round(vh - rect.top + gap)}px`
+          : "auto",
+      };
+      setBoardMenuFloatStyle(next);
+    };
+
+    place();
+    const raf = requestAnimationFrame(place);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    compactMq.addEventListener("change", place);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+      compactMq.removeEventListener("change", place);
+    };
+  }, [boardMenuOpen, boardType, connected, bleConnected]);
 
   const appendConsole = useCallback((line, kind = "out") => {
     setConsoleLines((prev) => {
@@ -2086,6 +2159,12 @@ export default function PyBotIDE() {
     </div>
   );
 
+  // En compact, el menú Placa flota vía portal con flip (mismo criterio que Ver como).
+  const boardMenuFloat =
+    boardMenuOpen &&
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 1220px)").matches;
+
   const consoleHead = (
     <div className="console-head">
       <span className="console-head__title">{t("terminal")}</span>
@@ -2434,7 +2513,26 @@ export default function PyBotIDE() {
                     <IconChevron width={14} height={14} />
                   </button>
                   {boardMenuOpen ? (
-                    <div className="toolbar-menu" role="menu" aria-label={t("menuSectionBoard")}>
+                    (() => {
+                      const boardMenuPanel = (
+                    <div
+                      ref={boardMenuPanelRef}
+                      className={`toolbar-menu${boardMenuFloat ? " toolbar-menu--board-float" : ""}`}
+                      role="menu"
+                      aria-label={t("menuSectionBoard")}
+                      style={
+                        boardMenuFloat
+                          ? boardMenuFloatStyle || {
+                              position: "fixed",
+                              left: 8,
+                              right: 8,
+                              top: 0,
+                              visibility: "hidden",
+                              zIndex: 200,
+                            }
+                          : undefined
+                      }
+                    >
                       <button
                         type="button"
                         className="toolbar-menu-item toolbar-menu-item--highlight"
@@ -2699,6 +2797,11 @@ export default function PyBotIDE() {
                       </button>
                       <div className="toolbar-menu-hint">{t("bleConnectMenuHint")}</div>
                     </div>
+                      );
+                      return boardMenuFloat
+                        ? createPortal(boardMenuPanel, document.body)
+                        : boardMenuPanel;
+                    })()
                   ) : null}
                 </div>
                 <div className="tb-group tb-group--muted tb-group--main-menu" ref={toolbarMenuRef}>

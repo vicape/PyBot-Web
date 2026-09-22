@@ -2181,9 +2181,9 @@
   }
 
   /* Menús abiertos desde Menu: anclaje fijo, no absolute sobre caja 0×0.
-     "Ver como" en compact usa portal + flip (toolbar-menu--view-float); Placa sigue aquí. */
+     Ver como / Placa en compact usan portal + flip (*-float); fallback sin float. */
   .tb-group--view .toolbar-menu:not(.toolbar-menu--view-float),
-  .tb-group--board .toolbar-menu {
+  .tb-group--board .toolbar-menu:not(.toolbar-menu--board-float) {
     pointer-events: auto;
     position: fixed;
     left: max(8px, env(safe-area-inset-left, 0px));
@@ -2228,6 +2228,37 @@
 }
 
 html[data-theme="light"] .toolbar-menu--view-float {
+  --ide-surface: #ffffff;
+  --ide-elevated: #f0f0f0;
+  --ide-border: #d0d0d0;
+  --ide-border-subtle: #e5e5e5;
+  --fg: #1f1f1f;
+  --fg-muted: #5c5c5c;
+  --fg-bright: #0a0a0a;
+  --accent: #0969da;
+  --shadow-md: 0 12px 48px rgba(0, 0, 0, 0.12);
+}
+
+/* Panel Placa flotante (portal): mismo criterio opaco/anti-clipping que Ver como. */
+.toolbar-menu--board-float {
+  pointer-events: auto;
+  -webkit-overflow-scrolling: touch;
+  --ide-surface: #252526;
+  --ide-elevated: #2d2d30;
+  --ide-border: #3c3c3c;
+  --ide-border-subtle: #2a2a2a;
+  --fg: #cccccc;
+  --fg-muted: #8d8d8d;
+  --fg-bright: #ffffff;
+  --accent: #3b9eff;
+  --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.45);
+  background: var(--ide-surface);
+  border: 1px solid var(--ide-border);
+  box-shadow: var(--shadow-md);
+  color: var(--fg);
+}
+
+html[data-theme="light"] .toolbar-menu--board-float {
   --ide-surface: #ffffff;
   --ide-elevated: #f0f0f0;
   --ide-border: #d0d0d0;
@@ -2603,7 +2634,7 @@ html[data-theme="light"] .toolbar-menu--view-float {
     padding: 8px 12px;
   }
 
-  .toolbar-menu:not(.toolbar-menu--view-float) {
+  .toolbar-menu:not(.toolbar-menu--view-float):not(.toolbar-menu--board-float) {
     position: fixed;
     left: max(8px, env(safe-area-inset-left, 0px));
     right: max(8px, env(safe-area-inset-right, 0px));
