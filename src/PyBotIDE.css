@@ -2207,11 +2207,36 @@
   }
 }
 
-/* Panel "Ver como" flotante (portal): evita clipping/overflow de padres en mobile */
+/* Panel "Ver como" flotante (portal): evita clipping/overflow de padres en mobile.
+   Portaled a body: las vars de .ide-root no heredan → restaurar superficie opaca. */
 .toolbar-menu--view-float {
   pointer-events: auto;
-  box-shadow: var(--shadow-md);
   -webkit-overflow-scrolling: touch;
+  --ide-surface: #252526;
+  --ide-elevated: #2d2d30;
+  --ide-border: #3c3c3c;
+  --ide-border-subtle: #2a2a2a;
+  --fg: #cccccc;
+  --fg-muted: #8d8d8d;
+  --fg-bright: #ffffff;
+  --accent: #3b9eff;
+  --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.45);
+  background: var(--ide-surface);
+  border: 1px solid var(--ide-border);
+  box-shadow: var(--shadow-md);
+  color: var(--fg);
+}
+
+html[data-theme="light"] .toolbar-menu--view-float {
+  --ide-surface: #ffffff;
+  --ide-elevated: #f0f0f0;
+  --ide-border: #d0d0d0;
+  --ide-border-subtle: #e5e5e5;
+  --fg: #1f1f1f;
+  --fg-muted: #5c5c5c;
+  --fg-bright: #0a0a0a;
+  --accent: #0969da;
+  --shadow-md: 0 12px 48px rgba(0, 0, 0, 0.12);
 }
 
 @media (max-width: 1080px) {
