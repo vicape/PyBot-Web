@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useEffect, lazy, Suspense } from "react";
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, lazy, Suspense } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import "./PyBotIDE.css";
@@ -355,6 +356,7 @@ export default function PyBotIDE() {
   const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   const [boardMenuOpen, setBoardMenuOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [viewMenuFloatStyle, setViewMenuFloatStyle] = useState(null);
   const [helpModuleIdx, setHelpModuleIdx] = useState(0);
   const [helpLesson, setHelpLesson] = useState(null);
   const [pythonOnly, setPythonOnly] = useState(() => readInitialPythonOnly());
@@ -383,6 +385,7 @@ export default function PyBotIDE() {
   const toolbarMenuRef = useRef(null);
   const boardMenuRef = useRef(null);
   const viewMenuRef = useRef(null);
+  const viewMenuPanelRef = useRef(null);
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const inputResolveRef = useRef(null);
@@ -842,12 +845,84 @@ export default function PyBotIDE() {
   useEffect(() => {
     if (!viewMenuOpen) return;
     const onDocPointerDown = (event) => {
-      if (!viewMenuRef.current?.contains(event.target)) {
+      const inTrigger = viewMenuRef.current?.contains(event.target);
+      const inPanel = viewMenuPanelRef.current?.contains(event.target);
+      if (!inTrigger && !inPanel) {
         setViewMenuOpen(false);
       }
     };
     document.addEventListener("pointerdown", onDocPointerDown, true);
     return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
+  }, [viewMenuOpen]);
+
+  // Mobile/compact: portal + flip del menú "Ver como" para evitar clipping y
+  // solapamiento con el terminal (no altera desktop).
+  useLayoutEffect(() => {
+    if (!viewMenuOpen) {
+      setViewMenuFloatStyle(null);
+      return;
+    }
+    const compactMq = window.matchMedia("(max-width: 1220px)");
+    if (!compactMq.matches) {
+      setViewMenuFloatStyle(null);
+      return;
+    }
+
+    const place = () => {
+      if (!compactMq.matches) {
+        setViewMenuFloatStyle(null);
+        return;
+      }
+      const panel = viewMenuPanelRef.current;
+      if (!panel) return;
+
+      const anchor =
+        toolbarMenuRef.current?.querySelector(".tb-btn--menu") ||
+        viewMenuRef.current?.querySelector(".tb-btn--menu") ||
+        viewMenuRef.current;
+      if (!anchor) return;
+
+      const rect = anchor.getBoundingClientRect();
+      const gap = 8;
+      const edge = 8;
+      const vh = window.innerHeight;
+      const menuHeight = panel.offsetHeight || 0;
+      const spaceBelow = vh - rect.bottom - edge;
+      const spaceAbove = rect.top - edge;
+      const openUp = menuHeight > spaceBelow && spaceAbove > spaceBelow;
+      const maxH = Math.max(
+        120,
+        Math.min(openUp ? spaceAbove - gap : spaceBelow - gap, Math.min(vh * 0.72, 520)),
+      );
+
+      const next = {
+        position: "fixed",
+        left: `max(8px, env(safe-area-inset-left, 0px))`,
+        right: `max(8px, env(safe-area-inset-right, 0px))`,
+        width: "auto",
+        maxHeight: `${maxH}px`,
+        overflowY: "auto",
+        zIndex: 200,
+        visibility: "visible",
+        top: openUp ? "auto" : `${Math.round(rect.bottom + gap)}px`,
+        bottom: openUp
+          ? `${Math.round(vh - rect.top + gap)}px`
+          : "auto",
+      };
+      setViewMenuFloatStyle(next);
+    };
+
+    place();
+    const raf = requestAnimationFrame(place);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    compactMq.addEventListener("change", place);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+      compactMq.removeEventListener("change", place);
+    };
   }, [viewMenuOpen]);
 
   const appendConsole = useCallback((line, kind = "out") => {
@@ -1947,6 +2022,49 @@ export default function PyBotIDE() {
   // Desplegable "Ver como" en la barra superior (reemplaza la fila de pestañas
   // para no ocupar espacio; misma logica switchRepresentation).
   // En anchos estrechos el disparador se oculta por CSS y se abre desde Menu.
+  // En compact, el panel flota vía portal con flip up/down según espacio.
+  const viewMenuFloat =
+    viewMenuOpen &&
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 1220px)").matches;
+
+  const viewMenuPanel = viewMenuOpen ? (
+    <div
+      ref={viewMenuPanelRef}
+      className={`toolbar-menu${viewMenuFloat ? " toolbar-menu--view-float" : ""}`}
+      role="menu"
+      aria-label={t("repTabsLabel")}
+      style={
+        viewMenuFloat
+          ? viewMenuFloatStyle || {
+              position: "fixed",
+              left: 8,
+              right: 8,
+              top: 0,
+              visibility: "hidden",
+              zIndex: 200,
+            }
+          : undefined
+      }
+    >
+      {REP_TABS.map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          role="menuitemradio"
+          aria-checked={editorMode === id}
+          className={`toolbar-menu-item ${editorMode === id ? "toolbar-menu-item--highlight" : ""}`}
+          onClick={() => {
+            switchRepresentation(id);
+            setViewMenuOpen(false);
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
   const viewMenu = (
     <div className="tb-group tb-group--muted tb-group--view" ref={viewMenuRef}>
       <button
@@ -1962,25 +2080,9 @@ export default function PyBotIDE() {
         </span>
         <IconChevron width={14} height={14} />
       </button>
-      {viewMenuOpen ? (
-        <div className="toolbar-menu" role="menu" aria-label={t("repTabsLabel")}>
-          {REP_TABS.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={editorMode === id}
-              className={`toolbar-menu-item ${editorMode === id ? "toolbar-menu-item--highlight" : ""}`}
-              onClick={() => {
-                switchRepresentation(id);
-                setViewMenuOpen(false);
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {viewMenuFloat && viewMenuPanel
+        ? createPortal(viewMenuPanel, document.body)
+        : viewMenuPanel}
     </div>
   );
 

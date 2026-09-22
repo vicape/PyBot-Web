@@ -2180,8 +2180,9 @@
     display: none;
   }
 
-  /* Menús abiertos desde Menu: anclaje fijo, no absolute sobre caja 0×0 */
-  .tb-group--view .toolbar-menu,
+  /* Menús abiertos desde Menu: anclaje fijo, no absolute sobre caja 0×0.
+     "Ver como" en compact usa portal + flip (toolbar-menu--view-float); Placa sigue aquí. */
+  .tb-group--view .toolbar-menu:not(.toolbar-menu--view-float),
   .tb-group--board .toolbar-menu {
     pointer-events: auto;
     position: fixed;
@@ -2204,6 +2205,13 @@
   .toolbar-menu-divider--compact-only {
     display: block;
   }
+}
+
+/* Panel "Ver como" flotante (portal): evita clipping/overflow de padres en mobile */
+.toolbar-menu--view-float {
+  pointer-events: auto;
+  box-shadow: var(--shadow-md);
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 1080px) {
@@ -2570,7 +2578,7 @@
     padding: 8px 12px;
   }
 
-  .toolbar-menu {
+  .toolbar-menu:not(.toolbar-menu--view-float) {
     position: fixed;
     left: max(8px, env(safe-area-inset-left, 0px));
     right: max(8px, env(safe-area-inset-right, 0px));
