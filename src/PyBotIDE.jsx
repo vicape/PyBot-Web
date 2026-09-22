@@ -2282,7 +2282,7 @@ export default function PyBotIDE() {
                 onSignOut={sessionSignOut}
               />
               <div className="toolbar-actions">
-                <div className="tb-group">
+                <div className="tb-group tb-group--run-stop">
                   <button
                     type="button"
                     className="tb-btn tb-btn--run tb-btn--primary"
@@ -2295,6 +2295,27 @@ export default function PyBotIDE() {
                   <button type="button" className="tb-btn tb-btn--stop tb-btn--primary" onClick={onStop}>
                     <IconSquare width={16} height={16} />
                     <span className="tb-btn__label">{t("stop")}</span>
+                  </button>
+                  {/* ≤1220px: un solo slot Run↔Stop (mismos handlers); oculto en desktop por CSS */}
+                  <button
+                    type="button"
+                    className={`tb-btn tb-btn--primary tb-btn--exec-compact ${
+                      running || stopping ? "tb-btn--stop" : "tb-btn--run"
+                    }`}
+                    onClick={running || stopping ? onStop : onRun}
+                    aria-label={running || stopping ? "Stop" : "Run"}
+                  >
+                    {running || stopping ? (
+                      <>
+                        <IconSquare width={16} height={16} />
+                        <span className="tb-btn__label">Stop</span>
+                      </>
+                    ) : (
+                      <>
+                        <IconPlay width={16} height={16} />
+                        <span className="tb-btn__label">Run</span>
+                      </>
+                    )}
                   </button>
                 </div>
                 {viewMenu}
@@ -2578,7 +2599,7 @@ export default function PyBotIDE() {
                     </div>
                   ) : null}
                 </div>
-                <div className="tb-group tb-group--muted" ref={toolbarMenuRef}>
+                <div className="tb-group tb-group--muted tb-group--main-menu" ref={toolbarMenuRef}>
                   <button
                     type="button"
                     className="tb-btn tb-btn--ghost tb-btn--menu"

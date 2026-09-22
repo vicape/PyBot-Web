@@ -766,6 +766,11 @@
   min-width: 94px;
 }
 
+/* Compact Run/Stop toggle: solo visible en ≤1220px (ver media query). */
+.tb-btn--exec-compact {
+  display: none;
+}
+
 .tb-btn--connected {
   color: var(--ok);
   border-color: var(--ok);
@@ -2063,7 +2068,7 @@
   display: none;
 }
 
-/* Responsive: toolbar — ≤1220px: 2 filas (logo+PyBotClass+avatar / Ejecutar+Detener+Menu) */
+/* Responsive: toolbar — ≤1220px: 2 filas (logo+PyBotClass+avatar / Run|Stop + Menu) */
 @media (max-width: 1220px) {
   .toolbar {
     flex-wrap: wrap;
@@ -2083,6 +2088,9 @@
     width: 100%;
     justify-content: flex-start;
     flex-wrap: nowrap;
+    gap: 8px;
+    min-width: 0;
+    box-sizing: border-box;
   }
   .tb-group--muted {
     border-left: none;
@@ -2090,6 +2098,31 @@
   }
   .brand-sub {
     max-width: min(240px, 24vw);
+  }
+
+  /* Fila 2: un solo Run↔Stop (~60%) + Menu (~40%), misma altura */
+  .tb-group--run-stop {
+    flex: 3 1 0;
+    min-width: 0;
+  }
+  .tb-group--run-stop > .tb-btn:not(.tb-btn--exec-compact) {
+    display: none;
+  }
+  .tb-group--run-stop > .tb-btn--exec-compact {
+    display: inline-flex;
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .tb-group--main-menu {
+    flex: 2 1 0;
+    min-width: 0;
+  }
+  .tb-group--main-menu > .tb-btn--menu {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .brand-pybotclass {
@@ -2132,6 +2165,7 @@
   .tb-group--view,
   .tb-group--board {
     position: fixed;
+    flex: 0 0 0;
     width: 0;
     height: 0;
     margin: 0;
@@ -2275,11 +2309,11 @@
     flex-wrap: nowrap;
     gap: 6px;
   }
-  .toolbar-actions > .tb-group:not(.tb-group--view):not(.tb-group--board) {
-    flex: 1 1 auto;
+  .tb-group--run-stop {
+    flex: 3 1 0;
   }
-  .toolbar-actions > .tb-group:not(.tb-group--view):not(.tb-group--board) .tb-btn {
-    flex: 1 1 auto;
+  .tb-group--main-menu {
+    flex: 2 1 0;
   }
   .tb-group {
     flex-wrap: nowrap;
