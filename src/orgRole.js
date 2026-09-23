@@ -89,11 +89,14 @@ export function getDashboardNavCapabilities({ orgs = [], enrolledCourseCount = 0
   };
 }
 
+/**
+ * Rol del caller en un colegio.
+ * Usa SELECT directo a organization_members (RLS om_select_self: solo filas propias).
+ * Equivalente fail-closed a RPC my_role_in_org; no depende de que la RPC esté
+ * publicada en PostgREST (evita HTTP 404 de /rest/v1/rpc/my_role_in_org).
+ */
 export async function fetchMyOrgRole(supabase, orgId, userId) {
   if (!supabase || !orgId || !userId) return null;
-
-  const rpc = await supabase.rpc("my_role_in_org", { p_org_id: orgId });
-  if (!rpc.error) return rpc.data ?? null;
 
   const { data, error } = await supabase
     .from("organization_members")

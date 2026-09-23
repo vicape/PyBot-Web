@@ -211,14 +211,17 @@ export async function fetchCourseBasics(courseId) {
   return { course: data, error: null };
 }
 
-const ACTIVITY_LIST_SELECT_FULL =
-  "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, activity_kind, origin, due_at, submission_close_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at";
-
-/** Fallback si falta submission_close_at: conserva due_at + max_points. */
-const ACTIVITY_LIST_SELECT_WITHOUT_CLOSE =
+/**
+ * Select del listado (curso / tab Actividades).
+ * Omite submission_close_at: si falta en el schema cache (migración 046 no aplicada),
+ * PostgREST responde HTTP 400 al incluirla en select — causa del 400 en producción.
+ * La UI de creación/edición sigue pudiendo enviar submission_close_at; create/update
+ * ya degradan si la columna no existe.
+ */
+const ACTIVITY_LIST_SELECT_PRIMARY =
   "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, content_snapshot, content_source_type, activity_kind, origin, due_at, max_points, classroom_coursework_id, classroom_coursework_url, classroom_last_synced_at, created_at";
 
-/** Último recurso: columnas base + metadatos previos a 046. */
+/** Fallback: columnas base + metadatos previos a content snapshot / origin. */
 const ACTIVITY_LIST_SELECT_LEGACY_META =
   "id, title, description, starter_code, pybot_lesson_id, content_lesson_id, due_at, max_points, created_at";
 
@@ -233,26 +236,14 @@ export async function fetchCourseActivities(courseId, supabaseClient = null) {
   const sb = supabaseClient || getSupabase();
   if (!sb || !courseId) return { rows: [], error: "missing_args" };
 
-  const full = await sb
+  const primary = await sb
     .from("activities")
-    .select(ACTIVITY_LIST_SELECT_FULL)
+    .select(ACTIVITY_LIST_SELECT_PRIMARY)
     .eq("course_id", courseId)
     .order("created_at", { ascending: false });
 
-  if (!full.error) {
-    return { rows: full.data ?? [], error: null };
-  }
-
-  // Si solo falta submission_close_at, no descartar due_at / max_points.
-  if (isMissingColumnError(full.error.message, "submission_close_at")) {
-    const mid = await sb
-      .from("activities")
-      .select(ACTIVITY_LIST_SELECT_WITHOUT_CLOSE)
-      .eq("course_id", courseId)
-      .order("created_at", { ascending: false });
-    if (!mid.error) {
-      return { rows: mid.data ?? [], error: null };
-    }
+  if (!primary.error) {
+    return { rows: primary.data ?? [], error: null };
   }
 
   const meta = await sb
@@ -269,7 +260,10 @@ export async function fetchCourseActivities(courseId, supabaseClient = null) {
     .select("id, title, description, starter_code, pybot_lesson_id, created_at")
     .eq("course_id", courseId)
     .order("created_at", { ascending: false });
-  return { rows: fb.data ?? [], error: fb.error?.message ?? meta.error?.message ?? full.error.message };
+  return {
+    rows: fb.data ?? [],
+    error: fb.error?.message ?? meta.error?.message ?? primary.error.message,
+  };
 }
 
 /**
