@@ -104,7 +104,15 @@ export default function PyBotClassSidebar({
             content?.scrollTo({ top: 0, behavior: "smooth" });
           }
           if (item.id === "courses" && path === "/dashboard/classes" && location.hash === "#mis-cursos") {
-            document.getElementById("mis-cursos")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            const target = document.getElementById("mis-cursos");
+            if (content && target) {
+              const top =
+                target.getBoundingClientRect().top -
+                content.getBoundingClientRect().top +
+                content.scrollTop;
+              content.scrollTo({ top, behavior: "smooth" });
+            }
+            window.scrollTo(0, 0);
           }
           onNavigate?.(item);
         }}

@@ -61,14 +61,25 @@ export default function PyBotClassHome({
     const content = document.querySelector(".pbc-dashboard__content");
     if (location.pathname !== "/dashboard/classes") return;
 
+    // Scroll only the dashboard content pane. scrollIntoView() also moves
+    // window/document and can push the sticky topbar off-screen on mobile.
     if (location.hash === "#mis-cursos") {
       requestAnimationFrame(() => {
-        document.getElementById("mis-cursos")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const target = document.getElementById("mis-cursos");
+        if (content && target) {
+          const top =
+            target.getBoundingClientRect().top -
+            content.getBoundingClientRect().top +
+            content.scrollTop;
+          content.scrollTo({ top, behavior: "smooth" });
+        }
+        window.scrollTo(0, 0);
       });
       return;
     }
 
     content?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo(0, 0);
   }, [location.pathname, location.hash]);
 
   const meta = user?.user_metadata || {};
