@@ -2441,3 +2441,18 @@
     text-align: center;
   }
 }
+
+/* /join — formulario alineado al lenguaje visual PyBotClass */
+.pbc-join-page {
+  width: 100%;
+  max-width: 28rem;
+  margin: 0 auto;
+}
+
+.pbc-join-page .pbc-modal__actions {
+  flex-direction: column;
+}
+
+.pbc-join-page .pbc-modal__actions .pbc-btn {
+  width: 100%;
+}
