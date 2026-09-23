@@ -1,41 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { t } from "../i18n.js";
+import JoinCourseForm from "../components/pybotclass/layout/JoinCourseForm.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
-import { roleLabelEs } from "../orgRole.js";
+import { useJoinCourse } from "../components/pybotclass/layout/useJoinCourse.js";
 import {
   applyAppearanceToElement,
   loadAppearanceFromStorage,
   normalizeAppearance,
 } from "../platform/appearanceApi.js";
-import {
-  joinPathAfterRedeem,
-  joinSuccessMessage,
-} from "../platform/redeemOrgInvitePlan.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 
 import "../styles/dashboard-theme.css";
 import "../styles/pybotclass-dashboard.css";
-
-function redeemErrorEs(code) {
-  switch (code) {
-    case "not_found":
-      return "El código no es válido.";
-    case "expired":
-      return "Este código expiró.";
-    case "max_uses":
-      return "Este código ya no tiene usos disponibles.";
-    case "already_member":
-      return "Ya sos miembro de este colegio.";
-    case "curso_invalido":
-      return "El curso de esta invitación no es válido.";
-    case "empty_code":
-      return "Ingresá un código.";
-    case "no_session":
-      return "Tenés que iniciar sesión primero.";
-    default:
-      return "No se pudo unir el colegio.";
-  }
-}
 
 /** Shell mínimo pbc-* para flujo de invitación sin sesión (sin forzar login). */
 function JoinGuestShell({ children }) {
@@ -65,80 +42,38 @@ function JoinGuestShell({ children }) {
   );
 }
 
-function JoinForm({ code, setCode, busy, msg, msgKind, onRedeem }) {
-  return (
-    <div className="pbc-join-page">
-      <header className="pbc-hero-block" style={{ marginBottom: "1.25rem" }}>
-        <div>
-          <h1 className="pbc-hero-block__title">Unirme a un curso</h1>
-          <p className="pbc-hero-block__subtitle">
-            Pedile a tu docente el enlace o el código de invitación. La institución se asigna sola.
-          </p>
-        </div>
-      </header>
-
-      <div className="pbc-panel-card">
-        {msg ? (
-          <p className={`pbc-alert pbc-alert--${msgKind === "error" ? "error" : "info"}`}>{msg}</p>
-        ) : null}
-
-        <div className="pbc-modal__field">
-          <label className="pbc-label" htmlFor="invite-code">
-            Código de invitación
-          </label>
-          <input
-            id="invite-code"
-            className="pbc-input"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Ej. a1b2c3d4e5f6g7"
-            autoComplete="off"
-            spellCheck={false}
-            disabled={busy}
-          />
-        </div>
-
-        <div className="pbc-modal__actions">
-          <button
-            type="button"
-            className="pbc-btn pbc-btn--primary"
-            onClick={() => void onRedeem()}
-            disabled={busy}
-          >
-            {busy ? "Procesando…" : !code.trim() ? "Ingresá un código o abrí el enlace" : "Unirme"}
-          </button>
-        </div>
-
-        <p className="pbc-panel-card__hint">
-          Si creás la institución vos, quedás como gestión ({roleLabelEs("owner")}); no hace falta
-          código.
-        </p>
-      </div>
-
-      <div style={{ marginTop: "1rem" }}>
-        <Link to="/dashboard/classes" className="pbc-btn pbc-btn--ghost">
-          Volver a PyBotClass
-        </Link>
-      </div>
-    </div>
-  );
-}
-
+/**
+ * Adaptador de ruta /join (y /join?code=): auth, shell y prefill.
+ * Canje/UI canónicos: useJoinCourse + JoinCourseForm (+ redeemJoinInvite).
+ */
 export default function JoinOrgPage() {
   const navigate = useNavigate();
   const supabase = useMemo(() => getSupabase(), []);
   const [searchParams] = useSearchParams();
-  const [code, setCode] = useState(searchParams.get("code") ?? "");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [msgKind, setMsgKind] = useState("info");
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+
+  const onNeedLogin = useCallback(
+    (trimmed) => {
+      const next = `/join?code=${encodeURIComponent(trimmed)}`;
+      navigate(`/login?next=${encodeURIComponent(next)}`, { replace: false });
+    },
+    [navigate],
+  );
+
+  const { code, setCode, busy, msg, err, submit } = useJoinCourse({
+    supabase: isSupabaseConfigured() ? supabase : null,
+    initialCode: searchParams.get("code") ?? "",
+    requireSession: true,
+    navigateReplace: true,
+    successDelayMs: 900,
+    onNeedLogin,
+  });
 
   useEffect(() => {
     const c = searchParams.get("code");
     if (c) setCode(c);
-  }, [searchParams]);
+  }, [searchParams, setCode]);
 
   useEffect(() => {
     if (!isSupabaseConfigured() || !supabase) {
@@ -170,60 +105,28 @@ export default function JoinOrgPage() {
     navigate("/login", { replace: true });
   }, [supabase, navigate]);
 
-  const redeem = useCallback(async () => {
-    const trimmed = code.trim();
-    if (!trimmed) {
-      setMsgKind("error");
-      setMsg("Ingresá un código.");
-      return;
-    }
-    if (!isSupabaseConfigured() || !supabase) {
-      setMsgKind("error");
-      setMsg("Supabase no está configurado.");
-      return;
-    }
-    setBusy(true);
-    setMsg("");
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      setBusy(false);
-      const next = `/join?code=${encodeURIComponent(code.trim())}`;
-      navigate(`/login?next=${encodeURIComponent(next)}`, { replace: false });
-      return;
-    }
-
-    const { data: out, error } = await supabase.rpc("redeem_org_invite", {
-      invite_code: trimmed,
-    });
-    setBusy(false);
-    if (error) {
-      setMsgKind("error");
-      setMsg(error.message);
-      return;
-    }
-    if (!out?.ok) {
-      setMsgKind("error");
-      setMsg(redeemErrorEs(out?.error));
-      return;
-    }
-    setMsgKind("info");
-    setMsg(joinSuccessMessage(out, roleLabelEs));
-    window.setTimeout(() => {
-      navigate(joinPathAfterRedeem(out), { replace: true });
-    }, 900);
-  }, [code, navigate, supabase]);
-
   const form = (
-    <JoinForm
-      code={code}
-      setCode={setCode}
-      busy={busy}
-      msg={msg}
-      msgKind={msgKind}
-      onRedeem={redeem}
-    />
+    <div className="pbc-join-page">
+      <div className="pbc-modal" role="dialog" aria-labelledby="join-org-title">
+        <JoinCourseForm
+          code={code}
+          onCodeChange={setCode}
+          busy={busy}
+          err={err}
+          msg={msg}
+          onSubmit={submit}
+          showCancel={false}
+          inputId="invite-code"
+          titleId="join-org-title"
+          autoFocus
+        />
+      </div>
+      <div style={{ marginTop: "1rem" }}>
+        <Link to="/dashboard/classes" className="pbc-btn pbc-btn--ghost">
+          {t("pcMyCourses")}
+        </Link>
+      </div>
+    </div>
   );
 
   if (!authReady) {
