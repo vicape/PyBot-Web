@@ -1450,8 +1450,20 @@
     display: none;
   }
 
+  /* Compact role at tablet+narrow: full value visible, no ellipsis */
   .pbc-topbar__role {
-    max-width: 7.5rem;
+    max-width: none;
+    overflow: visible;
+    text-overflow: unset;
+    flex-shrink: 0;
+  }
+
+  .pbc-topbar__role-full {
+    display: none;
+  }
+
+  .pbc-topbar__role-compact {
+    display: inline;
   }
 }
 
@@ -1538,22 +1550,10 @@
     font-size: 0.75rem;
   }
 
-  /* Compact role: full value visible, no ellipsis */
+  /* Mobile density for compact role (presentation already switched at ≤860px) */
   .pbc-topbar__role {
-    max-width: none;
-    overflow: visible;
-    text-overflow: unset;
-    flex-shrink: 0;
     padding: 0.1rem 0.35rem;
     font-size: 0.625rem;
-  }
-
-  .pbc-topbar__role-full {
-    display: none;
-  }
-
-  .pbc-topbar__role-compact {
-    display: inline;
   }
 }
 
