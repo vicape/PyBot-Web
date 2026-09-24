@@ -1,10 +1,11 @@
 import { t } from "../i18n.js";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PyBotClassShell, { CourseTabs, PyBotClassBreadcrumb } from "../components/pybotclass/PyBotClassShell.jsx";
 import {
   PbcAlert,
   PbcCourseHeader,
+  PbcEmpty,
   PbcFormPanel,
   PbcLoading,
   PbcPage,
@@ -15,8 +16,14 @@ import CourseRosterTab from "../components/pybotclass/CourseRosterTab.jsx";
 import CourseSubmissionsTab from "../components/pybotclass/CourseSubmissionsTab.jsx";
 import CourseGradesTab from "../components/pybotclass/CourseGradesTab.jsx";
 import CourseIntegrationsTab from "../components/pybotclass/CourseIntegrationsTab.jsx";
-import { fetchMyOrgRole, isStaffRole } from "../orgRole.js";
-import { canTeachCourse, fetchMyCourseRole, isCourseStudent } from "../platform/courseRole.js";
+import { fetchMyOrgRole } from "../orgRole.js";
+import {
+  COURSE_ACCESS_MODES,
+  courseTabIdsForMode,
+  fetchMyCourseRole,
+  formatCurrentRoleLabel,
+  resolveCourseContext,
+} from "../platform/courseRole.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
 import { fetchProfile } from "../platform/profileApi.js";
@@ -29,20 +36,21 @@ import {
 import { listCourseWork } from "../classroom/classroomApi.js";
 import { getValidClassroomToken } from "../platform/classroomToken.js";
 
-const TEACHER_TABS = [
-  { id: "resumen", label: t("pcTabSummary") },
-  { id: "actividades", label: t("pcTabActivities") },
-  { id: "alumnos", label: t("pcTabStudents") },
-  { id: "entregas", label: t("pcTabSubmissions") },
-  { id: "notas", label: t("pcTabGrades") },
-  { id: "integraciones", label: t("pcTabIntegrations") },
-];
+const TAB_LABELS = {
+  resumen: () => t("pcTabSummary"),
+  actividades: () => t("pcTabActivities"),
+  alumnos: () => t("pcTabStudents"),
+  entregas: () => t("pcTabSubmissions"),
+  notas: () => t("pcTabGrades"),
+  integraciones: () => t("pcTabIntegrations"),
+};
 
-const STUDENT_TABS = [
-  { id: "resumen", label: t("pcTabSummary") },
-  { id: "actividades", label: t("pcTabActivities") },
-  { id: "notas", label: t("pcTabGrades") },
-];
+function tabsForMode(mode) {
+  return courseTabIdsForMode(mode).map((id) => ({
+    id,
+    label: TAB_LABELS[id]?.() || id,
+  }));
+}
 
 export default function PyBotClassCoursePage() {
   const { courseId } = useParams();
@@ -61,22 +69,24 @@ export default function PyBotClassCoursePage() {
   const [importBusy, setImportBusy] = useState(false);
   const [importPicker, setImportPicker] = useState(null);
 
-  const orgStaff = isStaffRole(myRole);
-  const canTeach = canTeachCourse({ orgRole: myRole, courseRole });
-  const isStudent = isCourseStudent({ courseRole });
+  const context = useMemo(
+    () =>
+      resolveCourseContext({
+        orgRole: myRole,
+        courseRole,
+        isSuperAdmin: superAdmin,
+      }),
+    [myRole, courseRole, superAdmin],
+  );
 
-  const tabs = canTeach ? TEACHER_TABS : STUDENT_TABS;
+  const { mode, displayRole, capabilities } = context;
+  const canTeach = capabilities.canTeachCourse && mode === COURSE_ACCESS_MODES.TEACHING;
+  const contextualRoleLabel = formatCurrentRoleLabel(displayRole, t);
+
+  const tabs = tabsForMode(mode);
   const rawTab = searchParams.get("tab") || "resumen";
-  const activeTab = tabs.some((t) => t.id === rawTab) ? rawTab : "resumen";
+  const activeTab = tabs.some((tab) => tab.id === rawTab) ? rawTab : "resumen";
   const setTab = (tabId) => setSearchParams(tabId === "resumen" ? {} : { tab: tabId }, { replace: true });
-
-  const roleDisplay = orgStaff
-    ? (myRole === "owner" ? t("pcManagement") : t("pcTeacher"))
-    : courseRole === "teacher"
-      ? t("pcCoTeacher")
-      : courseRole === "student"
-        ? t("pcStudent")
-        : (courseRole || myRole || "—");
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -174,103 +184,121 @@ export default function PyBotClassCoursePage() {
   if (!user) return null;
 
   return (
-    <PyBotClassShell user={user} showAdminTab={superAdmin} onSignOut={() => void signOut()}>
+    <PyBotClassShell
+      user={user}
+      showAdminTab={superAdmin}
+      onSignOut={() => void signOut()}
+      contextualRoleLabel={contextualRoleLabel}
+    >
       <PbcPage>
         <PyBotClassBreadcrumb items={[{ label: course?.title || t("pcClass") }]} />
 
         <PbcCourseHeader
           title={course?.title || "Clase"}
           orgName={orgName}
-          roleLabel={canTeach ? roleDisplay : `${t("pcYourRole")} ${roleDisplay}`}
           classroomLinked={!!course?.classroom_course_id}
         />
 
         {profileError ? <PbcAlert variant="error">{profileError}</PbcAlert> : null}
         {err ? <PbcAlert variant="error">{err}</PbcAlert> : null}
 
-        <CourseTabs tabs={tabs} activeTab={activeTab} onTabChange={setTab} />
+        {mode === COURSE_ACCESS_MODES.NONE ? (
+          <PbcEmpty title={t("pcNoCourseAccess")} />
+        ) : (
+          <>
+            <CourseTabs tabs={tabs} activeTab={activeTab} onTabChange={setTab} />
 
-        {activeTab === "resumen" ? (
-          <CourseSummaryTab
-            courseId={courseId}
-            canTeach={canTeach}
-            onGoSubmissions={canTeach ? () => setTab("entregas") : undefined}
-          />
-        ) : null}
+            {activeTab === "resumen" ? (
+              <CourseSummaryTab
+                courseId={courseId}
+                mode={mode}
+                onGoSubmissions={canTeach ? () => setTab("entregas") : undefined}
+              />
+            ) : null}
 
-        {activeTab === "actividades" ? (
-          <CourseActivitiesTab
-            activities={activities}
-            canTeach={canTeach}
-            isStudent={isStudent}
-            user={user}
-            supabase={supabase}
-            courseId={courseId}
-            saving={false}
-            err={err}
-            onReload={load}
-            onImportClassroom={canTeach && course?.classroom_course_id ? importFromClassroom : null}
-            importBusy={importBusy}
-          />
-        ) : null}
+            {activeTab === "actividades" ? (
+              <CourseActivitiesTab
+                activities={activities}
+                mode={mode}
+                user={user}
+                supabase={supabase}
+                courseId={courseId}
+                saving={false}
+                err={err}
+                onReload={load}
+                onImportClassroom={
+                  canTeach && course?.classroom_course_id ? importFromClassroom : null
+                }
+                importBusy={importBusy}
+              />
+            ) : null}
 
-        {activeTab === "alumnos" && canTeach ? (
-          <CourseRosterTab
-            orgId={course?.org_id}
-            courseId={courseId}
-            classroomCourseId={course?.classroom_course_id}
-            user={user}
-            orgRole={myRole}
-          />
-        ) : null}
+            {activeTab === "alumnos" && mode === COURSE_ACCESS_MODES.TEACHING ? (
+              <CourseRosterTab
+                orgId={course?.org_id}
+                courseId={courseId}
+                classroomCourseId={course?.classroom_course_id}
+                user={user}
+                orgRole={myRole}
+              />
+            ) : null}
 
-        {activeTab === "entregas" && canTeach ? <CourseSubmissionsTab courseId={courseId} /> : null}
+            {activeTab === "entregas" && mode === COURSE_ACCESS_MODES.TEACHING ? (
+              <CourseSubmissionsTab courseId={courseId} />
+            ) : null}
 
-        {activeTab === "notas" ? <CourseGradesTab courseId={courseId} canTeach={canTeach} /> : null}
+            {activeTab === "notas" ? (
+              <CourseGradesTab
+                courseId={courseId}
+                canTeach={mode === COURSE_ACCESS_MODES.TEACHING}
+              />
+            ) : null}
 
-        {activeTab === "integraciones" && canTeach ? (
-          <CourseIntegrationsTab
-            courseId={courseId}
-            orgId={course?.org_id}
-            classroomCourseId={course?.classroom_course_id}
-            user={user}
-            onReloadActivities={load}
-          />
-        ) : null}
+            {activeTab === "integraciones" && mode === COURSE_ACCESS_MODES.TEACHING ? (
+              <CourseIntegrationsTab
+                courseId={courseId}
+                orgId={course?.org_id}
+                classroomCourseId={course?.classroom_course_id}
+                user={user}
+                onReloadActivities={load}
+              />
+            ) : null}
 
-        {importPicker ? (
-          <PbcFormPanel title={t("pcImportFromClassroom")} onCancel={() => setImportPicker(null)}>
-            <ul className="pbc-list">
-              {importPicker.list.map((cw) => (
-                <li key={cw.id} className="pbc-list-item">
-                  <label style={{ display: "flex", gap: "0.65rem", alignItems: "center", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={importPicker.selected.has(cw.id)}
-                      onChange={(e) => {
-                        const next = new Set(importPicker.selected);
-                        if (e.target.checked) next.add(cw.id);
-                        else next.delete(cw.id);
-                        setImportPicker({ ...importPicker, selected: next });
-                      }}
-                    />
-                    <span className="pbc-list-item__title">{cw.title}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-            <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.85rem" }}>
-              <button
-                type="button"
-                className="auth-btn auth-btn--primary auth-btn--sm"
-                disabled={importBusy}
-                onClick={() => void confirmImport()}
-              >
-                {importBusy ? t("pcImporting") : t("pcImportSelected")}
-              </button>
-            </div>
-          </PbcFormPanel>
-        ) : null}
+            {importPicker && mode === COURSE_ACCESS_MODES.TEACHING ? (
+              <PbcFormPanel title={t("pcImportFromClassroom")} onCancel={() => setImportPicker(null)}>
+                <ul className="pbc-list">
+                  {importPicker.list.map((cw) => (
+                    <li key={cw.id} className="pbc-list-item">
+                      <label style={{ display: "flex", gap: "0.65rem", alignItems: "center", cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={importPicker.selected.has(cw.id)}
+                          onChange={(e) => {
+                            const next = new Set(importPicker.selected);
+                            if (e.target.checked) next.add(cw.id);
+                            else next.delete(cw.id);
+                            setImportPicker({ ...importPicker, selected: next });
+                          }}
+                        />
+                        <span className="pbc-list-item__title">{cw.title}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.85rem" }}>
+                  <button
+                    type="button"
+                    className="auth-btn auth-btn--primary auth-btn--sm"
+                    disabled={importBusy}
+                    onClick={() => void confirmImport()}
+                  >
+                    {importBusy ? t("pcImporting") : t("pcImportSelected")}
+                  </button>
+                </div>
+              </PbcFormPanel>
+            ) : null}
+          </>
+        )}
 
         <div className="pbc-footer-links">
           <Link to="/dashboard/classes" className="auth-link">

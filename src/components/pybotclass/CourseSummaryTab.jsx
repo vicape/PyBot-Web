@@ -4,8 +4,10 @@ import {
   fetchPybotclassCourseSummary,
   fetchPybotclassStudentSummary,
 } from "../../platform/pybotClassApi.js";
+import { COURSE_ACCESS_MODES } from "../../platform/courseRole.js";
 import {
   PbcAlert,
+  PbcEmpty,
   PbcList,
   PbcListItem,
   PbcLoading,
@@ -13,7 +15,7 @@ import {
   PbcStatGrid,
 } from "./PyBotClassUi.jsx";
 
-export default function CourseSummaryTab({ courseId, canTeach, onGoSubmissions }) {
+export default function CourseSummaryTab({ courseId, mode, onGoSubmissions }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -21,9 +23,18 @@ export default function CourseSummaryTab({ courseId, canTeach, onGoSubmissions }
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (mode === COURSE_ACCESS_MODES.NONE || !mode) {
+        setSummary(null);
+        setErr("");
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setErr("");
-      const fn = canTeach ? fetchPybotclassCourseSummary : fetchPybotclassStudentSummary;
+      const fn =
+        mode === COURSE_ACCESS_MODES.STUDYING
+          ? fetchPybotclassStudentSummary
+          : fetchPybotclassCourseSummary;
       const { summary: data, error } = await fn(courseId);
       if (cancelled) return;
       if (error) setErr(error);
@@ -33,12 +44,16 @@ export default function CourseSummaryTab({ courseId, canTeach, onGoSubmissions }
     return () => {
       cancelled = true;
     };
-  }, [courseId, canTeach]);
+  }, [courseId, mode]);
+
+  if (mode === COURSE_ACCESS_MODES.NONE || !mode) {
+    return <PbcEmpty title={t("pcNoCourseAccess")} />;
+  }
 
   if (loading) return <PbcLoading label={t("pcLoadingSummary")} />;
   if (err) return <PbcAlert variant="error">{err}</PbcAlert>;
 
-  if (!canTeach) {
+  if (mode === COURSE_ACCESS_MODES.STUDYING) {
     return (
       <PbcSection title={t("pcYourProgress")}>
         <PbcStatGrid
@@ -67,12 +82,14 @@ export default function CourseSummaryTab({ courseId, canTeach, onGoSubmissions }
   }
 
   const recent = summary?.recent_activities || [];
+  const isTeaching = mode === COURSE_ACCESS_MODES.TEACHING;
 
   return (
     <PbcSection
       title={t("pcClassSummary")}
+      description={mode === COURSE_ACCESS_MODES.ADMIN ? t("pcAdminReadOnly") : undefined}
       actions={
-        onGoSubmissions ? (
+        isTeaching && onGoSubmissions ? (
           <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" onClick={onGoSubmissions}>
             {t("pcViewSubmissions")}
           </button>

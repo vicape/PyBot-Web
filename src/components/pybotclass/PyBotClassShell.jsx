@@ -5,10 +5,16 @@ export default function PyBotClassShell({
   showAdminTab = false,
   adminActive = false,
   onSignOut,
+  contextualRoleLabel = null,
   children,
 }) {
   return (
-    <PyBotClassLayout user={user} showAdmin={showAdminTab || adminActive} onSignOut={onSignOut}>
+    <PyBotClassLayout
+      user={user}
+      showAdmin={showAdminTab || adminActive}
+      onSignOut={onSignOut}
+      contextualRoleLabel={contextualRoleLabel}
+    >
       <div className="pbc-course-page">{children}</div>
     </PyBotClassLayout>
   );

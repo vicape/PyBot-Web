@@ -307,6 +307,24 @@
   white-space: nowrap;
 }
 
+.pbc-topbar__role {
+  display: inline-flex;
+  align-items: center;
+  max-width: 11rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--pbc-border);
+  background: var(--pbc-panel-hover);
+  color: var(--pbc-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+}
+
 .pbc-dashboard__content {
   flex: 1;
   min-height: 0;
@@ -1395,6 +1413,12 @@
 
   .pbc-topbar__user-text {
     display: none;
+  }
+
+  .pbc-topbar__role {
+    max-width: 7.5rem;
+    font-size: 0.625rem;
+    padding: 0.1rem 0.4rem;
   }
 }
 

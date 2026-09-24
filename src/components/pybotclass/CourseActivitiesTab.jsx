@@ -7,6 +7,7 @@ import {
 } from "../../platform/pybotClassApi.js";
 import { fetchMySubmission, submissionVersionLabel } from "../../platform/activitySubmissions.js";
 import { deriveProcessStatus } from "../../platform/submissionWorkflow.js";
+import { COURSE_ACCESS_MODES } from "../../platform/courseRole.js";
 import { formatDueDate, processStatusLabel } from "./pyclassI18n.js";
 import {
   PbcEmpty,
@@ -205,13 +206,13 @@ function StudentActivityRow({ activity, userId }) {
             <span className="pbc-pill pbc-pill--content">{t("pcMyContent")}</span>
           ) : null}
           {process === "evaluado" || process === "cerrado" ? (
-            <span className="pbc-pill pbc-pill--ok">{processStatusLabelEs(process)}</span>
+            <span className="pbc-pill pbc-pill--ok">{processStatusLabel(process)}</span>
           ) : process === "entregado" ||
             process === "reentregado" ||
             process === "revision_solicitada" ? (
-            <span className="pbc-pill pbc-pill--warn">{processStatusLabelEs(process)}</span>
+            <span className="pbc-pill pbc-pill--warn">{processStatusLabel(process)}</span>
           ) : (
-            <span className="pbc-pill pbc-pill--muted">{processStatusLabelEs(process)}</span>
+            <span className="pbc-pill pbc-pill--muted">{processStatusLabel(process)}</span>
           )}
         </>
       }
@@ -224,10 +225,39 @@ function StudentActivityRow({ activity, userId }) {
   );
 }
 
+function activityListMeta(activity) {
+  return [
+    activity.due_at ? `${t("pcDuePrefix")} ${formatDueDate(activity.due_at)}` : t("pcNoDate"),
+    activity.max_points != null ? `${activity.max_points} pts` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function activityListBadges(activity) {
+  return (
+    <>
+      {activity.content_lesson_id || activity.content_snapshot || activity.content_source_type ? (
+        <span className="pbc-pill pbc-pill--content">
+          {activity.activity_kind === "exercise"
+            ? t("pcExercise")
+            : activity.activity_kind === "task"
+              ? t("pcTask")
+              : t("pcFromMyContent")}
+        </span>
+      ) : null}
+      {activity.classroom_coursework_id ? (
+        <span className="pbc-pill pbc-pill--classroom">Classroom</span>
+      ) : activity.content_lesson_id || activity.content_snapshot ? null : (
+        <span className="pbc-pill pbc-pill--muted">PyBotClass</span>
+      )}
+    </>
+  );
+}
+
 export default function CourseActivitiesTab({
   activities,
-  canTeach,
-  isStudent,
+  mode,
   user,
   supabase,
   courseId,
@@ -271,7 +301,11 @@ export default function CourseActivitiesTab({
     await onReload();
   };
 
-  if (isStudent) {
+  if (mode === COURSE_ACCESS_MODES.NONE || !mode) {
+    return <PbcEmpty title={t("pcNoCourseAccess")} />;
+  }
+
+  if (mode === COURSE_ACCESS_MODES.STUDYING) {
     return (
       <PbcSection title={t("pcActivities")}>
         {activities.length === 0 ? (
@@ -287,6 +321,31 @@ export default function CourseActivitiesTab({
     );
   }
 
+  if (mode === COURSE_ACCESS_MODES.ADMIN) {
+    return (
+      <PbcSection
+        title={t("pcActivities")}
+        description={t("pcAdminReadOnly")}
+      >
+        {activities.length === 0 ? (
+          <PbcEmpty title={t("pcNoActivities")} />
+        ) : (
+          <PbcList>
+            {activities.map((a) => (
+              <PbcListItem
+                key={a.id}
+                title={a.title}
+                meta={activityListMeta(a)}
+                badges={activityListBadges(a)}
+              />
+            ))}
+          </PbcList>
+        )}
+      </PbcSection>
+    );
+  }
+
+  // teaching — controles docentes existentes
   return (
     <>
       <PbcSection
@@ -328,30 +387,8 @@ export default function CourseActivitiesTab({
               <PbcListItem
                 key={a.id}
                 title={a.title}
-                meta={[
-                  a.due_at ? `Entrega ${formatDueDateEs(a.due_at)}` : "Sin fecha",
-                  a.max_points != null ? `${a.max_points} pts` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-                badges={
-                  <>
-                    {a.content_lesson_id || a.content_snapshot || a.content_source_type ? (
-                      <span className="pbc-pill pbc-pill--content">
-                        {a.activity_kind === "exercise"
-                          ? t("pcExercise")
-                          : a.activity_kind === "task"
-                            ? t("pcTask")
-                            : t("pcFromMyContent")}
-                      </span>
-                    ) : null}
-                    {a.classroom_coursework_id ? (
-                      <span className="pbc-pill pbc-pill--classroom">Classroom</span>
-                    ) : a.content_lesson_id || a.content_snapshot ? null : (
-                      <span className="pbc-pill pbc-pill--muted">PyBotClass</span>
-                    )}
-                  </>
-                }
+                meta={activityListMeta(a)}
+                badges={activityListBadges(a)}
                 actions={
                   <>
                     <button
