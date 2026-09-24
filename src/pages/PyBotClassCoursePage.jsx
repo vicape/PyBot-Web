@@ -21,6 +21,7 @@ import {
   COURSE_ACCESS_MODES,
   courseTabIdsForMode,
   fetchMyCourseRole,
+  formatCurrentRoleCompact,
   formatCurrentRoleLabel,
   resolveCourseContext,
 } from "../platform/courseRole.js";
@@ -82,6 +83,7 @@ export default function PyBotClassCoursePage() {
   const { mode, displayRole, capabilities } = context;
   const canTeach = capabilities.canTeachCourse && mode === COURSE_ACCESS_MODES.TEACHING;
   const contextualRoleLabel = formatCurrentRoleLabel(displayRole, t);
+  const contextualRoleCompact = formatCurrentRoleCompact(displayRole, t);
 
   const tabs = tabsForMode(mode);
   const rawTab = searchParams.get("tab") || "resumen";
@@ -189,6 +191,7 @@ export default function PyBotClassCoursePage() {
       showAdminTab={superAdmin}
       onSignOut={() => void signOut()}
       contextualRoleLabel={contextualRoleLabel}
+      contextualRoleCompact={contextualRoleCompact}
     >
       <PbcPage>
         <PyBotClassBreadcrumb items={[{ label: course?.title || t("pcClass") }]} />

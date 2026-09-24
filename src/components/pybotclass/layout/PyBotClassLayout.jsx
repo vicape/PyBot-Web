@@ -20,6 +20,7 @@ export default function PyBotClassLayout({
   onSignOut,
   hasStaffAccess: hasStaffAccessProp,
   contextualRoleLabel = null,
+  contextualRoleCompact = null,
   children,
 }) {
   const containerRef = useRef(null);
@@ -66,6 +67,7 @@ export default function PyBotClassLayout({
             onSignOut={onSignOut}
             onMenuOpen={() => setSidebarOpen(true)}
             contextualRoleLabel={contextualRoleLabel}
+            contextualRoleCompact={contextualRoleCompact}
           />
           <div className="pbc-dashboard__content">{children}</div>
         </div>

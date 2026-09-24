@@ -13,6 +13,7 @@ import {
   canTeachCourse,
   courseDisplayRoleI18nKey,
   courseTabIdsForMode,
+  formatCurrentRoleCompact,
   formatCurrentRoleLabel,
   isCourseStudent,
   normalizeCourseRole,
@@ -70,6 +71,7 @@ test("ROLE-01 owner in own course -> Docente, teaching", () => {
   assert.equal(ctx.mode, COURSE_ACCESS_MODES.TEACHING);
   assert.equal(ctx.displayRole, "teacher");
   assert.equal(formatCurrentRoleLabel(ctx.displayRole, tEs), "Rol actual: Docente");
+  assert.equal(formatCurrentRoleCompact(ctx.displayRole, tEs), "Docente");
   assert.equal(ctx.capabilities.canTeachCourse, true);
   assert.equal(ctx.capabilities.canManageOrganization, true);
 });
@@ -86,6 +88,7 @@ test("ROLE-03 course-specific teacher -> Co-docente, teaching", () => {
   assert.equal(ctx.mode, COURSE_ACCESS_MODES.TEACHING);
   assert.equal(ctx.displayRole, "co_teacher");
   assert.equal(formatCurrentRoleLabel(ctx.displayRole, tEs), "Rol actual: Co-docente");
+  assert.equal(formatCurrentRoleCompact(ctx.displayRole, tEs), "Co-docente");
   assert.equal(ctx.capabilities.canTeachCourse, true);
 });
 
@@ -94,6 +97,7 @@ test("ROLE-04 student -> Alumno, studying", () => {
   assert.equal(ctx.mode, COURSE_ACCESS_MODES.STUDYING);
   assert.equal(ctx.displayRole, "student");
   assert.equal(formatCurrentRoleLabel(ctx.displayRole, tEs), "Rol actual: Alumno");
+  assert.equal(formatCurrentRoleCompact(ctx.displayRole, tEs), "Alumno");
   assert.equal(ctx.capabilities.canStudyCourse, true);
   assert.equal(ctx.capabilities.canTeachCourse, false);
 });
@@ -107,6 +111,7 @@ test("ROLE-05 superadmin no pedagogical membership -> Superadmin, admin, no teac
   assert.equal(ctx.mode, COURSE_ACCESS_MODES.ADMIN);
   assert.equal(ctx.displayRole, "superadmin");
   assert.equal(formatCurrentRoleLabel(ctx.displayRole, tEs), "Rol actual: Superadmin");
+  assert.equal(formatCurrentRoleCompact(ctx.displayRole, tEs), "Superadmin");
   assert.equal(ctx.capabilities.canManagePlatform, true);
   assert.equal(ctx.capabilities.canTeachCourse, false);
   assert.equal(ctx.capabilities.canStudyCourse, false);
@@ -181,9 +186,29 @@ test("ROLE-11 /dashboard/classes mixed roles -> no forced current-role badge", (
 
   const topbar = readSrc("src/components/pybotclass/layout/PyBotClassTopbar.jsx");
   assert.match(topbar, /contextualRoleLabel/);
+  assert.match(topbar, /contextualRoleCompact/);
   // Solo muestra badge si hay label (no inventa "—")
   assert.match(topbar, /contextualRoleLabel \?/);
+  assert.match(topbar, /pbc-topbar__role-full/);
+  assert.match(topbar, /pbc-topbar__role-compact/);
+  assert.match(topbar, /aria-label=\{contextualRoleLabel\}/);
   assert.doesNotMatch(topbar, /Rol actual: —|Tu rol: —|Your role: —/);
+  assert.doesNotMatch(topbar, /contextualRoleLabel\.split|substring|slice\(.*pcCurrentRole/);
+});
+
+test("formatCurrentRoleCompact es independiente de la etiqueta full (no parsea strings)", () => {
+  assert.equal(formatCurrentRoleCompact("teacher", tEs), "Docente");
+  assert.equal(formatCurrentRoleCompact("co_teacher", tEs), "Co-docente");
+  assert.equal(formatCurrentRoleCompact("student", tEs), "Alumno");
+  assert.equal(formatCurrentRoleCompact("superadmin", tEs), "Superadmin");
+  assert.equal(formatCurrentRoleCompact(null, tEs), null);
+  assert.equal(formatCurrentRoleCompact(undefined, tEs), null);
+  // Contrato: compact usa courseDisplayRoleI18nKey + translate, no el string full
+  assert.notEqual(formatCurrentRoleCompact("teacher", tEs), formatCurrentRoleLabel("teacher", tEs));
+  assert.equal(
+    formatCurrentRoleLabel("teacher", tEs),
+    `${tEs("pcCurrentRole")} ${formatCurrentRoleCompact("teacher", tEs)}`,
+  );
 });
 
 test("capacidades trusted: platform/org/study/grade/roster", () => {

@@ -203,6 +203,19 @@ export function formatCurrentRoleLabel(displayRole, translate) {
 }
 
 /**
+ * Valor compacto del rol (sin prefijo "Rol actual:") para UI estrecha.
+ * Independiente de formatCurrentRoleLabel — no parsea strings traducidos.
+ * @param {"teacher"|"co_teacher"|"student"|"superadmin"|null|undefined} displayRole
+ * @param {(key: string) => string} translate
+ * @returns {string|null}
+ */
+export function formatCurrentRoleCompact(displayRole, translate) {
+  const key = courseDisplayRoleI18nKey(displayRole);
+  if (!key || typeof translate !== "function") return null;
+  return translate(key);
+}
+
+/**
  * Lee el rol del usuario en course_members.
  * @returns {Promise<string | null>}
  */

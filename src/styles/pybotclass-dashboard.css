@@ -194,6 +194,9 @@
   position: sticky;
   top: 0;
   z-index: 30;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .pbc-topbar__menu-btn {
@@ -323,6 +326,38 @@
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 1;
+}
+
+.pbc-topbar__role-full {
+  display: inline;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pbc-topbar__role-compact {
+  display: none;
+}
+
+.pbc-topbar__lang {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.pbc-topbar__lang select {
+  max-width: 6.5rem;
+  padding: 0.4rem 0.45rem;
+  border-radius: var(--pbc-radius-sm);
+  border: 1px solid var(--pbc-border);
+  background: var(--pbc-panel);
+  color: var(--pbc-text);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.pbc-topbar__logout {
+  flex-shrink: 0;
 }
 
 .pbc-dashboard__content {
@@ -1417,8 +1452,6 @@
 
   .pbc-topbar__role {
     max-width: 7.5rem;
-    font-size: 0.625rem;
-    padding: 0.1rem 0.4rem;
   }
 }
 
@@ -1444,10 +1477,130 @@
     padding: 1rem;
   }
 
+  /* Intentional 2-row topbar: controls | search — no accidental wrap */
+  .pbc-topbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "menu actions"
+      "search search";
+    gap: 0.45rem 0.4rem;
+    padding: 0.55rem 0.65rem;
+    align-items: center;
+  }
+
+  .pbc-topbar__menu-btn {
+    grid-area: menu;
+    padding: 0.35rem 0.5rem;
+    flex-shrink: 0;
+  }
+
   .pbc-topbar__search {
-    order: 3;
-    flex: 1 1 100%;
+    grid-area: search;
+    order: unset;
+    flex: unset;
     max-width: none;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .pbc-topbar__actions {
+    grid-area: actions;
+    margin-left: 0;
+    justify-self: end;
+    min-width: 0;
+    gap: 0.3rem;
+    flex-wrap: nowrap;
+  }
+
+  .pbc-topbar__lang select {
+    max-width: 4.25rem;
+    padding: 0.28rem 0.2rem;
+    font-size: 0.75rem;
+  }
+
+  .pbc-theme-toggle__btn {
+    padding: 0.28rem 0.35rem;
+  }
+
+  .pbc-topbar__user {
+    gap: 0.3rem;
+    padding-left: 0.3rem;
+  }
+
+  .pbc-topbar__avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .pbc-topbar__logout {
+    padding: 0.28rem 0.45rem;
+    font-size: 0.75rem;
+  }
+
+  /* Compact role: full value visible, no ellipsis */
+  .pbc-topbar__role {
+    max-width: none;
+    overflow: visible;
+    text-overflow: unset;
+    flex-shrink: 0;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.625rem;
+  }
+
+  .pbc-topbar__role-full {
+    display: none;
+  }
+
+  .pbc-topbar__role-compact {
+    display: inline;
+  }
+}
+
+/* Extra density for the narrowest phones (360–400) — no scale(), no ellipsis on role */
+@media (max-width: 400px) {
+  .pbc-topbar {
+    gap: 0.35rem 0.3rem;
+    padding: 0.45rem 0.5rem;
+  }
+
+  .pbc-topbar__actions {
+    gap: 0.2rem;
+  }
+
+  .pbc-topbar__menu-btn {
+    padding: 0.3rem 0.4rem;
+  }
+
+  .pbc-topbar__lang select {
+    max-width: 3.5rem;
+    padding: 0.22rem 0.15rem;
+    font-size: 0.6875rem;
+  }
+
+  .pbc-theme-toggle__btn {
+    padding: 0.22rem 0.28rem;
+    font-size: 0.75rem;
+  }
+
+  .pbc-topbar__user {
+    gap: 0.25rem;
+    padding-left: 0.25rem;
+  }
+
+  .pbc-topbar__avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .pbc-topbar__logout {
+    padding: 0.22rem 0.35rem;
+    font-size: 0.6875rem;
+  }
+
+  .pbc-topbar__role {
+    font-size: 0.5625rem;
+    padding: 0.08rem 0.28rem;
   }
 }
 

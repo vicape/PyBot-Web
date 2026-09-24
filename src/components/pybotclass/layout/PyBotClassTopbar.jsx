@@ -16,6 +16,7 @@ export default function PyBotClassTopbar({
   onSignOut,
   onMenuOpen,
   contextualRoleLabel = null,
+  contextualRoleCompact = null,
 }) {
   const [lang, setLangState] = useState(() => getLang());
   const onLangChange = (next) => {
@@ -95,11 +96,20 @@ export default function PyBotClassTopbar({
             {userEmail ? <span>{userEmail}</span> : null}
           </div>
           {contextualRoleLabel ? (
-            <span className="pbc-topbar__role" title={contextualRoleLabel}>
-              {contextualRoleLabel}
+            <span
+              className="pbc-topbar__role"
+              title={contextualRoleLabel}
+              aria-label={contextualRoleLabel}
+            >
+              <span className="pbc-topbar__role-full">{contextualRoleLabel}</span>
+              {contextualRoleCompact ? (
+                <span className="pbc-topbar__role-compact" aria-hidden="true">
+                  {contextualRoleCompact}
+                </span>
+              ) : null}
             </span>
           ) : null}
-          <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={onSignOut}>
+          <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-topbar__logout" onClick={onSignOut}>
             {t("pcSignOut")}
           </button>
         </div>

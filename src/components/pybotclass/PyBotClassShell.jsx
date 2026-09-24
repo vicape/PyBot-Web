@@ -6,6 +6,7 @@ export default function PyBotClassShell({
   adminActive = false,
   onSignOut,
   contextualRoleLabel = null,
+  contextualRoleCompact = null,
   children,
 }) {
   return (
@@ -14,6 +15,7 @@ export default function PyBotClassShell({
       showAdmin={showAdminTab || adminActive}
       onSignOut={onSignOut}
       contextualRoleLabel={contextualRoleLabel}
+      contextualRoleCompact={contextualRoleCompact}
     >
       <div className="pbc-course-page">{children}</div>
     </PyBotClassLayout>
