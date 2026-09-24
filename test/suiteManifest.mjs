@@ -52,6 +52,7 @@ export const TEST_SUITES = Object.freeze({
     "firmwareRunRerun.test.mjs",
     "hardwareBridgeSerialPriority.test.mjs",
     "immutableSubmissionVersions.test.mjs",
+    "materialV2Content.test.mjs",
     "micropythonNativeBle.test.mjs",
     "micropythonNetwork.test.mjs",
     "micropythonPortOpenBusy.test.mjs",

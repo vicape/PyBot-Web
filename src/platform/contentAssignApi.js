@@ -1,7 +1,28 @@
 import { getSupabase } from "../supabaseClient.js";
 import { getContent, getLesson, listContentUnits, listUnitLessons } from "./contentApi.js";
+import { pickContentMetadata } from "./contentMetadata.js";
 import { normalizeCourseRole } from "./courseRole.js";
 import { listPybotclassMyCourses } from "./pybotClassApi.js";
+
+export const CONTENT_SNAPSHOT_SCHEMA_VERSION = 2;
+
+function contentMetaForSnapshot(content) {
+  const meta = pickContentMetadata(content) || {};
+  return {
+    language_code: meta.language_code ?? null,
+    recommended_age_min: meta.recommended_age_min ?? null,
+    recommended_age_max: meta.recommended_age_max ?? null,
+    estimated_minutes: meta.estimated_minutes ?? null,
+    difficulty: meta.difficulty ?? null,
+    subject: meta.subject ?? null,
+    tags: meta.tags ?? [],
+    learning_objectives: meta.learning_objectives ?? [],
+    prerequisites: meta.prerequisites ?? [],
+    copied_from_content_id: meta.copied_from_content_id ?? null,
+    original_content_id: meta.original_content_id ?? null,
+    original_owner_id: meta.original_owner_id ?? null,
+  };
+}
 
 function canAssignAsTeacher(row) {
   return normalizeCourseRole(row?.my_course_role) === "teacher";
@@ -71,16 +92,20 @@ export async function buildContentSnapshot(opts) {
     const { content } = contentId ? await getContent(contentId) : { content: null };
     return {
       snapshot: {
-        schemaVersion: 1,
+        schemaVersion: CONTENT_SNAPSHOT_SCHEMA_VERSION,
         sourceType: "lesson",
         sourceId: lesson.id,
         title: lesson.title,
         description: lesson.description || "",
+        itemType: lesson.item_type || "lesson",
+        estimatedMinutes: lesson.estimated_minutes ?? null,
         mediaOwnerId: content?.owner_id || mediaOwnerId,
         contentId: contentId || null,
         contentTitle: content?.title || "",
+        contentMeta: contentMetaForSnapshot(content),
         unitId: lesson.unit_id,
         unitTitle: lesson.content_units?.title || "",
+        unitType: lesson.content_units?.unit_type || "unit",
         document_json: Array.isArray(lesson.document_json) ? lesson.document_json : [],
       },
       error: null,
@@ -90,7 +115,7 @@ export async function buildContentSnapshot(opts) {
   if (sourceType === "unit") {
     const { data: unit, error: uErr } = await sb
       .from("content_units")
-      .select("id, content_id, title, description, position")
+      .select("id, content_id, title, description, position, unit_type, estimated_minutes")
       .eq("id", sourceId)
       .maybeSingle();
     if (uErr || !unit) return { snapshot: null, error: uErr?.message || "not_found" };
@@ -104,19 +129,24 @@ export async function buildContentSnapshot(opts) {
         title: l.title,
         description: l.description || "",
         position: l.position,
+        itemType: l.item_type || lesson?.item_type || "lesson",
+        estimatedMinutes: l.estimated_minutes ?? lesson?.estimated_minutes ?? null,
         document_json: Array.isArray(lesson?.document_json) ? lesson.document_json : [],
       });
     }
     return {
       snapshot: {
-        schemaVersion: 1,
+        schemaVersion: CONTENT_SNAPSHOT_SCHEMA_VERSION,
         sourceType: "unit",
         sourceId: unit.id,
         title: unit.title,
         description: unit.description || "",
+        unitType: unit.unit_type || "unit",
+        estimatedMinutes: unit.estimated_minutes ?? null,
         mediaOwnerId: content?.owner_id || mediaOwnerId,
         contentId: unit.content_id,
         contentTitle: content?.title || "",
+        contentMeta: contentMetaForSnapshot(content),
         lessons: lessonSnaps,
       },
       error: null,
@@ -138,6 +168,8 @@ export async function buildContentSnapshot(opts) {
           title: l.title,
           description: l.description || "",
           position: l.position,
+          itemType: l.item_type || lesson?.item_type || "lesson",
+          estimatedMinutes: l.estimated_minutes ?? lesson?.estimated_minutes ?? null,
           document_json: Array.isArray(lesson?.document_json) ? lesson.document_json : [],
         });
       }
@@ -146,12 +178,14 @@ export async function buildContentSnapshot(opts) {
         title: u.title,
         description: u.description || "",
         position: u.position,
+        unitType: u.unit_type || "unit",
+        estimatedMinutes: u.estimated_minutes ?? null,
         lessons: lessonSnaps,
       });
     }
     return {
       snapshot: {
-        schemaVersion: 1,
+        schemaVersion: CONTENT_SNAPSHOT_SCHEMA_VERSION,
         sourceType: "content",
         sourceId: content.id,
         title: content.title,
@@ -159,6 +193,7 @@ export async function buildContentSnapshot(opts) {
         mediaOwnerId: content.owner_id || mediaOwnerId,
         contentId: content.id,
         contentTitle: content.title,
+        contentMeta: contentMetaForSnapshot(content),
         units: unitSnaps,
       },
       error: null,
@@ -183,13 +218,15 @@ export async function buildContentSnapshot(opts) {
     const { content } = contentId ? await getContent(contentId) : { content: null };
     return {
       snapshot: {
-        schemaVersion: 1,
+        schemaVersion: CONTENT_SNAPSHOT_SCHEMA_VERSION,
         sourceType,
         sourceId,
         title: props.title || (sourceType === "exercise" ? "Ejercicio" : "Tarea"),
         description: props.instructions || "",
+        itemType: sourceType,
         mediaOwnerId: content?.owner_id || mediaOwnerId,
         contentId: contentId || null,
+        contentMeta: contentMetaForSnapshot(content),
         lessonId: sourceId,
         starterCode: props.starterCode || "",
         block: {

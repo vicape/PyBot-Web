@@ -8,11 +8,13 @@ import AssignLessonModal from "../components/content-editor/AssignLessonModal.js
 import ShareContentModal from "../components/content-editor/ShareContentModal.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import MyContentEmptyIllustration from "../components/pybotclass/illustrations/MyContentEmptyIllustration.jsx";
-import { listMyContents } from "../platform/contentApi.js";
+import { copyLearningContent, listMyContents } from "../platform/contentApi.js";
+import { listTeacherCoursesForAssign } from "../platform/contentAssignApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
 import { isSuperAdmin } from "../platformRole.js";
+import { t } from "../i18n.js";
 
 export default function MyContentPage() {
   const navigate = useNavigate();
@@ -21,11 +23,13 @@ export default function MyContentPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [superAdmin, setSuperAdmin] = useState(false);
+  const [canAssign, setCanAssign] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [sharing, setSharing] = useState(null);
   const [assigning, setAssigning] = useState(null);
+  const [copyBusyId, setCopyBusyId] = useState(null);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -36,11 +40,13 @@ export default function MyContentPage() {
     if (!user) return;
     setLoading(true);
     setErr("");
-    const [{ rows, error }, { profile }] = await Promise.all([
+    const [{ rows, error }, { profile }, teacherCourses] = await Promise.all([
       listMyContents(),
       fetchProfile(user.id),
+      listTeacherCoursesForAssign(),
     ]);
     setSuperAdmin(isSuperAdmin(profile));
+    setCanAssign((teacherCourses.rows || []).length > 0);
     if (error) setErr(error);
     setContents(rows);
     setLoading(false);
@@ -53,6 +59,19 @@ export default function MyContentPage() {
     }
     if (!authLoading && user) void load();
   }, [authLoading, user, load, navigate]);
+
+  const handleCopy = async (content) => {
+    if (!content?.id || copyBusyId) return;
+    setCopyBusyId(content.id);
+    setErr("");
+    const { content: copy, error } = await copyLearningContent(content.id);
+    setCopyBusyId(null);
+    if (error || !copy) {
+      setErr(error === "forbidden_read" ? t("pcCopyFail") : error || t("pcCopyFail"));
+      return;
+    }
+    navigate(`/dashboard/content/${copy.id}`);
+  };
 
   if (authLoading || loading) {
     return (
@@ -102,10 +121,13 @@ export default function MyContentPage() {
               <ContentCard
                 key={c.id}
                 content={c}
+                isOwner
+                canAssign={canAssign}
                 onEdit={setEditing}
                 onDelete={setDeleting}
                 onShare={setSharing}
-                onAssign={setAssigning}
+                onAssign={canAssign ? setAssigning : undefined}
+                onCopy={handleCopy}
               />
             ))}
           </div>
@@ -124,17 +146,7 @@ export default function MyContentPage() {
         onClose={() => setEditing(null)}
         onSaved={(updated) => {
           setContents((rows) =>
-            rows.map((row) =>
-              row.id === updated.id
-                ? {
-                    ...row,
-                    title: updated.title,
-                    description: updated.description,
-                    status: updated.status,
-                    updated_at: updated.updated_at,
-                  }
-                : row,
-            ),
+            rows.map((row) => (row.id === updated.id ? { ...row, ...updated, unit_count: row.unit_count } : row)),
           );
         }}
       />
@@ -146,9 +158,7 @@ export default function MyContentPage() {
         onSaved={(saved) => {
           setContents((rows) =>
             rows.map((row) =>
-              row.id === saved.id
-                ? { ...row, visibility: saved.visibility, updated_at: saved.updated_at }
-                : row,
+              row.id === saved.id ? { ...row, ...saved, unit_count: row.unit_count } : row,
             ),
           );
         }}

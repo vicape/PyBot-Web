@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { t } from "../../i18n.js";
 import {
   CONTENT_VISIBILITY,
   CONTENT_VISIBILITY_LABELS,
+  COMMUNITY_METADATA_REQUIRED_HINT,
   listContentCourseAccess,
   listTeacherCoursesForShare,
   setContentSharing,
@@ -57,7 +59,11 @@ export default function ShareContentModal({ open, onClose, content, onSaved }) {
     });
     setBusy(false);
     if (error || !saved) {
-      setErr(error || "No se pudo guardar.");
+      setErr(
+        error === COMMUNITY_METADATA_REQUIRED_HINT || /Comunidad|Community|comunidad/i.test(String(error || ""))
+          ? t("pcCommunityMetaRequired")
+          : error || "No se pudo guardar.",
+      );
       return;
     }
     onSaved?.(saved);

@@ -1,4 +1,17 @@
 import { getSupabase } from "../supabaseClient.js";
+import {
+  LEARNING_CONTENT_SELECT_BASE,
+  normalizeContentMetadataPatch,
+  normalizeItemType,
+  normalizeUnitType,
+  pickContentMetadata,
+} from "./contentMetadata.js";
+import {
+  CONTENT_MEDIA_BUCKET,
+  CONTENT_MEDIA_SCHEME,
+  parseContentMediaRef,
+  toContentMediaRef,
+} from "../components/content-editor/contentMedia.js";
 
 export const BLOCK_TYPES = {
   theory: { label: "Teoría", hasStarterCode: false },
@@ -17,6 +30,20 @@ export const CONTENT_VISIBILITY_LABELS = {
   courses: "Mis cursos",
   community: "Comunidad",
 };
+
+export {
+  CONTENT_DIFFICULTIES,
+  CONTENT_LANGUAGE_CODES,
+  UNIT_TYPES,
+  LESSON_ITEM_TYPES,
+  communityMetadataGaps,
+  isCommunityMetadataComplete,
+  normalizeContentMetadataPatch,
+  normalizeItemType,
+  normalizeUnitType,
+} from "./contentMetadata.js";
+
+export { deriveContentToc } from "./contentToc.js";
 
 function sb() {
   const client = getSupabase();
@@ -55,6 +82,26 @@ async function swapPositions(table, idA, posA, idB, posB) {
   return { ok: true, error: null };
 }
 
+function mapContentRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    visibility: row.visibility || "private",
+    owner_id: row.owner_id,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    ...pickContentMetadata(row),
+  };
+}
+
+const UNIT_SELECT =
+  "id, content_id, title, description, position, unit_type, estimated_minutes, created_at, updated_at";
+const LESSON_SELECT =
+  "id, unit_id, title, description, position, item_type, estimated_minutes, created_at, updated_at";
+
 // --- Contenidos --------------------------------------------------------------
 
 export async function listMyContents() {
@@ -65,22 +112,38 @@ export async function listMyContents() {
 
   const { data, error } = await client
     .from("learning_contents")
-    .select("id, title, description, status, visibility, owner_id, created_at, updated_at, content_units ( id )")
+    .select(`${LEARNING_CONTENT_SELECT_BASE}, content_units ( id )`)
     .eq("owner_id", userId)
     .order("updated_at", { ascending: false });
 
-  if (error) return { rows: [], error: error.message };
+  if (error) {
+    if (/language_code|recommended_age|estimated_minutes|difficulty|copied_from/i.test(error.message)) {
+      return {
+        rows: [],
+        error: "Falta aplicar la migración 20260924100048_material_v2_ownership_copy_metadata.sql",
+      };
+    }
+    return { rows: [], error: error.message };
+  }
+
+  const originalOwnerIds = [
+    ...new Set((data ?? []).map((r) => r.original_owner_id).filter(Boolean)),
+  ];
+  let originalNames = {};
+  if (originalOwnerIds.length) {
+    const { data: profs } = await client
+      .from("profiles")
+      .select("id, display_name, email")
+      .in("id", originalOwnerIds);
+    for (const p of profs ?? []) {
+      originalNames[p.id] = p.display_name || p.email || null;
+    }
+  }
 
   const rows = (data ?? []).map((row) => ({
-    id: row.id,
-    title: row.title,
-    description: row.description,
-    status: row.status,
-    visibility: row.visibility || "private",
-    owner_id: row.owner_id,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
+    ...mapContentRow(row),
     unit_count: Array.isArray(row.content_units) ? row.content_units.length : 0,
+    original_owner_name: row.original_owner_id ? originalNames[row.original_owner_id] || null : null,
   }));
 
   return { rows, error: null };
@@ -89,51 +152,78 @@ export async function listMyContents() {
 export async function getContent(contentId) {
   const { data, error } = await sb()
     .from("learning_contents")
-    .select("id, title, description, status, visibility, owner_id, created_at, updated_at")
+    .select(LEARNING_CONTENT_SELECT_BASE)
     .eq("id", contentId)
     .maybeSingle();
 
-  if (error) return { content: null, error: error.message };
+  if (error) {
+    if (/language_code|recommended_age|estimated_minutes|difficulty|copied_from/i.test(error.message)) {
+      return {
+        content: null,
+        error: "Falta aplicar la migración 20260924100048_material_v2_ownership_copy_metadata.sql",
+      };
+    }
+    return { content: null, error: error.message };
+  }
   if (!data) return { content: null, error: "not_found" };
-  return { content: data, error: null };
+  return { content: mapContentRow(data), error: null };
 }
 
-export async function createContent({ title, description }) {
+export async function createContent(input = {}) {
   const client = sb();
   const { data: session } = await client.auth.getUser();
   const userId = session?.user?.id;
   if (!userId) return { content: null, error: "no_session" };
 
+  const title = String(input.title ?? "").trim();
+  if (!title) return { content: null, error: "title_required" };
+
+  const { patch: meta, error: metaErr } = normalizeContentMetadataPatch(input);
+  if (metaErr) return { content: null, error: metaErr };
+
   const { data, error } = await client
     .from("learning_contents")
     .insert({
       owner_id: userId,
-      title: String(title ?? "").trim(),
-      description: String(description ?? "").trim() || null,
+      title,
+      description: String(input.description ?? "").trim() || null,
+      ...meta,
     })
-    .select("id, title, description, status, created_at, updated_at")
+    .select(LEARNING_CONTENT_SELECT_BASE)
     .single();
 
-  if (error) return { content: null, error: error.message };
-  return { content: data, error: null };
+  if (error) {
+    if (/language_code|recommended_age|estimated_minutes|difficulty|check/i.test(error.message)) {
+      return {
+        content: null,
+        error: "Falta aplicar la migración 20260924100048_material_v2_ownership_copy_metadata.sql",
+      };
+    }
+    return { content: null, error: error.message };
+  }
+  return { content: mapContentRow(data), error: null };
 }
 
-export async function updateContent(contentId, patch) {
+export async function updateContent(contentId, patch = {}) {
   const body = { updated_at: new Date().toISOString() };
   if (patch.title !== undefined) body.title = String(patch.title).trim();
   if (patch.description !== undefined) body.description = String(patch.description).trim() || null;
   if (patch.status !== undefined) body.status = patch.status;
   if (patch.visibility !== undefined) body.visibility = patch.visibility;
 
+  const { patch: meta, error: metaErr } = normalizeContentMetadataPatch(patch);
+  if (metaErr) return { content: null, error: metaErr };
+  Object.assign(body, meta);
+
   const { data, error } = await sb()
     .from("learning_contents")
     .update(body)
     .eq("id", contentId)
-    .select("id, title, description, status, visibility, owner_id, created_at, updated_at")
+    .select(LEARNING_CONTENT_SELECT_BASE)
     .single();
 
   if (error) return { content: null, error: error.message };
-  return { content: data, error: null };
+  return { content: mapContentRow(data), error: null };
 }
 
 export async function deleteContent(contentId) {
@@ -142,20 +232,210 @@ export async function deleteContent(contentId) {
   return { ok: true, error: null };
 }
 
+/**
+ * Deep-copy via RPC (fail-closed if cannot read). Best-effort media clone afterward.
+ * Media: independent clone only when download+reupload under caller path succeeds;
+ * otherwise structured copy keeps readable content-media:// refs (limitation reported).
+ */
+export async function copyLearningContent(sourceContentId) {
+  const client = sb();
+  const { data: session } = await client.auth.getUser();
+  const userId = session?.user?.id;
+  if (!userId) return { content: null, error: "no_session", media: { cloned: false, limitation: null } };
+
+  const { data: newId, error } = await client.rpc("copy_learning_content", {
+    p_source_id: sourceContentId,
+  });
+
+  if (error) {
+    const msg = error.message || "";
+    if (/forbidden_read/i.test(msg)) return { content: null, error: "forbidden_read", media: { cloned: false, limitation: null } };
+    if (/not_authenticated/i.test(msg)) return { content: null, error: "no_session", media: { cloned: false, limitation: null } };
+    if (/Could not find the function|copy_learning_content/i.test(msg)) {
+      return {
+        content: null,
+        error: "Falta aplicar la migración 20260924100048_material_v2_ownership_copy_metadata.sql",
+        media: { cloned: false, limitation: null },
+      };
+    }
+    return { content: null, error: msg, media: { cloned: false, limitation: null } };
+  }
+
+  const { content, error: getErr } = await getContent(newId);
+  if (getErr || !content) {
+    return { content: null, error: getErr || "copy_fetch_failed", media: { cloned: false, limitation: null } };
+  }
+
+  const media = await bestEffortCloneContentMedia({
+    client,
+    userId,
+    sourceContentId,
+    newContentId: newId,
+  });
+
+  return { content, error: null, media };
+}
+
+function collectMediaRefsFromDoc(documentJson, into) {
+  const walk = (node) => {
+    if (!node) return;
+    if (typeof node === "string") {
+      if (node.startsWith(CONTENT_MEDIA_SCHEME)) into.add(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (typeof node === "object") {
+      for (const v of Object.values(node)) walk(v);
+    }
+  };
+  walk(documentJson);
+}
+
+async function bestEffortCloneContentMedia({ client, userId, sourceContentId, newContentId }) {
+  const limitationBase =
+    "Media: se preservan refs content-media:// legibles del origen. Clon independiente completo requiere reescritura de blobs; se intenta best-effort sin service-role.";
+
+  try {
+    const { rows: units } = await listContentUnits(newContentId);
+    if (!units.length) {
+      return { cloned: true, rewritten: 0, limitation: null };
+    }
+
+    const newLessonsFlat = [];
+    for (const u of units) {
+      const { rows } = await listUnitLessons(u.id);
+      for (const l of rows) newLessonsFlat.push(l);
+    }
+
+    let rewritten = 0;
+    let attempted = 0;
+    let failed = 0;
+    const pathMap = new Map();
+
+    for (let i = 0; i < newLessonsFlat.length; i++) {
+      const newLesson = newLessonsFlat[i];
+      const { lesson } = await getLesson(newLesson.id);
+      if (!lesson) continue;
+      const doc = Array.isArray(lesson.document_json) ? lesson.document_json : [];
+      const refs = new Set();
+      collectMediaRefsFromDoc(doc, refs);
+      if (refs.size === 0) continue;
+
+      let changed = false;
+      const rewrite = async (node) => {
+        if (!node) return node;
+        if (typeof node === "string") {
+          if (!node.startsWith(CONTENT_MEDIA_SCHEME)) return node;
+          attempted += 1;
+          if (pathMap.has(node)) {
+            changed = true;
+            rewritten += 1;
+            return pathMap.get(node);
+          }
+          const parsed = parseContentMediaRef(node);
+          if (!parsed) {
+            failed += 1;
+            return node;
+          }
+          const { data: blob, error: dlErr } = await client.storage.from(CONTENT_MEDIA_BUCKET).download(parsed.path);
+          if (dlErr || !blob) {
+            failed += 1;
+            return node;
+          }
+          const newRef = toContentMediaRef(userId, newContentId, newLesson.id, parsed.fileName);
+          const newPath = `${userId}/${newContentId}/${newLesson.id}/${parsed.fileName}`;
+          const { error: upErr } = await client.storage.from(CONTENT_MEDIA_BUCKET).upload(newPath, blob, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+          if (upErr) {
+            failed += 1;
+            return node;
+          }
+          pathMap.set(node, newRef);
+          changed = true;
+          rewritten += 1;
+          return newRef;
+        }
+        if (Array.isArray(node)) {
+          const out = [];
+          for (const item of node) out.push(await rewrite(item));
+          return out;
+        }
+        if (typeof node === "object") {
+          const out = {};
+          for (const [k, v] of Object.entries(node)) out[k] = await rewrite(v);
+          return out;
+        }
+        return node;
+      };
+
+      const nextDoc = await rewrite(doc);
+      if (changed) {
+        await saveLessonDocument(newLesson.id, nextDoc, lesson.document_version || 1);
+      }
+    }
+
+    if (attempted === 0) {
+      return { cloned: true, rewritten: 0, limitation: null };
+    }
+    if (failed > 0) {
+      return {
+        cloned: false,
+        rewritten,
+        attempted,
+        failed,
+        limitation: `${limitationBase} Fallaron ${failed}/${attempted} archivos; refs originales legibles si la fuente sigue siendo readable.`,
+      };
+    }
+    return { cloned: true, rewritten, attempted, failed: 0, limitation: null };
+  } catch (e) {
+    return {
+      cloned: false,
+      rewritten: 0,
+      limitation: `${limitationBase} (${e?.message || "clone_error"})`,
+    };
+  }
+}
+
 // --- Unidades ----------------------------------------------------------------
 
 export async function listContentUnits(contentId) {
   const { data, error } = await sb()
     .from("content_units")
-    .select("id, content_id, title, description, position, created_at, updated_at")
+    .select(UNIT_SELECT)
     .eq("content_id", contentId)
     .order("position", { ascending: true });
 
-  if (error) return { rows: [], error: error.message };
-  return { rows: data ?? [], error: null };
+  if (error) {
+    // Fallback if migration not applied yet
+    if (/unit_type|estimated_minutes/i.test(error.message)) {
+      const { data: legacy, error: legErr } = await sb()
+        .from("content_units")
+        .select("id, content_id, title, description, position, created_at, updated_at")
+        .eq("content_id", contentId)
+        .order("position", { ascending: true });
+      if (legErr) return { rows: [], error: legErr.message };
+      return {
+        rows: (legacy ?? []).map((r) => ({ ...r, unit_type: "unit", estimated_minutes: null })),
+        error: null,
+      };
+    }
+    return { rows: [], error: error.message };
+  }
+  return {
+    rows: (data ?? []).map((r) => ({
+      ...r,
+      unit_type: normalizeUnitType(r.unit_type),
+    })),
+    error: null,
+  };
 }
 
-export async function createContentUnit(contentId, { title, description }) {
+export async function createContentUnit(contentId, { title, description, unitType, estimatedMinutes } = {}) {
   const client = sb();
   const { data: maxRow } = await client
     .from("content_units")
@@ -166,39 +446,59 @@ export async function createContentUnit(contentId, { title, description }) {
     .maybeSingle();
 
   const position = (maxRow?.position ?? -1) + 1;
+  const insert = {
+    content_id: contentId,
+    title: String(title ?? "").trim(),
+    description: String(description ?? "").trim() || null,
+    position,
+    unit_type: normalizeUnitType(unitType),
+  };
+  if (estimatedMinutes !== undefined && estimatedMinutes !== null && estimatedMinutes !== "") {
+    insert.estimated_minutes = Number(estimatedMinutes);
+  }
 
-  const { data, error } = await client
-    .from("content_units")
-    .insert({
-      content_id: contentId,
-      title: String(title ?? "").trim(),
-      description: String(description ?? "").trim() || null,
-      position,
-    })
-    .select("id, content_id, title, description, position, created_at, updated_at")
-    .single();
+  const { data, error } = await client.from("content_units").insert(insert).select(UNIT_SELECT).single();
 
-  if (error) return { unit: null, error: error.message };
+  if (error) {
+    if (/unit_type/i.test(error.message)) {
+      const { data: legacy, error: legErr } = await client
+        .from("content_units")
+        .insert({
+          content_id: contentId,
+          title: insert.title,
+          description: insert.description,
+          position,
+        })
+        .select("id, content_id, title, description, position, created_at, updated_at")
+        .single();
+      if (legErr) return { unit: null, error: legErr.message };
+      await touchContent(contentId);
+      return { unit: { ...legacy, unit_type: "unit", estimated_minutes: null }, error: null };
+    }
+    return { unit: null, error: error.message };
+  }
   await touchContent(contentId);
-  return { unit: data, error: null };
+  return { unit: { ...data, unit_type: normalizeUnitType(data.unit_type) }, error: null };
 }
 
-export async function updateContentUnit(unitId, patch) {
+export async function updateContentUnit(unitId, patch = {}) {
   const body = { updated_at: new Date().toISOString() };
   if (patch.title !== undefined) body.title = String(patch.title).trim();
   if (patch.description !== undefined) body.description = String(patch.description).trim() || null;
   if (patch.position !== undefined) body.position = patch.position;
+  if (patch.unitType !== undefined || patch.unit_type !== undefined) {
+    body.unit_type = normalizeUnitType(patch.unitType ?? patch.unit_type);
+  }
+  if (patch.estimatedMinutes !== undefined || patch.estimated_minutes !== undefined) {
+    const v = patch.estimatedMinutes ?? patch.estimated_minutes;
+    body.estimated_minutes = v === null || v === "" ? null : Number(v);
+  }
 
-  const { data, error } = await sb()
-    .from("content_units")
-    .update(body)
-    .eq("id", unitId)
-    .select("id, content_id, title, description, position, created_at, updated_at")
-    .single();
+  const { data, error } = await sb().from("content_units").update(body).eq("id", unitId).select(UNIT_SELECT).single();
 
   if (error) return { unit: null, error: error.message };
   await touchContent(data.content_id);
-  return { unit: data, error: null };
+  return { unit: { ...data, unit_type: normalizeUnitType(data.unit_type) }, error: null };
 }
 
 export async function deleteContentUnit(unitId) {
@@ -245,26 +545,76 @@ export async function moveContentUnit(unitId, direction) {
 export async function listUnitLessons(unitId) {
   const { data, error } = await sb()
     .from("content_lessons")
-    .select("id, unit_id, title, description, position, created_at, updated_at")
+    .select(LESSON_SELECT)
     .eq("unit_id", unitId)
     .order("position", { ascending: true });
 
-  if (error) return { rows: [], error: error.message };
-  return { rows: data ?? [], error: null };
+  if (error) {
+    if (/item_type|estimated_minutes/i.test(error.message)) {
+      const { data: legacy, error: legErr } = await sb()
+        .from("content_lessons")
+        .select("id, unit_id, title, description, position, created_at, updated_at")
+        .eq("unit_id", unitId)
+        .order("position", { ascending: true });
+      if (legErr) return { rows: [], error: legErr.message };
+      return {
+        rows: (legacy ?? []).map((r) => ({ ...r, item_type: "lesson", estimated_minutes: null })),
+        error: null,
+      };
+    }
+    return { rows: [], error: error.message };
+  }
+  return {
+    rows: (data ?? []).map((r) => ({ ...r, item_type: normalizeItemType(r.item_type) })),
+    error: null,
+  };
 }
 
 export async function getLesson(lessonId) {
   const { data, error } = await sb()
     .from("content_lessons")
     .select(
-      "id, unit_id, title, description, position, created_at, updated_at, document_json, document_version, content_units ( content_id, title, position )",
+      `${LESSON_SELECT}, document_json, document_version, content_units ( content_id, title, position, unit_type )`,
     )
     .eq("id", lessonId)
     .maybeSingle();
 
-  if (error) return { lesson: null, error: error.message };
+  if (error) {
+    if (/item_type|unit_type|estimated_minutes/i.test(error.message)) {
+      const { data: legacy, error: legErr } = await sb()
+        .from("content_lessons")
+        .select(
+          "id, unit_id, title, description, position, created_at, updated_at, document_json, document_version, content_units ( content_id, title, position )",
+        )
+        .eq("id", lessonId)
+        .maybeSingle();
+      if (legErr) return { lesson: null, error: legErr.message };
+      if (!legacy) return { lesson: null, error: "not_found" };
+      return {
+        lesson: {
+          ...legacy,
+          item_type: "lesson",
+          estimated_minutes: null,
+          content_units: legacy.content_units
+            ? { ...legacy.content_units, unit_type: "unit" }
+            : legacy.content_units,
+        },
+        error: null,
+      };
+    }
+    return { lesson: null, error: error.message };
+  }
   if (!data) return { lesson: null, error: "not_found" };
-  return { lesson: data, error: null };
+  return {
+    lesson: {
+      ...data,
+      item_type: normalizeItemType(data.item_type),
+      content_units: data.content_units
+        ? { ...data.content_units, unit_type: normalizeUnitType(data.content_units.unit_type) }
+        : data.content_units,
+    },
+    error: null,
+  };
 }
 
 export async function saveLessonDocument(lessonId, documentJson, documentVersion = 1) {
@@ -285,7 +635,7 @@ export async function saveLessonDocument(lessonId, documentJson, documentVersion
   return { lesson: data, error: null };
 }
 
-export async function createLesson(unitId, { title, description }) {
+export async function createLesson(unitId, { title, description, itemType, estimatedMinutes } = {}) {
   const client = sb();
   const contentId = await contentIdForUnit(unitId);
 
@@ -298,40 +648,60 @@ export async function createLesson(unitId, { title, description }) {
     .maybeSingle();
 
   const position = (maxRow?.position ?? -1) + 1;
+  const insert = {
+    unit_id: unitId,
+    title: String(title ?? "").trim(),
+    description: String(description ?? "").trim() || null,
+    position,
+    item_type: normalizeItemType(itemType),
+  };
+  if (estimatedMinutes !== undefined && estimatedMinutes !== null && estimatedMinutes !== "") {
+    insert.estimated_minutes = Number(estimatedMinutes);
+  }
 
-  const { data, error } = await client
-    .from("content_lessons")
-    .insert({
-      unit_id: unitId,
-      title: String(title ?? "").trim(),
-      description: String(description ?? "").trim() || null,
-      position,
-    })
-    .select("id, unit_id, title, description, position, created_at, updated_at")
-    .single();
+  const { data, error } = await client.from("content_lessons").insert(insert).select(LESSON_SELECT).single();
 
-  if (error) return { lesson: null, error: error.message };
+  if (error) {
+    if (/item_type/i.test(error.message)) {
+      const { data: legacy, error: legErr } = await client
+        .from("content_lessons")
+        .insert({
+          unit_id: unitId,
+          title: insert.title,
+          description: insert.description,
+          position,
+        })
+        .select("id, unit_id, title, description, position, created_at, updated_at")
+        .single();
+      if (legErr) return { lesson: null, error: legErr.message };
+      await touchContent(contentId);
+      return { lesson: { ...legacy, item_type: "lesson", estimated_minutes: null }, error: null };
+    }
+    return { lesson: null, error: error.message };
+  }
   await touchContent(contentId);
-  return { lesson: data, error: null };
+  return { lesson: { ...data, item_type: normalizeItemType(data.item_type) }, error: null };
 }
 
-export async function updateLesson(lessonId, patch) {
+export async function updateLesson(lessonId, patch = {}) {
   const body = { updated_at: new Date().toISOString() };
   if (patch.title !== undefined) body.title = String(patch.title).trim();
   if (patch.description !== undefined) body.description = String(patch.description).trim() || null;
   if (patch.position !== undefined) body.position = patch.position;
+  if (patch.itemType !== undefined || patch.item_type !== undefined) {
+    body.item_type = normalizeItemType(patch.itemType ?? patch.item_type);
+  }
+  if (patch.estimatedMinutes !== undefined || patch.estimated_minutes !== undefined) {
+    const v = patch.estimatedMinutes ?? patch.estimated_minutes;
+    body.estimated_minutes = v === null || v === "" ? null : Number(v);
+  }
 
-  const { data, error } = await sb()
-    .from("content_lessons")
-    .update(body)
-    .eq("id", lessonId)
-    .select("id, unit_id, title, description, position, created_at, updated_at")
-    .single();
+  const { data, error } = await sb().from("content_lessons").update(body).eq("id", lessonId).select(LESSON_SELECT).single();
 
   if (error) return { lesson: null, error: error.message };
   const contentId = await contentIdForUnit(data.unit_id);
   await touchContent(contentId);
-  return { lesson: data, error: null };
+  return { lesson: { ...data, item_type: normalizeItemType(data.item_type) }, error: null };
 }
 
 export async function deleteLesson(lessonId) {

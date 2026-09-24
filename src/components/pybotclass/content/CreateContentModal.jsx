@@ -1,10 +1,24 @@
 import { t } from "../../../i18n.js";
 import { useEffect, useState } from "react";
 import { createContent } from "../../../platform/contentApi.js";
+import ContentMetadataFields from "./ContentMetadataFields.jsx";
+
+const EMPTY_META = {
+  language_code: null,
+  difficulty: null,
+  recommended_age_min: null,
+  recommended_age_max: null,
+  estimated_minutes: null,
+  subject: "",
+  tags: "",
+  learning_objectives: "",
+  prerequisites: "",
+};
 
 export default function CreateContentModal({ open, onClose, onCreated }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [meta, setMeta] = useState(EMPTY_META);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -12,6 +26,7 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
     if (!open) {
       setTitle("");
       setDescription("");
+      setMeta(EMPTY_META);
       setErr("");
       setBusy(false);
     }
@@ -26,7 +41,11 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
     setBusy(true);
     setErr("");
 
-    const { content, error } = await createContent({ title: trimmed, description });
+    const { content, error } = await createContent({
+      title: trimmed,
+      description,
+      ...meta,
+    });
     setBusy(false);
 
     if (error || !content) {
@@ -41,7 +60,7 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
   return (
     <div className="pbc-modal-backdrop pbc-modal-backdrop--create-content" role="presentation" onClick={onClose}>
       <form
-        className="pbc-modal pbc-modal--create-content"
+        className="pbc-modal pbc-modal--create-content pbc-modal--content-meta"
         role="dialog"
         aria-labelledby="create-content-title"
         onClick={(e) => e.stopPropagation()}
@@ -50,9 +69,7 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
         <h2 id="create-content-title" className="pbc-modal__title">
           {t("pcCreateContent")}
         </h2>
-        <p className="pbc-modal--create-content__subtitle">
-          {t("pcCreateContentDesc")}
-        </p>
+        <p className="pbc-modal--create-content__subtitle">{t("pcCreateContentDesc")}</p>
 
         <div className="pbc-modal__field">
           <label className="pbc-label" htmlFor="content-title">
@@ -82,6 +99,8 @@ export default function CreateContentModal({ open, onClose, onCreated }) {
             rows={3}
           />
         </div>
+
+        <ContentMetadataFields value={meta} onChange={setMeta} disabled={busy} />
 
         {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
 

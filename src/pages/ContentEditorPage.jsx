@@ -2,8 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import AssignLessonModal from "../components/content-editor/AssignLessonModal.jsx";
 import ShareContentModal from "../components/content-editor/ShareContentModal.jsx";
+import ContentMetaChips from "../components/pybotclass/content/ContentMetaChips.jsx";
+import ContentTableOfContents from "../components/pybotclass/content/ContentTableOfContents.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
+import { t } from "../i18n.js";
 import {
+  UNIT_TYPES,
+  LESSON_ITEM_TYPES,
+  copyLearningContent,
   createContentUnit,
   createLesson,
   deleteContentUnit,
@@ -16,6 +22,7 @@ import {
   updateContentUnit,
   updateLesson,
 } from "../platform/contentApi.js";
+import { listTeacherCoursesForAssign } from "../platform/contentAssignApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
@@ -70,6 +77,8 @@ export default function ContentEditorPage() {
   const [busy, setBusy] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [assignTarget, setAssignTarget] = useState(null);
+  const [canAssign, setCanAssign] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -81,19 +90,30 @@ export default function ContentEditorPage() {
     setLoading(true);
     setErr("");
 
-    const [{ content: c, error: cErr }, { rows: unitRows, error: uErr }, { profile }] = await Promise.all([
-      getContent(contentId),
-      listContentUnits(contentId),
-      fetchProfile(user.id),
-    ]);
+    const [{ content: c, error: cErr }, { rows: unitRows, error: uErr }, { profile }, teacherCourses] =
+      await Promise.all([
+        getContent(contentId),
+        listContentUnits(contentId),
+        fetchProfile(user.id),
+        listTeacherCoursesForAssign(),
+      ]);
 
     setSuperAdmin(isSuperAdmin(profile));
+    setCanAssign((teacherCourses.rows || []).length > 0);
 
     if (cErr || !c) {
       setErr(cErr || "Contenido no encontrado.");
       setLoading(false);
       return;
     }
+
+    const owner = c.owner_id === user.id;
+    setIsOwner(owner);
+    if (!owner) {
+      navigate(`/dashboard/community/${contentId}`, { replace: true });
+      return;
+    }
+
     if (uErr) setErr(uErr);
 
     const lessonMap = {};
@@ -106,7 +126,7 @@ export default function ContentEditorPage() {
     setUnits(unitRows);
     setLessonsByUnit(lessonMap);
     setLoading(false);
-  }, [user, contentId]);
+  }, [user, contentId, navigate]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -124,8 +144,16 @@ export default function ContentEditorPage() {
   const addUnit = async () => {
     const title = promptText("Título de la unidad");
     if (!title || busy) return;
+    const typeRaw = window.prompt(
+      `${t("pcUnitType")} (${UNIT_TYPES.join("|")})`,
+      "unit",
+    );
+    if (typeRaw === null) return;
     setBusy(true);
-    const { unit, error } = await createContentUnit(contentId, { title });
+    const { unit, error } = await createContentUnit(contentId, {
+      title,
+      unitType: typeRaw || "unit",
+    });
     setBusy(false);
     if (error || !unit) {
       setErr(error || "No se pudo crear la unidad.");
@@ -136,9 +164,18 @@ export default function ContentEditorPage() {
 
   const editUnitTitle = async (unit) => {
     const title = promptText("Título de la unidad", unit.title);
-    if (!title || title === unit.title) return;
+    if (title === null) return;
+    const typeRaw = window.prompt(
+      `${t("pcUnitType")} (${UNIT_TYPES.join("|")})`,
+      unit.unit_type || "unit",
+    );
+    if (typeRaw === null) return;
+    if (!title || (title === unit.title && typeRaw === (unit.unit_type || "unit"))) return;
     setBusy(true);
-    const { error } = await updateContentUnit(unit.id, { title });
+    const { error } = await updateContentUnit(unit.id, {
+      title: title || unit.title,
+      unitType: typeRaw || unit.unit_type || "unit",
+    });
     setBusy(false);
     if (error) setErr(error);
     else void load();
@@ -154,10 +191,18 @@ export default function ContentEditorPage() {
   };
 
   const addLesson = async (unitId) => {
-    const title = promptText("Título de la lección");
+    const title = promptText("Título del ítem");
     if (!title || busy) return;
+    const typeRaw = window.prompt(
+      `${t("pcItemType")} (${LESSON_ITEM_TYPES.join("|")})`,
+      "lesson",
+    );
+    if (typeRaw === null) return;
     setBusy(true);
-    const { lesson, error } = await createLesson(unitId, { title });
+    const { lesson, error } = await createLesson(unitId, {
+      title,
+      itemType: typeRaw || "lesson",
+    });
     setBusy(false);
     if (error || !lesson) {
       setErr(error || "No se pudo crear la lección.");
@@ -167,17 +212,26 @@ export default function ContentEditorPage() {
   };
 
   const editLessonTitle = async (lesson) => {
-    const title = promptText("Título de la lección", lesson.title);
-    if (!title || title === lesson.title) return;
+    const title = promptText("Título del ítem", lesson.title);
+    if (title === null) return;
+    const typeRaw = window.prompt(
+      `${t("pcItemType")} (${LESSON_ITEM_TYPES.join("|")})`,
+      lesson.item_type || "lesson",
+    );
+    if (typeRaw === null) return;
+    if (!title || (title === lesson.title && typeRaw === (lesson.item_type || "lesson"))) return;
     setBusy(true);
-    const { error } = await updateLesson(lesson.id, { title });
+    const { error } = await updateLesson(lesson.id, {
+      title: title || lesson.title,
+      itemType: typeRaw || lesson.item_type || "lesson",
+    });
     setBusy(false);
     if (error) setErr(error);
     else void load();
   };
 
   const removeLesson = async (lesson) => {
-    if (!window.confirm(`¿Eliminar la lección «${lesson.title}»?`)) return;
+    if (!window.confirm(`¿Eliminar «${lesson.title}»?`)) return;
     setBusy(true);
     const { error } = await deleteLesson(lesson.id);
     setBusy(false);
@@ -203,6 +257,30 @@ export default function ContentEditorPage() {
     else void load();
   };
 
+  const handleCopy = async () => {
+    if (busy || !contentId) return;
+    setBusy(true);
+    setErr("");
+    const { content: copy, error } = await copyLearningContent(contentId);
+    setBusy(false);
+    if (error || !copy) {
+      setErr(error || t("pcCopyFail"));
+      return;
+    }
+    navigate(`/dashboard/content/${copy.id}`);
+  };
+
+  const onTocNavigate = (entry) => {
+    if (entry.type === "unit") {
+      const el = document.getElementById(`unit-${entry.id}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (entry.type === "lesson") {
+      navigate(`/dashboard/content/${contentId}/lessons/${entry.id}`);
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <main className="dash-root dash-root--center">
@@ -210,7 +288,7 @@ export default function ContentEditorPage() {
       </main>
     );
   }
-  if (!user || !content) return null;
+  if (!user || !content || !isOwner) return null;
 
   return (
     <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
@@ -227,6 +305,7 @@ export default function ContentEditorPage() {
         <header className="pbc-content-editor__head">
           <h1 className="pbc-hero-block__title">{content.title}</h1>
           {content.description ? <p className="pbc-hero-block__subtitle">{content.description}</p> : null}
+          <ContentMetaChips content={content} />
           <p className="pbc-content-editor__hint">
             Primero creá unidades y lecciones. Para cargar el material, abrí una lección con{" "}
             <strong>Escribir contenido</strong>.
@@ -235,27 +314,34 @@ export default function ContentEditorPage() {
 
         <div className="pbc-content-editor__actions">
           <button type="button" className="pbc-btn pbc-btn--primary" onClick={addUnit} disabled={busy}>
-            + Nueva unidad
+            + {t("pcNewUnit")}
           </button>
           <button type="button" className="pbc-btn pbc-btn--ghost" onClick={() => setShareOpen(true)} disabled={busy}>
-            Compartir
+            {t("pcShare")}
           </button>
-          <button
-            type="button"
-            className="pbc-btn pbc-btn--ghost"
-            onClick={() =>
-              setAssignTarget({
-                sourceType: "content",
-                sourceId: content.id,
-                defaultTitle: content.title,
-                contextLabel: "contenido",
-              })
-            }
-            disabled={busy}
-          >
-            Asignar
+          {canAssign ? (
+            <button
+              type="button"
+              className="pbc-btn pbc-btn--ghost"
+              onClick={() =>
+                setAssignTarget({
+                  sourceType: "content",
+                  sourceId: content.id,
+                  defaultTitle: content.title,
+                  contextLabel: "contenido",
+                })
+              }
+              disabled={busy}
+            >
+              {t("pcAssign")}
+            </button>
+          ) : null}
+          <button type="button" className="pbc-btn pbc-btn--ghost" onClick={() => void handleCopy()} disabled={busy}>
+            {busy ? t("pcCopying") : t("pcCreateCopy")}
           </button>
         </div>
+
+        <ContentTableOfContents units={units} lessonsByUnit={lessonsByUnit} onNavigate={onTocNavigate} />
 
         {units.length === 0 ? (
           <div className="pbc-content-editor__empty">
@@ -264,11 +350,12 @@ export default function ContentEditorPage() {
         ) : (
           <div className="pbc-unit-list">
             {units.map((unit, unitIndex) => (
-              <section key={unit.id} className="pbc-unit-card">
+              <section key={unit.id} id={`unit-${unit.id}`} className="pbc-unit-card">
                 <div className="pbc-unit-card__head">
                   <div className="pbc-unit-card__title-row">
                     <h2 className="pbc-unit-card__title">
-                      Unidad {unitIndex + 1} — {unit.title}
+                      <span className="pbc-type-badge">{t(`pcUnitType_${unit.unit_type || "unit"}`)}</span>{" "}
+                      {unitIndex + 1} — {unit.title}
                     </h2>
                     <div className="pbc-order-btns">
                       <button
@@ -292,51 +379,56 @@ export default function ContentEditorPage() {
                     </div>
                   </div>
                   <div className="pbc-unit-card__actions">
-                    <button
-                      type="button"
-                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                      onClick={() =>
-                        setAssignTarget({
-                          sourceType: "unit",
-                          sourceId: unit.id,
-                          defaultTitle: unit.title,
-                          contextLabel: "unidad",
-                        })
-                      }
-                    >
-                      Asignar
-                    </button>
+                    {canAssign ? (
+                      <button
+                        type="button"
+                        className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                        onClick={() =>
+                          setAssignTarget({
+                            sourceType: "unit",
+                            sourceId: unit.id,
+                            defaultTitle: unit.title,
+                            contextLabel: "unidad",
+                          })
+                        }
+                      >
+                        {t("pcAssign")}
+                      </button>
+                    ) : null}
                     <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={() => void editUnitTitle(unit)}>
-                      Editar
+                      {t("pcEdit")}
                     </button>
                     <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={() => void removeUnit(unit)}>
-                      Eliminar
+                      {t("pcDelete")}
                     </button>
                   </div>
                 </div>
 
                 {(lessonsByUnit[unit.id] ?? []).length === 0 ? (
                   <div className="pbc-unit-card__empty">
-                    <p className="pbc-unit-card__empty-title">Todavía no hay lecciones</p>
+                    <p className="pbc-unit-card__empty-title">Todavía no hay ítems</p>
                     <p className="pbc-unit-card__empty-text">
-                      Creá una lección para escribir texto, agregar imágenes, videos y ejercicios.
+                      Creá una lección, ejercicio, quiz u otro ítem tipado.
                     </p>
                   </div>
                 ) : (
                   <ul className="pbc-lesson-list">
                     {(lessonsByUnit[unit.id] ?? []).map((lesson, lessonIndex) => (
-                      <li key={lesson.id} className="pbc-lesson-row">
+                      <li key={lesson.id} id={`lesson-${lesson.id}`} className="pbc-lesson-row">
                         <Link
                           to={`/dashboard/content/${contentId}/lessons/${lesson.id}`}
                           className="pbc-lesson-row__main"
-                          aria-label={`Escribir contenido de la lección ${lesson.title}`}
+                          aria-label={`Escribir contenido de ${lesson.title}`}
                         >
                           <span className="pbc-lesson-row__icon" aria-hidden>
                             <DocumentIcon />
                           </span>
                           <span className="pbc-lesson-row__copy">
                             <span className="pbc-lesson-row__title">
-                              Lección {lessonIndex + 1} — {lesson.title}
+                              <span className="pbc-type-badge">
+                                {t(`pcItemType_${lesson.item_type || "lesson"}`)}
+                              </span>{" "}
+                              {lessonIndex + 1} — {lesson.title}
                             </span>
                             <span className="pbc-lesson-row__subtitle">
                               Tocá para escribir o editar el contenido
@@ -354,7 +446,7 @@ export default function ContentEditorPage() {
                               className="pbc-order-btn"
                               onClick={() => void moveLessonItem(lesson.id, "up")}
                               disabled={busy || lessonIndex === 0}
-                              aria-label="Subir lección"
+                              aria-label="Subir ítem"
                             >
                               ↑
                             </button>
@@ -365,25 +457,27 @@ export default function ContentEditorPage() {
                               disabled={
                                 busy || lessonIndex === (lessonsByUnit[unit.id]?.length ?? 0) - 1
                               }
-                              aria-label="Bajar lección"
+                              aria-label="Bajar ítem"
                             >
                               ↓
                             </button>
                           </div>
-                          <button
-                            type="button"
-                            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                            onClick={() =>
-                              setAssignTarget({
-                                sourceType: "lesson",
-                                sourceId: lesson.id,
-                                defaultTitle: lesson.title,
-                                contextLabel: "lección",
-                              })
-                            }
-                          >
-                            Asignar
-                          </button>
+                          {canAssign ? (
+                            <button
+                              type="button"
+                              className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                              onClick={() =>
+                                setAssignTarget({
+                                  sourceType: "lesson",
+                                  sourceId: lesson.id,
+                                  defaultTitle: lesson.title,
+                                  contextLabel: "lección",
+                                })
+                              }
+                            >
+                              {t("pcAssign")}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="pbc-btn pbc-btn--ghost pbc-btn--sm"
@@ -396,7 +490,7 @@ export default function ContentEditorPage() {
                             className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                             onClick={() => void removeLesson(lesson)}
                           >
-                            Eliminar
+                            {t("pcDelete")}
                           </button>
                         </div>
                       </li>
@@ -411,7 +505,7 @@ export default function ContentEditorPage() {
                   disabled={busy}
                 >
                   <PencilIcon size={14} />
-                  Nueva lección
+                  {t("pcNewItem")}
                 </button>
               </section>
             ))}

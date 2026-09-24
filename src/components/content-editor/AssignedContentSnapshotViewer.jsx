@@ -94,7 +94,12 @@ export default function AssignedContentSnapshotViewer({ snapshot }) {
     return (
       <div className="pbc-assigned-lesson">
         {(snapshot.lessons || []).map((lesson) => (
-          <section key={lesson.id} className="pbc-activity-lesson" style={{ marginBottom: 24 }}>
+          <section
+            key={lesson.id}
+            id={`lesson-${lesson.id}`}
+            className="pbc-activity-lesson"
+            style={{ marginBottom: 24 }}
+          >
             <h3 className="pbc-activity-lesson__title">{lesson.title}</h3>
             <div className="pbc-lesson-workspace pbc-lesson-workspace--preview">
               <ReadOnlyDoc docKey={lesson.id} initialContent={lesson.document_json} />
@@ -109,10 +114,15 @@ export default function AssignedContentSnapshotViewer({ snapshot }) {
     return (
       <div className="pbc-assigned-lesson">
         {(snapshot.units || []).map((unit) => (
-          <section key={unit.id} style={{ marginBottom: 32 }}>
+          <section key={unit.id} id={`unit-${unit.id}`} style={{ marginBottom: 32 }}>
             <h2 className="pbc-activity-lesson__title">{unit.title}</h2>
             {(unit.lessons || []).map((lesson) => (
-              <div key={lesson.id} className="pbc-activity-lesson" style={{ marginBottom: 20 }}>
+              <div
+                key={lesson.id}
+                id={`lesson-${lesson.id}`}
+                className="pbc-activity-lesson"
+                style={{ marginBottom: 20 }}
+              >
                 <h3 className="pbc-activity-lesson__title" style={{ fontSize: "1rem" }}>
                   {lesson.title}
                 </h3>

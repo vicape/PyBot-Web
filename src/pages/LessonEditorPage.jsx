@@ -199,6 +199,11 @@ export default function LessonEditorPage() {
       return;
     }
 
+    if (c.owner_id !== user.id) {
+      navigate(`/dashboard/community/${contentId}`, { replace: true });
+      return;
+    }
+
     let documentJson = l.document_json;
     let documentVersion = l.document_version ?? 1;
 
@@ -234,7 +239,7 @@ export default function LessonEditorPage() {
       documentVersion,
     });
     setLoading(false);
-  }, [user, contentId, lessonId]);
+  }, [user, contentId, lessonId, navigate]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
