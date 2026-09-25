@@ -360,7 +360,7 @@ export default function ContentEditorPage() {
 
         <header className="pbc-content-editor__head">
           <h1 className="pbc-hero-block__title">{content.title}</h1>
-          {content.description ? <p className="pbc-hero-block__subtitle">{content.description}</p> : null}
+          {content.description ? <p className="pbc-content-editor__description">{content.description}</p> : null}
           <ContentMetaChips content={content} showAuthor={Boolean(content.owner_name)} />
           <p className="pbc-content-editor__hint">
             Primero creá unidades y lecciones. Para cargar el material, abrí una lección con{" "}

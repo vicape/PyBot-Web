@@ -2000,6 +2000,19 @@
   margin-bottom: 1.25rem;
 }
 
+.pbc-content-editor__description {
+  margin: 0.75rem 0 1rem;
+  max-width: 66ch;
+  font-size: 0.925rem;
+  font-weight: 400;
+  line-height: 1.55;
+  color: #64748b;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-content-editor__description {
+  color: var(--pbc-text-muted);
+}
+
 .pbc-content-editor__actions {
   margin-bottom: 1.25rem;
 }
@@ -2832,6 +2845,12 @@
 @media (max-width: 480px) {
   .pbc-content-toc__link {
     gap: 0.25rem;
+  }
+
+  /* Description stays compact/readable at 360px, 375px, 430px via this 480px query */
+  .pbc-content-editor__description {
+    font-size: 0.875rem;
+    line-height: 1.5;
   }
 
   .pbc-content-editor__actions {
