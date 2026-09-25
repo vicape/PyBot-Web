@@ -281,13 +281,13 @@ test("gating: alumno sin controles teacher; teacher con controles; admin read-on
   // Controles teacher solo en rama teaching (después de early-return studying/admin)
   const studyingIdx = activities.indexOf("COURSE_ACCESS_MODES.STUDYING");
   const adminIdx = activities.indexOf("COURSE_ACCESS_MODES.ADMIN");
-  const newBtnIdx = activities.indexOf('+ {t("pcNew")}');
+  const newBtnIdx = activities.indexOf('t("pcCreateActivity")');
   const editIdx = activities.indexOf('t("pcEdit")');
   const reviewIdx = activities.indexOf('t("pcReview")');
   const importIdx = activities.indexOf('t("pcImportClassroom")');
   assert.ok(studyingIdx > 0);
   assert.ok(adminIdx > studyingIdx);
-  assert.ok(newBtnIdx > adminIdx, "+ Nueva solo después de rama admin");
+  assert.ok(newBtnIdx > adminIdx, "Crear actividad solo después de rama admin");
   assert.ok(editIdx > adminIdx);
   assert.ok(reviewIdx > adminIdx);
   assert.ok(importIdx > adminIdx);

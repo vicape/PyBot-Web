@@ -1,5 +1,5 @@
 import { t } from "../../i18n.js";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getSupabase } from "../../supabaseClient.js";
 import { listCourseStudents, listCourseTeachers } from "../../classroom/classroomApi.js";
 import {
@@ -8,14 +8,37 @@ import {
 } from "../../classroom/classroomRosterSync.js";
 import { getValidClassroomToken } from "../../platform/classroomToken.js";
 import { isStaffRole } from "../../orgRole.js";
+import { mapClassroomSyncUserError, shouldAutoCreateInviteOnNavigate } from "../../platform/uxIaHelpers.js";
 import {
   PbcAlert,
+  PbcEmpty,
   PbcList,
   PbcListItem,
   PbcLoading,
   PbcSection,
   PbcSubTabs,
 } from "./PyBotClassUi.jsx";
+
+async function copyText(text) {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "absolute";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 function MemberList({ rows, onRemove, removingId, badge }) {
   if (!rows.length) {
@@ -53,8 +76,11 @@ export default function CourseRosterTab({
   classroomCourseId,
   user,
   orgRole,
+  focusInvite = false,
+  onGoIntegrations,
 }) {
   const sb = getSupabase();
+  const inviteSectionRef = useRef(null);
   const [subTab, setSubTab] = useState("alumnos");
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -64,8 +90,22 @@ export default function CourseRosterTab({
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncErr, setSyncErr] = useState("");
   const [removingId, setRemovingId] = useState(null);
+  const [inviteCode, setInviteCode] = useState("");
   const [inviteLink, setInviteLink] = useState("");
   const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [feedback, setFeedback] = useState("");
+
+  // Invite generation remains explicit — opening/navigating never creates one.
+  if (shouldAutoCreateInviteOnNavigate()) {
+    // Intentionally unreachable: navigation alone must not create invites.
+  }
+
+  useEffect(() => {
+    if (!focusInvite) return;
+    requestAnimationFrame(() => {
+      inviteSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [focusInvite]);
 
   const load = useCallback(async () => {
     if (!sb || !courseId) return;
@@ -108,7 +148,7 @@ export default function CourseRosterTab({
 
   const syncStudents = async () => {
     if (!classroomCourseId) {
-      setSyncErr(t("pcClassroomNotLinkedCourse"));
+      setSyncErr(t("pcClassroomSyncNeedLink"));
       return;
     }
     setSyncBusy(true);
@@ -119,9 +159,13 @@ export default function CourseRosterTab({
       const classroomStudents = await listCourseStudents(tok, classroomCourseId);
       const sync = await syncClassroomRosterToCourse(sb, { courseId, orgId, classroomStudents });
       if (!sync.ok) throw { message: sync.error };
+      setFeedback(t("pcStudentsSynced"));
       await load();
     } catch (ex) {
-      setSyncErr(ex?.message || t("pcClassroomSyncError"));
+      const mapped = mapClassroomSyncUserError(ex);
+      if (mapped.kind === "reconnect") setSyncErr(t("pcClassroomSyncNeedReconnect"));
+      else if (mapped.kind === "link_integrations") setSyncErr(t("pcClassroomSyncNeedLink"));
+      else setSyncErr(mapped.raw || t("pcClassroomSyncError"));
     } finally {
       setSyncBusy(false);
     }
@@ -129,7 +173,7 @@ export default function CourseRosterTab({
 
   const syncTeachers = async () => {
     if (!classroomCourseId) {
-      setSyncErr("Este curso no tiene Classroom vinculado.");
+      setSyncErr(t("pcClassroomSyncNeedLink"));
       return;
     }
     setSyncBusy(true);
@@ -145,9 +189,13 @@ export default function CourseRosterTab({
         currentUserId: user?.id,
       });
       if (!sync.ok) throw { message: sync.error };
+      setFeedback(t("pcTeachersSynced"));
       await load();
     } catch (ex) {
-      setSyncErr(ex?.message || t("pcClassroomSyncError"));
+      const mapped = mapClassroomSyncUserError(ex);
+      if (mapped.kind === "reconnect") setSyncErr(t("pcClassroomSyncNeedReconnect"));
+      else if (mapped.kind === "link_integrations") setSyncErr(t("pcClassroomSyncNeedLink"));
+      else setSyncErr(mapped.raw || t("pcClassroomSyncError"));
     } finally {
       setSyncBusy(false);
     }
@@ -162,6 +210,7 @@ export default function CourseRosterTab({
 
   const generateInvite = async () => {
     setGeneratingInvite(true);
+    setFeedback("");
     const { data } = await sb
       .from("organization_invites")
       .insert({
@@ -174,7 +223,11 @@ export default function CourseRosterTab({
       .select("code")
       .maybeSingle();
     setGeneratingInvite(false);
-    if (data?.code) setInviteLink(`${window.location.origin}/join?code=${data.code}`);
+    if (data?.code) {
+      setInviteCode(data.code);
+      setInviteLink(`${window.location.origin}/join?code=${data.code}`);
+      setFeedback(t("pcInviteCreated"));
+    }
   };
 
   const studentRows = [
@@ -189,14 +242,12 @@ export default function CourseRosterTab({
   ];
 
   const teacherRows = [
-    ...teachers.map((t) => ({
-      ...t,
+    ...teachers.map((row) => ({
+      ...row,
       badge: () =>
-        isStaffRole(orgRole) && t.userId === user?.id
+        isStaffRole(orgRole) && row.userId === user?.id
           ? t("pcInstitutionalTeacher")
-          : t.source === "manual"
-            ? t("pcCoTeacher")
-            : t("pcCoTeacher"),
+          : t("pcCoTeacher"),
     })),
     ...pendingTeachers.map((p) => ({
       key: p.classroom_user_id || p.email,
@@ -206,6 +257,8 @@ export default function CourseRosterTab({
       badge: () => t("pcNoLogin"),
     })),
   ];
+
+  const studentCount = studentRows.length;
 
   return (
     <PbcSection title={t("pcPeopleClass")}>
@@ -218,35 +271,144 @@ export default function CourseRosterTab({
         onChange={setSubTab}
       />
 
-      {syncErr ? <PbcAlert variant="error">{syncErr}</PbcAlert> : null}
-
-      {subTab === "alumnos" ? (
-        <>
-          <div className="pbc-section__actions" style={{ marginBottom: "1rem" }}>
+      {feedback ? <p className="pbc-feedback" role="status">{feedback}</p> : null}
+      {syncErr ? (
+        <PbcAlert variant="error">
+          <p style={{ margin: 0 }}>{syncErr}</p>
+          {onGoIntegrations ? (
             <button
               type="button"
               className="auth-btn auth-btn--ghost auth-btn--sm"
-              disabled={generatingInvite}
-              onClick={() => void generateInvite()}
+              style={{ marginTop: "0.5rem" }}
+              onClick={onGoIntegrations}
             >
-              {generatingInvite ? "…" : t("pcInviteStudents")}
+              {t("pcGoIntegrations")}
             </button>
-            <button
-              type="button"
-              className="auth-btn auth-btn--primary auth-btn--sm"
-              disabled={syncBusy}
-              onClick={() => void syncStudents()}
-            >
-              {syncBusy ? t("pcSyncing") : t("pcSyncClassroom")}
-            </button>
-          </div>
-          {inviteLink ? (
-            <p className="pbc-alert pbc-alert--info" style={{ marginBottom: "1rem" }}>
-              {t("pcInvitationLink")} <code>{inviteLink}</code>
-            </p>
           ) : null}
+        </PbcAlert>
+      ) : null}
+
+      {subTab === "alumnos" ? (
+        <>
+          <section
+            ref={inviteSectionRef}
+            id="agregar-alumnos"
+            className="pbc-add-students"
+            aria-labelledby="add-students-heading"
+          >
+            <h3 id="add-students-heading" className="pbc-section__title">
+              {t("pcAddStudents")}
+            </h3>
+
+            <div className="pbc-add-students__block">
+              <h4 className="pbc-add-students__subtitle">{t("pcInviteWithPyBot")}</h4>
+              <p className="auth-card__muted">{t("pcInviteWithPyBotDesc")}</p>
+              <button
+                type="button"
+                className="auth-btn auth-btn--primary auth-btn--sm"
+                disabled={generatingInvite}
+                onClick={() => void generateInvite()}
+              >
+                {generatingInvite ? "…" : t("pcGenerateInvite")}
+              </button>
+              {inviteCode ? (
+                <div className="pbc-invite-result" role="status">
+                  <p>
+                    <strong>{t("pcInvitationCode")}:</strong> <code>{inviteCode}</code>
+                  </p>
+                  <p>
+                    <strong>{t("pcInvitationLinkLabel")}:</strong> <code>{inviteLink}</code>
+                  </p>
+                  <div className="pbc-invite-result__actions">
+                    <button
+                      type="button"
+                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      onClick={async () => {
+                        const ok = await copyText(inviteCode);
+                        if (ok) setFeedback(t("pcCodeCopied"));
+                      }}
+                    >
+                      {t("pcCopyCode")}
+                    </button>
+                    <button
+                      type="button"
+                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      onClick={async () => {
+                        const ok = await copyText(inviteLink);
+                        if (ok) setFeedback(t("pcLinkCopied"));
+                      }}
+                    >
+                      {t("pcCopyLink")}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="pbc-add-students__block">
+              <h4 className="pbc-add-students__subtitle">{t("pcInviteWithClassroom")}</h4>
+              <p className="auth-card__muted">{t("pcInviteWithClassroomDesc")}</p>
+              <p className="auth-card__muted">{t("pcClassroomOptionalHint")}</p>
+              {classroomCourseId ? (
+                <button
+                  type="button"
+                  className="auth-btn auth-btn--ghost auth-btn--sm"
+                  disabled={syncBusy}
+                  onClick={() => void syncStudents()}
+                >
+                  {syncBusy ? t("pcSyncing") : t("pcSyncClassroom")}
+                </button>
+              ) : (
+                <div className="pbc-add-students__classroom-off">
+                  <p className="auth-card__muted">{t("pcClassroomNotLinkedCourse")}</p>
+                  {onGoIntegrations ? (
+                    <button
+                      type="button"
+                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      onClick={onGoIntegrations}
+                    >
+                      {t("pcGoIntegrations")}
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <h3 className="pbc-section__title" style={{ marginTop: "1.5rem" }}>
+            {t("pcCourseStudentsHeading").replace("{n}", String(studentCount))}
+          </h3>
+
           {loading ? (
             <PbcLoading label={t("pcLoadingStudents")} />
+          ) : studentCount === 0 ? (
+            <PbcEmpty
+              title={t("pcStudentsEmptyTitle")}
+              description={t("pcStudentsEmptyDesc")}
+              actions={
+                <div className="pbc-empty__actions-row">
+                  <button
+                    type="button"
+                    className="auth-btn auth-btn--primary auth-btn--sm"
+                    onClick={() => {
+                      inviteSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                  >
+                    {t("pcInviteStudents")}
+                  </button>
+                  {classroomCourseId ? (
+                    <button
+                      type="button"
+                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      disabled={syncBusy}
+                      onClick={() => void syncStudents()}
+                    >
+                      {t("pcSyncClassroom")}
+                    </button>
+                  ) : null}
+                </div>
+              }
+            />
           ) : (
             <MemberList rows={studentRows} onRemove={removeMember} removingId={removingId} badge={(m) => m.badge?.()} />
           )}
@@ -254,14 +416,18 @@ export default function CourseRosterTab({
       ) : (
         <>
           <div className="pbc-section__actions" style={{ marginBottom: "1rem" }}>
-            <button
-              type="button"
-              className="auth-btn auth-btn--primary auth-btn--sm"
-              disabled={syncBusy}
-              onClick={() => void syncTeachers()}
-            >
-              {syncBusy ? t("pcSyncing") : t("pcSyncClassroom")}
-            </button>
+            {classroomCourseId ? (
+              <button
+                type="button"
+                className="auth-btn auth-btn--primary auth-btn--sm"
+                disabled={syncBusy}
+                onClick={() => void syncTeachers()}
+              >
+                {syncBusy ? t("pcSyncing") : t("pcSyncClassroom")}
+              </button>
+            ) : (
+              <p className="auth-card__muted">{t("pcClassroomOptionalHint")}</p>
+            )}
           </div>
           {loading ? (
             <PbcLoading label={t("pcLoadingTeachers")} />

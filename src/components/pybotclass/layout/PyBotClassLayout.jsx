@@ -50,7 +50,6 @@ export default function PyBotClassLayout({
           onClose={() => setSidebarOpen(false)}
           showAdmin={showAdmin}
           showMyContent={showTeacherTools}
-          showClassroom={showTeacherTools}
           showInstitutions={showTeacherTools}
         />
 
@@ -68,6 +67,7 @@ export default function PyBotClassLayout({
             onMenuOpen={() => setSidebarOpen(true)}
             contextualRoleLabel={contextualRoleLabel}
             contextualRoleCompact={contextualRoleCompact}
+            accountHref="/dashboard/classes?panel=account"
           />
           <div className="pbc-dashboard__content">{children}</div>
         </div>

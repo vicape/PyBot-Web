@@ -38,7 +38,8 @@ export function PbcAlert({ variant = "error", children }) {
   return <p className={`pbc-alert pbc-alert--${variant}`}>{children}</p>;
 }
 
-export function PbcEmpty({ title, description, action }) {
+export function PbcEmpty({ title, description, action, actions }) {
+  const actionNode = actions || action;
   return (
     <div className="pbc-empty">
       <div className="pbc-empty__icon" aria-hidden>
@@ -46,7 +47,7 @@ export function PbcEmpty({ title, description, action }) {
       </div>
       <h2 className="pbc-empty__title">{title}</h2>
       {description ? <p className="pbc-empty__desc">{description}</p> : null}
-      {action ? <div className="pbc-empty__action">{action}</div> : null}
+      {actionNode ? <div className="pbc-empty__action">{actionNode}</div> : null}
     </div>
   );
 }
@@ -109,10 +110,10 @@ export function PbcClassCard({ course, showOrg }) {
   );
 }
 
-export function PbcCourseHeader({ title, orgName, roleLabel, classroomLinked, badges }) {
+export function PbcCourseHeader({ title, orgName, roleLabel, classroomLinked, badges, actions }) {
   return (
     <header className="pbc-course-header">
-      <div>
+      <div className="pbc-course-header__main">
         <h1 className="pbc-course-header__title">{title}</h1>
         <div className="pbc-course-header__meta">
           {orgName ? <span>{orgName}</span> : null}
@@ -123,6 +124,7 @@ export function PbcCourseHeader({ title, orgName, roleLabel, classroomLinked, ba
           {badges}
         </div>
       </div>
+      {actions ? <div className="pbc-course-header__actions">{actions}</div> : null}
     </header>
   );
 }

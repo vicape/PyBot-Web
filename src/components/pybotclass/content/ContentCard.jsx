@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getLang, t } from "../../../i18n.js";
+import { ownedContentShareState } from "../../../platform/uxIaHelpers.js";
 import ContentMetaChips from "./ContentMetaChips.jsx";
 
 function formatDate(iso) {
@@ -19,6 +20,52 @@ function formatDate(iso) {
   }
 }
 
+function shareBadgeLabel(visibility) {
+  const state = ownedContentShareState(visibility);
+  if (state === "community") return t("pcSharedInCommunity");
+  if (state === "courses") return t("pcSharedToCourses");
+  return t("pcPrivate");
+}
+
+function UsageBlock({ metrics, unavailable }) {
+  const wrap = {
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+    maxWidth: "100%",
+    margin: "0.35rem 0 0",
+    fontSize: "0.85rem",
+    opacity: 0.9,
+  };
+
+  if (unavailable) {
+    return <p style={wrap}>{t("pcUsageUnavailable")}</p>;
+  }
+
+  const total = metrics?.distinct_total_user_count ?? 0;
+  if (total <= 0) {
+    return <p style={wrap}>{t("pcUsageNobody")}</p>;
+  }
+
+  const copyN = metrics?.distinct_copy_user_count ?? 0;
+  const assignN = metrics?.distinct_assignment_user_count ?? 0;
+
+  return (
+    <div style={wrap}>
+      <p style={{ margin: 0 }}>{t("pcUsageUsedBy").replace("{n}", String(total))}</p>
+      {copyN > 0 ? (
+        <p style={{ margin: "0.15rem 0 0" }}>
+          {t("pcUsageCopyBreakdown").replace("{n}", String(copyN))}
+        </p>
+      ) : null}
+      {assignN > 0 ? (
+        <p style={{ margin: "0.15rem 0 0" }}>
+          {t("pcUsageAssignBreakdown").replace("{n}", String(assignN))}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * @param {{
  *   content: object,
@@ -29,6 +76,9 @@ function formatDate(iso) {
  *   onShare?: Function,
  *   onAssign?: Function,
  *   onCopy?: Function,
+ *   usageMetrics?: object | null,
+ *   usageUnavailable?: boolean,
+ *   emphasizeAssign?: boolean,
  * }} props
  */
 export default function ContentCard({
@@ -40,6 +90,9 @@ export default function ContentCard({
   onShare,
   onAssign,
   onCopy,
+  usageMetrics = null,
+  usageUnavailable = false,
+  emphasizeAssign = false,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -61,10 +114,12 @@ export default function ContentCard({
     };
   }, [menuOpen]);
 
-  const showMenu = isOwner || canAssign || onCopy;
+  // Own original content: do not emphasize Create Copy unless caller needs it.
+  const showCopy = Boolean(onCopy) && !isOwner;
+  const showMenu = isOwner || canAssign || showCopy;
 
   return (
-    <article className="pbc-content-card">
+    <article className="pbc-content-card" style={{ minWidth: 0, maxWidth: "100%" }}>
       <div className="pbc-content-card__header">
         <span className="pbc-content-card__icon" aria-hidden>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -79,20 +134,16 @@ export default function ContentCard({
         </span>
 
         <div className="pbc-content-card__header-right">
-          {/* Status badges BORRADOR / PUBLICADO — not ownership */}
           <span className="pbc-badge pbc-badge--blue" title={`${t("pcStatus")}: BORRADOR / PUBLICADO`}>
             {content.status === "published" ? t("pcPublished") : t("pcDraft")}
           </span>
-          {content.visibility && content.visibility !== "private" ? (
-            <span
-              className="pbc-badge pbc-badge--blue"
-              title={`${t("pcVisibility")}: PRIVADO / CURSOS / COMUNIDAD`}
-            >
-              {content.visibility === "community"
-                ? t("pcCommunity")
-                : content.visibility === "courses"
-                  ? t("pcCourses")
-                  : t("pcPrivate")}
+          {isOwner ? (
+            <span className="pbc-badge pbc-badge--blue" title={t("pcVisibility")}>
+              {shareBadgeLabel(content.visibility)}
+            </span>
+          ) : content.visibility && content.visibility !== "private" ? (
+            <span className="pbc-badge pbc-badge--blue">
+              {content.visibility === "community" ? t("pcCommunity") : t("pcCourses")}
             </span>
           ) : null}
 
@@ -131,7 +182,7 @@ export default function ContentCard({
                         onShare?.(content);
                       }}
                     >
-                      {t("pcShare")}
+                      {t("pcManageSharing")}
                     </button>
                   ) : null}
                   {canAssign ? (
@@ -150,7 +201,7 @@ export default function ContentCard({
                       {t("pcAssign")}
                     </button>
                   ) : null}
-                  {onCopy ? (
+                  {showCopy ? (
                     <button
                       type="button"
                       role="menuitem"
@@ -212,10 +263,25 @@ export default function ContentCard({
           {t("pcModified")} {formatDate(content.updated_at)}
         </span>
       </div>
-      <ContentMetaChips content={content} showAuthor={Boolean(content.owner_name)} />
-      <Link to={`/dashboard/content/${content.id}`} className="pbc-content-card__link">
-        {t("pcOpen")} →
-      </Link>
+      <ContentMetaChips content={content} showAuthor={Boolean(content.owner_name) && !isOwner} />
+      {isOwner ? <UsageBlock metrics={usageMetrics} unavailable={usageUnavailable} /> : null}
+      <div
+        className="pbc-content-card__actions-row"
+        style={{ display: "flex", flexWrap: "wrap", gap: 8, maxWidth: "100%" }}
+      >
+        <Link to={`/dashboard/content/${content.id}`} className="pbc-content-card__link">
+          {t("pcOpen")} →
+        </Link>
+        {emphasizeAssign && canAssign ? (
+          <button
+            type="button"
+            className="pbc-btn pbc-btn--primary pbc-btn--sm"
+            onClick={() => onAssign?.(content)}
+          >
+            {t("pcAssign")}
+          </button>
+        ) : null}
+      </div>
     </article>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { UI_THEMES } from "../../../platform/appearanceApi.js";
 import { getLang, setLang, SUPPORTED_LANGS, LANG_LABELS, t } from "../../../i18n.js";
 
@@ -17,6 +18,7 @@ export default function PyBotClassTopbar({
   onMenuOpen,
   contextualRoleLabel = null,
   contextualRoleCompact = null,
+  accountHref = "/dashboard/classes?panel=account",
 }) {
   const [lang, setLangState] = useState(() => getLang());
   const onLangChange = (next) => {
@@ -84,17 +86,24 @@ export default function PyBotClassTopbar({
         </div>
 
         <div className="pbc-topbar__user">
-          {userPicture ? (
-            <img src={userPicture} alt="" className="pbc-topbar__avatar" width={36} height={36} />
-          ) : (
-            <div className="pbc-topbar__avatar pbc-topbar__avatar--letter" aria-hidden>
-              {(userName || "?").slice(0, 1).toUpperCase()}
+          <Link
+            to={accountHref}
+            className="pbc-topbar__account-link"
+            aria-label={t("pcAccount")}
+            title={t("pcAccount")}
+          >
+            {userPicture ? (
+              <img src={userPicture} alt="" className="pbc-topbar__avatar" width={36} height={36} />
+            ) : (
+              <div className="pbc-topbar__avatar pbc-topbar__avatar--letter" aria-hidden>
+                {(userName || "?").slice(0, 1).toUpperCase()}
+              </div>
+            )}
+            <div className="pbc-topbar__user-text">
+              <strong>{userName}</strong>
+              {userEmail ? <span>{userEmail}</span> : null}
             </div>
-          )}
-          <div className="pbc-topbar__user-text">
-            <strong>{userName}</strong>
-            {userEmail ? <span>{userEmail}</span> : null}
-          </div>
+          </Link>
           {contextualRoleLabel ? (
             <span
               className="pbc-topbar__role"

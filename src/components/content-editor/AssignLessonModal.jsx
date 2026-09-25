@@ -30,6 +30,7 @@ export default function AssignLessonModal({
   contextLabel,
   blockId,
   blockProps,
+  defaultCourseId = null,
 }) {
   const sourceType = sourceTypeProp || "lesson";
   const sourceId = sourceIdProp || lessonId;
@@ -74,14 +75,20 @@ export default function AssignLessonModal({
         return;
       }
       setCourses(rows);
-      if (rows.length === 1) setCourseId(rows[0].course_id);
+      const preferred =
+        defaultCourseId && rows.some((r) => r.course_id === defaultCourseId)
+          ? defaultCourseId
+          : rows.length === 1
+            ? rows[0].course_id
+            : "";
+      if (preferred) setCourseId(preferred);
       if (rows.length === 0) {
         setErr(
           "No encontramos cursos donde seas docente. Abrí Mis clases y verificá que tengas al menos un curso.",
         );
       }
     })();
-  }, [open, initialTitle]);
+  }, [open, initialTitle, defaultCourseId]);
 
   useEffect(() => {
     if (!open || !courseId) {

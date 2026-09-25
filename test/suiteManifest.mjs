@@ -21,6 +21,7 @@ export const TEST_SUITES = Object.freeze({
     "platformSchoolCycle.test.mjs",
     "pybotClassCourseRoles.test.mjs",
     "pybotclassI18n.test.mjs",
+    "uxIaRedesign.test.mjs",
     "replProtocol.test.mjs",
     "studentCourses.test.mjs",
     "telemetry.test.mjs",

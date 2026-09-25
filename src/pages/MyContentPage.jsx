@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ContentCard from "../components/pybotclass/content/ContentCard.jsx";
 import CreateContentModal from "../components/pybotclass/content/CreateContentModal.jsx";
 import DeleteContentModal from "../components/pybotclass/content/DeleteContentModal.jsx";
@@ -10,6 +10,7 @@ import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.j
 import MyContentEmptyIllustration from "../components/pybotclass/illustrations/MyContentEmptyIllustration.jsx";
 import { copyLearningContent, listMyContents } from "../platform/contentApi.js";
 import { listTeacherCoursesForAssign } from "../platform/contentAssignApi.js";
+import { getMyContentUsageMetrics } from "../platform/contentShareApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
@@ -18,39 +19,68 @@ import { t } from "../i18n.js";
 
 export default function MyContentPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const assignToCourse = searchParams.get("assignToCourse");
   const { user, loading: authLoading, profileError, supabase } = useRequireSession("/dashboard/content");
   const [contents, setContents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [feedback, setFeedback] = useState("");
   const [superAdmin, setSuperAdmin] = useState(false);
   const [canAssign, setCanAssign] = useState(false);
+  const [teacherCourses, setTeacherCourses] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [sharing, setSharing] = useState(null);
   const [assigning, setAssigning] = useState(null);
   const [copyBusyId, setCopyBusyId] = useState(null);
+  const [usageById, setUsageById] = useState({});
+  const [usageUnavailable, setUsageUnavailable] = useState(false);
+
+  const assignCourseTitle = useMemo(() => {
+    if (!assignToCourse) return null;
+    const row = teacherCourses.find((c) => c.course_id === assignToCourse);
+    return row?.course_title || row?.title || null;
+  }, [assignToCourse, teacherCourses]);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
     navigate("/login", { replace: true });
   }, [supabase, navigate]);
 
+  const loadUsage = useCallback(async () => {
+    const { rows: metrics, unavailable } = await getMyContentUsageMetrics();
+    if (unavailable) {
+      setUsageUnavailable(true);
+      setUsageById({});
+      return;
+    }
+    setUsageUnavailable(false);
+    const map = {};
+    for (const m of metrics || []) {
+      map[m.content_id] = m;
+    }
+    setUsageById(map);
+  }, []);
+
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     setErr("");
-    const [{ rows, error }, { profile }, teacherCourses] = await Promise.all([
+    const [{ rows, error }, { profile }, teacherCoursesRes] = await Promise.all([
       listMyContents(),
       fetchProfile(user.id),
       listTeacherCoursesForAssign(),
     ]);
+    await loadUsage();
     setSuperAdmin(isSuperAdmin(profile));
-    setCanAssign((teacherCourses.rows || []).length > 0);
+    setTeacherCourses(teacherCoursesRes.rows || []);
+    setCanAssign((teacherCoursesRes.rows || []).length > 0);
     if (error) setErr(error);
     setContents(rows);
     setLoading(false);
-  }, [user]);
+  }, [user, loadUsage]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -73,10 +103,17 @@ export default function MyContentPage() {
     navigate(`/dashboard/content/${copy.id}`);
   };
 
+  const clearAssignIntent = () => {
+    if (!assignToCourse) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("assignToCourse");
+    setSearchParams(next, { replace: true });
+  };
+
   if (authLoading || loading) {
     return (
       <main className="dash-root dash-root--center">
-        <p>Cargando Mi Contenido…</p>
+        <p>{t("pcLoadingGeneric")}</p>
       </main>
     );
   }
@@ -86,18 +123,34 @@ export default function MyContentPage() {
     <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
       {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
       {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+      {feedback ? (
+        <p className="pbc-feedback" role="status">
+          {feedback}
+        </p>
+      ) : null}
 
       <div className="pbc-content-page">
         <header className="pbc-content-page__head">
           <div>
-            <h1 className="pbc-hero-block__title">Mi Contenido</h1>
+            <h1 className="pbc-hero-block__title">{t("pcNavContent")}</h1>
             <p className="pbc-hero-block__subtitle">
-              Creá y organizá contenidos completos para reutilizarlos en tus cursos.
+              {assignToCourse
+                ? t("pcAssignToCourseIntent").replace(
+                    "{course}",
+                    assignCourseTitle || assignToCourse,
+                  )
+                : t("pcContentPageLead")}
             </p>
           </div>
-          <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
-            + Crear contenido
-          </button>
+          {!assignToCourse ? (
+            <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
+              + {t("pcCreateContent")}
+            </button>
+          ) : (
+            <button type="button" className="pbc-btn pbc-btn--ghost" onClick={clearAssignIntent}>
+              {t("pcCancel")}
+            </button>
+          )}
         </header>
 
         {contents.length === 0 ? (
@@ -105,13 +158,11 @@ export default function MyContentPage() {
             <span className="pbc-empty-state__illus" aria-hidden>
               <MyContentEmptyIllustration />
             </span>
-            <h3 className="pbc-empty-state__title">Creá tu primer contenido</h3>
-            <p className="pbc-empty-state__desc">
-              Organizá teoría, ejemplos, ejercicios y tareas en un mismo lugar.
-            </p>
+            <h3 className="pbc-empty-state__title">{t("pcContentEmptyTitle")}</h3>
+            <p className="pbc-empty-state__desc">{t("pcContentEmptyDesc")}</p>
             <div className="pbc-empty-state__actions">
               <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
-                Crear contenido
+                {t("pcCreateContent")}
               </button>
             </div>
           </div>
@@ -127,7 +178,9 @@ export default function MyContentPage() {
                 onDelete={setDeleting}
                 onShare={setSharing}
                 onAssign={canAssign ? setAssigning : undefined}
-                onCopy={handleCopy}
+                usageMetrics={usageById[c.id]}
+                usageUnavailable={usageUnavailable}
+                emphasizeAssign={Boolean(assignToCourse)}
               />
             ))}
           </div>
@@ -148,6 +201,7 @@ export default function MyContentPage() {
           setContents((rows) =>
             rows.map((row) => (row.id === updated.id ? { ...row, ...updated, unit_count: row.unit_count } : row)),
           );
+          setFeedback(t("pcChangesSaved"));
         }}
       />
 
@@ -161,6 +215,8 @@ export default function MyContentPage() {
               row.id === saved.id ? { ...row, ...saved, unit_count: row.unit_count } : row,
             ),
           );
+          setSharing(null);
+          setFeedback(t("pcChangesSaved"));
         }}
       />
 
@@ -172,6 +228,7 @@ export default function MyContentPage() {
         defaultTitle={assigning?.title}
         contentTitle={assigning?.title}
         contextLabel="contenido"
+        defaultCourseId={assignToCourse || null}
       />
 
       <DeleteContentModal

@@ -266,10 +266,21 @@ export default function CourseActivitiesTab({
   onReload,
   onImportClassroom,
   importBusy,
+  openCreate = false,
+  onCreateOpened,
+  onAssignContent,
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
   const [localErr, setLocalErr] = useState("");
+  const [feedback, setFeedback] = useState("");
+
+  useEffect(() => {
+    if (!openCreate) return;
+    setShowCreate(true);
+    setEditing(() => null);
+    onCreateOpened?.();
+  }, [openCreate, onCreateOpened]);
 
   const handleCreate = async (fields) => {
     setLocalErr("");
@@ -280,6 +291,7 @@ export default function CourseActivitiesTab({
     });
     if (row) {
       setShowCreate(false);
+      setFeedback(t("pcActivityCreated"));
       await onReload();
     }
     if (error) {
@@ -361,8 +373,17 @@ export default function CourseActivitiesTab({
                 setEditing(null);
               }}
             >
-              + {t("pcNew")}
+              + {t("pcCreateActivity")}
             </button>
+            {onAssignContent ? (
+              <button
+                type="button"
+                className="auth-btn auth-btn--ghost auth-btn--sm"
+                onClick={onAssignContent}
+              >
+                {t("pcAssignContent")}
+              </button>
+            ) : null}
             {onImportClassroom ? (
               <button
                 type="button"
@@ -376,10 +397,34 @@ export default function CourseActivitiesTab({
           </>
         }
       >
+        {feedback ? <p className="pbc-feedback" role="status">{feedback}</p> : null}
         {activities.length === 0 ? (
           <PbcEmpty
-            title={t("pcCreateFirstActivity")}
-            description={t("pcCreateFirstActivityDesc")}
+            title={t("pcActivitiesEmptyTitle")}
+            description={t("pcActivitiesEmptyDesc")}
+            actions={
+              <div className="pbc-empty__actions-row">
+                <button
+                  type="button"
+                  className="auth-btn auth-btn--primary auth-btn--sm"
+                  onClick={() => {
+                    setShowCreate(true);
+                    setEditing(null);
+                  }}
+                >
+                  {t("pcCreateActivity")}
+                </button>
+                {onAssignContent ? (
+                  <button
+                    type="button"
+                    className="auth-btn auth-btn--ghost auth-btn--sm"
+                    onClick={onAssignContent}
+                  >
+                    {t("pcAssignContent")}
+                  </button>
+                ) : null}
+              </div>
+            }
           />
         ) : (
           <PbcList>

@@ -88,7 +88,20 @@ export default function PyBotClassCoursePage() {
   const tabs = tabsForMode(mode);
   const rawTab = searchParams.get("tab") || "resumen";
   const activeTab = tabs.some((tab) => tab.id === rawTab) ? rawTab : "resumen";
-  const setTab = (tabId) => setSearchParams(tabId === "resumen" ? {} : { tab: tabId }, { replace: true });
+  const setTab = (tabId, extra = {}) => {
+    const next = {};
+    if (tabId !== "resumen") next.tab = tabId;
+    Object.assign(next, extra);
+    setSearchParams(next, { replace: true });
+  };
+
+  const goCreateActivity = () => setTab("actividades", { action: "create" });
+  const goAddStudents = () => setTab("alumnos", { focus: "invite" });
+  const goAssignContent = () => {
+    navigate(`/dashboard/content?assignToCourse=${encodeURIComponent(courseId)}`);
+  };
+  const goSubmissions = () => setTab("entregas");
+  const goIntegrations = () => setTab("integraciones");
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -200,6 +213,27 @@ export default function PyBotClassCoursePage() {
           title={course?.title || "Clase"}
           orgName={orgName}
           classroomLinked={!!course?.classroom_course_id}
+          actions={
+            canTeach ? (
+              <div className="pbc-course-quick-actions">
+                <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" onClick={goCreateActivity}>
+                  + {t("pcCreateActivity")}
+                </button>
+                <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={goAddStudents}>
+                  + {t("pcAddStudents")}
+                </button>
+                <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={goAssignContent}>
+                  {t("pcAssignContent")}
+                </button>
+                <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={goSubmissions}>
+                  {t("pcViewSubmissions")}
+                </button>
+                <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={goIntegrations}>
+                  {t("pcTabIntegrations")}
+                </button>
+              </div>
+            ) : null
+          }
         />
 
         {profileError ? <PbcAlert variant="error">{profileError}</PbcAlert> : null}
@@ -209,13 +243,16 @@ export default function PyBotClassCoursePage() {
           <PbcEmpty title={t("pcNoCourseAccess")} />
         ) : (
           <>
-            <CourseTabs tabs={tabs} activeTab={activeTab} onTabChange={setTab} />
+            <CourseTabs tabs={tabs} activeTab={activeTab} onTabChange={(id) => setTab(id)} />
 
             {activeTab === "resumen" ? (
               <CourseSummaryTab
                 courseId={courseId}
                 mode={mode}
-                onGoSubmissions={canTeach ? () => setTab("entregas") : undefined}
+                onGoSubmissions={canTeach ? goSubmissions : undefined}
+                onGoStudents={canTeach ? goAddStudents : undefined}
+                onGoCreateActivity={canTeach ? goCreateActivity : undefined}
+                onGoAssignContent={canTeach ? goAssignContent : undefined}
               />
             ) : null}
 
@@ -233,6 +270,13 @@ export default function PyBotClassCoursePage() {
                   canTeach && course?.classroom_course_id ? importFromClassroom : null
                 }
                 importBusy={importBusy}
+                openCreate={canTeach && searchParams.get("action") === "create"}
+                onCreateOpened={() => {
+                  if (searchParams.get("action") === "create") {
+                    setTab("actividades");
+                  }
+                }}
+                onAssignContent={canTeach ? goAssignContent : undefined}
               />
             ) : null}
 
@@ -243,6 +287,8 @@ export default function PyBotClassCoursePage() {
                 classroomCourseId={course?.classroom_course_id}
                 user={user}
                 orgRole={myRole}
+                focusInvite={searchParams.get("focus") === "invite"}
+                onGoIntegrations={goIntegrations}
               />
             ) : null}
 

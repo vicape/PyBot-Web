@@ -1,6 +1,6 @@
 import { t } from "../i18n.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import AccountSettings from "../components/dashboard/AccountSettings.jsx";
 import ClassroomPanel from "../components/dashboard/ClassroomPanel.jsx";
 import AppearanceSettings from "../components/pybotclass/layout/AppearanceSettings.jsx";
@@ -20,6 +20,7 @@ import {
 import { fetchProfile } from "../platform/profileApi.js";
 import { clearClassroomTokenCache } from "../platform/classroomToken.js";
 import { isStaffRole } from "../orgRole.js";
+import { resolveClassesView } from "../platform/uxIaHelpers.js";
 
 function PyBotClassLoading() {
   return (
@@ -49,6 +50,7 @@ function PyBotClassAccountPanel({ user, onProfileUpdated }) {
 
 export default function PyBotClassPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const panel = searchParams.get("panel");
   const { user, loading: authLoading, profileError, supabase } = useRequireSession("/dashboard/classes");
@@ -61,6 +63,21 @@ export default function PyBotClassPage() {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
+
+  const classesView = resolveClassesView({
+    view: searchParams.get("view"),
+    hash: location.hash,
+  });
+
+  // Preserve #mis-cursos by mapping to ?view=courses (non-destructive deep-link compat).
+  useEffect(() => {
+    if (panel) return;
+    if (location.hash !== "#mis-cursos") return;
+    if (searchParams.get("view") === "courses") return;
+    const next = new URLSearchParams(searchParams);
+    next.set("view", "courses");
+    setSearchParams(next, { replace: true });
+  }, [location.hash, panel, searchParams, setSearchParams]);
 
   const signOut = useCallback(async () => {
     clearClassroomTokenCache();
@@ -193,9 +210,12 @@ export default function PyBotClassPage() {
         hasStaffAccess={hasStaffAccess}
         onCreateCourse={() => setShowCreate(true)}
         onJoinCourse={() => setShowJoin(true)}
+        classesView={classesView}
       />
     );
   }
+
+  const hideSearch = panel === "account" || panel === "classroom" || classesView !== "courses";
 
   return (
     <PyBotClassLayout
@@ -204,6 +224,7 @@ export default function PyBotClassPage() {
       hasStaffAccess={hasStaffAccess}
       search={search}
       onSearchChange={setSearch}
+      hideSearch={hideSearch}
       onSignOut={() => void signOut()}
     >
       {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
