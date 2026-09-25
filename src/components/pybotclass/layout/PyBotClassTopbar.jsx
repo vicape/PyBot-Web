@@ -28,7 +28,7 @@ export default function PyBotClassTopbar({
   };
 
   return (
-    <header className="pbc-topbar">
+    <header className={`pbc-topbar${hideSearch ? " pbc-topbar--no-search" : ""}`}>
       <button
         type="button"
         className="pbc-topbar__menu-btn"
@@ -51,9 +51,7 @@ export default function PyBotClassTopbar({
             aria-label={t("pcSearchCoursesLabel")}
           />
         </div>
-      ) : (
-        <div className="pbc-topbar__search" aria-hidden />
-      )}
+      ) : null}
 
       <div className="pbc-topbar__actions">
         <label className="pbc-topbar__lang">

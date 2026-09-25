@@ -139,6 +139,35 @@ function AttentionIcon({ kind }) {
   return <IconCourseCompact size={18} />;
 }
 
+function MetricIcon({ id }) {
+  if (id === "students" || id === "student") return <IconPeople size={18} />;
+  if (id === "activities") return <IconClipboard size={18} />;
+  if (id === "pending") return <IconGrade size={18} />;
+  return <IconCourseCompact size={18} />;
+}
+
+function MetricsRow({ summary }) {
+  if (!summary.length) return null;
+  return (
+    <section className="pbc-metrics" aria-label={t("pcQuickSummary")}>
+      {summary.map((s) => (
+        <div
+          key={s.id}
+          className={`pbc-metric-card${s.highlight ? " pbc-metric-card--highlight" : ""}`}
+        >
+          <span className="pbc-metric-card__icon" aria-hidden>
+            <MetricIcon id={s.id} />
+          </span>
+          <span className="pbc-metric-card__body">
+            <span className="pbc-metric-card__value">{s.value}</span>
+            <span className="pbc-metric-card__label">{s.label}</span>
+          </span>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 export default function PyBotClassHome({
   user,
   orgs = [],
@@ -369,37 +398,101 @@ export default function PyBotClassHome({
             </h1>
             <p className="pbc-hero-block__subtitle">{t("pcHomeLead")}</p>
           </div>
-          {hasStaffAccess ? (
-            <button
-              type="button"
-              className={`pbc-classroom-status pbc-classroom-status--compact${
-                classroomLinked ? " pbc-classroom-status--on" : " pbc-classroom-status--off"
-              }`}
-              onClick={onClassroomConnect}
-              title={
-                classroomLinked
-                  ? t("pcClassroomLinkedReauth")
-                  : t("pcClassroomNotLinkedClick")
-              }
-              aria-label={
-                classroomLinked
-                  ? t("pcClassroomLinkedReauthLabel")
-                  : t("pcLinkClassroom")
-              }
-            >
-              <span className="pbc-classroom-status__icon" aria-hidden>
-                <GoogleClassroomIcon />
-              </span>
-              <span className="pbc-classroom-status__meta">
-                <span className="pbc-classroom-status__name">{t("pcIntegrationOptional")}</span>
-                <span className="pbc-classroom-status__state">
-                  <span className="pbc-classroom-status__dot" aria-hidden />
-                  {classroomStatusLabel}
+          <div className="pbc-hero-block__actions">
+            {hasStaffAccess ? (
+              <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
+                <span aria-hidden>
+                  <CompactCreateIcon />
                 </span>
+                {t("pcCreateCourse")}
+              </button>
+            ) : null}
+            <a href="/" className="pbc-btn pbc-btn--ghost">
+              <span aria-hidden>
+                <CompactIdeIcon />
+              </span>
+              {t("pcOpenIde")}
+            </a>
+            {hasStaffAccess ? (
+              <button
+                type="button"
+                className={`pbc-classroom-status${
+                  classroomLinked ? " pbc-classroom-status--on" : " pbc-classroom-status--off"
+                }`}
+                onClick={onClassroomConnect}
+                title={
+                  classroomLinked
+                    ? t("pcClassroomLinkedReauth")
+                    : t("pcClassroomNotLinkedClick")
+                }
+                aria-label={
+                  classroomLinked
+                    ? t("pcClassroomLinkedReauthLabel")
+                    : t("pcLinkClassroom")
+                }
+              >
+                <span className="pbc-classroom-status__icon" aria-hidden>
+                  <GoogleClassroomIcon />
+                </span>
+                <span className="pbc-classroom-status__meta">
+                  <span className="pbc-classroom-status__name">{t("pcIntegrationOptional")}</span>
+                  <span className="pbc-classroom-status__state">
+                    <span className="pbc-classroom-status__dot" aria-hidden />
+                    {classroomStatusLabel}
+                  </span>
+                </span>
+              </button>
+            ) : null}
+          </div>
+        </header>
+
+        <MetricsRow summary={summary} />
+
+        <div className="pbc-action-grid">
+          {hasStaffAccess ? (
+            <button type="button" className="pbc-action-card pbc-action-card--create" onClick={onCreateCourse}>
+              <span className="pbc-action-card__icon pbc-action-card__icon--blue" aria-hidden>
+                <CompactCreateIcon />
+              </span>
+              <span className="pbc-action-card__body">
+                <span className="pbc-action-card__title">{t("pcCreateCourse")}</span>
+                <span className="pbc-action-card__desc">{t("pcActionCreateCourseHint")}</span>
               </span>
             </button>
           ) : null}
-        </header>
+
+          {hasStaffAccess ? (
+            <Link to="/dashboard/content" className="pbc-action-card pbc-action-card--content">
+              <span className="pbc-action-card__icon" aria-hidden>
+                <CompactContentIcon />
+              </span>
+              <span className="pbc-action-card__body">
+                <span className="pbc-action-card__title">{t("pcCreateContent")}</span>
+                <span className="pbc-action-card__desc">{t("pcActionCreateContentHint")}</span>
+              </span>
+            </Link>
+          ) : null}
+
+          <button type="button" className="pbc-action-card pbc-action-card--join" onClick={onJoinCourse}>
+            <span className="pbc-action-card__icon pbc-action-card__icon--violet" aria-hidden>
+              <CompactJoinIcon />
+            </span>
+            <span className="pbc-action-card__body">
+              <span className="pbc-action-card__title">{t("pcJoinCourse")}</span>
+              <span className="pbc-action-card__desc">{t("pcActionJoinCourseHint")}</span>
+            </span>
+          </button>
+
+          <a href="/" className="pbc-action-card pbc-action-card--ide">
+            <span className="pbc-action-card__icon pbc-action-card__icon--indigo" aria-hidden>
+              <CompactIdeIcon />
+            </span>
+            <span className="pbc-action-card__body">
+              <span className="pbc-action-card__title">{t("pcOpenIde")}</span>
+              <span className="pbc-action-card__desc">{t("pcActionOpenIdeHint")}</span>
+            </span>
+          </a>
+        </div>
 
         {hasStaffAccess && attentionItems.length > 0 ? (
           <section className="pbc-attention" aria-labelledby="attention-heading">
@@ -427,49 +520,7 @@ export default function PyBotClassHome({
           </section>
         ) : null}
 
-        <div className="pbc-action-grid">
-          {hasStaffAccess ? (
-            <button type="button" className="pbc-action-card pbc-action-card--create" onClick={onCreateCourse}>
-              <span className="pbc-action-card__icon pbc-action-card__icon--teal" aria-hidden>
-                <CompactCreateIcon />
-              </span>
-              <span className="pbc-action-card__body">
-                <span className="pbc-action-card__title">{t("pcCreateCourse")}</span>
-              </span>
-            </button>
-          ) : null}
-
-          {hasStaffAccess ? (
-            <Link to="/dashboard/content" className="pbc-action-card pbc-action-card--content">
-              <span className="pbc-action-card__icon pbc-action-card__icon--teal" aria-hidden>
-                <CompactContentIcon />
-              </span>
-              <span className="pbc-action-card__body">
-                <span className="pbc-action-card__title">{t("pcCreateContent")}</span>
-              </span>
-            </Link>
-          ) : null}
-
-          <button type="button" className="pbc-action-card pbc-action-card--join" onClick={onJoinCourse}>
-            <span className="pbc-action-card__icon pbc-action-card__icon--violet" aria-hidden>
-              <CompactJoinIcon />
-            </span>
-            <span className="pbc-action-card__body">
-              <span className="pbc-action-card__title">{t("pcJoinCourse")}</span>
-            </span>
-          </button>
-
-          <a href="/" className="pbc-action-card pbc-action-card--ide">
-            <span className="pbc-action-card__icon pbc-action-card__icon--indigo" aria-hidden>
-              <CompactIdeIcon />
-            </span>
-            <span className="pbc-action-card__body">
-              <span className="pbc-action-card__title">{t("pcOpenIde")}</span>
-            </span>
-          </a>
-        </div>
-
-        <section aria-labelledby="recent-courses-heading">
+        <section className="pbc-recent-courses" aria-labelledby="recent-courses-heading">
           <div className="pbc-section-head">
             <h2 id="recent-courses-heading" className="pbc-section-head__title">
               {t("pcRecentCourses")}
@@ -503,23 +554,6 @@ export default function PyBotClassHome({
             {t("pcAccount")}
           </Link>
         </div>
-
-        {summary.length > 0 ? (
-          <div className="pbc-panel-card">
-            <h3 className="pbc-panel-card__title">{t("pcQuickSummary")}</h3>
-            <div className="pbc-stat-grid">
-              {summary.map((s) => (
-                <div
-                  key={s.id}
-                  className={`pbc-stat-chip${s.highlight ? " pbc-stat-chip--highlight" : ""}`}
-                >
-                  <span className="pbc-stat-chip__value">{s.value}</span>
-                  <span className="pbc-stat-chip__label">{s.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </aside>
     </div>
   );
