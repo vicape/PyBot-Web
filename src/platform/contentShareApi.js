@@ -136,9 +136,72 @@ export async function listTeacherCoursesForShare() {
   return listTeacherCoursesForAssign();
 }
 
-export async function listCommunityContents({ search = "" } = {}) {
+/**
+ * Distinct-user usage semantics (pure; for tests + UI fallback mapping).
+ * Overall = UNION of copy owners and assignment creators; owner excluded.
+ * Must never equal copy_count + assignment_count when the same user appears in both.
+ *
+ * Copy source: learning_contents.owner_id where copied_from_content_id = content.id
+ * Assignment source: activities.created_by where content_source_type='content'
+ *   and content_source_id = content.id
+ */
+export function summarizeContentUsageCounts({
+  copyOwnerIds = [],
+  assignmentCreatorIds = [],
+  ownerId = null,
+} = {}) {
+  const copySet = new Set(
+    (copyOwnerIds || []).filter((id) => id && id !== ownerId).map(String),
+  );
+  const assignSet = new Set(
+    (assignmentCreatorIds || []).filter((id) => id && id !== ownerId).map(String),
+  );
+  const totalSet = new Set([...copySet, ...assignSet]);
+  return {
+    distinct_copy_user_count: copySet.size,
+    distinct_assignment_user_count: assignSet.size,
+    distinct_total_user_count: totalSet.size,
+  };
+}
+
+/**
+ * Batched usage counts for the caller's owned contents via SECURITY DEFINER RPC.
+ * On missing/undeployed RPC: unavailable=true (must NOT be treated as zero usage).
+ */
+export async function getMyContentUsageMetrics() {
+  const sb = getSupabase();
+  if (!sb) return { rows: [], error: "no_supabase", unavailable: true };
+
+  const { data, error } = await sb.rpc("get_my_content_usage_metrics");
+  if (error) {
+    return { rows: [], error: error.message, unavailable: true };
+  }
+
+  return {
+    rows: (data ?? []).map((r) => ({
+      content_id: r.content_id,
+      distinct_copy_user_count: Number(r.distinct_copy_user_count) || 0,
+      distinct_assignment_user_count: Number(r.distinct_assignment_user_count) || 0,
+      distinct_total_user_count: Number(r.distinct_total_user_count) || 0,
+    })),
+    error: null,
+    unavailable: false,
+  };
+}
+
+/**
+ * Explore Community: visibility = 'community' AND owner_id != current user id.
+ * Search only other users’ Community content (active-view scoped).
+ */
+export async function listCommunityContents({ search = "", excludeOwnerId } = {}) {
   const sb = getSupabase();
   if (!sb) return { rows: [], error: "no_supabase" };
+
+  let excludeId = excludeOwnerId;
+  if (excludeId == null) {
+    const { data: session } = await sb.auth.getUser();
+    excludeId = session?.user?.id || null;
+  }
 
   let q = sb
     .from("learning_contents")
@@ -146,17 +209,22 @@ export async function listCommunityContents({ search = "" } = {}) {
     .eq("visibility", "community")
     .order("updated_at", { ascending: false });
 
+  if (excludeId) q = q.neq("owner_id", excludeId);
+
   const term = String(search || "").trim();
   if (term) q = q.ilike("title", `%${term}%`);
 
   const { data, error } = await q;
   if (error) {
     if (/language_code|recommended_age|difficulty|estimated_minutes|copied_from|original_creator|first_community/i.test(error.message)) {
-      const legacy = await sb
+      let legacyQ = sb
         .from("learning_contents")
         .select("id, title, description, visibility, owner_id, updated_at, created_at")
         .eq("visibility", "community")
         .order("updated_at", { ascending: false });
+      if (excludeId) legacyQ = legacyQ.neq("owner_id", excludeId);
+      if (term) legacyQ = legacyQ.ilike("title", `%${term}%`);
+      const legacy = await legacyQ;
       if (legacy.error) return { rows: [], error: legacy.error.message };
       const ownerIds = [...new Set((legacy.data ?? []).map((r) => r.owner_id).filter(Boolean))];
       const profiles = await loadOwnerNames(sb, ownerIds);

@@ -54,6 +54,7 @@ export const TEST_SUITES = Object.freeze({
     "immutableSubmissionVersions.test.mjs",
     "materialV2Content.test.mjs",
     "contentProvenance.test.mjs",
+    "communityPageViews.test.mjs",
     "micropythonNativeBle.test.mjs",
     "micropythonNetwork.test.mjs",
     "micropythonPortOpenBusy.test.mjs",
