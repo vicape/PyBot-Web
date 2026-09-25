@@ -126,24 +126,27 @@ export async function listMyContents() {
     return { rows: [], error: error.message };
   }
 
+  const ownerIds = [...new Set((data ?? []).map((r) => r.owner_id).filter(Boolean))];
   const originalOwnerIds = [
     ...new Set((data ?? []).map((r) => r.original_owner_id).filter(Boolean)),
   ];
-  let originalNames = {};
-  if (originalOwnerIds.length) {
+  const profileIds = [...new Set([...ownerIds, ...originalOwnerIds])];
+  const profileNames = {};
+  if (profileIds.length) {
     const { data: profs } = await client
       .from("profiles")
       .select("id, display_name, email")
-      .in("id", originalOwnerIds);
+      .in("id", profileIds);
     for (const p of profs ?? []) {
-      originalNames[p.id] = p.display_name || p.email || null;
+      profileNames[p.id] = p.display_name || p.email || null;
     }
   }
 
   const rows = (data ?? []).map((row) => ({
     ...mapContentRow(row),
     unit_count: Array.isArray(row.content_units) ? row.content_units.length : 0,
-    original_owner_name: row.original_owner_id ? originalNames[row.original_owner_id] || null : null,
+    owner_name: row.owner_id ? profileNames[row.owner_id] || null : null,
+    original_owner_name: row.original_owner_id ? profileNames[row.original_owner_id] || null : null,
   }));
 
   return { rows, error: null };

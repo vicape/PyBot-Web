@@ -79,11 +79,15 @@ export default function ContentCard({
         </span>
 
         <div className="pbc-content-card__header-right">
-          <span className="pbc-badge pbc-badge--blue">
+          {/* Status badges BORRADOR / PUBLICADO — not ownership */}
+          <span className="pbc-badge pbc-badge--blue" title={`${t("pcStatus")}: BORRADOR / PUBLICADO`}>
             {content.status === "published" ? t("pcPublished") : t("pcDraft")}
           </span>
           {content.visibility && content.visibility !== "private" ? (
-            <span className="pbc-badge pbc-badge--blue" title={t("pcVisibility")}>
+            <span
+              className="pbc-badge pbc-badge--blue"
+              title={`${t("pcVisibility")}: PRIVADO / CURSOS / COMUNIDAD`}
+            >
               {content.visibility === "community"
                 ? t("pcCommunity")
                 : content.visibility === "courses"
@@ -135,6 +139,7 @@ export default function ContentCard({
                       type="button"
                       role="menuitem"
                       className="pbc-content-card__menu-item"
+                      title={`${t("pcAssign")} — no ownership`}
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -199,7 +204,6 @@ export default function ContentCard({
 
       <h2 className="pbc-content-card__title">{content.title}</h2>
       {content.description ? <p className="pbc-content-card__desc">{content.description}</p> : null}
-      <ContentMetaChips content={content} showAuthor={Boolean(content.owner_name)} />
       <div className="pbc-content-card__meta">
         <span>
           {content.unit_count ?? 0} {t("pcUnits")}
@@ -208,6 +212,7 @@ export default function ContentCard({
           {t("pcModified")} {formatDate(content.updated_at)}
         </span>
       </div>
+      <ContentMetaChips content={content} showAuthor={Boolean(content.owner_name)} />
       <Link to={`/dashboard/content/${content.id}`} className="pbc-content-card__link">
         {t("pcOpen")} →
       </Link>

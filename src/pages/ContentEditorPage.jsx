@@ -116,17 +116,36 @@ export default function ContentEditorPage() {
 
     if (uErr) setErr(uErr);
 
+    const ownerName = profile?.display_name || profile?.email || null;
+    let originalOwnerName = null;
+    if (c.original_owner_id) {
+      if (c.original_owner_id === user.id) {
+        originalOwnerName = ownerName;
+      } else if (supabase) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, display_name, email")
+          .eq("id", c.original_owner_id)
+          .maybeSingle();
+        originalOwnerName = profs?.display_name || profs?.email || null;
+      }
+    }
+
     const lessonMap = {};
     for (const unit of unitRows) {
       const { rows } = await listUnitLessons(unit.id);
       lessonMap[unit.id] = rows;
     }
 
-    setContent(c);
+    setContent({
+      ...c,
+      owner_name: ownerName,
+      original_owner_name: originalOwnerName,
+    });
     setUnits(unitRows);
     setLessonsByUnit(lessonMap);
     setLoading(false);
-  }, [user, contentId, navigate]);
+  }, [user, contentId, navigate, supabase]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -305,7 +324,7 @@ export default function ContentEditorPage() {
         <header className="pbc-content-editor__head">
           <h1 className="pbc-hero-block__title">{content.title}</h1>
           {content.description ? <p className="pbc-hero-block__subtitle">{content.description}</p> : null}
-          <ContentMetaChips content={content} />
+          <ContentMetaChips content={content} showAuthor={Boolean(content.owner_name)} />
           <p className="pbc-content-editor__hint">
             Primero creá unidades y lecciones. Para cargar el material, abrí una lección con{" "}
             <strong>Escribir contenido</strong>.
