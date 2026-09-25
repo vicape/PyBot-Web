@@ -21,6 +21,7 @@ import { fetchProfile } from "../platform/profileApi.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
 import { isSuperAdmin } from "../platformRole.js";
+import { t } from "../i18n.js";
 
 const TITLE_SAVE_MS = 1000;
 
@@ -84,7 +85,7 @@ function SaveStatus({ status, onRetry }) {
   if (status === "saving") {
     return (
       <span className="pbc-lesson-save" aria-live="polite">
-        Guardando...
+        {t("pcSaving")}
       </span>
     );
   }
@@ -92,16 +93,16 @@ function SaveStatus({ status, onRetry }) {
     return (
       <span className="pbc-lesson-save pbc-lesson-save--ok" aria-live="polite">
         <CheckIcon />
-        Guardado
+        {t("pcSavedShort")}
       </span>
     );
   }
   if (status === "error") {
     return (
       <span className="pbc-lesson-save pbc-lesson-save--err" role="alert">
-        No se pudo guardar
+        {t("pcSaveFailShort")}
         <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={onRetry}>
-          Reintentar
+          {t("pcRetry")}
         </button>
       </span>
     );
@@ -274,8 +275,8 @@ export default function LessonEditorPage() {
 
   if (authLoading || loading) {
     return (
-      <main className="dash-root dash-root--center">
-        <p>Cargando lección…</p>
+      <main className="dash-root dash-root--center" role="status">
+        <p>{t("pcLoadingGeneric")}</p>
       </main>
     );
   }
@@ -284,17 +285,25 @@ export default function LessonEditorPage() {
   const unit = lesson.content_units;
   const unitPosition = Number.isFinite(unit?.position) ? unit.position + 1 : null;
   const unitLabel = unit
-    ? `${unitPosition ? `Unidad ${unitPosition}` : "Unidad"} · ${unit.title || "Sin título"}`
-    : "Unidad";
+    ? `${unitPosition ? t("pcUnitLabeled").replace("{n}", String(unitPosition)) : t("pcUnitFallback")} · ${unit.title || t("pcUntitled")}`
+    : t("pcUnitFallback");
 
   return (
     <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
-      {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
-      {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+      {profileError ? (
+        <div className="pbc-alert pbc-alert--error" role="alert">
+          {profileError}
+        </div>
+      ) : null}
+      {err ? (
+        <div className="pbc-alert pbc-alert--error" role="alert">
+          {err}
+        </div>
+      ) : null}
 
       <div className="pbc-lesson-page">
-        <nav className="pbc-content-breadcrumb" aria-label="Ubicación">
-          <Link to="/dashboard/content">Mi Contenido</Link>
+        <nav className="pbc-content-breadcrumb" aria-label={t("pcRoute")}>
+          <Link to="/dashboard/content">{t("pcMyContent")}</Link>
           <span aria-hidden> › </span>
           <Link to={`/dashboard/content/${contentId}`}>{content.title}</Link>
           <span aria-hidden> › </span>
@@ -309,7 +318,7 @@ export default function LessonEditorPage() {
             <div className="pbc-lesson-hero__copy">
               <div className="pbc-lesson-hero__title-row">
                 <label className="pbc-visually-hidden" htmlFor="lesson-title-input">
-                  Título de la lección
+                  {t("pcLessonTitle")}
                 </label>
                 <input
                   id="lesson-title-input"
@@ -324,8 +333,8 @@ export default function LessonEditorPage() {
                   <button
                     type="button"
                     className="pbc-lesson-hero__pencil"
-                    title="Editar título"
-                    aria-label="Editar título"
+                    title={t("pcEditTitle")}
+                    aria-label={t("pcEditTitle")}
                     onClick={() => titleInputRef.current?.focus()}
                   >
                     <PencilIcon />
@@ -336,7 +345,7 @@ export default function LessonEditorPage() {
                 {content.title} · {unitLabel}
               </p>
               <Link to={`/dashboard/content/${contentId}`} className="pbc-lesson-hero__back">
-                ← Volver
+                {t("pcBackToContent")}
               </Link>
             </div>
           </div>
@@ -345,15 +354,15 @@ export default function LessonEditorPage() {
             <SaveStatus status={saveStatus} onRetry={retrySave} />
             <button
               type="button"
-              className="pbc-lesson-preview-btn"
+              className="pbc-btn pbc-btn--ghost"
               onClick={() => setShareOpen(true)}
               disabled={preview}
             >
-              Compartir
+              {t("pcShare")}
             </button>
             <button
               type="button"
-              className="pbc-lesson-assign-btn"
+              className="pbc-btn pbc-btn--primary"
               onClick={() => {
                 setAssignTarget(null);
                 setAssignOpen(true);
@@ -361,16 +370,16 @@ export default function LessonEditorPage() {
               disabled={preview}
             >
               <AssignIcon />
-              Asignar
+              {t("pcAssign")}
             </button>
             <button
               type="button"
-              className="pbc-lesson-preview-btn"
+              className="pbc-btn pbc-btn--ghost"
               onClick={() => setPreview((value) => !value)}
               aria-pressed={preview}
             >
               <EyeIcon />
-              {preview ? "Seguir editando" : "Vista previa"}
+              {preview ? t("pcContinueEditing") : t("pcPreview")}
             </button>
           </div>
         </header>

@@ -336,8 +336,8 @@ export default function ContentEditorPage() {
 
   if (authLoading || loading) {
     return (
-      <main className="dash-root dash-root--center">
-        <p>Cargando editor…</p>
+      <main className="dash-root dash-root--center" role="status">
+        <p>{t("pcLoadingGeneric")}</p>
       </main>
     );
   }
@@ -348,12 +348,20 @@ export default function ContentEditorPage() {
 
   return (
     <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
-      {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
-      {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+      {profileError ? (
+        <div className="pbc-alert pbc-alert--error" role="alert">
+          {profileError}
+        </div>
+      ) : null}
+      {err ? (
+        <div className="pbc-alert pbc-alert--error" role="alert">
+          {err}
+        </div>
+      ) : null}
 
       <div className="pbc-content-editor">
-        <nav className="pbc-content-breadcrumb">
-          <Link to="/dashboard/content">Mi Contenido</Link>
+        <nav className="pbc-content-breadcrumb" aria-label={t("pcRoute")}>
+          <Link to="/dashboard/content">{t("pcMyContent")}</Link>
           <span aria-hidden> / </span>
           <span>{content.title}</span>
         </nav>
@@ -362,10 +370,7 @@ export default function ContentEditorPage() {
           <h1 className="pbc-hero-block__title">{content.title}</h1>
           {content.description ? <p className="pbc-content-editor__description">{content.description}</p> : null}
           <ContentMetaChips content={content} showAuthor={Boolean(content.owner_name)} />
-          <p className="pbc-content-editor__hint">
-            Primero creá unidades y lecciones. Para cargar el material, abrí una lección con{" "}
-            <strong>Escribir contenido</strong>.
-          </p>
+          <p className="pbc-content-editor__hint">{t("pcEditorStructureHint")}</p>
         </header>
 
         <div className="pbc-content-editor__actions">
@@ -400,8 +405,8 @@ export default function ContentEditorPage() {
         <ContentTableOfContents units={units} lessonsByUnit={lessonsByUnit} onNavigate={onTocNavigate} />
 
         {units.length === 0 ? (
-          <div className="pbc-content-editor__empty">
-            <p>Todavía no hay unidades. Creá la primera para organizar tus lecciones.</p>
+          <div className="pbc-content-editor__empty" role="status">
+            <p>{t("pcNoUnitsYet")}</p>
           </div>
         ) : (
           <div className="pbc-unit-list">
@@ -419,7 +424,7 @@ export default function ContentEditorPage() {
                         className="pbc-order-btn"
                         onClick={() => void moveUnit(unit.id, "up")}
                         disabled={busy || unitIndex === 0}
-                        aria-label="Subir unidad"
+                        aria-label={t("pcMoveUnitUp")}
                       >
                         ↑
                       </button>
@@ -428,7 +433,7 @@ export default function ContentEditorPage() {
                         className="pbc-order-btn"
                         onClick={() => void moveUnit(unit.id, "down")}
                         disabled={busy || unitIndex === units.length - 1}
-                        aria-label="Bajar unidad"
+                        aria-label={t("pcMoveUnitDown")}
                       >
                         ↓
                       </button>
@@ -454,7 +459,11 @@ export default function ContentEditorPage() {
                     <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={() => openEditUnit(unit)}>
                       {t("pcEdit")}
                     </button>
-                    <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={() => void removeUnit(unit)}>
+                    <button
+                      type="button"
+                      className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-btn--danger-ghost"
+                      onClick={() => void removeUnit(unit)}
+                    >
                       {t("pcDelete")}
                     </button>
                   </div>
@@ -462,10 +471,8 @@ export default function ContentEditorPage() {
 
                 {(lessonsByUnit[unit.id] ?? []).length === 0 ? (
                   <div className="pbc-unit-card__empty">
-                    <p className="pbc-unit-card__empty-title">Todavía no hay ítems</p>
-                    <p className="pbc-unit-card__empty-text">
-                      Creá una lección, ejercicio, quiz u otro ítem tipado.
-                    </p>
+                    <p className="pbc-unit-card__empty-title">{t("pcNoItemsYet")}</p>
+                    <p className="pbc-unit-card__empty-text">{t("pcNoItemsYetDesc")}</p>
                   </div>
                 ) : (
                   <ul className="pbc-lesson-list">
@@ -474,7 +481,7 @@ export default function ContentEditorPage() {
                         <Link
                           to={`/dashboard/content/${contentId}/lessons/${lesson.id}`}
                           className="pbc-lesson-row__main"
-                          aria-label={`Escribir contenido de ${lesson.title}`}
+                          aria-label={t("pcWriteContentOf").replace("{title}", lesson.title)}
                         >
                           <span className="pbc-lesson-row__icon" aria-hidden>
                             <DocumentIcon />
@@ -486,13 +493,11 @@ export default function ContentEditorPage() {
                               </span>{" "}
                               {lessonIndex + 1} — {lesson.title}
                             </span>
-                            <span className="pbc-lesson-row__subtitle">
-                              Tocá para escribir o editar el contenido
-                            </span>
+                            <span className="pbc-lesson-row__subtitle">{t("pcTapToWrite")}</span>
                           </span>
                           <span className="pbc-lesson-row__cta">
                             <PencilIcon size={15} />
-                            Escribir contenido
+                            {t("pcWriteContent")}
                           </span>
                         </Link>
                         <div className="pbc-lesson-row__actions">
@@ -502,7 +507,7 @@ export default function ContentEditorPage() {
                               className="pbc-order-btn"
                               onClick={() => void moveLessonItem(lesson.id, "up")}
                               disabled={busy || lessonIndex === 0}
-                              aria-label="Subir ítem"
+                              aria-label={t("pcMoveItemUp")}
                             >
                               ↑
                             </button>
@@ -513,7 +518,7 @@ export default function ContentEditorPage() {
                               disabled={
                                 busy || lessonIndex === (lessonsByUnit[unit.id]?.length ?? 0) - 1
                               }
-                              aria-label="Bajar ítem"
+                              aria-label={t("pcMoveItemDown")}
                             >
                               ↓
                             </button>
@@ -543,7 +548,7 @@ export default function ContentEditorPage() {
                           </button>
                           <button
                             type="button"
-                            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                            className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-btn--danger-ghost"
                             onClick={() => void removeLesson(lesson)}
                           >
                             {t("pcDelete")}

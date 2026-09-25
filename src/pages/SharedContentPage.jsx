@@ -54,7 +54,7 @@ export default function SharedContentPage() {
 
       const { content: c, error } = await getContent(contentId);
       if (error || !c) {
-        setErr(error || "No se pudo abrir el contenido.");
+        setErr(error || t("pcContentOpenFail"));
         setLoading(false);
         return;
       }
@@ -77,7 +77,7 @@ export default function SharedContentPage() {
             .select("id, display_name, email")
             .in("id", ids);
           const map = {};
-          for (const p of profs ?? []) map[p.id] = p.display_name || p.email || "Docente";
+          for (const p of profs ?? []) map[p.id] = p.display_name || p.email || t("pcTeacherFallback");
           setOwnerName(map[c.owner_id] || "");
           if (c.original_owner_id) setOriginalOwnerName(map[c.original_owner_id] || "");
           if (c.original_creator_id) setOriginalCreatorName(map[c.original_creator_id] || "");
@@ -156,8 +156,8 @@ export default function SharedContentPage() {
 
   if (authLoading || loading) {
     return (
-      <main className="dash-root dash-root--center">
-        <p>Cargando…</p>
+      <main className="dash-root dash-root--center" role="status">
+        <p>{t("pcLoadingGeneric")}</p>
       </main>
     );
   }
@@ -165,32 +165,34 @@ export default function SharedContentPage() {
 
   return (
     <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
-      {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
-      <div className="pbc-lesson-page">
-        <nav className="pbc-content-breadcrumb" aria-label="Ubicación">
+      {err ? (
+        <div className="pbc-alert pbc-alert--error" role="alert">
+          {err}
+        </div>
+      ) : null}
+      <div className="pbc-content-editor pbc-shared-content">
+        <nav className="pbc-content-breadcrumb" aria-label={t("pcRoute")}>
           <Link to="/dashboard/community">{t("pcCommunity")}</Link>
           <span aria-hidden> › </span>
-          <span>{content?.title || "Contenido"}</span>
+          <span>{content?.title || t("pcNavContent")}</span>
         </nav>
-        <header className="pbc-lesson-hero" style={{ marginBottom: 24 }}>
-          <div className="pbc-lesson-hero__copy">
-            <h1 className="pbc-lesson-title-input" style={{ border: 0, padding: 0 }}>
-              {content?.title}
-            </h1>
-            <p className="pbc-lesson-hero__subtitle">{t("pcReadOnlyShared")}</p>
-            <ContentMetaChips
-              content={{
-                ...content,
-                owner_name: ownerName,
-                original_owner_name: originalOwnerName,
-                original_creator_name: originalCreatorName || originalOwnerName,
-                first_community_published_by_name: firstCommunityPublisherName,
-                based_on_name: originalOwnerName,
-              }}
-              showAuthor
-            />
+        <header className="pbc-content-editor__head">
+          <div className="pbc-shared-content__banner" role="status">
+            {t("pcReadOnlyShared")}
           </div>
-          <div className="pbc-content-editor__actions" style={{ marginTop: 12 }}>
+          <h1 className="pbc-hero-block__title">{content?.title}</h1>
+          <ContentMetaChips
+            content={{
+              ...content,
+              owner_name: ownerName,
+              original_owner_name: originalOwnerName,
+              original_creator_name: originalCreatorName || originalOwnerName,
+              first_community_published_by_name: firstCommunityPublisherName,
+              based_on_name: originalOwnerName,
+            }}
+            showAuthor
+          />
+          <div className="pbc-content-editor__actions">
             <button type="button" className="pbc-btn pbc-btn--primary" disabled={busy} onClick={() => void handleCopy()}>
               {busy ? t("pcCopying") : t("pcCreateCopy")}
             </button>

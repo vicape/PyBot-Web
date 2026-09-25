@@ -1,3 +1,4 @@
+import { t } from "../../i18n.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPybotSlashMenuItems } from "./pybotContentSchema.jsx";
 
@@ -229,7 +230,7 @@ export default function LessonInsertToolbar({ editor, disabled = false }) {
   };
 
   return (
-    <div className="pbc-vbar" role="toolbar" aria-label="Herramientas del editor">
+    <div className="pbc-vbar" role="toolbar" aria-label={t("pcEditorTools")}>
       <div className="pbc-vbar__start">
         <span className="pbc-vbar__grip" aria-hidden>
           <GripIcon />
@@ -250,7 +251,7 @@ export default function LessonInsertToolbar({ editor, disabled = false }) {
 
       <div className="pbc-vbar__divider" aria-hidden />
 
-      <div className="pbc-vbar__group" role="group" aria-label="Texto" ref={menuRef}>
+      <div className="pbc-vbar__group" role="group" aria-label={t("pcToolbarText")} ref={menuRef}>
         <IconBtn label="Título" disabled={disabled} onClick={() => insert(heading1)}>
           <IconHeading />
         </IconBtn>
@@ -303,7 +304,7 @@ export default function LessonInsertToolbar({ editor, disabled = false }) {
 
       <div className="pbc-vbar__divider" aria-hidden />
 
-      <div className="pbc-vbar__group" role="group" aria-label="Multimedia">
+      <div className="pbc-vbar__group" role="group" aria-label={t("pcToolbarMedia")}>
         <IconBtn label="Imagen" tone="cyan" disabled={disabled} onClick={() => insert(image)}>
           <IconImage />
         </IconBtn>
@@ -323,7 +324,7 @@ export default function LessonInsertToolbar({ editor, disabled = false }) {
 
       <div className="pbc-vbar__divider" aria-hidden />
 
-      <div className="pbc-vbar__group" role="group" aria-label="Código">
+      <div className="pbc-vbar__group" role="group" aria-label={t("pcToolbarCode")}>
         <IconBtn label="Código" tone="violet" disabled={disabled} onClick={() => insert(code)}>
           <IconCode />
         </IconBtn>

@@ -113,7 +113,7 @@ export default function MyContentPage() {
 
   if (authLoading || loading) {
     return (
-      <main className="dash-root dash-root--center">
+      <main className="dash-root dash-root--center" role="status">
         <p>{t("pcLoadingGeneric")}</p>
       </main>
     );
@@ -122,8 +122,16 @@ export default function MyContentPage() {
 
   return (
     <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
-      {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
-      {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+      {profileError ? (
+        <div className="pbc-alert pbc-alert--error" role="alert">
+          {profileError}
+        </div>
+      ) : null}
+      {err ? (
+        <div className="pbc-alert pbc-alert--error" role="alert">
+          {err}
+        </div>
+      ) : null}
       {feedback ? (
         <p className="pbc-feedback" role="status">
           {feedback}
@@ -131,31 +139,34 @@ export default function MyContentPage() {
       ) : null}
 
       <div className="pbc-content-page">
-        <header className="pbc-content-page__head">
-          <div>
+        <header className="pbc-hero-block pbc-content-page__head">
+          <div className="pbc-hero-block__text">
             <h1 className="pbc-hero-block__title">{t("pcNavContent")}</h1>
-            <p className="pbc-hero-block__subtitle">
-              {assignToCourse
-                ? t("pcAssignToCourseIntent").replace(
-                    "{course}",
-                    assignCourseTitle || assignToCourse,
-                  )
-                : t("pcContentPageLead")}
+            <p className="pbc-hero-block__subtitle">{t("pcContentPageLead")}</p>
+          </div>
+          <div className="pbc-hero-block__actions">
+            {!assignToCourse ? (
+              <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
+                <span aria-hidden>
+                  <CompactContentIcon />
+                </span>
+                {t("pcCreateContent")}
+              </button>
+            ) : (
+              <button type="button" className="pbc-btn pbc-btn--ghost" onClick={clearAssignIntent}>
+                {t("pcCancel")}
+              </button>
+            )}
+          </div>
+        </header>
+
+        {assignToCourse ? (
+          <div className="pbc-assign-intent" role="status">
+            <p className="pbc-assign-intent__text">
+              {t("pcAssignToCourseIntent").replace("{course}", assignCourseTitle || assignToCourse)}
             </p>
           </div>
-          {!assignToCourse ? (
-            <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
-              <span aria-hidden>
-                <CompactContentIcon />
-              </span>
-              {t("pcCreateContent")}
-            </button>
-          ) : (
-            <button type="button" className="pbc-btn pbc-btn--ghost" onClick={clearAssignIntent}>
-              {t("pcCancel")}
-            </button>
-          )}
-        </header>
+        ) : null}
 
         {contents.length === 0 ? (
           <div className="pbc-empty-state pbc-empty-state--content">

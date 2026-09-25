@@ -50,7 +50,7 @@ function ShareBadgeIcon({ visibility }) {
 function UsageBlock({ metrics, unavailable }) {
   if (unavailable) {
     return (
-      <p className="pbc-content-card__usage--muted" title={t("pcUsageUnavailable")}>
+      <p className="pbc-content-card__usage pbc-content-card__usage--muted" title={t("pcUsageUnavailable")}>
         {t("pcUsageUnavailable")}
       </p>
     );
@@ -58,43 +58,22 @@ function UsageBlock({ metrics, unavailable }) {
 
   const total = metrics?.distinct_total_user_count ?? 0;
   if (total <= 0) {
-    return (
-      <p
-        style={{
-          overflowWrap: "anywhere",
-          wordBreak: "break-word",
-          maxWidth: "100%",
-          margin: "0.35rem 0 0",
-          fontSize: "0.85rem",
-          opacity: 0.9,
-        }}
-      >
-        {t("pcUsageNobody")}
-      </p>
-    );
+    return <p className="pbc-content-card__usage">{t("pcUsageNobody")}</p>;
   }
 
   const copyN = metrics?.distinct_copy_user_count ?? 0;
   const assignN = metrics?.distinct_assignment_user_count ?? 0;
-  const wrap = {
-    overflowWrap: "anywhere",
-    wordBreak: "break-word",
-    maxWidth: "100%",
-    margin: "0.35rem 0 0",
-    fontSize: "0.85rem",
-    opacity: 0.9,
-  };
 
   return (
-    <div style={wrap}>
-      <p style={{ margin: 0 }}>{t("pcUsageUsedBy").replace("{n}", String(total))}</p>
+    <div className="pbc-content-card__usage">
+      <p className="pbc-content-card__usage-line">{t("pcUsageUsedBy").replace("{n}", String(total))}</p>
       {copyN > 0 ? (
-        <p style={{ margin: "0.15rem 0 0" }}>
+        <p className="pbc-content-card__usage-line">
           {t("pcUsageCopyBreakdown").replace("{n}", String(copyN))}
         </p>
       ) : null}
       {assignN > 0 ? (
-        <p style={{ margin: "0.15rem 0 0" }}>
+        <p className="pbc-content-card__usage-line">
           {t("pcUsageAssignBreakdown").replace("{n}", String(assignN))}
         </p>
       ) : null}
@@ -157,17 +136,14 @@ export default function ContentCard({
   const showMenu = isOwner || showCopy || (canAssign && !showDirectAssign);
 
   return (
-    <article className="pbc-content-card" style={{ minWidth: 0, maxWidth: "100%" }}>
+    <article className="pbc-content-card" style={{ minWidth: 0, maxWidth: "100%", overflowWrap: "anywhere" }}>
       <div className="pbc-content-card__header">
         <span className="pbc-content-card__icon" aria-hidden>
           <IconContentType />
         </span>
 
         <div className="pbc-content-card__header-right">
-          <span
-            className="pbc-badge pbc-badge--blue pbc-badge--with-icon"
-            title={`${t("pcStatus")}: BORRADOR / PUBLICADO`}
-          >
+          <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon">
             <span aria-hidden>
               {content.status === "published" ? <IconPublished size={12} /> : <IconDraft size={12} />}
             </span>

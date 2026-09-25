@@ -1,4 +1,5 @@
 import { BlockNoteView } from "@blocknote/mantine";
+import { t } from "../../i18n.js";
 import { useCreateBlockNote } from "@blocknote/react";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
@@ -52,13 +53,13 @@ function BlockCard({ kind, block }) {
       </div>
       {block?.instructions ? (
         <div className="pbc-pybot-card__section">
-          <div className="pbc-pybot-card__label">Instrucciones</div>
+          <div className="pbc-pybot-card__label">{t("pcInstructions")}</div>
           <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{block.instructions}</p>
         </div>
       ) : null}
       {block?.starterCode != null && String(block.starterCode).length > 0 ? (
         <div className="pbc-pybot-card__section">
-          <div className="pbc-pybot-card__label">Código inicial</div>
+          <div className="pbc-pybot-card__label">{t("pcStarterCode")}</div>
           <pre className="pbc-pybot-card__code">{block.starterCode}</pre>
         </div>
       ) : null}

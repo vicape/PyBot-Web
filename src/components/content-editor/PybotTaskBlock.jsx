@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { t } from "../../i18n.js";
 
 function updateProp(editor, block, key, value) {
   if (!editor.isEditable) return;
@@ -42,16 +43,16 @@ export default function PybotTaskBlock({ block, editor }) {
           <span className="pbc-pybot-card__glyph" aria-hidden>
             <BookmarkIcon />
           </span>
-          <span className="pbc-pybot-card__kind">Tarea</span>
+          <span className="pbc-pybot-card__kind">{t("pcSource_task")}</span>
         </div>
         <div className="pbc-pybot-card__meta">
-          <span className="pbc-pybot-card__hint">Actividad de programación</span>
+          <span className="pbc-pybot-card__hint">{t("pcWrittenTask")}</span>
           {editable ? (
             <div className="pbc-pybot-card__menu" ref={menuRef}>
               <button
                 type="button"
                 className="pbc-pybot-card__menu-btn"
-                aria-label="Opciones de la tarea"
+                aria-label={t("pcTaskOptions")}
                 aria-expanded={menuOpen}
                 onClick={() => setMenuOpen((v) => !v)}
               >
@@ -84,7 +85,7 @@ export default function PybotTaskBlock({ block, editor }) {
                       );
                     }}
                   >
-                    Asignar
+                    {t("pcAssign")}
                   </button>
                   <button
                     type="button"
@@ -95,7 +96,7 @@ export default function PybotTaskBlock({ block, editor }) {
                       editor.removeBlocks([block]);
                     }}
                   >
-                    Eliminar bloque
+                    {t("pcDeleteBlock")}
                   </button>
                 </div>
               ) : null}
@@ -105,7 +106,7 @@ export default function PybotTaskBlock({ block, editor }) {
       </div>
 
       <label className="pbc-pybot-card__label pbc-pybot-card__label--dot" htmlFor={titleId}>
-        Título
+        {t("pcTitle")}
       </label>
       {editable ? (
         <input
@@ -114,16 +115,16 @@ export default function PybotTaskBlock({ block, editor }) {
           value={block.props.title}
           onChange={(event) => updateProp(editor, block, "title", event.target.value)}
           placeholder="Mini proyecto"
-          aria-label="Título de la tarea"
+          aria-label={t("pcTaskTitleAria")}
         />
       ) : (
-        <p className="pbc-pybot-card__static">{block.props.title || "Tarea"}</p>
+        <p className="pbc-pybot-card__static">{block.props.title || t("pcSource_task")}</p>
       )}
 
       <div className="pbc-pybot-card__grid">
         <div className="pbc-pybot-card__col">
           <label className="pbc-pybot-card__label" htmlFor={instructionsId}>
-            Instrucciones
+            {t("pcInstructions")}
           </label>
           {editable ? (
             <textarea
@@ -133,18 +134,18 @@ export default function PybotTaskBlock({ block, editor }) {
               onChange={(event) => updateProp(editor, block, "instructions", event.target.value)}
               placeholder="Crear un programa…"
               rows={6}
-              aria-label="Instrucciones de la tarea"
+              aria-label={t("pcTaskInstructionsAria")}
             />
           ) : (
             <p className="pbc-pybot-card__static pbc-pybot-card__static--pre">
-              {block.props.instructions || "Sin instrucciones todavía."}
+              {block.props.instructions || t("pcNoInstructionsYet")}
             </p>
           )}
         </div>
 
         <div className="pbc-pybot-card__col">
           <label className="pbc-pybot-card__label" htmlFor={codeId}>
-            Código inicial (opcional)
+            {t("pcStarterCodeOptional")}
           </label>
           {editable ? (
             <textarea
@@ -155,12 +156,12 @@ export default function PybotTaskBlock({ block, editor }) {
               placeholder="Podés dejar una pista de código"
               rows={6}
               spellCheck={false}
-              aria-label="Código inicial de la tarea"
+              aria-label={t("pcTaskCodeAria")}
             />
           ) : block.props.starterCode ? (
             <pre className="pbc-pybot-card__code">{block.props.starterCode}</pre>
           ) : (
-            <p className="pbc-pybot-card__static pbc-pybot-card__static--muted">Sin código inicial.</p>
+            <p className="pbc-pybot-card__static pbc-pybot-card__static--muted">{t("pcNoStarterCode")}</p>
           )}
         </div>
       </div>

@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { t } from "../../i18n.js";
 import {
   assignContentSourceToCourse,
   listCourseStudents,
   listTeacherCoursesForAssign,
 } from "../../platform/contentAssignApi.js";
 
-const SOURCE_LABELS = {
-  content: "contenido",
-  unit: "unidad",
-  lesson: "lección",
-  exercise: "ejercicio",
-  task: "tarea",
+const SOURCE_KEYS = {
+  content: "pcSource_content",
+  unit: "pcSource_unit",
+  lesson: "pcSource_lesson",
+  exercise: "pcSource_exercise",
+  task: "pcSource_task",
 };
 
 /**
@@ -83,9 +84,7 @@ export default function AssignLessonModal({
             : "";
       if (preferred) setCourseId(preferred);
       if (rows.length === 0) {
-        setErr(
-          "No encontramos cursos donde seas docente. Abrí Mis clases y verificá que tengas al menos un curso.",
-        );
+        setErr(t("pcAssignNoTeacherCourses"));
       }
     })();
   }, [open, initialTitle, defaultCourseId]);
@@ -149,45 +148,46 @@ export default function AssignLessonModal({
 
     setBusy(false);
     if (error || !activity) {
-      setErr(error || "No se pudo asignar.");
+      setErr(error || t("pcAssignFail"));
       return;
     }
     setDone(activity);
   };
 
-  const label = contextLabel || SOURCE_LABELS[sourceType] || "contenido";
+  const sourceKey = SOURCE_KEYS[sourceType];
+  const label = (sourceKey ? t(sourceKey) : null) || contextLabel || t("pcSource_content");
+  const heading = t("pcAssignHeading").replace("{label}", label);
+  const labelWithTitle = contentTitle ? `${label} («${contentTitle}»)` : label;
+  const lead = t("pcAssignSnapshotLead").replace("{label}", labelWithTitle);
 
   return (
-    <div className="pbc-modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="pbc-modal-backdrop pbc-modal-backdrop--create-content" role="presentation" onClick={onClose}>
       <form
-        className="pbc-modal pbc-modal--assign-lesson"
+        className="pbc-modal pbc-modal--create-content pbc-modal--assign-lesson"
         role="dialog"
         aria-labelledby="assign-lesson-title"
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
       >
         <h2 id="assign-lesson-title" className="pbc-modal__title">
-          Asignar {label}
+          {heading}
         </h2>
-        <p className="pbc-modal--assign-lesson__subtitle">
-          Se crea una actividad con una copia fija del {label}
-          {contentTitle ? ` («${contentTitle}»)` : ""}. Cambios posteriores en Mi Contenido no la modifican.
-        </p>
+        <p className="pbc-modal--create-content__subtitle">{lead}</p>
 
         {done ? (
           <div className="pbc-assign-done">
             <p className="pbc-assign-done__msg">
-              Actividad creada: <strong>{done.title}</strong>
+              {t("pcAssignActivityCreated")} <strong>{done.title}</strong>
             </p>
             <div className="pbc-modal__actions">
               <Link className="pbc-btn pbc-btn--primary" to={`/actividad/${done.id}`}>
-                Abrir actividad
+                {t("pcAssignOpenActivity")}
               </Link>
               <Link className="pbc-btn pbc-btn--ghost" to={`/dashboard/classes/${done.course_id}`}>
-                Ir al curso
+                {t("pcAssignGoToCourse")}
               </Link>
               <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose}>
-                Cerrar
+                {t("pcClose")}
               </button>
             </div>
           </div>
@@ -195,7 +195,7 @@ export default function AssignLessonModal({
           <>
             <div className="pbc-modal__field">
               <label className="pbc-label" htmlFor="assign-title">
-                Título de la actividad
+                {t("pcAssignActivityTitle")}
               </label>
               <input
                 id="assign-title"
@@ -209,7 +209,7 @@ export default function AssignLessonModal({
 
             <div className="pbc-modal__field">
               <label className="pbc-label" htmlFor="assign-course">
-                Curso
+                {t("pcCourses")}
               </label>
               <select
                 id="assign-course"
@@ -219,7 +219,9 @@ export default function AssignLessonModal({
                 required
                 disabled={busy || loadingCourses}
               >
-                <option value="">{loadingCourses ? "Cargando cursos…" : "Elegí un curso"}</option>
+                <option value="">
+                  {loadingCourses ? t("pcAssignLoadingCourses") : t("pcAssignPickCourse")}
+                </option>
                 {courses.map((c) => (
                   <option key={c.course_id} value={c.course_id}>
                     {c.course_title}
@@ -230,7 +232,7 @@ export default function AssignLessonModal({
             </div>
 
             <fieldset className="pbc-modal__field pbc-assign-mode">
-              <legend className="pbc-label">Destinatarios</legend>
+              <legend className="pbc-label">{t("pcAssignRecipients")}</legend>
               <label className="pbc-assign-mode__option">
                 <input
                   type="radio"
@@ -239,7 +241,7 @@ export default function AssignLessonModal({
                   onChange={() => setMode("all")}
                   disabled={busy}
                 />
-                Todo el curso
+                {t("pcAssignWholeCourse")}
               </label>
               <label className="pbc-assign-mode__option">
                 <input
@@ -249,7 +251,7 @@ export default function AssignLessonModal({
                   onChange={() => setMode("selected")}
                   disabled={busy}
                 />
-                Alumnos seleccionados
+                {t("pcAssignSelectedStudents")}
               </label>
             </fieldset>
 
@@ -257,7 +259,11 @@ export default function AssignLessonModal({
               <div className="pbc-modal__field">
                 <div className="pbc-assign-students__toolbar">
                   <span className="pbc-label">
-                    Alumnos {loadingStudents ? "(cargando…)" : `(${selectedCount}/${students.length})`}
+                    {loadingStudents
+                      ? t("pcAssignStudentsLoading")
+                      : t("pcAssignStudentsCount")
+                          .replace("{selected}", String(selectedCount))
+                          .replace("{total}", String(students.length))}
                   </span>
                   <div className="pbc-assign-students__actions">
                     <button
@@ -266,7 +272,7 @@ export default function AssignLessonModal({
                       onClick={() => setSelected(new Set(students.map((s) => s.userId)))}
                       disabled={busy || !students.length}
                     >
-                      Todos
+                      {t("pcAssignAll")}
                     </button>
                     <button
                       type="button"
@@ -274,13 +280,13 @@ export default function AssignLessonModal({
                       onClick={() => setSelected(new Set())}
                       disabled={busy || selectedCount === 0}
                     >
-                      Ninguno
+                      {t("pcAssignNone")}
                     </button>
                   </div>
                 </div>
                 <div className="pbc-assign-students">
                   {students.length === 0 && !loadingStudents ? (
-                    <p className="pbc-modal--assign-lesson__subtitle">No hay alumnos en este curso.</p>
+                    <p className="pbc-modal--create-content__subtitle">{t("pcAssignNoStudents")}</p>
                   ) : (
                     students.map((s) => (
                       <label key={s.userId} className="pbc-assign-students__row">
@@ -304,7 +310,7 @@ export default function AssignLessonModal({
             <div className="pbc-assign-meta">
               <div className="pbc-modal__field">
                 <label className="pbc-label" htmlFor="assign-due">
-                  Fecha de entrega
+                  {t("pcDueDate")}
                 </label>
                 <input
                   id="assign-due"
@@ -317,7 +323,7 @@ export default function AssignLessonModal({
               </div>
               <div className="pbc-modal__field">
                 <label className="pbc-label" htmlFor="assign-points">
-                  Puntaje máximo
+                  {t("pcMaxPoints")}
                 </label>
                 <input
                   id="assign-points"
@@ -332,14 +338,18 @@ export default function AssignLessonModal({
               </div>
             </div>
 
-            {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+            {err ? (
+              <p className="pbc-alert pbc-alert--error" role="alert">
+                {err}
+              </p>
+            ) : null}
 
             <div className="pbc-modal__actions">
               <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose} disabled={busy}>
-                Cancelar
+                {t("pcCancel")}
               </button>
               <button type="submit" className="pbc-btn pbc-btn--primary" disabled={!canSubmit}>
-                {busy ? "Asignando…" : "Asignar"}
+                {busy ? t("pcSaving") : t("pcAssign")}
               </button>
             </div>
           </>

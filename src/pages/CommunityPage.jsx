@@ -84,7 +84,7 @@ export default function CommunityPage() {
 
   if (authLoading) {
     return (
-      <main className="dash-root dash-root--center">
+      <main className="dash-root dash-root--center" role="status">
         <p>{t("pcLoadingGeneric")}</p>
       </main>
     );
@@ -93,18 +93,27 @@ export default function CommunityPage() {
 
   return (
     <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
-      {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
-      {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+      {profileError ? (
+        <div className="pbc-alert pbc-alert--error" role="alert">
+          {profileError}
+        </div>
+      ) : null}
+      {err ? (
+        <div className="pbc-alert pbc-alert--error" role="alert">
+          {err}
+        </div>
+      ) : null}
       {feedback ? (
         <p className="pbc-feedback" role="status">
           {feedback}
         </p>
       ) : null}
 
-      <header className="pbc-hero-block" style={{ marginBottom: "1.5rem" }}>
-        <div>
+      <div className="pbc-content-page">
+      <header className="pbc-hero-block pbc-content-page__head">
+        <div className="pbc-hero-block__text">
           <h1 className="pbc-hero-block__title">{t("pcCommunity")}</h1>
-          <p className="pbc-hero-block__lead">{t("pcCommunityExternalLead")}</p>
+          <p className="pbc-hero-block__subtitle">{t("pcCommunityExternalLead")}</p>
         </div>
       </header>
 
@@ -130,7 +139,7 @@ export default function CommunityPage() {
       </form>
 
       {loading ? (
-        <p>{t("pcLoadingGeneric")}</p>
+        <p role="status">{t("pcLoadingGeneric")}</p>
       ) : rows.length === 0 ? (
         <div className="pbc-community-empty" role="status">
           <span className="pbc-community-empty__icon" aria-hidden>
@@ -152,7 +161,10 @@ export default function CommunityPage() {
           {rows.map((c) => (
             <article key={c.id} className="pbc-content-card" style={{ minWidth: 0, maxWidth: "100%" }}>
               <div className="pbc-content-card__header">
-                <span className="pbc-badge pbc-badge--blue">{t("pcCommunity")}</span>
+                <span className="pbc-content-card__icon" aria-hidden>
+                  <CompactContentIcon />
+                </span>
+                <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon">{t("pcCommunity")}</span>
               </div>
               <h2 className="pbc-content-card__title">{c.title}</h2>
               {c.description ? <p className="pbc-content-card__desc">{c.description}</p> : null}
@@ -211,6 +223,7 @@ export default function CommunityPage() {
         contentTitle={assigning?.title}
         contextLabel="contenido"
       />
+      </div>
     </PyBotClassLayout>
   );
 }

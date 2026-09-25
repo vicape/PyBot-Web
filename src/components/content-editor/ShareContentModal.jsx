@@ -2,12 +2,18 @@ import { useEffect, useState } from "react";
 import { t } from "../../i18n.js";
 import {
   CONTENT_VISIBILITY,
-  CONTENT_VISIBILITY_LABELS,
   COMMUNITY_METADATA_REQUIRED_HINT,
   listContentCourseAccess,
   listTeacherCoursesForShare,
   setContentSharing,
 } from "../../platform/contentShareApi.js";
+
+function visibilityLabel(key) {
+  if (key === CONTENT_VISIBILITY.private) return t("pcPrivate");
+  if (key === CONTENT_VISIBILITY.courses) return t("pcVisibilityCoursesShare");
+  if (key === CONTENT_VISIBILITY.community) return t("pcVisibilityCommunityShare");
+  return key;
+}
 
 export default function ShareContentModal({ open, onClose, content, onSaved }) {
   const [visibility, setVisibility] = useState(CONTENT_VISIBILITY.private);
@@ -62,7 +68,7 @@ export default function ShareContentModal({ open, onClose, content, onSaved }) {
       setErr(
         error === COMMUNITY_METADATA_REQUIRED_HINT || /Comunidad|Community|comunidad/i.test(String(error || ""))
           ? t("pcCommunityMetaRequired")
-          : error || "No se pudo guardar.",
+          : error || t("pcShareSaveFail"),
       );
       return;
     }
@@ -71,23 +77,23 @@ export default function ShareContentModal({ open, onClose, content, onSaved }) {
   };
 
   return (
-    <div className="pbc-modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="pbc-modal-backdrop pbc-modal-backdrop--create-content" role="presentation" onClick={onClose}>
       <form
-        className="pbc-modal pbc-modal--assign-lesson"
+        className="pbc-modal pbc-modal--create-content pbc-modal--assign-lesson"
         role="dialog"
         aria-labelledby="share-content-title"
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
       >
         <h2 id="share-content-title" className="pbc-modal__title">
-          Compartir
+          {t("pcShare")}
         </h2>
-        <p className="pbc-modal--assign-lesson__subtitle">
-          Definí quién puede <strong>leer</strong> «{content?.title}». Solo vos podés editarlo.
+        <p className="pbc-modal--create-content__subtitle">
+          {t("pcShareLead").replace("{title}", content?.title || "")}
         </p>
 
         <fieldset className="pbc-modal__field pbc-assign-mode">
-          <legend className="pbc-label">Visibilidad</legend>
+          <legend className="pbc-label">{t("pcVisibility")}</legend>
           {Object.keys(CONTENT_VISIBILITY).map((key) => (
             <label key={key} className="pbc-assign-mode__option">
               <input
@@ -97,17 +103,17 @@ export default function ShareContentModal({ open, onClose, content, onSaved }) {
                 onChange={() => setVisibility(key)}
                 disabled={busy || loading}
               />
-              {CONTENT_VISIBILITY_LABELS[key]}
+              {visibilityLabel(key)}
             </label>
           ))}
         </fieldset>
 
         {visibility === CONTENT_VISIBILITY.courses ? (
           <div className="pbc-modal__field">
-            <span className="pbc-label">Cursos con acceso de lectura</span>
-            <div className="pbc-assign-students" style={{ marginTop: 8 }}>
+            <span className="pbc-label">{t("pcCoursesReadAccess")}</span>
+            <div className="pbc-assign-students pbc-assign-students--spaced">
               {courses.length === 0 ? (
-                <p className="pbc-modal--assign-lesson__subtitle">No hay cursos donde seas docente.</p>
+                <p className="pbc-modal--create-content__subtitle">{t("pcNoTeacherCoursesShare")}</p>
               ) : (
                 courses.map((c) => (
                   <label key={c.course_id} className="pbc-assign-students__row">
@@ -128,14 +134,18 @@ export default function ShareContentModal({ open, onClose, content, onSaved }) {
           </div>
         ) : null}
 
-        {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
+        {err ? (
+          <p className="pbc-alert pbc-alert--error" role="alert">
+            {err}
+          </p>
+        ) : null}
 
         <div className="pbc-modal__actions">
           <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose} disabled={busy}>
-            Cancelar
+            {t("pcCancel")}
           </button>
           <button type="submit" className="pbc-btn pbc-btn--primary" disabled={busy || loading}>
-            {busy ? "Guardando…" : "Guardar"}
+            {busy ? t("pcSaving") : t("pcSave")}
           </button>
         </div>
       </form>
