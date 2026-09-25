@@ -24,7 +24,7 @@
   display: block;
 }
 
-/* —— Sidebar: persistent on wide desktop; drawer on tablet/mobile —— */
+/* —— Sidebar: in-flow + collapsible on desktop; drawer on tablet/mobile —— */
 .pbc-sidebar {
   width: var(--pbc-sidebar-width, 224px);
   flex-shrink: 0;
@@ -48,26 +48,35 @@
   z-index: 50;
 }
 
+/* Desktop breakpoint: >= 961px (in-flow collapsible sidebar; no overlay). */
 @media (min-width: 961px) {
+  /* Desktop >= 961px: in-flow sidebar; hamburger toggles open/collapsed (no overlay, no drawer slide). */
   .pbc-sidebar {
     position: static;
     transform: none;
     height: 100%;
     box-shadow: none;
     z-index: auto;
+    transition: none;
   }
 
   .pbc-sidebar--open {
     transform: none;
+    width: var(--pbc-sidebar-width, 224px);
+  }
+
+  .pbc-sidebar:not(.pbc-sidebar--open) {
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    overflow: hidden;
+    pointer-events: none;
   }
 
   .pbc-dashboard__overlay,
   .pbc-dashboard__overlay--open {
     display: none !important;
-  }
-
-  .pbc-topbar__menu-btn {
-    display: none;
   }
 }
 

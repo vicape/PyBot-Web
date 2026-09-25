@@ -13,6 +13,7 @@ const DAILY_NAV = [
 ];
 
 export default function PyBotClassSidebar({
+  id = "pbc-sidebar",
   open,
   onClose,
   showAdmin,
@@ -104,7 +105,11 @@ export default function PyBotClassSidebar({
   };
 
   return (
-    <aside className={`pbc-sidebar${open ? " pbc-sidebar--open" : ""}`} aria-label={t("pcNavigation")}>
+    <aside
+      id={id}
+      className={`pbc-sidebar${open ? " pbc-sidebar--open" : ""}`}
+      aria-label={t("pcNavigation")}
+    >
       <Link to="/dashboard/classes" className="pbc-sidebar__brand" onClick={onClose}>
         <span className="pbc-sidebar__logo" aria-hidden>
           {"</>"}

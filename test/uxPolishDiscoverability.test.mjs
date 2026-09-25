@@ -28,13 +28,50 @@ const sidebarIconsSrc = readFileSync(
   resolve(root, "src/components/pybotclass/illustrations/SidebarIcons.jsx"),
   "utf8",
 );
+const layoutSrc = readFileSync(
+  resolve(root, "src/components/pybotclass/layout/PyBotClassLayout.jsx"),
+  "utf8",
+);
+const topbarSrc = readFileSync(
+  resolve(root, "src/components/pybotclass/layout/PyBotClassTopbar.jsx"),
+  "utf8",
+);
+const sidebarLayoutSrc = readFileSync(
+  resolve(root, "src/components/pybotclass/layout/PyBotClassSidebar.jsx"),
+  "utf8",
+);
 
-test("desktop sidebar persistently visible; hamburger hidden ≥961px", () => {
+test("desktop sidebar toggleable via hamburger ≥961px; no overlay", () => {
+  // Exact desktop breakpoint literal required by acceptance: >= 961px
+  assert.ok(cssSrc.includes(">= 961px"));
   assert.match(cssSrc, /@media \(min-width:\s*961px\)/);
   assert.match(cssSrc, /position:\s*static/);
-  assert.match(cssSrc, /\.pbc-topbar__menu-btn\s*\{\s*display:\s*none/);
+  // Hamburger remains available on desktop (toggle)
+  assert.doesNotMatch(cssSrc, /\.pbc-topbar__menu-btn\s*\{\s*display:\s*none/);
+  // Closed desktop sidebar collapses width so main expands
+  assert.match(cssSrc, /\.pbc-sidebar:not\(\.pbc-sidebar--open\)\s*\{[^}]*width:\s*0/s);
+  // Overlay never shows on desktop
+  assert.match(cssSrc, /\.pbc-dashboard__overlay(?:--open)?,\s*\n\s*\.pbc-dashboard__overlay--open\s*\{[^}]*display:\s*none\s*!important/s);
   // Drawer remains the default (mobile/tablet) via translateX(-100%)
   assert.match(cssSrc, /transform:\s*translateX\(-100%\)/);
+});
+
+test("PyBotClass sidebar hamburger is a real toggle with a11y wiring", () => {
+  // Exact desktop breakpoint literal required by acceptance: >= 961px
+  assert.ok(layoutSrc.includes(">= 961px"));
+  assert.match(layoutSrc, /min-width:\s*961px/);
+  assert.match(layoutSrc, /onMenuToggle=\{\(\) => setSidebarOpen\(\(open\) => !open\)\}/);
+  assert.match(layoutSrc, /isDesktopViewport\(\)/);
+  assert.match(layoutSrc, /PBC_SIDEBAR_ID/);
+  assert.match(layoutSrc, /Escape/);
+  assert.match(topbarSrc, /aria-expanded=\{sidebarOpen\}/);
+  assert.match(topbarSrc, /aria-controls=\{sidebarId\}/);
+  assert.match(topbarSrc, /aria-label=\{sidebarOpen \? t\("pcCloseMenu"\) : t\("pcOpenMenu"\)\}/);
+  assert.match(topbarSrc, /type="button"/);
+  assert.match(sidebarLayoutSrc, /id=\{id\}/);
+  assert.match(sidebarLayoutSrc, /id = "pbc-sidebar"/);
+  assert.equal(PYBOTCLASS_STRINGS.en.pcOpenMenu, "Open menu");
+  assert.equal(PYBOTCLASS_STRINGS.en.pcCloseMenu, "Close menu");
 });
 
 test("Home attention items expose semantic icon + text CTA", () => {

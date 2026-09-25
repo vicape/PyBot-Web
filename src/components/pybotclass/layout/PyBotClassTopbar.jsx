@@ -15,7 +15,9 @@ export default function PyBotClassTopbar({
   appearance,
   onThemeChange,
   onSignOut,
-  onMenuOpen,
+  sidebarOpen = false,
+  sidebarId = "pbc-sidebar",
+  onMenuToggle,
   contextualRoleLabel = null,
   contextualRoleCompact = null,
   accountHref = "/dashboard/classes?panel=account",
@@ -32,8 +34,10 @@ export default function PyBotClassTopbar({
       <button
         type="button"
         className="pbc-topbar__menu-btn"
-        onClick={onMenuOpen}
-        aria-label={t("pcOpenMenu")}
+        onClick={onMenuToggle}
+        aria-expanded={sidebarOpen}
+        aria-controls={sidebarId}
+        aria-label={sidebarOpen ? t("pcCloseMenu") : t("pcOpenMenu")}
       >
         ☰
       </button>
