@@ -2,6 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getLang, t } from "../../../i18n.js";
 import { ownedContentShareState } from "../../../platform/uxIaHelpers.js";
+import {
+  IconAssign,
+  IconContentType,
+  IconCopy,
+  IconDraft,
+  IconEdit,
+  IconLock,
+  IconOpen,
+  IconPublished,
+  IconShare,
+  IconSharedCommunity,
+  IconSharedCourses,
+} from "../illustrations/ActionIcons.jsx";
 import ContentMetaChips from "./ContentMetaChips.jsx";
 
 function formatDate(iso) {
@@ -27,7 +40,42 @@ function shareBadgeLabel(visibility) {
   return t("pcPrivate");
 }
 
+function ShareBadgeIcon({ visibility }) {
+  const state = ownedContentShareState(visibility);
+  if (state === "community") return <IconSharedCommunity />;
+  if (state === "courses") return <IconSharedCourses />;
+  return <IconLock size={12} />;
+}
+
 function UsageBlock({ metrics, unavailable }) {
+  if (unavailable) {
+    return (
+      <p className="pbc-content-card__usage--muted" title={t("pcUsageUnavailable")}>
+        {t("pcUsageUnavailable")}
+      </p>
+    );
+  }
+
+  const total = metrics?.distinct_total_user_count ?? 0;
+  if (total <= 0) {
+    return (
+      <p
+        style={{
+          overflowWrap: "anywhere",
+          wordBreak: "break-word",
+          maxWidth: "100%",
+          margin: "0.35rem 0 0",
+          fontSize: "0.85rem",
+          opacity: 0.9,
+        }}
+      >
+        {t("pcUsageNobody")}
+      </p>
+    );
+  }
+
+  const copyN = metrics?.distinct_copy_user_count ?? 0;
+  const assignN = metrics?.distinct_assignment_user_count ?? 0;
   const wrap = {
     overflowWrap: "anywhere",
     wordBreak: "break-word",
@@ -36,18 +84,6 @@ function UsageBlock({ metrics, unavailable }) {
     fontSize: "0.85rem",
     opacity: 0.9,
   };
-
-  if (unavailable) {
-    return <p style={wrap}>{t("pcUsageUnavailable")}</p>;
-  }
-
-  const total = metrics?.distinct_total_user_count ?? 0;
-  if (total <= 0) {
-    return <p style={wrap}>{t("pcUsageNobody")}</p>;
-  }
-
-  const copyN = metrics?.distinct_copy_user_count ?? 0;
-  const assignN = metrics?.distinct_assignment_user_count ?? 0;
 
   return (
     <div style={wrap}>
@@ -116,33 +152,43 @@ export default function ContentCard({
 
   // Own original content: do not emphasize Create Copy unless caller needs it.
   const showCopy = Boolean(onCopy) && !isOwner;
-  const showMenu = isOwner || canAssign || showCopy;
+  const showDirectAssign = canAssign && Boolean(onAssign);
+  // Menu keeps secondary actions; Assign stays in menu only when not shown directly.
+  const showMenu = isOwner || showCopy || (canAssign && !showDirectAssign);
 
   return (
     <article className="pbc-content-card" style={{ minWidth: 0, maxWidth: "100%" }}>
       <div className="pbc-content-card__header">
         <span className="pbc-content-card__icon" aria-hidden>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path
-              d="M5.5 7.5h13A1.5 1.5 0 0 1 20 9v10.5A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5V9A1.5 1.5 0 0 1 5.5 7.5Z"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinejoin="round"
-            />
-            <path d="M8 12h8M8 15.5h5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+          <IconContentType />
         </span>
 
         <div className="pbc-content-card__header-right">
-          <span className="pbc-badge pbc-badge--blue" title={`${t("pcStatus")}: BORRADOR / PUBLICADO`}>
+          <span
+            className="pbc-badge pbc-badge--blue pbc-badge--with-icon"
+            title={`${t("pcStatus")}: BORRADOR / PUBLICADO`}
+          >
+            <span aria-hidden>
+              {content.status === "published" ? <IconPublished size={12} /> : <IconDraft size={12} />}
+            </span>
             {content.status === "published" ? t("pcPublished") : t("pcDraft")}
           </span>
           {isOwner ? (
-            <span className="pbc-badge pbc-badge--blue" title={t("pcVisibility")}>
+            <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon" title={t("pcVisibility")}>
+              <span aria-hidden>
+                <ShareBadgeIcon visibility={content.visibility} />
+              </span>
               {shareBadgeLabel(content.visibility)}
             </span>
           ) : content.visibility && content.visibility !== "private" ? (
-            <span className="pbc-badge pbc-badge--blue">
+            <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon">
+              <span aria-hidden>
+                {content.visibility === "community" ? (
+                  <IconSharedCommunity />
+                ) : (
+                  <IconSharedCourses />
+                )}
+              </span>
               {content.visibility === "community" ? t("pcCommunity") : t("pcCourses")}
             </span>
           ) : null}
@@ -182,10 +228,13 @@ export default function ContentCard({
                         onShare?.(content);
                       }}
                     >
+                      <span aria-hidden>
+                        <IconShare size={16} />
+                      </span>
                       {t("pcManageSharing")}
                     </button>
                   ) : null}
-                  {canAssign ? (
+                  {canAssign && !showDirectAssign ? (
                     <button
                       type="button"
                       role="menuitem"
@@ -198,6 +247,9 @@ export default function ContentCard({
                         onAssign?.(content);
                       }}
                     >
+                      <span aria-hidden>
+                        <IconAssign size={16} />
+                      </span>
                       {t("pcAssign")}
                     </button>
                   ) : null}
@@ -213,6 +265,9 @@ export default function ContentCard({
                         onCopy?.(content);
                       }}
                     >
+                      <span aria-hidden>
+                        <IconCopy size={16} />
+                      </span>
                       {t("pcCreateCopy")}
                     </button>
                   ) : null}
@@ -229,6 +284,9 @@ export default function ContentCard({
                           onEdit?.(content);
                         }}
                       >
+                        <span aria-hidden>
+                          <IconEdit size={16} />
+                        </span>
                         {t("pcEdit")}
                       </button>
                       <button
@@ -265,19 +323,22 @@ export default function ContentCard({
       </div>
       <ContentMetaChips content={content} showAuthor={Boolean(content.owner_name) && !isOwner} />
       {isOwner ? <UsageBlock metrics={usageMetrics} unavailable={usageUnavailable} /> : null}
-      <div
-        className="pbc-content-card__actions-row"
-        style={{ display: "flex", flexWrap: "wrap", gap: 8, maxWidth: "100%" }}
-      >
+      <div className="pbc-content-card__actions-row pbc-content-card__direct-actions">
         <Link to={`/dashboard/content/${content.id}`} className="pbc-content-card__link">
-          {t("pcOpen")} →
+          <span aria-hidden>
+            <IconOpen size={16} />
+          </span>
+          {t("pcOpen")}
         </Link>
-        {emphasizeAssign && canAssign ? (
+        {showDirectAssign ? (
           <button
             type="button"
-            className="pbc-btn pbc-btn--primary pbc-btn--sm"
+            className={`pbc-btn pbc-btn--sm ${emphasizeAssign ? "pbc-btn--primary" : "pbc-btn--ghost"}`}
             onClick={() => onAssign?.(content)}
           >
+            <span aria-hidden>
+              <IconAssign size={16} />
+            </span>
             {t("pcAssign")}
           </button>
         ) : null}

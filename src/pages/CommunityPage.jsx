@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ContentMetaChips from "../components/pybotclass/content/ContentMetaChips.jsx";
+import { IconAssign, IconCommunityEmpty, IconCopy, IconOpen, CompactContentIcon } from "../components/pybotclass/illustrations/ActionIcons.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import { t } from "../i18n.js";
 import { copyLearningContent } from "../platform/contentApi.js";
@@ -91,7 +92,7 @@ export default function CommunityPage() {
   if (!user) return null;
 
   return (
-    <PyBotClassLayout user={user} showAdmin={superAdmin} onSignOut={() => void signOut()}>
+    <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
       {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
       {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
       {feedback ? (
@@ -131,7 +132,21 @@ export default function CommunityPage() {
       {loading ? (
         <p>{t("pcLoadingGeneric")}</p>
       ) : rows.length === 0 ? (
-        <p className="pbc-modal--assign-lesson__subtitle">{t("pcCommunityEmptyExplore")}</p>
+        <div className="pbc-community-empty" role="status">
+          <span className="pbc-community-empty__icon" aria-hidden>
+            <IconCommunityEmpty />
+          </span>
+          <h2 className="pbc-community-empty__title">{t("pcCommunityEmptyTitle")}</h2>
+          <p className="pbc-community-empty__desc">{t("pcCommunityEmptyExplore")}</p>
+          <div className="pbc-community-empty__actions">
+            <Link to="/dashboard/content" className="pbc-btn pbc-btn--primary">
+              <span aria-hidden>
+                <CompactContentIcon />
+              </span>
+              {t("pcGoToContent")}
+            </Link>
+          </div>
+        </div>
       ) : (
         <div className="pbc-content-grid">
           {rows.map((c) => (
@@ -149,11 +164,14 @@ export default function CommunityPage() {
                 showAuthor
               />
               <div
-                className="pbc-content-card__actions-row"
+                className="pbc-content-card__actions-row pbc-content-card__direct-actions"
                 style={{ display: "flex", flexWrap: "wrap", gap: 8, maxWidth: "100%" }}
               >
                 <Link to={`/dashboard/community/${c.id}`} className="pbc-content-card__link">
-                  {t("pcRead")} →
+                  <span aria-hidden>
+                    <IconOpen size={16} />
+                  </span>
+                  {t("pcRead")}
                 </Link>
                 <button
                   type="button"
@@ -161,6 +179,9 @@ export default function CommunityPage() {
                   disabled={copyBusyId === c.id}
                   onClick={() => void handleCopy(c)}
                 >
+                  <span aria-hidden>
+                    <IconCopy size={16} />
+                  </span>
                   {copyBusyId === c.id ? t("pcCopying") : t("pcCreateCopy")}
                 </button>
                 {canAssign ? (
@@ -169,6 +190,9 @@ export default function CommunityPage() {
                     className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                     onClick={() => setAssigning(c)}
                   >
+                    <span aria-hidden>
+                      <IconAssign size={16} />
+                    </span>
                     {t("pcAssignAsIs")}
                   </button>
                 ) : null}

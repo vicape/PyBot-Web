@@ -1,6 +1,6 @@
 import { t } from "../../../i18n.js";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { countryNameByCode } from "../../../data/countries.js";
 import { computeAccountRoleBadges, computeQuickSummary } from "../../../platform/accountRoles.js";
 import { normalizeCourseRole } from "../../../platform/courseRole.js";
@@ -11,16 +11,16 @@ import {
   resolveClassesView,
 } from "../../../platform/uxIaHelpers.js";
 import {
-  CoursesActionIcon,
-  CreateCourseActionIcon,
-  IdeActionIcon,
-  JoinCourseActionIcon,
-} from "../illustrations/ActionCardIcons.jsx";
-import CoursesIllustration from "../illustrations/CoursesIllustration.jsx";
-import CreateCourseIllustration from "../illustrations/CreateCourseIllustration.jsx";
+  CompactContentIcon,
+  CompactCreateIcon,
+  CompactIdeIcon,
+  CompactJoinIcon,
+  IconClipboard,
+  IconCourseCompact,
+  IconGrade,
+  IconPeople,
+} from "../illustrations/ActionIcons.jsx";
 import EmptyCoursesIllustration from "../illustrations/EmptyCoursesIllustration.jsx";
-import IdeIllustration from "../illustrations/IdeIllustration.jsx";
-import JoinCourseIllustration from "../illustrations/JoinCourseIllustration.jsx";
 import { GoogleClassroomIcon } from "../illustrations/SidebarIcons.jsx";
 import RoleBadges from "./RoleBadges.jsx";
 
@@ -43,6 +43,9 @@ function CourseCards({ filtered, hasStaffAccess, onCreateCourse, onJoinCourse })
         <div className="pbc-empty-state__actions">
           {hasStaffAccess ? (
             <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
+              <span aria-hidden>
+                <CompactCreateIcon />
+              </span>
               {t("pcCreateCourse")}
             </button>
           ) : null}
@@ -51,9 +54,15 @@ function CourseCards({ filtered, hasStaffAccess, onCreateCourse, onJoinCourse })
             className={`pbc-btn ${hasStaffAccess ? "pbc-btn--ghost" : "pbc-btn--primary"}`}
             onClick={onJoinCourse}
           >
+            <span aria-hidden>
+              <CompactJoinIcon />
+            </span>
             {t("pcJoinCourse")}
           </button>
           <a href="/" className="pbc-btn pbc-btn--ghost">
+            <span aria-hidden>
+              <CompactIdeIcon />
+            </span>
             {t("pcOpenIde")}
           </a>
         </div>
@@ -66,21 +75,20 @@ function CourseCards({ filtered, hasStaffAccess, onCreateCourse, onJoinCourse })
       {filtered.map((c) => {
         const role = normalizeCourseRole(c.my_course_role);
         const rb = role ? ROLE_BADGE[role] : null;
-        const headerTone =
+        const iconTone =
           role === "teacher" ? "teacher" : role === "student" ? "student" : "neutral";
         return (
           <Link key={c.course_id} to={`/dashboard/classes/${c.course_id}`} className="pbc-course-card">
-            <div
-              className={`pbc-course-card__header pbc-course-card__header--${headerTone}`}
-              aria-hidden
-            >
-              <span className="pbc-course-card__header-icon">
-                {role === "teacher" ? "📘" : role === "student" ? "📗" : ""}
-              </span>
-            </div>
             <div className="pbc-course-card__body">
-              <p className="pbc-course-card__title">{c.course_title}</p>
-              <p className="pbc-course-card__meta">{c.org_name || t("pcInstitution")}</p>
+              <div className="pbc-course-card__lead">
+                <span className={`pbc-course-card__icon pbc-course-card__icon--${iconTone}`} aria-hidden>
+                  <IconCourseCompact size={20} />
+                </span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <p className="pbc-course-card__title">{c.course_title}</p>
+                  <p className="pbc-course-card__meta">{c.org_name || t("pcInstitution")}</p>
+                </div>
+              </div>
               <div className="pbc-course-card__footer">
                 {rb ? <span className={`pbc-badge pbc-badge--${rb.variant}`}>{rb.label}</span> : null}
                 {role === "teacher" && c.student_count > 0 ? (
@@ -117,6 +125,20 @@ function attentionLabel(item) {
   return item.title;
 }
 
+function attentionCta(kind) {
+  if (kind === "no_students") return t("pcAddStudents");
+  if (kind === "no_activities") return t("pcCreateActivity");
+  if (kind === "pending_grades") return t("pcGrade");
+  return null;
+}
+
+function AttentionIcon({ kind }) {
+  if (kind === "no_students") return <IconPeople size={18} />;
+  if (kind === "no_activities") return <IconClipboard size={18} />;
+  if (kind === "pending_grades") return <IconGrade size={18} />;
+  return <IconCourseCompact size={18} />;
+}
+
 export default function PyBotClassHome({
   user,
   orgs = [],
@@ -131,7 +153,6 @@ export default function PyBotClassHome({
   const [orgFilter, setOrgFilter] = useState("");
   const [classroomLinked, setClassroomLinked] = useState(null);
   const location = useLocation();
-  const navigate = useNavigate();
 
   const view = classesView || resolveClassesView({
     view: new URLSearchParams(location.search).get("view"),
@@ -264,6 +285,9 @@ export default function PyBotClassHome({
             <div className="pbc-hero-block__actions" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {hasStaffAccess ? (
                 <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
+                  <span aria-hidden>
+                    <CompactCreateIcon />
+                  </span>
                   {t("pcCreateCourse")}
                 </button>
               ) : null}
@@ -272,6 +296,9 @@ export default function PyBotClassHome({
                 className={`pbc-btn ${hasStaffAccess ? "pbc-btn--ghost" : "pbc-btn--primary"}`}
                 onClick={onJoinCourse}
               >
+                <span aria-hidden>
+                  <CompactJoinIcon />
+                </span>
                 {t("pcJoinCourse")}
               </button>
             </div>
@@ -380,104 +407,64 @@ export default function PyBotClassHome({
               {t("pcNeedsAttention")}
             </h2>
             <ul className="pbc-attention__list">
-              {attentionItems.slice(0, 8).map((item) => (
-                <li key={item.id}>
-                  <Link to={item.href} className="pbc-attention__item">
-                    {attentionLabel(item)}
-                  </Link>
-                </li>
-              ))}
+              {attentionItems.slice(0, 8).map((item) => {
+                const cta = attentionCta(item.kind);
+                return (
+                  <li key={item.id}>
+                    <Link to={item.href} className="pbc-attention__item">
+                      <span className={`pbc-attention__icon pbc-attention__icon--${item.kind}`} aria-hidden>
+                        <AttentionIcon kind={item.kind} />
+                      </span>
+                      <span className="pbc-attention__body">
+                        <span className="pbc-attention__label">{attentionLabel(item)}</span>
+                        {cta ? <span className="pbc-attention__cta">{cta}</span> : null}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : null}
 
         <div className="pbc-action-grid">
-          <button
-            type="button"
-            className="pbc-action-card pbc-action-card--courses"
-            onClick={() => navigate("/dashboard/classes?view=courses")}
-          >
-            <span className="pbc-action-card__decor" aria-hidden />
-            <span className="pbc-action-card__illus" aria-hidden>
-              <CoursesIllustration />
-            </span>
-            <span className="pbc-action-card__icon pbc-action-card__icon--blue" aria-hidden>
-              <CoursesActionIcon />
-            </span>
-            <span className="pbc-action-card__body">
-              <span className="pbc-action-card__title">{t("pcCourses")}</span>
-              <span className="pbc-action-card__desc">
-                {courses.length} {t("pcCourses")}
-              </span>
-            </span>
-            <span className="pbc-action-card__arrow" aria-hidden>
-              →
-            </span>
-          </button>
-
           {hasStaffAccess ? (
             <button type="button" className="pbc-action-card pbc-action-card--create" onClick={onCreateCourse}>
-              <span className="pbc-action-card__decor" aria-hidden />
-              <span className="pbc-action-card__illus" aria-hidden>
-                <CreateCourseIllustration />
-              </span>
               <span className="pbc-action-card__icon pbc-action-card__icon--teal" aria-hidden>
-                <CreateCourseActionIcon />
+                <CompactCreateIcon />
               </span>
               <span className="pbc-action-card__body">
                 <span className="pbc-action-card__title">{t("pcCreateCourse")}</span>
-                <span className="pbc-action-card__desc">{t("pcWorkAsTeacher")}</span>
-              </span>
-              <span className="pbc-action-card__arrow" aria-hidden>
-                →
               </span>
             </button>
           ) : null}
 
           {hasStaffAccess ? (
-            <Link to="/dashboard/content" className="pbc-action-card pbc-action-card--create">
-              <span className="pbc-action-card__decor" aria-hidden />
+            <Link to="/dashboard/content" className="pbc-action-card pbc-action-card--content">
+              <span className="pbc-action-card__icon pbc-action-card__icon--teal" aria-hidden>
+                <CompactContentIcon />
+              </span>
               <span className="pbc-action-card__body">
                 <span className="pbc-action-card__title">{t("pcCreateContent")}</span>
-                <span className="pbc-action-card__desc">{t("pcNavContent")}</span>
-              </span>
-              <span className="pbc-action-card__arrow" aria-hidden>
-                →
               </span>
             </Link>
           ) : null}
 
           <button type="button" className="pbc-action-card pbc-action-card--join" onClick={onJoinCourse}>
-            <span className="pbc-action-card__decor" aria-hidden />
-            <span className="pbc-action-card__illus" aria-hidden>
-              <JoinCourseIllustration />
-            </span>
             <span className="pbc-action-card__icon pbc-action-card__icon--violet" aria-hidden>
-              <JoinCourseActionIcon />
+              <CompactJoinIcon />
             </span>
             <span className="pbc-action-card__body">
               <span className="pbc-action-card__title">{t("pcJoinCourse")}</span>
-              <span className="pbc-action-card__desc">{t("pcJoinByCodeOrLink")}</span>
-            </span>
-            <span className="pbc-action-card__arrow" aria-hidden>
-              →
             </span>
           </button>
 
           <a href="/" className="pbc-action-card pbc-action-card--ide">
-            <span className="pbc-action-card__decor" aria-hidden />
-            <span className="pbc-action-card__illus" aria-hidden>
-              <IdeIllustration />
-            </span>
             <span className="pbc-action-card__icon pbc-action-card__icon--indigo" aria-hidden>
-              <IdeActionIcon />
+              <CompactIdeIcon />
             </span>
             <span className="pbc-action-card__body">
               <span className="pbc-action-card__title">{t("pcOpenIde")}</span>
-              <span className="pbc-action-card__desc">{t("pcOpenIdeDesc")}</span>
-            </span>
-            <span className="pbc-action-card__arrow" aria-hidden>
-              →
             </span>
           </a>
         </div>
@@ -503,28 +490,11 @@ export default function PyBotClassHome({
       <aside className="pbc-home__aside">
         <div className="pbc-panel-card">
           <h3 className="pbc-panel-card__title">{t("pcMyAccount")}</h3>
-          <div className="pbc-account-card__profile">
-            {meta.avatar_url || meta.picture ? (
-              <img
-                src={meta.avatar_url || meta.picture}
-                alt=""
-                className="pbc-account-card__avatar"
-                width={48}
-                height={48}
-              />
-            ) : (
-              <div className="pbc-account-card__avatar pbc-account-card__avatar--letter" aria-hidden>
-                {firstName.slice(0, 1).toUpperCase()}
-              </div>
-            )}
-            <div>
-              <p className="pbc-account-card__name">{meta.full_name || meta.name || firstName}</p>
-              <p className="pbc-account-card__email">{user?.email}</p>
-              {primaryCountry ? (
-                <p className="pbc-account-card__email">{countryNameByCode(primaryCountry)}</p>
-              ) : null}
-            </div>
-          </div>
+          {primaryCountry ? (
+            <p className="pbc-account-card__email" style={{ marginTop: 0 }}>
+              {countryNameByCode(primaryCountry)}
+            </p>
+          ) : null}
           <RoleBadges badges={badges} />
           <Link
             to="/dashboard/classes?panel=account"

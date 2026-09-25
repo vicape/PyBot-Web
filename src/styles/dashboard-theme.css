@@ -182,6 +182,30 @@
   font-size: 0.875rem;
 }
 
+.pbc-dashboard .pbc-select,
+.pbc-dashboard select.pbc-select {
+  width: auto;
+  min-width: 160px;
+  cursor: pointer;
+  opacity: 1;
+  appearance: auto;
+  -webkit-appearance: menulist;
+  background-color: var(--pbc-input-bg);
+  color: var(--pbc-text);
+  border: 1px solid var(--pbc-border-strong, var(--pbc-border));
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.pbc-dashboard .pbc-select:hover,
+.pbc-dashboard select.pbc-select:hover {
+  border-color: var(--pbc-primary);
+}
+
+.pbc-dashboard .pbc-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .pbc-input:focus-visible,
 .pbc-select:focus-visible {
   outline: 2px solid var(--pbc-primary);

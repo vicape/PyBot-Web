@@ -129,6 +129,7 @@ test("cliente usa RPC de counts; fallback neutral en Content", () => {
   assert.match(contentPageSrc, /usageUnavailable/);
   assert.match(contentCardSrc, /pcUsageUnavailable/);
   assert.match(contentCardSrc, /if \(unavailable\)/);
+  assert.match(contentCardSrc, /pbc-content-card__usage--muted|title=\{t\("pcUsageUnavailable"\)\}/);
   assert.equal(PYBOTCLASS_STRINGS.es.pcUsageUnavailable, "Uso no disponible");
   assert.equal(PYBOTCLASS_STRINGS.es.pcUsageNobody, "Todavía nadie lo está usando");
 });
@@ -136,6 +137,8 @@ test("cliente usa RPC de counts; fallback neutral en Content", () => {
 test("búsqueda comunidad acotada a material externo cargado", () => {
   assert.match(pageSrc, /void load\(search\)/);
   assert.match(pageSrc, /listCommunityContents\(\{[\s\S]*search:/);
+  assert.match(pageSrc, /hideSearch/);
+  assert.match(pageSrc, /pcCommunitySearchLabel/);
 });
 
 test("i18n completo en todos los idiomas soportados", () => {

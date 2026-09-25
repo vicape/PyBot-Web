@@ -8,6 +8,7 @@ import AssignLessonModal from "../components/content-editor/AssignLessonModal.js
 import ShareContentModal from "../components/content-editor/ShareContentModal.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import MyContentEmptyIllustration from "../components/pybotclass/illustrations/MyContentEmptyIllustration.jsx";
+import { CompactContentIcon } from "../components/pybotclass/illustrations/ActionIcons.jsx";
 import { copyLearningContent, listMyContents } from "../platform/contentApi.js";
 import { listTeacherCoursesForAssign } from "../platform/contentAssignApi.js";
 import { getMyContentUsageMetrics } from "../platform/contentShareApi.js";
@@ -144,7 +145,10 @@ export default function MyContentPage() {
           </div>
           {!assignToCourse ? (
             <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
-              + {t("pcCreateContent")}
+              <span aria-hidden>
+                <CompactContentIcon />
+              </span>
+              {t("pcCreateContent")}
             </button>
           ) : (
             <button type="button" className="pbc-btn pbc-btn--ghost" onClick={clearAssignIntent}>
@@ -162,6 +166,9 @@ export default function MyContentPage() {
             <p className="pbc-empty-state__desc">{t("pcContentEmptyDesc")}</p>
             <div className="pbc-empty-state__actions">
               <button type="button" className="pbc-btn pbc-btn--primary" onClick={() => setShowCreate(true)}>
+                <span aria-hidden>
+                  <CompactContentIcon />
+                </span>
                 {t("pcCreateContent")}
               </button>
             </div>
