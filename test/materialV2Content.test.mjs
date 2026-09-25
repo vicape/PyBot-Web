@@ -188,15 +188,16 @@ test("UI distingue copy / assign-as-is / owner-only edit", () => {
   assert.match(shared, /pcCreateCopy/);
   assert.match(shared, /pcAssignAsIs/);
   assert.match(shared, /canAssign/);
-  assert.match(shared, /lesson-\$\{entry\.id\}/);
-  assert.match(shared, /unit-\$\{entry\.id\}/);
+  assert.match(shared, /AssignedContentSnapshotViewer/);
+  assert.doesNotMatch(shared, /scrollIntoView/);
+  assert.doesNotMatch(shared, /ContentTableOfContents/);
 
   const viewer = readFileSync(
     resolve(root, "src/components/content-editor/AssignedContentSnapshotViewer.jsx"),
     "utf8",
   );
-  assert.match(viewer, /id=\{`unit-\$\{unit\.id\}`\}/);
-  assert.match(viewer, /id=\{`lesson-\$\{lesson\.id\}`\}/);
+  assert.match(viewer, /ProgressiveMultiLessonReader|pbc-content-reader/);
+  assert.match(viewer, /buildSnapshotReaderModel/);
 
   const editor = readFileSync(resolve(root, "src/pages/ContentEditorPage.jsx"), "utf8");
   assert.match(editor, /owner_id === user\.id/);

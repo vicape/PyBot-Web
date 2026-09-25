@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { t } from "../../i18n.js";
 import { useCreateBlockNote } from "@blocknote/react";
@@ -6,6 +7,10 @@ import "@blocknote/mantine/style.css";
 import "../../styles/lesson-blocknote.css";
 import { isSafeLessonLink, resolveContentMediaUrl } from "./contentMedia.js";
 import { pybotContentSchema, pybotDictionary } from "./pybotContentSchema.jsx";
+import {
+  buildSnapshotReaderModel,
+  findLessonIndex,
+} from "../../platform/contentSnapshotReader.js";
 
 function ReadOnlyDoc({ docKey, initialContent }) {
   const editor = useCreateBlockNote(
@@ -67,8 +72,247 @@ function BlockCard({ kind, block }) {
   );
 }
 
+function LessonTypeBadge({ itemType }) {
+  const key = `pcItemType_${itemType || "lesson"}`;
+  return <span className="pbc-content-toc__badge">{t(key)}</span>;
+}
+
+function MinutesBadge({ minutes }) {
+  if (minutes == null || minutes === "") return null;
+  return <span className="pbc-content-toc__mins">{minutes}′</span>;
+}
+
+function ReaderOutline({ units, selectedLessonId, onSelectLesson }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <nav className="pbc-content-reader__nav" aria-label={t("pcReaderOutline")}>
+      <button
+        type="button"
+        className="pbc-content-reader__nav-toggle"
+        aria-expanded={mobileOpen}
+        onClick={() => setMobileOpen((v) => !v)}
+      >
+        <span>{t("pcReaderOutline")}</span>
+        <span aria-hidden>{mobileOpen ? "▾" : "▸"}</span>
+      </button>
+      <ol
+        className={
+          mobileOpen
+            ? "pbc-content-reader__outline-list"
+            : "pbc-content-reader__outline-list pbc-content-reader__outline-list--mobile-collapsed"
+        }
+      >
+        {(units || []).map((unit) => (
+          <li key={unit.id} className="pbc-content-reader__outline-unit">
+            <div className="pbc-content-reader__outline-unit-title">
+              <span>{unit.title || t("pcUnitFallback")}</span>
+              {unit.unitType ? (
+                <span className="pbc-content-toc__badge">{t(`pcUnitType_${unit.unitType}`)}</span>
+              ) : null}
+              <MinutesBadge minutes={unit.estimatedMinutes} />
+            </div>
+            {unit.lessons?.length ? (
+              <ol className="pbc-content-reader__outline-lessons">
+                {unit.lessons.map((lesson) => {
+                  const isCurrent = lesson.id === selectedLessonId;
+                  return (
+                    <li key={lesson.id}>
+                      <button
+                        type="button"
+                        className={
+                          isCurrent
+                            ? "pbc-content-reader__outline-link pbc-content-reader__outline-link--current"
+                            : "pbc-content-reader__outline-link"
+                        }
+                        aria-current={isCurrent ? "true" : undefined}
+                        onClick={() => {
+                          onSelectLesson(lesson.id);
+                          setMobileOpen(false);
+                        }}
+                      >
+                        <span className="pbc-content-reader__outline-lesson-title">
+                          {lesson.title || t("pcUntitled")}
+                        </span>
+                        <LessonTypeBadge itemType={lesson.itemType} />
+                        <MinutesBadge minutes={lesson.estimatedMinutes} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+function OverviewMode({ model, onOpenLesson }) {
+  const firstLessonId = model.orderedLessons[0]?.id;
+
+  return (
+    <div className="pbc-content-reader pbc-content-reader--overview">
+      <header className="pbc-content-reader__overview-head">
+        {model.title ? <h2 className="pbc-content-reader__title">{model.title}</h2> : null}
+        {model.description ? (
+          <p className="pbc-content-reader__description">{model.description}</p>
+        ) : null}
+        {firstLessonId ? (
+          <button
+            type="button"
+            className="pbc-btn pbc-btn--primary"
+            onClick={() => onOpenLesson(firstLessonId)}
+          >
+            {t("pcStartLesson")}
+          </button>
+        ) : null}
+      </header>
+
+      <div className="pbc-content-reader__structure" aria-label={t("pcReaderOutline")}>
+        {(model.units || []).map((unit) => (
+          <section key={unit.id} className="pbc-content-reader__unit">
+            <div className="pbc-content-reader__unit-head">
+              <h3 className="pbc-content-reader__unit-title">{unit.title || t("pcUnitFallback")}</h3>
+              {unit.unitType ? (
+                <span className="pbc-content-toc__badge">{t(`pcUnitType_${unit.unitType}`)}</span>
+              ) : null}
+              <MinutesBadge minutes={unit.estimatedMinutes} />
+            </div>
+            {unit.description ? (
+              <p className="pbc-content-reader__unit-desc">{unit.description}</p>
+            ) : null}
+            <ul className="pbc-content-reader__lesson-list">
+              {(unit.lessons || []).map((lesson) => (
+                <li key={lesson.id} className="pbc-content-reader__lesson-row">
+                  <div className="pbc-content-reader__lesson-meta">
+                    <span className="pbc-content-reader__lesson-title">
+                      {lesson.title || t("pcUntitled")}
+                    </span>
+                    <LessonTypeBadge itemType={lesson.itemType} />
+                    <MinutesBadge minutes={lesson.estimatedMinutes} />
+                  </div>
+                  <button
+                    type="button"
+                    className="pbc-btn pbc-btn--ghost pbc-content-reader__open-btn"
+                    onClick={() => onOpenLesson(lesson.id)}
+                  >
+                    {t("pcOpen")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LessonMode({ model, selectedLessonId, onSelectLesson, onBack }) {
+  const index = findLessonIndex(model.orderedLessons, selectedLessonId);
+  const lesson = index >= 0 ? model.orderedLessons[index] : null;
+  if (!lesson) return null;
+
+  const total = model.orderedLessons.length;
+  const positionLabel = t("pcLessonPosition")
+    .replace("{n}", String(index + 1))
+    .replace("{total}", String(total));
+  const prev = index > 0 ? model.orderedLessons[index - 1] : null;
+  const next = index < total - 1 ? model.orderedLessons[index + 1] : null;
+
+  return (
+    <div className="pbc-content-reader pbc-content-reader--lesson">
+      <div className="pbc-content-reader__toolbar">
+        <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onBack}>
+          {t("pcViewStructure")}
+        </button>
+        <p className="pbc-content-reader__position" aria-live="polite">
+          {positionLabel}
+        </p>
+      </div>
+
+      <div className="pbc-content-reader__layout">
+        <ReaderOutline
+          units={model.units}
+          selectedLessonId={lesson.id}
+          onSelectLesson={onSelectLesson}
+        />
+
+        <article className="pbc-content-reader__article" aria-labelledby="pbc-reader-lesson-title">
+          <header className="pbc-content-reader__lesson-head">
+            {lesson.unitTitle ? (
+              <p className="pbc-content-reader__context-unit">{lesson.unitTitle}</p>
+            ) : null}
+            <h2 id="pbc-reader-lesson-title" className="pbc-content-reader__lesson-heading">
+              {lesson.title || t("pcUntitled")}
+            </h2>
+          </header>
+
+          <div className="pbc-lesson-workspace pbc-lesson-workspace--preview">
+            <ReadOnlyDoc docKey={lesson.id} initialContent={lesson.document_json} />
+          </div>
+
+          <div className="pbc-content-reader__pager">
+            <button
+              type="button"
+              className="pbc-btn pbc-btn--ghost"
+              disabled={!prev}
+              aria-label={t("pcPrevious")}
+              onClick={() => prev && onSelectLesson(prev.id)}
+            >
+              {t("pcPrevious")}
+            </button>
+            <button
+              type="button"
+              className="pbc-btn pbc-btn--primary"
+              disabled={!next}
+              aria-label={t("pcNext")}
+              onClick={() => next && onSelectLesson(next.id)}
+            >
+              {t("pcNext")}
+            </button>
+          </div>
+        </article>
+      </div>
+    </div>
+  );
+}
+
+function ProgressiveMultiLessonReader({ snapshot }) {
+  const model = useMemo(() => buildSnapshotReaderModel(snapshot), [snapshot]);
+  const [selectedLessonId, setSelectedLessonId] = useState(null);
+
+  useEffect(() => {
+    setSelectedLessonId(null);
+  }, [snapshot?.sourceId, snapshot?.sourceType]);
+
+  if (!model || model.mode !== "multi") return null;
+
+  if (!model.orderedLessons.length) {
+    return <p className="auth-card__muted">{t("pcNoContentToShow")}</p>;
+  }
+
+  if (!selectedLessonId) {
+    return <OverviewMode model={model} onOpenLesson={setSelectedLessonId} />;
+  }
+
+  return (
+    <LessonMode
+      model={model}
+      selectedLessonId={selectedLessonId}
+      onSelectLesson={setSelectedLessonId}
+      onBack={() => setSelectedLessonId(null)}
+    />
+  );
+}
+
 /**
- * Viewer de snapshot inmutable para actividades.
+ * Viewer de snapshot inmutable para actividades y contenido compartido.
+ * For sourceType="content" and sourceType="unit", default view does not render all lesson documents
+ * (progressive overview + one lesson at a time).
+ * Single lesson/exercise/task: direct render (no forced overview).
  */
 export default function AssignedContentSnapshotViewer({ snapshot }) {
   if (!snapshot) return null;
@@ -91,52 +335,14 @@ export default function AssignedContentSnapshotViewer({ snapshot }) {
     );
   }
 
-  if (type === "unit") {
+  // For sourceType="content" and sourceType="unit": progressive reader (no endless dump).
+  if (type === "unit" || type === "content") {
     return (
       <div className="pbc-assigned-lesson">
-        {(snapshot.lessons || []).map((lesson) => (
-          <section
-            key={lesson.id}
-            id={`lesson-${lesson.id}`}
-            className="pbc-activity-lesson"
-            style={{ marginBottom: 24 }}
-          >
-            <h3 className="pbc-activity-lesson__title">{lesson.title}</h3>
-            <div className="pbc-lesson-workspace pbc-lesson-workspace--preview">
-              <ReadOnlyDoc docKey={lesson.id} initialContent={lesson.document_json} />
-            </div>
-          </section>
-        ))}
+        <ProgressiveMultiLessonReader snapshot={snapshot} />
       </div>
     );
   }
 
-  if (type === "content") {
-    return (
-      <div className="pbc-assigned-lesson">
-        {(snapshot.units || []).map((unit) => (
-          <section key={unit.id} id={`unit-${unit.id}`} style={{ marginBottom: 32 }}>
-            <h2 className="pbc-activity-lesson__title">{unit.title}</h2>
-            {(unit.lessons || []).map((lesson) => (
-              <div
-                key={lesson.id}
-                id={`lesson-${lesson.id}`}
-                className="pbc-activity-lesson"
-                style={{ marginBottom: 20 }}
-              >
-                <h3 className="pbc-activity-lesson__title" style={{ fontSize: "1rem" }}>
-                  {lesson.title}
-                </h3>
-                <div className="pbc-lesson-workspace pbc-lesson-workspace--preview">
-                  <ReadOnlyDoc docKey={lesson.id} initialContent={lesson.document_json} />
-                </div>
-              </div>
-            ))}
-          </section>
-        ))}
-      </div>
-    );
-  }
-
-  return <p className="auth-card__muted">No hay contenido para mostrar.</p>;
+  return <p className="auth-card__muted">{t("pcNoContentToShow")}</p>;
 }

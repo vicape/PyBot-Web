@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import AssignedContentSnapshotViewer from "../components/content-editor/AssignedContentSnapshotViewer.jsx";
 import AssignLessonModal from "../components/content-editor/AssignLessonModal.jsx";
 import ContentMetaChips from "../components/pybotclass/content/ContentMetaChips.jsx";
-import ContentTableOfContents from "../components/pybotclass/content/ContentTableOfContents.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import { t } from "../i18n.js";
 import { copyLearningContent, getContent, listContentUnits, listUnitLessons, getLesson } from "../platform/contentApi.js";
@@ -24,8 +23,6 @@ export default function SharedContentPage() {
   const { user, loading: authLoading, supabase } = useRequireSession(loginPath);
   const [content, setContent] = useState(null);
   const [snapshot, setSnapshot] = useState(null);
-  const [units, setUnits] = useState([]);
-  const [lessonsByUnit, setLessonsByUnit] = useState({});
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [superAdmin, setSuperAdmin] = useState(false);
@@ -88,11 +85,9 @@ export default function SharedContentPage() {
       }
 
       const { rows: unitRows } = await listContentUnits(contentId);
-      const lessonMap = {};
       const unitSnaps = [];
       for (const u of unitRows) {
         const { rows: lessons } = await listUnitLessons(u.id);
-        lessonMap[u.id] = lessons;
         const lessonSnaps = [];
         for (const l of lessons) {
           const { lesson } = await getLesson(l.id);
@@ -116,8 +111,6 @@ export default function SharedContentPage() {
           lessons: lessonSnaps,
         });
       }
-      setUnits(unitRows);
-      setLessonsByUnit(lessonMap);
       setSnapshot({
         schemaVersion: 2,
         sourceType: "content",
@@ -141,17 +134,6 @@ export default function SharedContentPage() {
       return;
     }
     navigate(`/dashboard/content/${copy.id}`);
-  };
-
-  const onTocNavigate = (entry) => {
-    const targetId =
-      entry.type === "lesson"
-        ? `lesson-${entry.id}`
-        : entry.type === "unit"
-          ? `unit-${entry.id}`
-          : entry.anchor || null;
-    if (!targetId) return;
-    document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   if (authLoading || loading) {
@@ -209,7 +191,6 @@ export default function SharedContentPage() {
           </div>
         </header>
 
-        <ContentTableOfContents units={units} lessonsByUnit={lessonsByUnit} onNavigate={onTocNavigate} />
         <AssignedContentSnapshotViewer snapshot={snapshot} />
       </div>
 

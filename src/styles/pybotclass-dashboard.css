@@ -3219,7 +3219,312 @@
   flex: 0 0 auto;
 }
 
+/* Progressive content reader (assigned + shared multi-lesson) */
+.pbc-content-reader {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.pbc-content-reader__overview-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.pbc-content-reader__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: inherit;
+}
+
+.pbc-content-reader__description {
+  margin: 0;
+  max-width: 42rem;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-content-reader__description,
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-content-reader__unit-desc,
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-content-reader__context-unit,
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-content-reader__position {
+  color: #94a3b8;
+}
+
+.pbc-content-reader__structure {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pbc-content-reader__unit {
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid #e6ebf2;
+  background: #f8fafc;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-content-reader__unit,
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-content-reader__nav {
+  background: var(--pbc-panel-solid, #0f172a);
+  border-color: var(--pbc-border, #334155);
+}
+
+.pbc-content-reader__unit-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.pbc-content-reader__unit-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.pbc-content-reader__unit-desc {
+  margin: 0 0 0.65rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.pbc-content-reader__lesson-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pbc-content-reader__lesson-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  padding: 0.45rem 0.35rem;
+  border-radius: 8px;
+}
+
+.pbc-content-reader__lesson-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.pbc-content-reader__lesson-title {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.pbc-content-reader__open-btn {
+  flex: 0 0 auto;
+}
+
+.pbc-content-reader__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.pbc-content-reader__position {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.pbc-content-reader__layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  max-width: 100%;
+}
+
+.pbc-content-reader__nav {
+  position: sticky;
+  top: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid #e6ebf2;
+  background: #f8fafc;
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+.pbc-content-reader__nav-toggle {
+  display: none;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.15rem 0;
+}
+
+.pbc-content-reader__outline-list,
+.pbc-content-reader__outline-lessons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pbc-content-reader__outline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.pbc-content-reader__outline-unit-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.45rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.pbc-content-reader__outline-lessons {
+  margin-left: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pbc-content-reader__outline-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.45rem;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.35rem 0.4rem;
+  border-radius: 6px;
+}
+
+.pbc-content-reader__outline-link:hover {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.pbc-content-reader__outline-link:focus-visible,
+.pbc-content-reader__open-btn:focus-visible,
+.pbc-content-reader__toolbar .pbc-btn:focus-visible,
+.pbc-content-reader__pager .pbc-btn:focus-visible,
+.pbc-content-reader__nav-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.pbc-content-reader__outline-link--current {
+  border-left-color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+  font-weight: 700;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-content-reader__outline-link--current {
+  background: rgba(96, 165, 250, 0.15);
+  border-left-color: #60a5fa;
+}
+
+.pbc-content-reader__outline-lesson-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.pbc-content-reader__article {
+  min-width: 0;
+  max-width: 48rem;
+}
+
+.pbc-content-reader__lesson-head {
+  margin-bottom: 0.85rem;
+}
+
+.pbc-content-reader__context-unit {
+  margin: 0 0 0.25rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.pbc-content-reader__lesson-heading {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.pbc-content-reader__pager {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e6ebf2;
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-content-reader__pager {
+  border-top-color: var(--pbc-border, #334155);
+}
+
+@media (max-width: 900px) {
+  .pbc-content-reader__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pbc-content-reader__nav {
+    position: static;
+    max-height: none;
+  }
+
+  .pbc-content-reader__nav-toggle {
+    display: flex;
+  }
+
+  .pbc-content-reader__outline-list--mobile-collapsed {
+    display: none;
+  }
+
+  .pbc-content-reader__outline-list:not(.pbc-content-reader__outline-list--mobile-collapsed) {
+    margin-top: 0.5rem;
+  }
+}
+
 @media (max-width: 480px) {
+  .pbc-content-reader__lesson-row {
+    align-items: flex-start;
+  }
+
+  .pbc-content-reader__article {
+    max-width: 100%;
+  }
+
   .pbc-content-toc__link {
     gap: 0.25rem;
   }
