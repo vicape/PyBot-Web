@@ -1399,6 +1399,35 @@
   font-weight: 600;
 }
 
+.pbc-modal--title-type {
+  max-width: min(440px, calc(100vw - 32px));
+  box-sizing: border-box;
+}
+
+.pbc-modal--title-type .pbc-input,
+.pbc-modal--title-type select.pbc-input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.pbc-modal--title-type .pbc-modal__actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 430px) {
+  .pbc-modal--title-type {
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    padding: 20px 16px;
+  }
+
+  .pbc-modal--title-type .pbc-modal__actions .pbc-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
 /* Course page inside layout */
 .pbc-course-page {
   max-width: 1200px;

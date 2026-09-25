@@ -4,6 +4,7 @@ import AssignLessonModal from "../components/content-editor/AssignLessonModal.js
 import ShareContentModal from "../components/content-editor/ShareContentModal.jsx";
 import ContentMetaChips from "../components/pybotclass/content/ContentMetaChips.jsx";
 import ContentTableOfContents from "../components/pybotclass/content/ContentTableOfContents.jsx";
+import TitleTypeDialog from "../components/pybotclass/content/TitleTypeDialog.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import { t } from "../i18n.js";
 import {
@@ -79,6 +80,7 @@ export default function ContentEditorPage() {
   const [assignTarget, setAssignTarget] = useState(null);
   const [canAssign, setCanAssign] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [titleTypeDialog, setTitleTypeDialog] = useState(null);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -164,95 +166,118 @@ export default function ContentEditorPage() {
     if (!authLoading && user) void load();
   }, [authLoading, user, load, navigate]);
 
-  const promptText = (message, defaultValue = "") => {
-    const v = window.prompt(message, defaultValue);
-    return v === null ? null : v.trim();
+  const openCreateUnit = () => {
+    if (busy) return;
+    setTitleTypeDialog({
+      kind: "unit",
+      mode: "create",
+      initialTitle: "",
+      initialType: "unit",
+    });
   };
 
-  const addUnit = async () => {
-    const title = promptText("Título de la unidad");
-    if (!title || busy) return;
-    const typeRaw = window.prompt(
-      `${t("pcUnitType")} (${UNIT_TYPES.join("|")})`,
-      "unit",
-    );
-    if (typeRaw === null) return;
-    setBusy(true);
-    const { unit, error } = await createContentUnit(contentId, {
-      title,
-      unitType: typeRaw || "unit",
+  const openEditUnit = (unit) => {
+    setTitleTypeDialog({
+      kind: "unit",
+      mode: "edit",
+      target: unit,
+      initialTitle: unit.title || "",
+      initialType: unit.unit_type || "unit",
     });
-    setBusy(false);
-    if (error || !unit) {
-      setErr(error || "No se pudo crear la unidad.");
-      return;
+  };
+
+  const openCreateItem = (unitId) => {
+    if (busy) return;
+    setTitleTypeDialog({
+      kind: "item",
+      mode: "create",
+      unitId,
+      initialTitle: "",
+      initialType: "lesson",
+    });
+  };
+
+  const openEditItem = (lesson) => {
+    setTitleTypeDialog({
+      kind: "item",
+      mode: "edit",
+      target: lesson,
+      initialTitle: lesson.title || "",
+      initialType: lesson.item_type || "lesson",
+    });
+  };
+
+  const closeTitleTypeDialog = () => setTitleTypeDialog(null);
+
+  const submitTitleTypeDialog = async ({ title, type }) => {
+    if (!titleTypeDialog) return { error: t("pcUnexpectedError") };
+    const { kind, mode, target, unitId } = titleTypeDialog;
+
+    if (kind === "unit" && mode === "create") {
+      setBusy(true);
+      const { unit, error } = await createContentUnit(contentId, {
+        title,
+        unitType: type,
+      });
+      setBusy(false);
+      if (error || !unit) {
+        return { error: error || "No se pudo crear la unidad." };
+      }
+      void load();
+      return {};
     }
-    void load();
-  };
 
-  const editUnitTitle = async (unit) => {
-    const title = promptText("Título de la unidad", unit.title);
-    if (title === null) return;
-    const typeRaw = window.prompt(
-      `${t("pcUnitType")} (${UNIT_TYPES.join("|")})`,
-      unit.unit_type || "unit",
-    );
-    if (typeRaw === null) return;
-    if (!title || (title === unit.title && typeRaw === (unit.unit_type || "unit"))) return;
-    setBusy(true);
-    const { error } = await updateContentUnit(unit.id, {
-      title: title || unit.title,
-      unitType: typeRaw || unit.unit_type || "unit",
-    });
-    setBusy(false);
-    if (error) setErr(error);
-    else void load();
+    if (kind === "unit" && mode === "edit") {
+      const unit = target;
+      const prevType = unit.unit_type || "unit";
+      if (title === unit.title && type === prevType) return {};
+      setBusy(true);
+      const { error } = await updateContentUnit(unit.id, {
+        title,
+        unitType: type,
+      });
+      setBusy(false);
+      if (error) return { error };
+      void load();
+      return {};
+    }
+
+    if (kind === "item" && mode === "create") {
+      setBusy(true);
+      const { lesson, error } = await createLesson(unitId, {
+        title,
+        itemType: type,
+      });
+      setBusy(false);
+      if (error || !lesson) {
+        return { error: error || "No se pudo crear la lección." };
+      }
+      navigate(`/dashboard/content/${contentId}/lessons/${lesson.id}`);
+      return {};
+    }
+
+    if (kind === "item" && mode === "edit") {
+      const lesson = target;
+      const prevType = lesson.item_type || "lesson";
+      if (title === lesson.title && type === prevType) return {};
+      setBusy(true);
+      const { error } = await updateLesson(lesson.id, {
+        title,
+        itemType: type,
+      });
+      setBusy(false);
+      if (error) return { error };
+      void load();
+      return {};
+    }
+
+    return { error: t("pcUnexpectedError") };
   };
 
   const removeUnit = async (unit) => {
     if (!window.confirm(`¿Eliminar la unidad «${unit.title}» y todas sus lecciones?`)) return;
     setBusy(true);
     const { error } = await deleteContentUnit(unit.id);
-    setBusy(false);
-    if (error) setErr(error);
-    else void load();
-  };
-
-  const addLesson = async (unitId) => {
-    const title = promptText("Título del ítem");
-    if (!title || busy) return;
-    const typeRaw = window.prompt(
-      `${t("pcItemType")} (${LESSON_ITEM_TYPES.join("|")})`,
-      "lesson",
-    );
-    if (typeRaw === null) return;
-    setBusy(true);
-    const { lesson, error } = await createLesson(unitId, {
-      title,
-      itemType: typeRaw || "lesson",
-    });
-    setBusy(false);
-    if (error || !lesson) {
-      setErr(error || "No se pudo crear la lección.");
-      return;
-    }
-    navigate(`/dashboard/content/${contentId}/lessons/${lesson.id}`);
-  };
-
-  const editLessonTitle = async (lesson) => {
-    const title = promptText("Título del ítem", lesson.title);
-    if (title === null) return;
-    const typeRaw = window.prompt(
-      `${t("pcItemType")} (${LESSON_ITEM_TYPES.join("|")})`,
-      lesson.item_type || "lesson",
-    );
-    if (typeRaw === null) return;
-    if (!title || (title === lesson.title && typeRaw === (lesson.item_type || "lesson"))) return;
-    setBusy(true);
-    const { error } = await updateLesson(lesson.id, {
-      title: title || lesson.title,
-      itemType: typeRaw || lesson.item_type || "lesson",
-    });
     setBusy(false);
     if (error) setErr(error);
     else void load();
@@ -318,6 +343,9 @@ export default function ContentEditorPage() {
   }
   if (!user || !content || !isOwner) return null;
 
+  const dialogIsUnit = titleTypeDialog?.kind === "unit";
+  const dialogIsCreate = titleTypeDialog?.mode === "create";
+
   return (
     <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
       {profileError ? <p className="pbc-alert pbc-alert--error">{profileError}</p> : null}
@@ -341,7 +369,7 @@ export default function ContentEditorPage() {
         </header>
 
         <div className="pbc-content-editor__actions">
-          <button type="button" className="pbc-btn pbc-btn--primary" onClick={addUnit} disabled={busy}>
+          <button type="button" className="pbc-btn pbc-btn--primary" onClick={openCreateUnit} disabled={busy}>
             + {t("pcNewUnit")}
           </button>
           <button type="button" className="pbc-btn pbc-btn--ghost" onClick={() => setShareOpen(true)} disabled={busy}>
@@ -423,7 +451,7 @@ export default function ContentEditorPage() {
                         {t("pcAssign")}
                       </button>
                     ) : null}
-                    <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={() => void editUnitTitle(unit)}>
+                    <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={() => openEditUnit(unit)}>
                       {t("pcEdit")}
                     </button>
                     <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={() => void removeUnit(unit)}>
@@ -509,9 +537,9 @@ export default function ContentEditorPage() {
                           <button
                             type="button"
                             className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                            onClick={() => void editLessonTitle(lesson)}
+                            onClick={() => openEditItem(lesson)}
                           >
-                            Renombrar
+                            {t("pcEdit")}
                           </button>
                           <button
                             type="button"
@@ -529,7 +557,7 @@ export default function ContentEditorPage() {
                 <button
                   type="button"
                   className="pbc-btn pbc-btn--primary pbc-btn--sm pbc-unit-card__add-lesson"
-                  onClick={() => void addLesson(unit.id)}
+                  onClick={() => openCreateItem(unit.id)}
                   disabled={busy}
                 >
                   <PencilIcon size={14} />
@@ -540,6 +568,26 @@ export default function ContentEditorPage() {
           </div>
         )}
       </div>
+
+      <TitleTypeDialog
+        open={Boolean(titleTypeDialog)}
+        dialogTitle={
+          dialogIsCreate
+            ? dialogIsUnit
+              ? t("pcNewUnit")
+              : t("pcNewItem")
+            : t("pcEdit")
+        }
+        submitLabel={dialogIsCreate ? t("pcCreate") : t("pcSave")}
+        busyLabel={dialogIsCreate ? t("pcCreating") : t("pcSaving")}
+        typeLabel={dialogIsUnit ? t("pcUnitType") : t("pcItemType")}
+        typeOptions={dialogIsUnit ? UNIT_TYPES : LESSON_ITEM_TYPES}
+        typeI18nPrefix={dialogIsUnit ? "pcUnitType_" : "pcItemType_"}
+        initialTitle={titleTypeDialog?.initialTitle ?? ""}
+        initialType={titleTypeDialog?.initialType}
+        onClose={closeTitleTypeDialog}
+        onSubmit={submitTitleTypeDialog}
+      />
 
       <ShareContentModal
         open={shareOpen}

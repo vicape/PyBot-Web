@@ -213,3 +213,39 @@ test("UI distingue copy / assign-as-is / owner-only edit", () => {
   assert.match(tutorDoc, /server-side only/i);
   assert.doesNotMatch(tutorDoc, /OPENAI_API_KEY|sk-/);
 });
+
+test("ContentEditor: title/type entry uses TitleTypeDialog (no browser prompts)", () => {
+  const editor = readFileSync(resolve(root, "src/pages/ContentEditorPage.jsx"), "utf8");
+  const dialog = readFileSync(
+    resolve(root, "src/components/pybotclass/content/TitleTypeDialog.jsx"),
+    "utf8",
+  );
+
+  assert.match(editor, /TitleTypeDialog/);
+  assert.doesNotMatch(editor, /window\.prompt/);
+  assert.doesNotMatch(editor, /const promptText\s*=/);
+  assert.doesNotMatch(dialog, /window\.prompt/);
+
+  assert.match(editor, /initialType:\s*"unit"/);
+  assert.match(editor, /initialType:\s*"lesson"/);
+  assert.match(editor, /typeOptions=\{dialogIsUnit \? UNIT_TYPES : LESSON_ITEM_TYPES\}/);
+  assert.match(editor, /navigate\(`\/dashboard\/content\/\$\{contentId\}\/lessons\/\$\{lesson\.id\}`\)/);
+
+  assert.match(dialog, /<select[\s\S]*className="pbc-input"/);
+  assert.match(dialog, /typeOptions\.map/);
+  assert.match(dialog, /type="button"/);
+  assert.match(dialog, /type="submit"/);
+  assert.match(dialog, /htmlFor=\{titleId\}/);
+  assert.match(dialog, /htmlFor=\{typeId\}/);
+  assert.match(dialog, /if \(result\?\.error\)/);
+
+  const meta = readFileSync(resolve(root, "src/platform/contentMetadata.js"), "utf8");
+  assert.match(meta, /export const UNIT_TYPES = Object\.freeze\(\["chapter", "unit", "section"\]\)/);
+  assert.match(
+    meta,
+    /export const LESSON_ITEM_TYPES = Object\.freeze\(\[\s*"lesson",\s*"theory",\s*"example",\s*"activity",\s*"exercise",\s*"quiz",\s*"test",\s*"project",\s*"resource",\s*\]\)/,
+  );
+
+  assert.doesNotMatch(dialog, /chapter.*unit.*section/);
+  assert.doesNotMatch(dialog, /\["lesson"/);
+});
