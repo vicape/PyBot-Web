@@ -2,8 +2,8 @@
 
 .pbc-dashboard {
   display: flex;
-  height: 100dvh;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   overflow: hidden;
   background: var(--pbc-bg);
@@ -36,8 +36,8 @@
   position: fixed;
   left: 0;
   top: 0;
-  height: 100dvh;
   height: 100vh;
+  height: 100dvh;
   transform: translateX(-100%);
   transition: transform 0.2s ease;
   box-shadow: var(--pbc-shadow-lg);
@@ -380,7 +380,7 @@
   flex: 1;
   min-height: 0;
   padding: 1.5rem;
-  padding-bottom: 2.5rem;
+  padding-bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px));
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -1486,6 +1486,7 @@
 
   .pbc-dashboard__content {
     padding: 1rem;
+    padding-bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   /* Intentional 2-row topbar: controls | search — no accidental wrap */
@@ -2811,5 +2812,23 @@
   .pbc-content-card__actions-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  /* Lesson row: give title full readable width; CTA on its own row */
+  .pbc-lesson-row__copy {
+    flex: 1 1 calc(100% - 3rem);
+    min-width: 0;
+  }
+
+  .pbc-lesson-row__cta {
+    flex: 1 1 100%;
+    margin-left: 0;
+    justify-content: center;
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
+  .pbc-lesson-row__actions {
+    flex: 1 1 100%;
   }
 }
