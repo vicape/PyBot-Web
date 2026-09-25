@@ -36,6 +36,9 @@ const CONTENT_META_SELECT = [
   "copied_from_content_id",
   "original_content_id",
   "original_owner_id",
+  "original_creator_id",
+  "first_community_published_by_id",
+  "first_community_published_at",
 ].join(", ");
 
 export const LEARNING_CONTENT_SELECT_BASE =
@@ -196,5 +199,8 @@ export function pickContentMetadata(row) {
     copied_from_content_id: row.copied_from_content_id ?? null,
     original_content_id: row.original_content_id ?? null,
     original_owner_id: row.original_owner_id ?? null,
+    original_creator_id: row.original_creator_id ?? null,
+    first_community_published_by_id: row.first_community_published_by_id ?? null,
+    first_community_published_at: row.first_community_published_at ?? null,
   };
 }

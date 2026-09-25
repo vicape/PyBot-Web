@@ -117,19 +117,26 @@ export default function ContentEditorPage() {
     if (uErr) setErr(uErr);
 
     const ownerName = profile?.display_name || profile?.email || null;
-    let originalOwnerName = null;
-    if (c.original_owner_id) {
-      if (c.original_owner_id === user.id) {
-        originalOwnerName = ownerName;
-      } else if (supabase) {
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, display_name, email")
-          .eq("id", c.original_owner_id)
-          .maybeSingle();
-        originalOwnerName = profs?.display_name || profs?.email || null;
+    const nameIds = [
+      c.original_owner_id,
+      c.original_creator_id,
+      c.first_community_published_by_id,
+    ].filter((id) => id && id !== user.id);
+    const nameMap = {};
+    if (nameIds.length && supabase) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, display_name, email")
+        .in("id", nameIds);
+      for (const p of profs ?? []) {
+        nameMap[p.id] = p.display_name || p.email || null;
       }
     }
+    const resolveName = (id) => {
+      if (!id) return null;
+      if (id === user.id) return ownerName;
+      return nameMap[id] || null;
+    };
 
     const lessonMap = {};
     for (const unit of unitRows) {
@@ -140,7 +147,9 @@ export default function ContentEditorPage() {
     setContent({
       ...c,
       owner_name: ownerName,
-      original_owner_name: originalOwnerName,
+      original_owner_name: resolveName(c.original_owner_id),
+      original_creator_name: resolveName(c.original_creator_id),
+      first_community_published_by_name: resolveName(c.first_community_published_by_id),
     });
     setUnits(unitRows);
     setLessonsByUnit(lessonMap);

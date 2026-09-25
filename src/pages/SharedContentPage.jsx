@@ -34,6 +34,8 @@ export default function SharedContentPage() {
   const [busy, setBusy] = useState(false);
   const [ownerName, setOwnerName] = useState("");
   const [originalOwnerName, setOriginalOwnerName] = useState("");
+  const [originalCreatorName, setOriginalCreatorName] = useState("");
+  const [firstCommunityPublisherName, setFirstCommunityPublisherName] = useState("");
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -63,7 +65,12 @@ export default function SharedContentPage() {
       setContent(c);
 
       if (supabase) {
-        const ids = [c.owner_id, c.original_owner_id].filter(Boolean);
+        const ids = [
+          c.owner_id,
+          c.original_owner_id,
+          c.original_creator_id,
+          c.first_community_published_by_id,
+        ].filter(Boolean);
         if (ids.length) {
           const { data: profs } = await supabase
             .from("profiles")
@@ -73,6 +80,10 @@ export default function SharedContentPage() {
           for (const p of profs ?? []) map[p.id] = p.display_name || p.email || "Docente";
           setOwnerName(map[c.owner_id] || "");
           if (c.original_owner_id) setOriginalOwnerName(map[c.original_owner_id] || "");
+          if (c.original_creator_id) setOriginalCreatorName(map[c.original_creator_id] || "");
+          if (c.first_community_published_by_id) {
+            setFirstCommunityPublisherName(map[c.first_community_published_by_id] || "");
+          }
         }
       }
 
@@ -172,6 +183,8 @@ export default function SharedContentPage() {
                 ...content,
                 owner_name: ownerName,
                 original_owner_name: originalOwnerName,
+                original_creator_name: originalCreatorName || originalOwnerName,
+                first_community_published_by_name: firstCommunityPublisherName,
                 based_on_name: originalOwnerName,
               }}
               showAuthor

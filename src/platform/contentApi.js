@@ -102,6 +102,53 @@ const UNIT_SELECT =
 const LESSON_SELECT =
   "id, unit_id, title, description, position, item_type, estimated_minutes, created_at, updated_at";
 
+const PROVENANCE_MIGRATION_HINT =
+  "Falta aplicar la migración 20260925100049_learning_content_creator_community_provenance.sql";
+const MATERIAL_V2_MIGRATION_HINT =
+  "Falta aplicar la migración 20260924100048_material_v2_ownership_copy_metadata.sql";
+
+function isMissingProvenanceColumnError(message) {
+  return /original_creator_id|first_community_published/i.test(String(message || ""));
+}
+
+function isMissingMaterialV2ColumnError(message) {
+  return /language_code|recommended_age|estimated_minutes|difficulty|copied_from/i.test(
+    String(message || ""),
+  );
+}
+
+function migrationErrorMessage(message) {
+  if (isMissingProvenanceColumnError(message)) return PROVENANCE_MIGRATION_HINT;
+  if (isMissingMaterialV2ColumnError(message)) return MATERIAL_V2_MIGRATION_HINT;
+  return null;
+}
+
+function attachProvenanceNames(row, profileNames) {
+  const names = profileNames || {};
+  const creatorId = row.original_creator_id || null;
+  const publisherId = row.first_community_published_by_id || null;
+  return {
+    owner_name: row.owner_id ? names[row.owner_id] || null : null,
+    original_owner_name: row.original_owner_id ? names[row.original_owner_id] || null : null,
+    original_creator_name: creatorId ? names[creatorId] || null : null,
+    first_community_published_by_name: publisherId ? names[publisherId] || null : null,
+  };
+}
+
+async function loadProfileNames(client, ids) {
+  const profileNames = {};
+  const unique = [...new Set((ids || []).filter(Boolean))];
+  if (!unique.length) return profileNames;
+  const { data: profs } = await client
+    .from("profiles")
+    .select("id, display_name, email")
+    .in("id", unique);
+  for (const p of profs ?? []) {
+    profileNames[p.id] = p.display_name || p.email || null;
+  }
+  return profileNames;
+}
+
 // --- Contenidos --------------------------------------------------------------
 
 export async function listMyContents() {
@@ -117,36 +164,23 @@ export async function listMyContents() {
     .order("updated_at", { ascending: false });
 
   if (error) {
-    if (/language_code|recommended_age|estimated_minutes|difficulty|copied_from/i.test(error.message)) {
-      return {
-        rows: [],
-        error: "Falta aplicar la migración 20260924100048_material_v2_ownership_copy_metadata.sql",
-      };
-    }
+    const hint = migrationErrorMessage(error.message);
+    if (hint) return { rows: [], error: hint };
     return { rows: [], error: error.message };
   }
 
-  const ownerIds = [...new Set((data ?? []).map((r) => r.owner_id).filter(Boolean))];
-  const originalOwnerIds = [
-    ...new Set((data ?? []).map((r) => r.original_owner_id).filter(Boolean)),
-  ];
-  const profileIds = [...new Set([...ownerIds, ...originalOwnerIds])];
-  const profileNames = {};
-  if (profileIds.length) {
-    const { data: profs } = await client
-      .from("profiles")
-      .select("id, display_name, email")
-      .in("id", profileIds);
-    for (const p of profs ?? []) {
-      profileNames[p.id] = p.display_name || p.email || null;
-    }
-  }
+  const profileIds = (data ?? []).flatMap((r) => [
+    r.owner_id,
+    r.original_owner_id,
+    r.original_creator_id,
+    r.first_community_published_by_id,
+  ]);
+  const profileNames = await loadProfileNames(client, profileIds);
 
   const rows = (data ?? []).map((row) => ({
     ...mapContentRow(row),
     unit_count: Array.isArray(row.content_units) ? row.content_units.length : 0,
-    owner_name: row.owner_id ? profileNames[row.owner_id] || null : null,
-    original_owner_name: row.original_owner_id ? profileNames[row.original_owner_id] || null : null,
+    ...attachProvenanceNames(row, profileNames),
   }));
 
   return { rows, error: null };
@@ -160,12 +194,8 @@ export async function getContent(contentId) {
     .maybeSingle();
 
   if (error) {
-    if (/language_code|recommended_age|estimated_minutes|difficulty|copied_from/i.test(error.message)) {
-      return {
-        content: null,
-        error: "Falta aplicar la migración 20260924100048_material_v2_ownership_copy_metadata.sql",
-      };
-    }
+    const hint = migrationErrorMessage(error.message);
+    if (hint) return { content: null, error: hint };
     return { content: null, error: error.message };
   }
   if (!data) return { content: null, error: "not_found" };
@@ -196,6 +226,12 @@ export async function createContent(input = {}) {
     .single();
 
   if (error) {
+    if (/original_creator|first_community/i.test(error.message)) {
+      return {
+        content: null,
+        error: "Falta aplicar la migración 20260925100049_learning_content_creator_community_provenance.sql",
+      };
+    }
     if (/language_code|recommended_age|estimated_minutes|difficulty|check/i.test(error.message)) {
       return {
         content: null,

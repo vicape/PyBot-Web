@@ -57,6 +57,12 @@ export async function setContentSharing({ contentId, visibility, courseIds = [] 
       .eq("id", contentId)
       .maybeSingle();
     if (curErr) {
+      if (/original_creator|first_community/i.test(curErr.message)) {
+        return {
+          content: null,
+          error: "Falta aplicar la migración 20260925100049_learning_content_creator_community_provenance.sql",
+        };
+      }
       if (/language_code|recommended_age|difficulty|estimated_minutes/i.test(curErr.message)) {
         return {
           content: null,
@@ -93,6 +99,12 @@ export async function setContentSharing({ contentId, visibility, courseIds = [] 
       return {
         content: null,
         error: "Falta aplicar la migración 20260924100048_material_v2_ownership_copy_metadata.sql",
+      };
+    }
+    if (/original_creator|first_community/i.test(error.message)) {
+      return {
+        content: null,
+        error: "Falta aplicar la migración 20260925100049_learning_content_creator_community_provenance.sql",
       };
     }
     return { content: null, error: error.message };
@@ -139,7 +151,7 @@ export async function listCommunityContents({ search = "" } = {}) {
 
   const { data, error } = await q;
   if (error) {
-    if (/language_code|recommended_age|difficulty|estimated_minutes|copied_from/i.test(error.message)) {
+    if (/language_code|recommended_age|difficulty|estimated_minutes|copied_from|original_creator|first_community/i.test(error.message)) {
       const legacy = await sb
         .from("learning_contents")
         .select("id, title, description, visibility, owner_id, updated_at, created_at")
@@ -160,9 +172,13 @@ export async function listCommunityContents({ search = "" } = {}) {
     return { rows: [], error: error.message };
   }
 
-  const ownerIds = [...new Set((data ?? []).map((r) => r.owner_id).filter(Boolean))];
-  const originalOwnerIds = [...new Set((data ?? []).map((r) => r.original_owner_id).filter(Boolean))];
-  const profiles = await loadOwnerNames(sb, [...ownerIds, ...originalOwnerIds]);
+  const profileIds = (data ?? []).flatMap((r) => [
+    r.owner_id,
+    r.original_owner_id,
+    r.original_creator_id,
+    r.first_community_published_by_id,
+  ]);
+  const profiles = await loadOwnerNames(sb, profileIds);
 
   return {
     rows: (data ?? []).map((r) => ({
@@ -170,6 +186,10 @@ export async function listCommunityContents({ search = "" } = {}) {
       ...pickContentMetadata(r),
       owner_name: profiles[r.owner_id] || "Docente",
       original_owner_name: r.original_owner_id ? profiles[r.original_owner_id] || null : null,
+      original_creator_name: r.original_creator_id ? profiles[r.original_creator_id] || null : null,
+      first_community_published_by_name: r.first_community_published_by_id
+        ? profiles[r.first_community_published_by_id] || null
+        : null,
     })),
     error: null,
   };

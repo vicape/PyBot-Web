@@ -21,6 +21,9 @@ function contentMetaForSnapshot(content) {
     copied_from_content_id: meta.copied_from_content_id ?? null,
     original_content_id: meta.original_content_id ?? null,
     original_owner_id: meta.original_owner_id ?? null,
+    original_creator_id: meta.original_creator_id ?? null,
+    first_community_published_by_id: meta.first_community_published_by_id ?? null,
+    first_community_published_at: meta.first_community_published_at ?? null,
   };
 }
 
