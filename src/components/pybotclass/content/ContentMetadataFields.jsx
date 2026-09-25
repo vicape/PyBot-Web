@@ -4,8 +4,11 @@ import {
   CONTENT_LANGUAGE_CODES,
 } from "../../../platform/contentMetadata.js";
 
-function listToText(arr) {
-  return Array.isArray(arr) ? arr.join(", ") : "";
+/** Display conversion for list metadata: arrays (persisted) or live edit strings. */
+export function listToText(value) {
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "string") return value;
+  return "";
 }
 
 /**
