@@ -279,20 +279,20 @@ export default function CourseIntegrationsTab({
       {err ? <PbcAlert variant="error">{err}</PbcAlert> : null}
       {msg ? <PbcAlert variant="info">{msg}</PbcAlert> : null}
 
-      <div className="pbc-section__actions" style={{ marginTop: "1rem" }}>
-        <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" disabled={!!busy} onClick={() => void syncStudents()}>
+      <div className="pbc-section__actions pbc-stack">
+        <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" disabled={!!busy} onClick={() => void syncStudents()}>
           {busy === "students" ? "…" : t("pcSyncStudents")}
         </button>
-        <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" disabled={!!busy} onClick={() => void syncTeachers()}>
+        <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" disabled={!!busy} onClick={() => void syncTeachers()}>
           {busy === "teachers" ? "…" : t("pcSyncTeachers")}
         </button>
-        <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" disabled={!!busy} onClick={() => void openImport()}>
+        <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" disabled={!!busy} onClick={() => void openImport()}>
           {busy === "import-list" ? "…" : t("pcImportActivities")}
         </button>
-        <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" disabled={!!busy} onClick={() => void publishAll()}>
+        <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" disabled={!!busy} onClick={() => void publishAll()}>
           {busy === "publish" ? "…" : t("pcPublishActivities")}
         </button>
-        <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" disabled={!!busy} onClick={() => void sendPendingGrades()}>
+        <button type="button" className="pbc-btn pbc-btn--primary pbc-btn--sm" disabled={!!busy} onClick={() => void sendPendingGrades()}>
           {busy === "grades" ? "…" : t("pcSendPendingGrades")}
         </button>
       </div>
@@ -302,7 +302,7 @@ export default function CourseIntegrationsTab({
           <ul className="pbc-list">
             {importList.map((cw) => (
               <li key={cw.id} className="pbc-list-item">
-                <label style={{ display: "flex", gap: "0.65rem", alignItems: "center", cursor: "pointer" }}>
+                <label className="pbc-check-row">
                   <input
                     type="checkbox"
                     checked={selectedCw.has(cw.id)}
@@ -318,8 +318,8 @@ export default function CourseIntegrationsTab({
               </li>
             ))}
           </ul>
-          <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.85rem" }}>
-            <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" disabled={busy === "import"} onClick={() => void doImport()}>
+          <div className="pbc-form-actions">
+            <button type="button" className="pbc-btn pbc-btn--primary pbc-btn--sm" disabled={busy === "import"} onClick={() => void doImport()}>
               {busy === "import" ? t("pcImporting") : t("pcImportSelected")}
             </button>
           </div>

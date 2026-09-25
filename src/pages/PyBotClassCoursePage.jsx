@@ -1,7 +1,7 @@
 import { t } from "../i18n.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import PyBotClassShell, { CourseTabs, PyBotClassBreadcrumb } from "../components/pybotclass/PyBotClassShell.jsx";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import PyBotClassShell, { CourseTabs } from "../components/pybotclass/PyBotClassShell.jsx";
 import {
   PbcAlert,
   PbcCourseHeader,
@@ -207,28 +207,29 @@ export default function PyBotClassCoursePage() {
       contextualRoleCompact={contextualRoleCompact}
     >
       <PbcPage>
-        <PyBotClassBreadcrumb items={[{ label: course?.title || t("pcClass") }]} />
-
         <PbcCourseHeader
-          title={course?.title || "Clase"}
+          title={course?.title || t("pcClass")}
           orgName={orgName}
+          roleLabel={contextualRoleLabel}
           classroomLinked={!!course?.classroom_course_id}
+          backTo="/dashboard/classes"
+          backLabel={t("pcMyClassesBack")}
           actions={
             canTeach ? (
               <div className="pbc-course-quick-actions">
-                <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" onClick={goCreateActivity}>
+                <button type="button" className="pbc-btn pbc-btn--primary pbc-btn--sm" onClick={goCreateActivity}>
                   + {t("pcCreateActivity")}
                 </button>
-                <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={goAddStudents}>
+                <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={goAddStudents}>
                   + {t("pcAddStudents")}
                 </button>
-                <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={goAssignContent}>
+                <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={goAssignContent}>
                   {t("pcAssignContent")}
                 </button>
-                <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={goSubmissions}>
+                <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={goSubmissions}>
                   {t("pcViewSubmissions")}
                 </button>
-                <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={goIntegrations}>
+                <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={goIntegrations}>
                   {t("pcTabIntegrations")}
                 </button>
               </div>
@@ -318,7 +319,7 @@ export default function PyBotClassCoursePage() {
                 <ul className="pbc-list">
                   {importPicker.list.map((cw) => (
                     <li key={cw.id} className="pbc-list-item">
-                      <label style={{ display: "flex", gap: "0.65rem", alignItems: "center", cursor: "pointer" }}>
+                      <label className="pbc-check-row">
                         <input
                           type="checkbox"
                           checked={importPicker.selected.has(cw.id)}
@@ -334,10 +335,10 @@ export default function PyBotClassCoursePage() {
                     </li>
                   ))}
                 </ul>
-                <div className="auth-card__actions auth-card__actions--row" style={{ marginTop: "0.85rem" }}>
+                <div className="pbc-form-actions">
                   <button
                     type="button"
-                    className="auth-btn auth-btn--primary auth-btn--sm"
+                    className="pbc-btn pbc-btn--primary pbc-btn--sm"
                     disabled={importBusy}
                     onClick={() => void confirmImport()}
                   >
@@ -348,12 +349,6 @@ export default function PyBotClassCoursePage() {
             ) : null}
           </>
         )}
-
-        <div className="pbc-footer-links">
-          <Link to="/dashboard/classes" className="auth-link">
-            {t("pcMyClassesBack")}
-          </Link>
-        </div>
       </PbcPage>
     </PyBotClassShell>
   );

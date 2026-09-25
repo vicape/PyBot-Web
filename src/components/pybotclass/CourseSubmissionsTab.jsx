@@ -105,9 +105,9 @@ export default function CourseSubmissionsTab({ courseId }) {
       <PbcSubTabs tabs={localizeInboxFilters(INBOX_FILTERS)} active={filter} onChange={setFilter} />
 
       {filtered.length === 0 ? (
-        <p className="auth-card__muted">{t("pcNoSubmissionsFilter")}</p>
+        <p className="pbc-muted">{t("pcNoSubmissionsFilter")}</p>
       ) : (
-        <div className="dash-table-wrap">
+        <div className="dash-table-wrap pbc-data-scroll">
           <table className="dash-table">
             <thead>
               <tr>
@@ -144,32 +144,34 @@ export default function CourseSubmissionsTab({ courseId }) {
                       )}
                     </td>
                     <td>{formatDateTime(r.progress_updated_at || r.submitted_at)}</td>
-                    <td style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-                      {r.submission_id ? (
-                        <Link
-                          className="auth-btn auth-btn--ghost auth-btn--sm"
-                          to={`/actividad/${r.activity_id}?alumno=${encodeURIComponent(r.student_user_id)}`}
-                        >
-                          {t("pcReview")}
-                        </Link>
-                      ) : (
-                        <Link
-                          className="auth-btn auth-btn--ghost auth-btn--sm"
-                          to={`/actividad/${r.activity_id}?alumno=${encodeURIComponent(r.student_user_id)}`}
-                        >
-                          {t("pcOpen")}
-                        </Link>
-                      )}
-                      {showReopen ? (
-                        <button
-                          type="button"
-                          className="auth-btn auth-btn--ghost auth-btn--sm"
-                          disabled={busyId === key}
-                          onClick={() => void onReopenRow(r)}
-                        >
-                          {t("pcReopen")}
-                        </button>
-                      ) : null}
+                    <td>
+                      <div className="pbc-table-actions">
+                        {r.submission_id ? (
+                          <Link
+                            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                            to={`/actividad/${r.activity_id}?alumno=${encodeURIComponent(r.student_user_id)}`}
+                          >
+                            {t("pcReview")}
+                          </Link>
+                        ) : (
+                          <Link
+                            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                            to={`/actividad/${r.activity_id}?alumno=${encodeURIComponent(r.student_user_id)}`}
+                          >
+                            {t("pcOpen")}
+                          </Link>
+                        )}
+                        {showReopen ? (
+                          <button
+                            type="button"
+                            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                            disabled={busyId === key}
+                            onClick={() => void onReopenRow(r)}
+                          >
+                            {t("pcReopen")}
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 );

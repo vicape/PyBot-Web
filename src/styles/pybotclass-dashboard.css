@@ -3118,12 +3118,11 @@
 
 .pbc-course-header {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem 1rem;
+  flex-direction: column;
+  gap: 0;
   margin-bottom: 1rem;
   max-width: 100%;
+  min-width: 0;
 }
 .pbc-course-header__main {
   min-width: 0;
@@ -3135,6 +3134,20 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   max-width: 100%;
+}
+.pbc-dashboard .pbc-course-header__back {
+  color: var(--pbc-primary, #2F86F6);
+}
+.pbc-dashboard .pbc-course-header__back:focus-visible {
+  outline: 2px solid var(--pbc-focus, #2F86F6);
+  outline-offset: 2px;
+}
+.pbc-dashboard .pbc-course-header__title {
+  color: var(--pbc-text);
+}
+.pbc-dashboard .pbc-course-header__meta {
+  opacity: 1;
+  color: var(--pbc-text-muted);
 }
 .pbc-next-step {
   margin-top: 1rem;
@@ -3330,11 +3343,15 @@
 }
 
 @media (max-width: 430px) {
+  .pbc-course-quick-actions .pbc-btn,
   .pbc-course-quick-actions .auth-btn,
+  .pbc-next-step__actions .pbc-btn,
   .pbc-next-step__actions .auth-btn,
+  .pbc-empty__actions-row .pbc-btn,
   .pbc-empty__actions-row .auth-btn {
     flex: 1 1 auto;
     min-width: 0;
+    min-height: 44px;
   }
   .pbc-home .pbc-action-grid {
     grid-template-columns: 1fr;
@@ -3428,5 +3445,283 @@
 
   .pbc-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * RESPONSIVE SOURCE CONTRACT — Modified course UI intentionally supports exactly these target widths:
+ * 1440x1000, 768x1024, 430x932, 390x844, 375x812, 360x800
+ * (source/static contract only — MaxPlay verifies viewports after deploy)
+ *
+ * SCOPE / OUT OF SCOPE — Active course UX/UI only. Must not modify as part of this work:
+ * /, PyBot IDE/Monaco/Python/Arduino/ESP32/USB/BLE, /dashboard/content and content editors,
+ * /dashboard/community, /dashboard/admin, backend/schema migrations, auth redesign,
+ * global search feature, new product functionality, unrelated workflow/deployment changes.
+ *
+ * PRESERVE (no modification of behavior/logic):
+ * Authentication/session; authorization/roles; course data queries; activity logic;
+ * roster/invite logic; submissions/grading logic; Google Classroom/OAuth logic;
+ * Supabase schema or API contracts; route semantics; existing data mutation behavior;
+ * existing IDE behavior; Light/Dark appearance mechanism and theme persistence;
+ * localization mechanism and selected-language behavior; keyboard operability;
+ * modal focus/escape behavior; truthful integration connection states.
+ */
+/* ── Active course experience — shared Home language ──────────────────────── */
+.pbc-course-page {
+  width: 100%;
+  max-width: 1200px;
+  min-width: 0;
+}
+
+.pbc-dashboard .pbc-course-page .pbc-page {
+  gap: 1.25rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.pbc-dashboard .pbc-section,
+.pbc-dashboard .pbc-list-item,
+.pbc-dashboard .pbc-stat,
+.pbc-dashboard .pbc-form-panel,
+.pbc-dashboard .pbc-next-step,
+.pbc-dashboard .pbc-add-students__block,
+.pbc-dashboard .pbc-empty {
+  background: var(--pbc-panel-solid, var(--pbc-panel));
+  border-color: var(--pbc-border);
+  color: var(--pbc-text);
+  box-shadow: none;
+}
+
+.pbc-dashboard .pbc-empty {
+  border-style: dashed;
+}
+
+.pbc-dashboard .pbc-stat {
+  background: var(--pbc-panel-hover, var(--pbc-panel));
+}
+
+.pbc-dashboard .pbc-stat--highlight .pbc-stat__value {
+  color: var(--pbc-primary, #2F86F6);
+}
+
+.pbc-dashboard .pbc-stat--warn .pbc-stat__value {
+  color: var(--pbc-warning, #d97706);
+}
+
+.pbc-dashboard .pbc-tabs {
+  border-bottom-color: var(--pbc-border);
+  margin: 0;
+  padding: 0.25rem 0;
+  gap: 0.25rem;
+}
+
+.pbc-dashboard .pbc-tab {
+  color: var(--pbc-text-muted);
+  border-radius: var(--pbc-radius-sm, 8px);
+}
+
+.pbc-dashboard .pbc-tab:hover {
+  background: var(--pbc-panel-hover);
+  color: var(--pbc-text);
+}
+
+.pbc-dashboard .pbc-tab--active {
+  background: color-mix(in srgb, var(--pbc-primary, #2F86F6) 16%, transparent);
+  border-color: color-mix(in srgb, var(--pbc-primary, #2F86F6) 40%, var(--pbc-border));
+  color: var(--pbc-text);
+}
+
+.pbc-dashboard .pbc-tab:focus-visible {
+  outline: 2px solid var(--pbc-focus, #2F86F6);
+  outline-offset: 2px;
+}
+
+.pbc-dashboard .pbc-subtabs {
+  background: var(--pbc-panel-hover, var(--pbc-panel));
+  border: 1px solid var(--pbc-border);
+  max-width: 100%;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+
+.pbc-dashboard .pbc-subtab {
+  color: var(--pbc-text-muted);
+  min-height: 36px;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+}
+
+.pbc-dashboard .pbc-subtab--active {
+  background: var(--pbc-panel-solid, #fff);
+  color: var(--pbc-primary, #1d4ed8);
+}
+
+.pbc-dashboard .pbc-subtab:focus-visible {
+  outline: 2px solid var(--pbc-focus, #2F86F6);
+  outline-offset: 2px;
+}
+
+.pbc-stack {
+  margin-top: 1.25rem;
+}
+
+.pbc-stack--before {
+  margin-bottom: 1rem;
+}
+
+.pbc-muted {
+  margin: 0;
+  color: var(--pbc-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.pbc-field-hint {
+  margin: 0.25rem 0 0;
+  color: var(--pbc-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.pbc-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  max-width: 100%;
+}
+
+.pbc-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+  max-width: 100%;
+}
+
+.pbc-check-row {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  cursor: pointer;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pbc-check-row input {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.pbc-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-width: 100%;
+}
+
+.pbc-data-scroll {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pbc-grade-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  min-width: 4.5rem;
+}
+
+.pbc-dashboard .dash-table--grades th,
+.pbc-dashboard .dash-table--grades td {
+  white-space: nowrap;
+  font-size: 0.8125rem;
+}
+
+.pbc-dashboard .dash-table--grades th[scope="row"] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--pbc-panel-solid, var(--pbc-panel));
+  font-weight: 600;
+  text-align: left;
+  white-space: normal;
+  min-width: 7rem;
+  max-width: 10rem;
+}
+
+.pbc-alert__text {
+  margin: 0;
+}
+
+.pbc-alert__action {
+  margin-top: 0.5rem;
+}
+
+.pbc-dashboard .pbc-alert {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.pbc-dashboard .pbc-prep-guide__list li {
+  font-size: 0.875rem;
+}
+
+.pbc-dashboard .pbc-icon-btn:focus-visible {
+  outline: 2px solid var(--pbc-focus, #2F86F6);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .pbc-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pbc-dashboard .pbc-tab,
+  .pbc-dashboard .pbc-subtab {
+    min-height: 44px;
+  }
+
+  .pbc-dashboard .pbc-course-header__back {
+    min-height: 44px;
+  }
+
+  .pbc-course-page .pbc-btn--sm,
+  .pbc-course-page .pbc-btn {
+    min-height: 44px;
+  }
+
+  .pbc-dashboard .pbc-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pbc-dashboard .pbc-list-item {
+    align-items: flex-start;
+  }
+
+  .pbc-dashboard .pbc-list-item__actions {
+    width: 100%;
+  }
+
+  .pbc-dashboard .pbc-list-item__actions .pbc-btn {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 430px) {
+  .pbc-dashboard .pbc-stat-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pbc-dashboard .pbc-course-header__title {
+    font-size: 1.35rem;
+  }
+
+  .pbc-dashboard .pbc-section {
+    padding: 0.95rem 0.9rem;
   }
 }

@@ -74,7 +74,7 @@ export default function CourseSummaryTab({
           ]}
         />
         {(summary?.graded_recent || []).length > 0 ? (
-          <div style={{ marginTop: "1.25rem" }}>
+          <div className="pbc-stack">
             <h3 className="pbc-section__title">{t("pcRecentlyGraded")}</h3>
             <PbcList>
               {(summary.graded_recent || []).map((a) => (
@@ -107,7 +107,7 @@ export default function CourseSummaryTab({
       return (
         <div className="pbc-next-step" role="status">
           <p className="pbc-next-step__msg">{t("pcNextStepAddStudents")}</p>
-          <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" onClick={onGoStudents}>
+          <button type="button" className="pbc-btn pbc-btn--primary pbc-btn--sm" onClick={onGoStudents}>
             {t("pcAddStudents")}
           </button>
         </div>
@@ -120,14 +120,14 @@ export default function CourseSummaryTab({
           <div className="pbc-next-step__actions">
             <button
               type="button"
-              className="auth-btn auth-btn--primary auth-btn--sm"
+              className="pbc-btn pbc-btn--primary pbc-btn--sm"
               onClick={onGoCreateActivity}
             >
               {t("pcCreateActivity")}
             </button>
             <button
               type="button"
-              className="auth-btn auth-btn--ghost auth-btn--sm"
+              className="pbc-btn pbc-btn--ghost pbc-btn--sm"
               onClick={onGoAssignContent}
             >
               {t("pcAssignContent")}
@@ -144,7 +144,7 @@ export default function CourseSummaryTab({
           </p>
           <button
             type="button"
-            className="auth-btn auth-btn--primary auth-btn--sm"
+            className="pbc-btn pbc-btn--primary pbc-btn--sm"
             onClick={onGoSubmissions}
           >
             {t("pcGradeNow")}
@@ -168,7 +168,7 @@ export default function CourseSummaryTab({
       description={mode === COURSE_ACCESS_MODES.ADMIN ? t("pcAdminReadOnly") : undefined}
       actions={
         isTeaching && onGoSubmissions ? (
-          <button type="button" className="auth-btn auth-btn--ghost auth-btn--sm" onClick={onGoSubmissions}>
+          <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={onGoSubmissions}>
             {t("pcViewSubmissions")}
           </button>
         ) : null
@@ -200,7 +200,7 @@ export default function CourseSummaryTab({
       ) : null}
 
       {recent.length > 0 ? (
-        <div style={{ marginTop: "1.25rem" }}>
+        <div className="pbc-stack">
           <h3 className="pbc-section__title">{t("pcRecentActivity")}</h3>
           <PbcList>
             {recent.map((a) => (
@@ -213,9 +213,7 @@ export default function CourseSummaryTab({
           </PbcList>
         </div>
       ) : (
-        <p className="auth-card__muted" style={{ marginTop: "1rem" }}>
-          {t("pcNoActivitiesClass")}
-        </p>
+        <p className="pbc-muted pbc-stack">{t("pcNoActivitiesClass")}</p>
       )}
     </PbcSection>
   );

@@ -56,27 +56,31 @@ export default function CourseGradesTab({ courseId, canTeach }) {
 
   return (
     <PbcSection title={t("pcGradebook")} description={`${students.length} ${t("pcTabStudents")} · ${activities.length} ${t("pcActivities")}`}>
-      <div className="dash-table-wrap">
-        <table className="dash-table">
+      <div className="dash-table-wrap pbc-data-scroll">
+        <table className="dash-table dash-table--grades">
           <thead>
             <tr>
-              <th>{t("pcStudent")}</th>
+              <th scope="col">{t("pcStudent")}</th>
               {activities.map((a) => (
-                <th key={a.id}>{a.title}</th>
+                <th key={a.id} scope="col">
+                  {a.title}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {students.map((s) => (
               <tr key={s.user_id}>
-                <td>{s.name}</td>
+                <th scope="row">{s.name}</th>
                 {activities.map((a) => {
                   const key = `${s.user_id}:${a.id}`;
                   const applies = !gradebook?.applicable || applicableSet.has(key);
                   if (!applies) {
                     return (
-                      <td key={a.id} title={t("pcNotAssigned")}>
-                        <span className="auth-card__muted">N/A</span>
+                      <td key={a.id}>
+                        <span className="pbc-muted" aria-label={t("pcNotAssigned")}>
+                          N/A
+                        </span>
                       </td>
                     );
                   }
@@ -86,19 +90,15 @@ export default function CourseGradesTab({ courseId, canTeach }) {
                   const pendingSync = grade != null && a.classroom_coursework_id && !synced;
                   return (
                     <td key={a.id}>
-                      <strong>{grade != null ? grade : "—"}</strong>
-                      {canTeach && synced ? (
-                        <span className="pbc-pill pbc-pill--ok pbc-pill--sm" title={t("pcSynced")}>
-                          {" "}
-                          ✓
-                        </span>
-                      ) : null}
-                      {canTeach && pendingSync ? (
-                        <span className="pbc-pill pbc-pill--warn pbc-pill--sm" title={t("pcPendingClassroom")}>
-                          {" "}
-                          ↻
-                        </span>
-                      ) : null}
+                      <div className="pbc-grade-cell">
+                        <strong>{grade != null ? grade : "—"}</strong>
+                        {canTeach && synced ? (
+                          <span className="pbc-pill pbc-pill--ok pbc-pill--sm">{t("pcSynced")}</span>
+                        ) : null}
+                        {canTeach && pendingSync ? (
+                          <span className="pbc-pill pbc-pill--warn pbc-pill--sm">{t("pcPendingClassroom")}</span>
+                        ) : null}
+                      </div>
                     </td>
                   );
                 })}

@@ -35,7 +35,7 @@ export function PbcSelect({ label, value, onChange, children, id }) {
 }
 
 export function PbcAlert({ variant = "error", children }) {
-  return <p className={`pbc-alert pbc-alert--${variant}`}>{children}</p>;
+  return <div className={`pbc-alert pbc-alert--${variant}`} role="alert">{children}</div>;
 }
 
 export function PbcEmpty({ title, description, action, actions }) {
@@ -110,40 +110,86 @@ export function PbcClassCard({ course, showOrg }) {
   );
 }
 
-export function PbcCourseHeader({ title, orgName, roleLabel, classroomLinked, badges, actions }) {
+export function PbcCourseHeader({
+  title,
+  orgName,
+  roleLabel,
+  classroomLinked,
+  badges,
+  actions,
+  backTo,
+  backLabel,
+}) {
   return (
     <header className="pbc-course-header">
-      <div className="pbc-course-header__main">
-        <h1 className="pbc-course-header__title">{title}</h1>
-        <div className="pbc-course-header__meta">
-          {orgName ? <span>{orgName}</span> : null}
-          {roleLabel ? <span>{roleLabel}</span> : null}
-          {classroomLinked ? (
-            <span className="pbc-pill pbc-pill--classroom pbc-pill--sm">Classroom</span>
-          ) : null}
-          {badges}
+      {backTo ? (
+        <Link to={backTo} className="pbc-course-header__back">
+          {backLabel || t("pcMyClassesBack")}
+        </Link>
+      ) : null}
+      <div className="pbc-course-header__row">
+        <div className="pbc-course-header__main">
+          <h1 className="pbc-course-header__title">{title}</h1>
+          <div className="pbc-course-header__meta">
+            {orgName ? <span className="pbc-course-header__meta-item">{orgName}</span> : null}
+            {roleLabel ? <span className="pbc-pill pbc-pill--role">{roleLabel}</span> : null}
+            {classroomLinked ? (
+              <span className="pbc-pill pbc-pill--classroom">Classroom</span>
+            ) : null}
+            {badges}
+          </div>
         </div>
+        {actions ? <div className="pbc-course-header__actions">{actions}</div> : null}
       </div>
-      {actions ? <div className="pbc-course-header__actions">{actions}</div> : null}
     </header>
   );
 }
 
 export function PbcTabs({ tabs, activeTab, onTabChange }) {
+  const onKeyDown = (event, index) => {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
+      return;
+    }
+    event.preventDefault();
+    let next = index;
+    if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    const target = tabs[next];
+    if (!target) return;
+    onTabChange(target.id);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`pbc-tab-${target.id}`);
+      el?.focus();
+      el?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    });
+  };
+
   return (
-    <nav className="pbc-tabs" aria-label={t("pcClassSections")}>
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          className={`pbc-tab${activeTab === tab.id ? " pbc-tab--active" : ""}`}
-          onClick={() => onTabChange(tab.id)}
-        >
-          {tab.label}
-          {tab.count != null ? <span className="pbc-tab__count">{tab.count}</span> : null}
-        </button>
-      ))}
-    </nav>
+    <div className="pbc-tabs-wrap">
+      <nav className="pbc-tabs" role="tablist" aria-label={t("pcClassSections")}>
+        {tabs.map((tab, index) => {
+          const selected = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              id={`pbc-tab-${tab.id}`}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              tabIndex={selected ? 0 : -1}
+              className={`pbc-tab${selected ? " pbc-tab--active" : ""}`}
+              onClick={() => onTabChange(tab.id)}
+              onKeyDown={(event) => onKeyDown(event, index)}
+            >
+              {tab.label}
+              {tab.count != null ? <span className="pbc-tab__count">{tab.count}</span> : null}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
   );
 }
 
@@ -204,7 +250,7 @@ export function PbcListItem({ title, meta, badges, actions, children }) {
 export function PbcBreadcrumb({ items }) {
   return (
     <nav className="pbc-breadcrumb" aria-label={t("pcRoute")}>
-      <Link to="/dashboard/classes">PyBotClass</Link>
+      <Link to="/dashboard/classes">{t("pcCourses")}</Link>
       {items.map((item, i) => (
         <span key={item.href || item.label || i}>
           <span className="pbc-breadcrumb__sep" aria-hidden>
@@ -235,17 +281,22 @@ export function PbcFormPanel({ title, onCancel, children }) {
 
 export function PbcSubTabs({ tabs, active, onChange }) {
   return (
-    <nav className="pbc-subtabs">
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          className={`pbc-subtab${active === t.id ? " pbc-subtab--active" : ""}`}
-          onClick={() => onChange(t.id)}
-        >
-          {t.label}
-        </button>
-      ))}
+    <nav className="pbc-subtabs" role="tablist">
+      {tabs.map((tab) => {
+        const selected = active === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            className={`pbc-subtab${selected ? " pbc-subtab--active" : ""}`}
+            onClick={() => onChange(tab.id)}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
     </nav>
   );
 }

@@ -56,7 +56,7 @@ function MemberList({ rows, onRemove, removingId, badge }) {
             onRemove && m.userId ? (
               <button
                 type="button"
-                className="auth-btn auth-btn--ghost auth-btn--sm"
+                className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                 disabled={removingId === m.userId}
                 onClick={() => void onRemove(m.userId)}
               >
@@ -274,12 +274,11 @@ export default function CourseRosterTab({
       {feedback ? <p className="pbc-feedback" role="status">{feedback}</p> : null}
       {syncErr ? (
         <PbcAlert variant="error">
-          <p style={{ margin: 0 }}>{syncErr}</p>
+          <p className="pbc-alert__text">{syncErr}</p>
           {onGoIntegrations ? (
             <button
               type="button"
-              className="auth-btn auth-btn--ghost auth-btn--sm"
-              style={{ marginTop: "0.5rem" }}
+              className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-alert__action"
               onClick={onGoIntegrations}
             >
               {t("pcGoIntegrations")}
@@ -305,7 +304,7 @@ export default function CourseRosterTab({
               <p className="auth-card__muted">{t("pcInviteWithPyBotDesc")}</p>
               <button
                 type="button"
-                className="auth-btn auth-btn--primary auth-btn--sm"
+                className="pbc-btn pbc-btn--primary pbc-btn--sm"
                 disabled={generatingInvite}
                 onClick={() => void generateInvite()}
               >
@@ -322,7 +321,7 @@ export default function CourseRosterTab({
                   <div className="pbc-invite-result__actions">
                     <button
                       type="button"
-                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                       onClick={async () => {
                         const ok = await copyText(inviteCode);
                         if (ok) setFeedback(t("pcCodeCopied"));
@@ -332,7 +331,7 @@ export default function CourseRosterTab({
                     </button>
                     <button
                       type="button"
-                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                       onClick={async () => {
                         const ok = await copyText(inviteLink);
                         if (ok) setFeedback(t("pcLinkCopied"));
@@ -352,7 +351,7 @@ export default function CourseRosterTab({
               {classroomCourseId ? (
                 <button
                   type="button"
-                  className="auth-btn auth-btn--ghost auth-btn--sm"
+                  className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                   disabled={syncBusy}
                   onClick={() => void syncStudents()}
                 >
@@ -364,7 +363,7 @@ export default function CourseRosterTab({
                   {onGoIntegrations ? (
                     <button
                       type="button"
-                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                       onClick={onGoIntegrations}
                     >
                       {t("pcGoIntegrations")}
@@ -375,7 +374,7 @@ export default function CourseRosterTab({
             </div>
           </section>
 
-          <h3 className="pbc-section__title" style={{ marginTop: "1.5rem" }}>
+          <h3 className="pbc-section__title pbc-stack">
             {t("pcCourseStudentsHeading").replace("{n}", String(studentCount))}
           </h3>
 
@@ -389,7 +388,7 @@ export default function CourseRosterTab({
                 <div className="pbc-empty__actions-row">
                   <button
                     type="button"
-                    className="auth-btn auth-btn--primary auth-btn--sm"
+                    className="pbc-btn pbc-btn--primary pbc-btn--sm"
                     onClick={() => {
                       inviteSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                     }}
@@ -399,7 +398,7 @@ export default function CourseRosterTab({
                   {classroomCourseId ? (
                     <button
                       type="button"
-                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                       disabled={syncBusy}
                       onClick={() => void syncStudents()}
                     >
@@ -415,11 +414,11 @@ export default function CourseRosterTab({
         </>
       ) : (
         <>
-          <div className="pbc-section__actions" style={{ marginBottom: "1rem" }}>
+          <div className="pbc-section__actions pbc-stack--before">
             {classroomCourseId ? (
               <button
                 type="button"
-                className="auth-btn auth-btn--primary auth-btn--sm"
+                className="pbc-btn pbc-btn--primary pbc-btn--sm"
                 disabled={syncBusy}
                 onClick={() => void syncTeachers()}
               >

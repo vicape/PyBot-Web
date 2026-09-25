@@ -566,6 +566,7 @@
 }
 
 .pbc-dashboard[data-pbc-theme="light"] .pbc-breadcrumb a,
+.pbc-dashboard[data-pbc-theme="light"] .pbc-course-header__back,
 .pbc-dashboard[data-pbc-theme="light"] .auth-link {
   color: #1d4ed8;
 }

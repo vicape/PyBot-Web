@@ -73,7 +73,7 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
         onChange={(e) => setDescription(e.target.value)}
         disabled={saving}
       />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+      <div className="pbc-form-grid">
         <div>
           <label className="auth-org-label" htmlFor="act-due">
             {t("pcDueDate")}
@@ -86,9 +86,7 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
             onChange={(e) => setDueAt(e.target.value)}
             disabled={saving}
           />
-          <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
-            {t("pcDueDateHint")}
-          </p>
+          <p className="pbc-field-hint">{t("pcDueDateHint")}</p>
         </div>
         <div>
           <label className="auth-org-label" htmlFor="act-close">
@@ -102,9 +100,7 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
             onChange={(e) => setSubmissionCloseAt(e.target.value)}
             disabled={saving}
           />
-          <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
-            {t("pcSubmissionCloseHint")}
-          </p>
+          <p className="pbc-field-hint">{t("pcSubmissionCloseHint")}</p>
         </div>
       </div>
       <div>
@@ -122,9 +118,7 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
           disabled={saving}
           placeholder="100"
         />
-        <p className="auth-card__muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
-          {t("pcMaxPointsHint")}
-        </p>
+        <p className="pbc-field-hint">{t("pcMaxPointsHint")}</p>
       </div>
       <label className="auth-org-label" htmlFor="act-starter">
         {t("pcStarterCode")}
@@ -137,12 +131,12 @@ function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
         onChange={(e) => setStarterCode(e.target.value)}
         disabled={saving}
       />
-      <div className="auth-card__actions auth-card__actions--row">
-        <button type="submit" className="auth-btn auth-btn--primary" disabled={saving}>
+      <div className="pbc-form-actions">
+        <button type="submit" className="pbc-btn pbc-btn--primary" disabled={saving}>
           {saving ? t("pcSaving") : t("pcSave")}
         </button>
         {onCancel ? (
-          <button type="button" className="auth-btn auth-btn--ghost" onClick={onCancel} disabled={saving}>
+          <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onCancel} disabled={saving}>
             {t("pcCancel")}
           </button>
         ) : null}
@@ -217,7 +211,7 @@ function StudentActivityRow({ activity, userId }) {
         </>
       }
       actions={
-        <Link className="auth-btn auth-btn--primary auth-btn--sm" to={`/actividad/${activity.id}`}>
+        <Link className="pbc-btn pbc-btn--primary pbc-btn--sm" to={`/actividad/${activity.id}`}>
           {t("pcOpen")}
         </Link>
       }
@@ -367,7 +361,7 @@ export default function CourseActivitiesTab({
           <>
             <button
               type="button"
-              className="auth-btn auth-btn--primary auth-btn--sm"
+              className="pbc-btn pbc-btn--primary pbc-btn--sm"
               onClick={() => {
                 setShowCreate(true);
                 setEditing(null);
@@ -378,7 +372,7 @@ export default function CourseActivitiesTab({
             {onAssignContent ? (
               <button
                 type="button"
-                className="auth-btn auth-btn--ghost auth-btn--sm"
+                className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                 onClick={onAssignContent}
               >
                 {t("pcAssignContent")}
@@ -387,7 +381,7 @@ export default function CourseActivitiesTab({
             {onImportClassroom ? (
               <button
                 type="button"
-                className="auth-btn auth-btn--ghost auth-btn--sm"
+                className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                 disabled={importBusy}
                 onClick={() => void onImportClassroom()}
               >
@@ -406,7 +400,7 @@ export default function CourseActivitiesTab({
               <div className="pbc-empty__actions-row">
                 <button
                   type="button"
-                  className="auth-btn auth-btn--primary auth-btn--sm"
+                  className="pbc-btn pbc-btn--primary pbc-btn--sm"
                   onClick={() => {
                     setShowCreate(true);
                     setEditing(null);
@@ -417,7 +411,7 @@ export default function CourseActivitiesTab({
                 {onAssignContent ? (
                   <button
                     type="button"
-                    className="auth-btn auth-btn--ghost auth-btn--sm"
+                    className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                     onClick={onAssignContent}
                   >
                     {t("pcAssignContent")}
@@ -438,7 +432,7 @@ export default function CourseActivitiesTab({
                   <>
                     <button
                       type="button"
-                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                       onClick={() => {
                         setEditing(a);
                         setShowCreate(false);
@@ -446,7 +440,7 @@ export default function CourseActivitiesTab({
                     >
                       {t("pcEdit")}
                     </button>
-                    <Link className="auth-btn auth-btn--primary auth-btn--sm" to={`/actividad/${a.id}`}>
+                    <Link className="pbc-btn pbc-btn--primary pbc-btn--sm" to={`/actividad/${a.id}`}>
                       {t("pcReview")}
                     </Link>
                   </>
