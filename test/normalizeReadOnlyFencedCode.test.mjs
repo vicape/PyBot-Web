@@ -42,23 +42,48 @@ test("AC fence: classifier distinguishes not-a-fence / supported / unsupported /
   assert.deepEqual(classifyFenceLine("hello"), { kind: "not-a-fence" });
   assert.deepEqual(classifyFenceLine("```"), {
     kind: "bare-fence",
+    delimiter: "backtick",
     language: "text",
   });
   assert.deepEqual(classifyFenceLine("```python"), {
     kind: "supported-open",
+    delimiter: "backtick",
     language: "python",
   });
   assert.deepEqual(classifyFenceLine("```text"), {
     kind: "supported-open",
+    delimiter: "backtick",
     language: "text",
   });
   assert.deepEqual(classifyFenceLine("```javascript"), {
     kind: "unsupported-open",
+    delimiter: "backtick",
     token: "javascript",
   });
   assert.deepEqual(classifyFenceLine("```html"), {
     kind: "unsupported-open",
+    delimiter: "backtick",
     token: "html",
+  });
+  assert.deepEqual(classifyFenceLine("'''"), {
+    kind: "bare-fence",
+    delimiter: "apostrophe",
+    language: "text",
+  });
+  assert.deepEqual(classifyFenceLine("'''python"), {
+    kind: "supported-open",
+    delimiter: "apostrophe",
+    language: "python",
+  });
+  assert.deepEqual(classifyFenceLine("'''text"), {
+    kind: "supported-open",
+    delimiter: "apostrophe",
+    language: "text",
+  });
+  assert.deepEqual(classifyFenceLine("'''javascript"), {
+    kind: "unsupported-open",
+    delimiter: "apostrophe",
+    token: "javascript",
   });
 });
 
@@ -669,4 +694,218 @@ test("AC nested: does not mutate root, parents, or children arrays", () => {
   assert.notEqual(out, input);
   assert.notEqual(out[0].children, kids);
   assert.equal(out[0].children[0].type, "codeBlock");
+});
+
+// --- Apostrophe (''') fence delimiter support ---
+
+test("AC apostrophe: '''python fence → codeBlock(language=python)", () => {
+  const input = [para("'''python\nprint(\"Hello\")\nx = 1\n'''")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, [
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: 'print("Hello")\nx = 1',
+    },
+  ]);
+});
+
+test("AC apostrophe: '''text fence → codeBlock(language=text)", () => {
+  const input = [para("'''text\nplain text\n'''")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, [
+    {
+      type: "codeBlock",
+      props: { language: "text" },
+      content: "plain text",
+    },
+  ]);
+});
+
+test("AC apostrophe: unlabeled ''' fence → codeBlock(language=text)", () => {
+  const input = [paraInline("'''\nplain\n'''")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.equal(out[0].type, "codeBlock");
+  assert.equal(out[0].props.language, "text");
+  assert.equal(out[0].content, "plain");
+});
+
+test("AC apostrophe: backtick and apostrophe forms derive the same codeBlock", () => {
+  const backtick = normalizeReadOnlyFencedCode([
+    para('```python\nprint("Hello")\n```'),
+  ]);
+  const apostrophe = normalizeReadOnlyFencedCode([
+    para("'''python\nprint(\"Hello\")\n'''"),
+  ]);
+  assert.deepEqual(backtick, apostrophe);
+  const btText = normalizeReadOnlyFencedCode([para("```text\nplain text\n```")]);
+  const apText = normalizeReadOnlyFencedCode([para("'''text\nplain text\n'''")]);
+  assert.deepEqual(btText, apText);
+  const btBare = normalizeReadOnlyFencedCode([para("```\nplain\n```")]);
+  const apBare = normalizeReadOnlyFencedCode([para("'''\nplain\n'''")]);
+  assert.deepEqual(btBare, apBare);
+});
+
+test("AC apostrophe: mismatched ```python ... ''' left unchanged", () => {
+  const input = [para("```python\nprint(1)\n'''")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, input);
+  assert.equal(out[0], input[0]);
+});
+
+test("AC apostrophe: mismatched '''python ... ``` left unchanged", () => {
+  const input = [para("'''python\nprint(1)\n```")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, input);
+  assert.equal(out[0], input[0]);
+});
+
+test("AC apostrophe: multi-paragraph mismatched delimiters left unchanged", () => {
+  const backtickOpenApostropheClose = [
+    para("```python"),
+    para("print(1)"),
+    para("'''"),
+  ];
+  const apostropheOpenBacktickClose = [
+    para("'''python"),
+    para("print(1)"),
+    para("```"),
+  ];
+  assert.deepEqual(
+    normalizeReadOnlyFencedCode(backtickOpenApostropheClose),
+    backtickOpenApostropheClose,
+  );
+  assert.deepEqual(
+    normalizeReadOnlyFencedCode(apostropheOpenBacktickClose),
+    apostropheOpenBacktickClose,
+  );
+});
+
+test("AC apostrophe: inline triple quotes left unchanged", () => {
+  const input = [para("Use ''' to make a Python multiline string")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, input);
+  assert.equal(out[0], input[0]);
+});
+
+test("AC apostrophe: Python multiline-string-looking prose left unchanged", () => {
+  const input = [para("message = '''hello'''")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, input);
+  assert.equal(out[0], input[0]);
+});
+
+test("AC apostrophe: mixed prose + '''python fence + prose splits", () => {
+  const input = [para("Before\n'''python\nx = 1\n'''\nAfter")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, [
+    { type: "paragraph", content: "Before" },
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: "x = 1",
+    },
+    { type: "paragraph", content: "After" },
+  ]);
+});
+
+test("AC apostrophe: mixed prose + '''text / unlabeled fences split", () => {
+  const textOut = normalizeReadOnlyFencedCode([
+    para("Before\n'''text\nplain\n'''\nAfter"),
+  ]);
+  assert.deepEqual(textOut, [
+    { type: "paragraph", content: "Before" },
+    { type: "codeBlock", props: { language: "text" }, content: "plain" },
+    { type: "paragraph", content: "After" },
+  ]);
+  const bareOut = normalizeReadOnlyFencedCode([
+    para("Before\n'''\nplain\n'''\nAfter"),
+  ]);
+  assert.deepEqual(bareOut, [
+    { type: "paragraph", content: "Before" },
+    { type: "codeBlock", props: { language: "text" }, content: "plain" },
+    { type: "paragraph", content: "After" },
+  ]);
+});
+
+test("AC apostrophe: multiple complete fences including mixed delimiters", () => {
+  const input = [
+    para(
+      "Intro\n'''text\nline 1\n'''\nMiddle\n```python\nprint(\"x\")\n```\nEnd",
+    ),
+  ];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, [
+    { type: "paragraph", content: "Intro" },
+    {
+      type: "codeBlock",
+      props: { language: "text" },
+      content: "line 1",
+    },
+    { type: "paragraph", content: "Middle" },
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: 'print("x")',
+    },
+    { type: "paragraph", content: "End" },
+  ]);
+});
+
+test("AC apostrophe: nested children '''python sequence → codeBlock", () => {
+  const column = {
+    type: "column",
+    props: { width: 1 },
+    children: [para("'''python"), para("print(1)"), para("'''")],
+  };
+  const out = normalizeReadOnlyFencedCode([column]);
+  assert.deepEqual(out[0].children, [
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: "print(1)",
+    },
+  ]);
+  assert.notEqual(out[0], column);
+});
+
+test("AC apostrophe: unsupported '''javascript left unchanged", () => {
+  const input = [para("'''javascript\nconsole.log(1)\n'''")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, input);
+});
+
+test("AC apostrophe: unmatched incomplete '''python left unchanged", () => {
+  const input = [para("Before\n'''python\nprint(1)\nstill open")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, input);
+  assert.equal(out[0], input[0]);
+});
+
+test("AC apostrophe: does not mutate input document", () => {
+  const input = [para("'''python"), para('print("x")'), para("'''")];
+  const snapshot = structuredClone(input);
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(input, snapshot);
+  assert.equal(out[0].type, "codeBlock");
+  assert.notEqual(out, input);
+});
+
+test("AC apostrophe: multi-paragraph '''python open/body/close → codeBlock", () => {
+  const input = [
+    para("Intro"),
+    para("'''python"),
+    para('print("a")'),
+    para("'''"),
+    para("Outro"),
+  ];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.equal(out.length, 3);
+  assert.equal(out[0].content, "Intro");
+  assert.deepEqual(out[1], {
+    type: "codeBlock",
+    props: { language: "python" },
+    content: 'print("a")',
+  });
+  assert.equal(out[2].content, "Outro");
 });

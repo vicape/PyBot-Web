@@ -6,15 +6,20 @@
  * Only empty/`text` or `python` fence tokens are accepted; other langs are left as-is.
  *
  * BlockNote's default codeBlock language id is `"text"` (plain text), so explicit
- * ```text fences map to language="text".
+ * ```text / '''text fences map to language="text".
  *
  * Also splits a single plain-text paragraph that embeds complete supported fences
  * together with surrounding prose (read-only only).
+ *
+ * Fence delimiters: three backticks (```) or three apostrophes ('''). Opening and
+ * closing delimiter types must match. Only complete-line fence syntax is recognized
+ * (inline ''' / ``` are never treated as fences).
  */
 
-const OPEN_FENCE_RE = /^```([A-Za-z0-9_+-]*)\s*$/;
-const CLOSE_FENCE_RE = /^```\s*$/;
-const SINGLE_FENCE_RE = /^```([A-Za-z0-9_+-]*)\r?\n([\s\S]*?)\r?\n```$/;
+const BACKTICK_OPEN_RE = /^```([A-Za-z0-9_+-]*)\s*$/;
+const APOSTROPHE_OPEN_RE = /^'''([A-Za-z0-9_+-]*)\s*$/;
+const BACKTICK_CLOSE_RE = /^```\s*$/;
+const APOSTROPHE_CLOSE_RE = /^'''\s*$/;
 
 /**
  * Map a fence language token to a BlockNote codeBlock language id.
@@ -31,31 +36,48 @@ function mapFenceLanguage(token) {
 /**
  * Classify a plain-text paragraph for fence scanning.
  * Distinguishes "not a fence" from "unsupported opening fence" so a later
- * ```text / ```javascript / etc. cannot be swallowed as body of an earlier fence.
+ * ```text / ```javascript / '''python / etc. cannot be swallowed as body of
+ * an earlier fence.
  *
- * Bare ``` is both an unlabeled open and a close; callers treat it as open at
- * sequence start and as close while collecting a body.
+ * Bare ``` / ''' is both an unlabeled open and a close; callers treat it as
+ * open at sequence start and as close while collecting a body (same delimiter
+ * only).
  *
  * @returns {{ kind: "not-a-fence" }
- *   | { kind: "bare-fence", language: "text" }
- *   | { kind: "supported-open", language: "text"|"python" }
- *   | { kind: "unsupported-open", token: string }}
+ *   | { kind: "bare-fence", delimiter: "backtick"|"apostrophe", language: "text" }
+ *   | { kind: "supported-open", delimiter: "backtick"|"apostrophe", language: "text"|"python" }
+ *   | { kind: "unsupported-open", delimiter: "backtick"|"apostrophe", token: string }}
  */
 export function classifyFenceLine(text) {
   if (text == null) return { kind: "not-a-fence" };
   const trimmed = text.trim();
-  const m = trimmed.match(OPEN_FENCE_RE);
-  if (!m) return { kind: "not-a-fence" };
-  const token = m[1] ?? "";
-  // Bare ``` matches open (empty token) and close — keep distinct from labeled opens.
-  if (token === "" && CLOSE_FENCE_RE.test(trimmed)) {
-    return { kind: "bare-fence", language: "text" };
+
+  let delimiter = null;
+  let token = "";
+  let m = trimmed.match(BACKTICK_OPEN_RE);
+  if (m) {
+    delimiter = "backtick";
+    token = m[1] ?? "";
+  } else {
+    m = trimmed.match(APOSTROPHE_OPEN_RE);
+    if (m) {
+      delimiter = "apostrophe";
+      token = m[1] ?? "";
+    }
+  }
+  if (delimiter == null) return { kind: "not-a-fence" };
+
+  const closeRe =
+    delimiter === "backtick" ? BACKTICK_CLOSE_RE : APOSTROPHE_CLOSE_RE;
+  // Bare fence matches open (empty token) and close — keep distinct from labeled opens.
+  if (token === "" && closeRe.test(trimmed)) {
+    return { kind: "bare-fence", delimiter, language: "text" };
   }
   const language = mapFenceLanguage(token);
   if (language != null) {
-    return { kind: "supported-open", language };
+    return { kind: "supported-open", delimiter, language };
   }
-  return { kind: "unsupported-open", token };
+  return { kind: "unsupported-open", delimiter, token };
 }
 
 function hasNoChildren(block) {
@@ -151,12 +173,17 @@ export function parseSupportedFenceSegments(text) {
       lineClass.kind === "bare-fence"
     ) {
       const language = lineClass.language;
+      const delimiter = lineClass.delimiter;
       const codeLines = [];
       let j = i + 1;
       let closed = false;
       while (j < lines.length) {
         const midClass = classifyFenceLine(lines[j]);
         if (midClass.kind === "bare-fence") {
+          if (midClass.delimiter !== delimiter) {
+            // Mismatched closing delimiter — do not partially transform.
+            return null;
+          }
           closed = true;
           break;
         }
@@ -196,13 +223,16 @@ function tryParseSingleFenceBlock(block) {
   if (!hasNoChildren(block)) return null;
   const text = extractPlainText(block);
   if (text == null) return null;
-  const trimmed = text.replace(/^\uFEFF/, "").replace(/\s+$/, "").replace(/^\s+/, "");
-  // Prefer exact interior: trim only outer whitespace for matching.
-  const match = trimmed.match(SINGLE_FENCE_RE);
-  if (!match) return null;
-  const language = mapFenceLanguage(match[1]);
-  if (language == null) return null;
-  return makeCodeBlock(match[2], language);
+  const trimmed = text
+    .replace(/^\uFEFF/, "")
+    .replace(/\s+$/, "")
+    .replace(/^\s+/, "");
+  // Require open + at least one body line + close (same as prior SINGLE_FENCE_RE).
+  if (trimmed.split(/\r?\n/).length < 3) return null;
+  const segments = parseSupportedFenceSegments(trimmed);
+  if (segments == null || segments.length !== 1) return null;
+  if (segments[0].type !== "codeBlock") return null;
+  return segments[0];
 }
 
 /**
@@ -257,6 +287,7 @@ function normalizeSiblingSequences(blocks) {
         openClass.kind === "supported-open" || openClass.kind === "bare-fence";
       if (canStart) {
         const language = openClass.language;
+        const delimiter = openClass.delimiter;
         let j = i + 1;
         const codeParts = [];
         let closed = false;
@@ -266,8 +297,12 @@ function normalizeSiblingSequences(blocks) {
           const midText = extractPlainText(mid);
           if (midText == null) break;
           const midClass = classifyFenceLine(midText);
-          // Bare ``` closes the current sequence (same as original close-first check).
+          // Bare fence with the SAME delimiter closes the current sequence.
           if (midClass.kind === "bare-fence") {
+            if (midClass.delimiter !== delimiter) {
+              // Mismatched delimiter — abort so originals stay unchanged.
+              break;
+            }
             closed = true;
             break;
           }
