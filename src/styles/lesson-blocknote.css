@@ -942,7 +942,7 @@
 
   /*
    * Phones (≤480): compact educational-reader scale. Hierarchy stays obvious;
-   * H1 ~29px / H2 ~23px / H3 ~19px — type scale unchanged; rhythm polished.
+   * H1 ~26px / H2 ~23px / H3 ~19px — H1 tightened only; lower levels unchanged.
    */
   .pbc-lesson-doc--preview .bn-default-styles {
     font-size: 16px;
@@ -971,10 +971,10 @@
   }
 
   .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"] {
-    --level: 1.8125rem; /* 29px — within 28–30px phone H1 band */
-    padding-top: 0.85rem;
+    --level: 1.625rem; /* 26px — tighter phone H1 without touching H2+ */
+    padding-top: 0.65rem;
     padding-bottom: 0.04rem;
-    line-height: 1.12;
+    line-height: 1.10;
     font-weight: 700;
   }
 

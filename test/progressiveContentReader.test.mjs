@@ -385,19 +385,19 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
   assert.ok(phoneBlock, "480px phone typography media query must exist");
   const body = phoneBlock[1];
 
-  // H1 / top-level: 1.8125rem (29px) within 28–30px band — not BlockNote 3em.
+  // H1 / top-level: 1.625rem (26px) — not BlockNote 3em; H2+ unchanged.
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*1\.8125rem/s,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*1\.625rem/s,
   );
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*line-height:\s*1\.12/s,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*line-height:\s*1\.10/s,
   );
-  // Stronger pre-section space before major headings; tight post-heading association.
+  // Compact pre-section space before H1; tight post-heading association.
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*0\.85rem/s,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*0\.65rem/s,
   );
   assert.match(
     body,
