@@ -796,6 +796,75 @@
     word-break: normal;
     overflow-wrap: break-word;
   }
+
+  /*
+   * Tablet / small-tablet (≤768): BlockNote defaults heading --level to 3em/2em
+   * (48px/32px at 16px base) — poster-scale on phones. Cap below desktop sizes
+   * while keeping clear hierarchy; phones tighten further at ≤480.
+   */
+  .pbc-lesson-doc--preview .bn-default-styles {
+    font-size: 16px;
+    line-height: 1.55;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="paragraph"],
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="bulletListItem"],
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="numberedListItem"],
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="checkListItem"] {
+    font-size: 16px;
+    line-height: 1.55;
+    font-weight: normal;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"] {
+    --level: 2.25rem; /* ~36px — below BlockNote 3em, above phone cap */
+    padding-top: 0.7rem;
+    line-height: 1.14;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="2"] {
+    --level: 1.75rem; /* ~28px */
+    line-height: 1.18;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="3"] {
+    --level: 1.375rem; /* ~22px */
+    line-height: 1.24;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="4"],
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="5"],
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="6"] {
+    --level: 1.1875rem; /* ~19px */
+    line-height: 1.3;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content {
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="divider"] hr {
+    margin: 0.55rem 0;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-group .bn-block-group {
+    margin-left: 1.15rem;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="codeBlock"] {
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="codeBlock"] > pre {
+    padding: 0.75rem 0.85rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 720px) {
@@ -825,6 +894,70 @@
 
   .pbc-lesson-doc--preview .bn-editor {
     padding-inline: 0;
+  }
+
+  /*
+   * Phones (≤480): educational-reader scale. BlockNote H1 --level:3em ≈48px is
+   * poster-like; cap near 32px with compact section rhythm for density.
+   */
+  .pbc-lesson-doc--preview .bn-default-styles {
+    font-size: 16px;
+    line-height: 1.55;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="paragraph"],
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="bulletListItem"],
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="numberedListItem"],
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="checkListItem"] {
+    font-size: 16px;
+    line-height: 1.55;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"] {
+    --level: 2rem; /* 32px — within 30–34px phone H1 band */
+    padding-top: 0.55rem;
+    line-height: 1.12;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="2"] {
+    --level: 1.5625rem; /* 25px */
+    line-height: 1.16;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="3"] {
+    --level: 1.3125rem; /* 21px */
+    line-height: 1.24;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="4"],
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="5"],
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="6"] {
+    --level: 1.125rem; /* 18px */
+    line-height: 1.3;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content {
+    padding-top: 0.15rem;
+    padding-bottom: 0.15rem;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="divider"] hr {
+    margin: 0.45rem 0;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-group .bn-block-group {
+    margin-left: 1rem;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="codeBlock"] {
+    font-size: 0.8125rem; /* 13px */
+    line-height: 1.5;
+  }
+
+  .pbc-lesson-doc--preview .bn-block-content[data-content-type="codeBlock"] > pre {
+    padding: 0.65rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.5;
   }
 }
 

@@ -25,6 +25,10 @@ const blockNoteEditorCss = readFileSync(
   resolve(root, "node_modules/@blocknote/core/src/editor/editor.css"),
   "utf8",
 );
+const blockNoteBlockCss = readFileSync(
+  resolve(root, "node_modules/@blocknote/core/src/editor/Block.css"),
+  "utf8",
+);
 
 const contentSnapshot = {
   sourceType: "content",
@@ -355,5 +359,164 @@ test("AC wide content: code/tables scroll internally inside lesson doc", () => {
   assert.match(
     lessonCss,
     /\.pbc-lesson-doc\s+(?:img|video)[\s\S]*?max-width:\s*100%/s,
+  );
+});
+
+test("AC mobile typography: BlockNote default heading --level is poster-scale (3em/2em)", () => {
+  // Root-cause anchor: installed BlockNote sizes headings via --level em units.
+  assert.match(
+    blockNoteBlockCss,
+    /\[data-content-type="heading"\]\s*\{[^}]*--level:\s*3em/s,
+  );
+  assert.match(
+    blockNoteBlockCss,
+    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*--level:\s*2em/s,
+  );
+  assert.match(
+    blockNoteBlockCss,
+    /\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*18px/s,
+  );
+});
+
+test("AC mobile typography: phone ≤480 caps preview heading scale + body readability", () => {
+  const phoneBlock = lessonCss.match(
+    /@media \(max-width:\s*480px\)\s*\{([\s\S]*?)\n\}\s*\n\/\* —— Asignar lección/,
+  );
+  assert.ok(phoneBlock, "480px phone typography media query must exist");
+  const body = phoneBlock[1];
+
+  // H1 / top-level: 2rem (32px) within 30–34px band — not BlockNote 3em.
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*2rem/s,
+  );
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*line-height:\s*1\.12/s,
+  );
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*0\.55rem/s,
+  );
+
+  // Hierarchy remains distinct.
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*--level:\s*1\.5625rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*--level:\s*1\.3125rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="4"\][\s\S]*?--level:\s*1\.125rem/s,
+  );
+
+  // Body ~16px / comfortable line-height.
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-default-styles\s*\{[^}]*font-size:\s*16px/s,
+  );
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-default-styles\s*\{[^}]*line-height:\s*1\.55/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="paragraph"\][\s\S]*?font-size:\s*16px[\s\S]*?line-height:\s*1\.55/s,
+  );
+
+  // Compact vertical rhythm (not cramped).
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\s*\{[^}]*padding-top:\s*0\.15rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="divider"\]\s+hr\s*\{[^}]*margin:\s*0\.45rem\s+0/s,
+  );
+
+  // Code: mobile monospace + internal scroll, no giant padding.
+  assert.match(
+    body,
+    /\[data-content-type="codeBlock"\]\s*\{[^}]*font-size:\s*0\.8125rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*padding:\s*0\.65rem\s+0\.75rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*font-size:\s*0\.8125rem/s,
+  );
+
+  // Nested lists: compact indent (not BlockNote 24px cascade).
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-group\s+\.bn-block-group\s*\{[^}]*margin-left:\s*1rem/s,
+  );
+
+  // Width repair preserved inside same phone query.
+  assert.match(body, /\.pbc-lesson-doc\s*\{[^}]*padding:\s*0\.75rem\s+0\.65rem/s);
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-editor\s*\{[^}]*padding-inline:\s*0/s,
+  );
+});
+
+test("AC mobile typography: tablet ≤768 uses intermediate heading scale below BlockNote defaults", () => {
+  const tabletBlock = lessonCss.match(
+    /@media \(max-width:\s*768px\)\s*\{([\s\S]*?)\n\}\s*\n@media \(max-width:\s*720px\)/,
+  );
+  assert.ok(tabletBlock, "768px tablet typography media query must exist");
+  const body = tabletBlock[1];
+
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*2\.25rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*--level:\s*1\.75rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*--level:\s*1\.375rem/s,
+  );
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-default-styles\s*\{[^}]*font-size:\s*16px/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*overflow-x:\s*auto/s,
+  );
+
+  // Width gutter collapse still present (second-pass must not regress width fix).
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-editor\s*\{[^}]*padding-inline:\s*0\.15rem/s,
+  );
+});
+
+test("AC mobile typography: overrides stay scoped to read-only preview (desktop Design C untouched)", () => {
+  // No unscoped heading --level overrides outside mobile media queries.
+  const outsideMobile = lessonCss
+    .replace(/@media\s*\([^)]*max-width:\s*768px\)\s*\{[\s\S]*?\n\}\s*\n@media \(max-width:\s*720px\)/, "")
+    .replace(/@media\s*\([^)]*max-width:\s*480px\)\s*\{[\s\S]*?\n\}\s*\n\/\* —— Asignar lección/, "/* —— Asignar lección");
+
+  assert.doesNotMatch(
+    outsideMobile,
+    /\.pbc-lesson-doc(?!--preview)[^{]*\{[^}]*--level:/s,
+  );
+  assert.match(
+    lessonCss,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]/,
+  );
+  // Editable path retains mobile handle gutter (not zeroed like preview).
+  assert.match(
+    lessonCss,
+    /\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)\s+\.bn-editor\s*\{[^}]*padding-inline:\s*2\.25rem/s,
   );
 });
