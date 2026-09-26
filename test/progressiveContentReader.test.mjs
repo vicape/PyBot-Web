@@ -210,6 +210,7 @@ test("responsive contract: Design C on-demand index, no permanent local rail", (
   assert.match(cssSrc, /\.pbc-content-reader__nav--drawer/);
   assert.match(cssSrc, /\.pbc-content-reader__index-backdrop/);
   assert.match(cssSrc, /\.pbc-content-reader__nav-toggle/);
+  assert.match(cssSrc, /\.pbc-content-reader__header-meta/);
   assert.match(cssSrc, /-webkit-line-clamp:\s*2/);
   assert.match(cssSrc, /@media \(max-width: 1024px\)/);
   assert.match(cssSrc, /@media \(max-width: 900px\)/);
@@ -221,7 +222,30 @@ test("responsive contract: Design C on-demand index, no permanent local rail", (
   assert.match(viewerSrc, /indexOpen/);
   assert.match(viewerSrc, /pcInThisLessonLearn/);
   assert.match(sharedSrc, /pbc-shared-content__secondary-actions/);
+  assert.match(sharedSrc, /pbc-shared-content__title-row/);
   assert.match(sharedSrc, /pcMoreOptions/);
+});
+
+test("AC1 structure access: single primary control; overview return demoted into panel", () => {
+  const lessonModeBlock = viewerSrc.match(
+    /function LessonMode[\s\S]*?function ProgressiveMultiLessonReader/,
+  );
+  assert.ok(lessonModeBlock, "LessonMode must exist");
+  const headerBlock = lessonModeBlock[0].match(
+    /className="pbc-content-reader__header"[\s\S]*?<\/header>/,
+  );
+  assert.ok(headerBlock, "lesson header must exist");
+  // Exactly one structure toggle in the reading header
+  assert.equal((headerBlock[0].match(/pcViewStructure/g) || []).length, 1);
+  assert.doesNotMatch(headerBlock[0], /pcTocTitle/);
+  // Competing primary "Índice" must not sit beside "Ver estructura" in the header
+  assert.equal((headerBlock[0].match(/pbc-content-reader__nav-toggle/g) || []).length, 1);
+  assert.doesNotMatch(headerBlock[0], /pbc-content-reader__back/);
+  // Return-to-overview preserved inside the structure panel
+  assert.match(lessonModeBlock[0], /onBackToOverview=\{onBack\}/);
+  assert.match(viewerSrc, /onBackToOverview/);
+  assert.match(cssSrc, /\.pbc-shared-content__title-row/);
+  assert.match(cssSrc, /\.pbc-content-reader__header-meta/);
 });
 
 test("reader i18n keys present in every supported language", () => {

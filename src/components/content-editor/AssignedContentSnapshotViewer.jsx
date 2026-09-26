@@ -93,7 +93,7 @@ function resolveLearningObjectives(snapshot) {
 }
 
 function LearningObjectives({ objectives }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   if (!objectives?.length) return null;
 
   return (
@@ -118,7 +118,15 @@ function LearningObjectives({ objectives }) {
   );
 }
 
-function ReaderOutline({ units, selectedLessonId, onSelectLesson, open, onClose }) {
+function ReaderOutline({
+  units,
+  selectedLessonId,
+  onSelectLesson,
+  open,
+  onClose,
+  onBackToOverview,
+  overviewTitle,
+}) {
   const panelRef = useRef(null);
 
   useEffect(() => {
@@ -159,6 +167,18 @@ function ReaderOutline({ units, selectedLessonId, onSelectLesson, open, onClose 
             {t("pcClose")}
           </button>
         </div>
+        {onBackToOverview ? (
+          <button
+            type="button"
+            className="pbc-content-reader__back"
+            onClick={() => {
+              onBackToOverview();
+              onClose?.();
+            }}
+          >
+            {overviewTitle || t("pcReaderOutline")}
+          </button>
+        ) : null}
         <ol className="pbc-content-reader__outline-list">
           {(units || []).map((unit) => (
             <li key={unit.id} className="pbc-content-reader__outline-unit">
@@ -292,18 +312,17 @@ function LessonMode({ model, selectedLessonId, onSelectLesson, onBack, learningO
             aria-controls="pbc-reader-index-panel"
             onClick={() => setIndexOpen((v) => !v)}
           >
-            {t("pcTocTitle")}
-          </button>
-          <p className="pbc-content-reader__position" aria-live="polite">
-            {positionLabel}
-          </p>
-          <button type="button" className="pbc-btn pbc-btn--ghost pbc-content-reader__back" onClick={onBack}>
             {t("pcViewStructure")}
           </button>
+          <div className="pbc-content-reader__header-meta">
+            <p className="pbc-content-reader__position" aria-live="polite">
+              {positionLabel}
+            </p>
+            {lesson.unitTitle ? (
+              <p className="pbc-content-reader__context-unit">{lesson.unitTitle}</p>
+            ) : null}
+          </div>
         </div>
-        {lesson.unitTitle ? (
-          <p className="pbc-content-reader__context-unit">{lesson.unitTitle}</p>
-        ) : null}
         <h2 id="pbc-reader-lesson-title" className="pbc-content-reader__lesson-heading">
           {lesson.title || t("pcUntitled")}
         </h2>
@@ -316,6 +335,8 @@ function LessonMode({ model, selectedLessonId, onSelectLesson, onBack, learningO
           onSelectLesson={onSelectLesson}
           open={indexOpen}
           onClose={() => setIndexOpen(false)}
+          onBackToOverview={onBack}
+          overviewTitle={model.title}
         />
 
         <article className="pbc-content-reader__article" aria-labelledby="pbc-reader-lesson-title">

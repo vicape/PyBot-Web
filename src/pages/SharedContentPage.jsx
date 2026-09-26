@@ -184,11 +184,60 @@ export default function SharedContentPage() {
           <span aria-hidden> › </span>
           <span>{content?.title || t("pcNavContent")}</span>
         </nav>
-        <header className="pbc-content-editor__head">
+        <header className="pbc-content-editor__head pbc-shared-content__head">
           <div className="pbc-shared-content__banner" role="status">
             {t("pcReadOnlyShared")}
           </div>
-          <h1 className="pbc-hero-block__title">{content?.title}</h1>
+          <div className="pbc-shared-content__title-row">
+            <h1 className="pbc-hero-block__title pbc-shared-content__title">{content?.title}</h1>
+            <div className="pbc-shared-content__secondary-actions" ref={actionsRef}>
+              <button
+                type="button"
+                className="pbc-shared-content__actions-toggle"
+                aria-label={t("pcMoreOptions")}
+                aria-expanded={actionsOpen}
+                aria-haspopup="menu"
+                disabled={busy}
+                onClick={() => setActionsOpen((v) => !v)}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <circle cx="5" cy="12" r="1.75" fill="currentColor" />
+                  <circle cx="12" cy="12" r="1.75" fill="currentColor" />
+                  <circle cx="19" cy="12" r="1.75" fill="currentColor" />
+                </svg>
+              </button>
+              {actionsOpen ? (
+                <div className="pbc-shared-content__actions-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="pbc-shared-content__actions-item"
+                    disabled={busy}
+                    onClick={() => {
+                      setActionsOpen(false);
+                      void handleCopy();
+                    }}
+                  >
+                    {busy ? t("pcCopying") : t("pcCreateCopy")}
+                  </button>
+                  {canAssign ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="pbc-shared-content__actions-item"
+                      disabled={busy}
+                      onClick={() => {
+                        setActionsOpen(false);
+                        setAssignOpen(true);
+                      }}
+                    >
+                      {t("pcAssignAsIs")}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
           <ContentMetaChips
             content={{
               ...content,
@@ -200,53 +249,6 @@ export default function SharedContentPage() {
             }}
             showAuthor
           />
-          <div className="pbc-shared-content__secondary-actions" ref={actionsRef}>
-            <button
-              type="button"
-              className="pbc-shared-content__actions-toggle"
-              aria-label={t("pcMoreOptions")}
-              aria-expanded={actionsOpen}
-              aria-haspopup="menu"
-              disabled={busy}
-              onClick={() => setActionsOpen((v) => !v)}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <circle cx="5" cy="12" r="1.75" fill="currentColor" />
-                <circle cx="12" cy="12" r="1.75" fill="currentColor" />
-                <circle cx="19" cy="12" r="1.75" fill="currentColor" />
-              </svg>
-            </button>
-            {actionsOpen ? (
-              <div className="pbc-shared-content__actions-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="pbc-shared-content__actions-item"
-                  disabled={busy}
-                  onClick={() => {
-                    setActionsOpen(false);
-                    void handleCopy();
-                  }}
-                >
-                  {busy ? t("pcCopying") : t("pcCreateCopy")}
-                </button>
-                {canAssign ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="pbc-shared-content__actions-item"
-                    disabled={busy}
-                    onClick={() => {
-                      setActionsOpen(false);
-                      setAssignOpen(true);
-                    }}
-                  >
-                    {t("pcAssignAsIs")}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
         </header>
 
         <AssignedContentSnapshotViewer snapshot={snapshot} />
