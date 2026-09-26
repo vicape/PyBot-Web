@@ -394,9 +394,18 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
     body,
     /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*line-height:\s*1\.12/s,
   );
+  // Stronger pre-section space before major headings; tight post-heading association.
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*0\.35rem/s,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*0\.85rem/s,
+  );
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-bottom:\s*0\.04rem/s,
+  );
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*font-weight:\s*700/s,
   );
 
   // Hierarchy remains distinct (H2 ~23px, H3 ~19px, H4+ ~17px).
@@ -406,14 +415,34 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
   );
   assert.match(
     body,
+    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*padding-top:\s*1rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*font-weight:\s*700/s,
+  );
+  assert.match(
+    body,
     /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*--level:\s*1\.1875rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*padding-top:\s*0\.4rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*font-weight:\s*600/s,
   );
   assert.match(
     body,
     /\[data-content-type="heading"\]\[data-level="4"\][\s\S]*?--level:\s*1\.0625rem/s,
   );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="4"\][\s\S]*?font-weight:\s*600/s,
+  );
 
-  // Body ~16px / comfortable line-height.
+  // Body ~16px / comfortable line-height (1.5–1.6).
   assert.match(
     body,
     /\.pbc-lesson-doc--preview\s+\.bn-default-styles\s*\{[^}]*font-size:\s*16px/s,
@@ -426,15 +455,27 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
     body,
     /\[data-content-type="paragraph"\][\s\S]*?font-size:\s*16px[\s\S]*?line-height:\s*1\.55/s,
   );
-
-  // Compact vertical rhythm (not cramped).
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\s*\{[^}]*padding-top:\s*0\.08rem/s,
+    /\[data-content-type="paragraph"\][\s\S]*?color:\s*var\(--pbc-lesson-ink\)/s,
+  );
+
+  // Compact block rhythm (not cramped); headings own section spacing.
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\s*\{[^}]*padding-top:\s*0\.06rem/s,
   );
   assert.match(
     body,
-    /\[data-content-type="divider"\]\s+hr\s*\{[^}]*margin:\s*0\.35rem\s+0/s,
+    /\[data-content-type="divider"\]\s+hr\s*\{[^}]*margin:\s*0\.5rem\s+0/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="divider"\]\s+hr\s*\{[^}]*width:\s*100%/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="divider"\]\s+hr\s*\{[^}]*border-top:\s*1px\s+solid\s+var\(--pbc-lesson-border/s,
   );
 
   // Code: mobile monospace + internal scroll, compact padding, preserve whitespace.
@@ -444,7 +485,7 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
   );
   assert.match(
     body,
-    /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*padding:\s*0\.55rem\s+0\.65rem/s,
+    /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*padding:\s*0\.5rem\s+0\.6rem/s,
   );
   assert.match(
     body,
@@ -459,10 +500,20 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
     /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*overflow-x:\s*auto/s,
   );
 
-  // Nested lists: compact indent (not BlockNote 24px cascade).
+  // Nested lists: compact indent (preserve line width; not BlockNote 24px cascade).
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-group\s+\.bn-block-group\s*\{[^}]*margin-left:\s*0\.85rem/s,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-group\s+\.bn-block-group\s*\{[^}]*margin-left:\s*0\.75rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="numberedListItem"\][\s\S]*?padding-top:\s*0\.1rem/s,
+  );
+
+  // First heading in a lesson avoids a large blank band.
+  assert.match(
+    body,
+    /\.bn-block-outer:first-child[\s\S]*?\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*0\.12rem/s,
   );
 
   // Width repair preserved inside same phone query.
@@ -493,7 +544,15 @@ test("AC mobile typography: tablet ≤768 uses intermediate heading scale below 
   );
   assert.match(
     body,
+    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*padding-top:\s*1rem/s,
+  );
+  assert.match(
+    body,
     /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*--level:\s*1\.375rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*font-weight:\s*600/s,
   );
   assert.match(
     body,
@@ -502,6 +561,14 @@ test("AC mobile typography: tablet ≤768 uses intermediate heading scale below 
   assert.match(
     body,
     /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*overflow-x:\s*auto/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="divider"\]\s+hr\s*\{[^}]*margin:\s*0\.5rem\s+0/s,
+  );
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-group\s+\.bn-block-group\s*\{[^}]*margin-left:\s*1rem/s,
   );
 
   // Width gutter collapse still present (second-pass must not regress width fix).
