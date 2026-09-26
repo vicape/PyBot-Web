@@ -205,13 +205,23 @@ test("SharedContentPage uses progressive viewer; no scroll-to-anchor TOC reader"
   assert.match(sharedSrc, /owner_id === user\.id/);
 });
 
-test("responsive contract: local outline collapses on narrow viewports", () => {
+test("responsive contract: Design C on-demand index, no permanent local rail", () => {
   assert.match(cssSrc, /\.pbc-content-reader__layout/);
-  assert.match(cssSrc, /grid-template-columns:\s*minmax\(180px,\s*240px\)/);
-  assert.match(cssSrc, /@media \(max-width: 900px\)/);
-  assert.match(cssSrc, /\.pbc-content-reader__outline-list--mobile-collapsed/);
+  assert.match(cssSrc, /\.pbc-content-reader__nav--drawer/);
+  assert.match(cssSrc, /\.pbc-content-reader__index-backdrop/);
   assert.match(cssSrc, /\.pbc-content-reader__nav-toggle/);
-  assert.match(cssSrc, /max-width:\s*48rem/);
+  assert.match(cssSrc, /-webkit-line-clamp:\s*2/);
+  assert.match(cssSrc, /@media \(max-width: 1024px\)/);
+  assert.match(cssSrc, /@media \(max-width: 900px\)/);
+  assert.match(cssSrc, /@media \(max-width: 768px\)/);
+  assert.match(cssSrc, /max-width:\s*46rem/);
+  // Permanent dual-column local rail must not remain the desktop default
+  assert.doesNotMatch(cssSrc, /\.pbc-content-reader__layout\s*\{[^}]*grid-template-columns:\s*minmax\(180px,\s*240px\)/);
+  assert.match(viewerSrc, /pcTocTitle/);
+  assert.match(viewerSrc, /indexOpen/);
+  assert.match(viewerSrc, /pcInThisLessonLearn/);
+  assert.match(sharedSrc, /pbc-shared-content__secondary-actions/);
+  assert.match(sharedSrc, /pcMoreOptions/);
 });
 
 test("reader i18n keys present in every supported language", () => {
@@ -221,7 +231,9 @@ test("reader i18n keys present in every supported language", () => {
     "pcViewStructure",
     "pcLessonPosition",
     "pcReaderOutline",
+    "pcInThisLessonLearn",
     "pcNoContentToShow",
+    "pcTocTitle",
   ];
   for (const lang of SUPPORTED_LANGS) {
     for (const key of keys) {
@@ -231,4 +243,19 @@ test("reader i18n keys present in every supported language", () => {
   }
   assert.match(PYBOTCLASS_STRINGS.es.pcLessonPosition, /\{n\}/);
   assert.match(PYBOTCLASS_STRINGS.es.pcLessonPosition, /\{total\}/);
+});
+
+test("objectives helper only when real data exists; teacher actions secondary", () => {
+  assert.match(viewerSrc, /resolveLearningObjectives/);
+  assert.match(viewerSrc, /learning_objectives/);
+  assert.match(viewerSrc, /pcInThisLessonLearn/);
+  assert.doesNotMatch(viewerSrc, /En esta lección aprenderás/);
+  assert.match(sharedSrc, /pbc-shared-content__actions-menu/);
+  assert.match(sharedSrc, /role="menu"/);
+  assert.match(sharedSrc, /pcCreateCopy/);
+  assert.match(sharedSrc, /pcAssignAsIs/);
+  assert.doesNotMatch(
+    sharedSrc,
+    /pbc-content-editor__actions[\s\S]*pbc-btn--primary[\s\S]*pcCreateCopy/,
+  );
 });

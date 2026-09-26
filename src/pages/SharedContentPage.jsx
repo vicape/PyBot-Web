@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import AssignedContentSnapshotViewer from "../components/content-editor/AssignedContentSnapshotViewer.jsx";
 import AssignLessonModal from "../components/content-editor/AssignLessonModal.jsx";
@@ -33,6 +33,26 @@ export default function SharedContentPage() {
   const [originalOwnerName, setOriginalOwnerName] = useState("");
   const [originalCreatorName, setOriginalCreatorName] = useState("");
   const [firstCommunityPublisherName, setFirstCommunityPublisherName] = useState("");
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsRef = useRef(null);
+
+  useEffect(() => {
+    if (!actionsOpen) return undefined;
+    const onDoc = (event) => {
+      if (actionsRef.current && !actionsRef.current.contains(event.target)) {
+        setActionsOpen(false);
+      }
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setActionsOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [actionsOpen]);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -111,12 +131,18 @@ export default function SharedContentPage() {
           lessons: lessonSnaps,
         });
       }
+      const learningObjectives = Array.isArray(c.learning_objectives)
+        ? c.learning_objectives.map((item) => String(item ?? "").trim()).filter(Boolean)
+        : [];
       setSnapshot({
         schemaVersion: 2,
         sourceType: "content",
         sourceId: c.id,
         title: c.title,
         description: c.description || "",
+        contentMeta: {
+          learning_objectives: learningObjectives,
+        },
         units: unitSnaps,
       });
       setLoading(false);
@@ -174,19 +200,51 @@ export default function SharedContentPage() {
             }}
             showAuthor
           />
-          <div className="pbc-content-editor__actions">
-            <button type="button" className="pbc-btn pbc-btn--primary" disabled={busy} onClick={() => void handleCopy()}>
-              {busy ? t("pcCopying") : t("pcCreateCopy")}
+          <div className="pbc-shared-content__secondary-actions" ref={actionsRef}>
+            <button
+              type="button"
+              className="pbc-shared-content__actions-toggle"
+              aria-label={t("pcMoreOptions")}
+              aria-expanded={actionsOpen}
+              aria-haspopup="menu"
+              disabled={busy}
+              onClick={() => setActionsOpen((v) => !v)}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle cx="5" cy="12" r="1.75" fill="currentColor" />
+                <circle cx="12" cy="12" r="1.75" fill="currentColor" />
+                <circle cx="19" cy="12" r="1.75" fill="currentColor" />
+              </svg>
             </button>
-            {canAssign ? (
-              <button
-                type="button"
-                className="pbc-btn pbc-btn--ghost"
-                disabled={busy}
-                onClick={() => setAssignOpen(true)}
-              >
-                {t("pcAssignAsIs")}
-              </button>
+            {actionsOpen ? (
+              <div className="pbc-shared-content__actions-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="pbc-shared-content__actions-item"
+                  disabled={busy}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    void handleCopy();
+                  }}
+                >
+                  {busy ? t("pcCopying") : t("pcCreateCopy")}
+                </button>
+                {canAssign ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="pbc-shared-content__actions-item"
+                    disabled={busy}
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setAssignOpen(true);
+                    }}
+                  >
+                    {t("pcAssignAsIs")}
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </header>

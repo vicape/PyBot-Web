@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { t } from "../../i18n.js";
 import { useCreateBlockNote } from "@blocknote/react";
@@ -82,70 +82,128 @@ function MinutesBadge({ minutes }) {
   return <span className="pbc-content-toc__mins">{minutes}′</span>;
 }
 
-function ReaderOutline({ units, selectedLessonId, onSelectLesson }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+/** Real learning objectives only — never invent placeholders. */
+function resolveLearningObjectives(snapshot) {
+  const raw =
+    snapshot?.contentMeta?.learning_objectives ??
+    snapshot?.learning_objectives ??
+    null;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => String(item ?? "").trim()).filter(Boolean);
+}
+
+function LearningObjectives({ objectives }) {
+  const [open, setOpen] = useState(true);
+  if (!objectives?.length) return null;
 
   return (
-    <nav className="pbc-content-reader__nav" aria-label={t("pcReaderOutline")}>
+    <aside className="pbc-content-reader__objectives" aria-label={t("pcMetaObjectives")}>
       <button
         type="button"
-        className="pbc-content-reader__nav-toggle"
-        aria-expanded={mobileOpen}
-        onClick={() => setMobileOpen((v) => !v)}
+        className="pbc-content-reader__objectives-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
       >
-        <span>{t("pcReaderOutline")}</span>
-        <span aria-hidden>{mobileOpen ? "▾" : "▸"}</span>
+        <span>{t("pcInThisLessonLearn")}</span>
+        <span aria-hidden>{open ? "▾" : "▸"}</span>
       </button>
-      <ol
-        className={
-          mobileOpen
-            ? "pbc-content-reader__outline-list"
-            : "pbc-content-reader__outline-list pbc-content-reader__outline-list--mobile-collapsed"
-        }
+      {open ? (
+        <ul className="pbc-content-reader__objectives-list">
+          {objectives.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      ) : null}
+    </aside>
+  );
+}
+
+function ReaderOutline({ units, selectedLessonId, onSelectLesson, open, onClose }) {
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (open && panelRef.current) {
+      const focusable = panelRef.current.querySelector("button, [href], [tabindex]:not([tabindex='-1'])");
+      focusable?.focus?.();
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        className="pbc-content-reader__index-backdrop"
+        aria-label={t("pcClose")}
+        onClick={onClose}
+      />
+      <nav
+        ref={panelRef}
+        id="pbc-reader-index-panel"
+        className="pbc-content-reader__nav pbc-content-reader__nav--drawer"
+        aria-label={t("pcReaderOutline")}
       >
-        {(units || []).map((unit) => (
-          <li key={unit.id} className="pbc-content-reader__outline-unit">
-            <div className="pbc-content-reader__outline-unit-title">
-              <span>{unit.title || t("pcUnitFallback")}</span>
-              {unit.unitType ? (
-                <span className="pbc-content-toc__badge">{t(`pcUnitType_${unit.unitType}`)}</span>
+        <div className="pbc-content-reader__nav-head">
+          <strong>{t("pcTocTitle")}</strong>
+          <button type="button" className="pbc-content-reader__nav-close" onClick={onClose}>
+            {t("pcClose")}
+          </button>
+        </div>
+        <ol className="pbc-content-reader__outline-list">
+          {(units || []).map((unit) => (
+            <li key={unit.id} className="pbc-content-reader__outline-unit">
+              <div className="pbc-content-reader__outline-unit-title">
+                <span>{unit.title || t("pcUnitFallback")}</span>
+                {unit.unitType ? (
+                  <span className="pbc-content-toc__badge">{t(`pcUnitType_${unit.unitType}`)}</span>
+                ) : null}
+                <MinutesBadge minutes={unit.estimatedMinutes} />
+              </div>
+              {unit.lessons?.length ? (
+                <ol className="pbc-content-reader__outline-lessons">
+                  {unit.lessons.map((lesson) => {
+                    const isCurrent = lesson.id === selectedLessonId;
+                    const title = lesson.title || t("pcUntitled");
+                    return (
+                      <li key={lesson.id}>
+                        <button
+                          type="button"
+                          className={
+                            isCurrent
+                              ? "pbc-content-reader__outline-link pbc-content-reader__outline-link--current"
+                              : "pbc-content-reader__outline-link"
+                          }
+                          aria-current={isCurrent ? "true" : undefined}
+                          title={title}
+                          onClick={() => {
+                            onSelectLesson(lesson.id);
+                            onClose?.();
+                          }}
+                        >
+                          <span className="pbc-content-reader__outline-lesson-title">{title}</span>
+                          <LessonTypeBadge itemType={lesson.itemType} />
+                          <MinutesBadge minutes={lesson.estimatedMinutes} />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
               ) : null}
-              <MinutesBadge minutes={unit.estimatedMinutes} />
-            </div>
-            {unit.lessons?.length ? (
-              <ol className="pbc-content-reader__outline-lessons">
-                {unit.lessons.map((lesson) => {
-                  const isCurrent = lesson.id === selectedLessonId;
-                  return (
-                    <li key={lesson.id}>
-                      <button
-                        type="button"
-                        className={
-                          isCurrent
-                            ? "pbc-content-reader__outline-link pbc-content-reader__outline-link--current"
-                            : "pbc-content-reader__outline-link"
-                        }
-                        aria-current={isCurrent ? "true" : undefined}
-                        onClick={() => {
-                          onSelectLesson(lesson.id);
-                          setMobileOpen(false);
-                        }}
-                      >
-                        <span className="pbc-content-reader__outline-lesson-title">
-                          {lesson.title || t("pcUntitled")}
-                        </span>
-                        <LessonTypeBadge itemType={lesson.itemType} />
-                        <MinutesBadge minutes={lesson.estimatedMinutes} />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            ) : null}
-          </li>
-        ))}
-      </ol>
-    </nav>
+            </li>
+          ))}
+        </ol>
+      </nav>
+    </>
   );
 }
 
@@ -210,7 +268,8 @@ function OverviewMode({ model, onOpenLesson }) {
   );
 }
 
-function LessonMode({ model, selectedLessonId, onSelectLesson, onBack }) {
+function LessonMode({ model, selectedLessonId, onSelectLesson, onBack, learningObjectives }) {
+  const [indexOpen, setIndexOpen] = useState(false);
   const index = findLessonIndex(model.orderedLessons, selectedLessonId);
   const lesson = index >= 0 ? model.orderedLessons[index] : null;
   if (!lesson) return null;
@@ -224,31 +283,43 @@ function LessonMode({ model, selectedLessonId, onSelectLesson, onBack }) {
 
   return (
     <div className="pbc-content-reader pbc-content-reader--lesson">
-      <div className="pbc-content-reader__toolbar">
-        <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onBack}>
-          {t("pcViewStructure")}
-        </button>
-        <p className="pbc-content-reader__position" aria-live="polite">
-          {positionLabel}
-        </p>
-      </div>
+      <header className="pbc-content-reader__header">
+        <div className="pbc-content-reader__header-row">
+          <button
+            type="button"
+            className="pbc-content-reader__nav-toggle"
+            aria-expanded={indexOpen}
+            aria-controls="pbc-reader-index-panel"
+            onClick={() => setIndexOpen((v) => !v)}
+          >
+            {t("pcTocTitle")}
+          </button>
+          <p className="pbc-content-reader__position" aria-live="polite">
+            {positionLabel}
+          </p>
+          <button type="button" className="pbc-btn pbc-btn--ghost pbc-content-reader__back" onClick={onBack}>
+            {t("pcViewStructure")}
+          </button>
+        </div>
+        {lesson.unitTitle ? (
+          <p className="pbc-content-reader__context-unit">{lesson.unitTitle}</p>
+        ) : null}
+        <h2 id="pbc-reader-lesson-title" className="pbc-content-reader__lesson-heading">
+          {lesson.title || t("pcUntitled")}
+        </h2>
+      </header>
 
       <div className="pbc-content-reader__layout">
         <ReaderOutline
           units={model.units}
           selectedLessonId={lesson.id}
           onSelectLesson={onSelectLesson}
+          open={indexOpen}
+          onClose={() => setIndexOpen(false)}
         />
 
         <article className="pbc-content-reader__article" aria-labelledby="pbc-reader-lesson-title">
-          <header className="pbc-content-reader__lesson-head">
-            {lesson.unitTitle ? (
-              <p className="pbc-content-reader__context-unit">{lesson.unitTitle}</p>
-            ) : null}
-            <h2 id="pbc-reader-lesson-title" className="pbc-content-reader__lesson-heading">
-              {lesson.title || t("pcUntitled")}
-            </h2>
-          </header>
+          <LearningObjectives objectives={learningObjectives} />
 
           <div className="pbc-lesson-workspace pbc-lesson-workspace--preview">
             <ReadOnlyDoc docKey={lesson.id} initialContent={lesson.document_json} />
@@ -282,6 +353,7 @@ function LessonMode({ model, selectedLessonId, onSelectLesson, onBack }) {
 
 function ProgressiveMultiLessonReader({ snapshot }) {
   const model = useMemo(() => buildSnapshotReaderModel(snapshot), [snapshot]);
+  const learningObjectives = useMemo(() => resolveLearningObjectives(snapshot), [snapshot]);
   const [selectedLessonId, setSelectedLessonId] = useState(null);
 
   useEffect(() => {
@@ -304,6 +376,7 @@ function ProgressiveMultiLessonReader({ snapshot }) {
       selectedLessonId={selectedLessonId}
       onSelectLesson={setSelectedLessonId}
       onBack={() => setSelectedLessonId(null)}
+      learningObjectives={learningObjectives}
     />
   );
 }
