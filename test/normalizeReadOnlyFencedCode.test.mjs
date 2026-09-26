@@ -10,6 +10,7 @@ import {
   classifyFenceLine,
   extractPlainText,
   normalizeReadOnlyFencedCode,
+  parseSupportedFenceSegments,
 } from "../src/components/content-editor/normalizeReadOnlyFencedCode.js";
 
 const root = resolve(import.meta.dirname, "..");
@@ -303,4 +304,165 @@ test("AC fence: read-only viewers apply normalizer; editor does not", () => {
   assert.match(viewerSrc, /normalizeReadOnlyFencedCode/);
   assert.match(lessonViewerSrc, /normalizeReadOnlyFencedCode/);
   assert.doesNotMatch(editorSrc, /normalizeReadOnlyFencedCode/);
+});
+
+test("AC mixed: prose + ```python fence + prose → paragraph/codeBlock/paragraph", () => {
+  const input = [
+    para('Write:\n```python\nprint("Hello")\n```\nRun the program.'),
+  ];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, [
+    { type: "paragraph", content: "Write:" },
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: 'print("Hello")',
+    },
+    { type: "paragraph", content: "Run the program." },
+  ]);
+});
+
+test("AC mixed: prose + ```text fence + prose splits correctly", () => {
+  const input = [
+    para(
+      "You may have seen something similar to this in a visual programming environment:\n```text\nwhen program starts\nrepeat 3 times\nturn LED on\n```\nThe same idea could be represented using Python:",
+    ),
+  ];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.equal(out.length, 3);
+  assert.equal(
+    out[0].content,
+    "You may have seen something similar to this in a visual programming environment:",
+  );
+  assert.deepEqual(out[1], {
+    type: "codeBlock",
+    props: { language: "text" },
+    content: "when program starts\nrepeat 3 times\nturn LED on",
+  });
+  assert.equal(
+    out[2].content,
+    "The same idea could be represented using Python:",
+  );
+});
+
+test("AC mixed: multiple supported fences in one paragraph", () => {
+  const input = [
+    para(
+      'Intro text\n```text\nline 1\nline 2\n```\nMiddle prose\n```python\nprint("x")\n```\nTrailing prose',
+    ),
+  ];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, [
+    { type: "paragraph", content: "Intro text" },
+    {
+      type: "codeBlock",
+      props: { language: "text" },
+      content: "line 1\nline 2",
+    },
+    { type: "paragraph", content: "Middle prose" },
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: 'print("x")',
+    },
+    { type: "paragraph", content: "Trailing prose" },
+  ]);
+});
+
+test("AC mixed: Python indentation and newlines preserved in code", () => {
+  const input = [
+    para(
+      "The same idea could be represented using Python:\n```python\nfor i in range(3):\n    LED_ON\n    wait(1)\n```\nDone.",
+    ),
+  ];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.equal(out.length, 3);
+  assert.equal(
+    out[1].content,
+    "for i in range(3):\n    LED_ON\n    wait(1)",
+  );
+  assert.equal(out[0].content, "The same idea could be represented using Python:");
+  assert.equal(out[2].content, "Done.");
+});
+
+test("AC mixed: surrounding prose preserved exactly in order", () => {
+  const input = [
+    para('Write:\n```python\nx = 1\n```\nRun the program.'),
+  ];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.equal(out[0].content, "Write:");
+  assert.equal(out[2].content, "Run the program.");
+});
+
+test("AC mixed: BlockNote newline-in-text serialization extracted losslessly", () => {
+  // Confirmed BlockNote shape: hardBreak folds into "\n" inside text nodes.
+  const block = {
+    type: "paragraph",
+    content: [
+      { type: "text", text: "Write:\n```python\n", styles: {} },
+      { type: "text", text: 'print("Hi")\n```\n', styles: {} },
+      { type: "text", text: "Run.", styles: {} },
+    ],
+  };
+  const plain = extractPlainText(block);
+  assert.equal(plain, 'Write:\n```python\nprint("Hi")\n```\nRun.');
+  const out = normalizeReadOnlyFencedCode([block]);
+  assert.deepEqual(out, [
+    { type: "paragraph", content: "Write:" },
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: 'print("Hi")',
+    },
+    { type: "paragraph", content: "Run." },
+  ]);
+});
+
+test("AC mixed: unsupported labeled fence leaves entire paragraph unchanged", () => {
+  const input = [
+    para("Before\n```javascript\nconsole.log(1)\n```\nAfter"),
+  ];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, input);
+  assert.equal(out[0], input[0]);
+});
+
+test("AC mixed: unmatched incomplete fence leaves paragraph unchanged", () => {
+  const input = [para("Before\n```python\nprint(1)\nstill open")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, input);
+  assert.equal(out[0], input[0]);
+});
+
+test("AC mixed: rich inline (link) paragraph left unchanged", () => {
+  const withLink = {
+    type: "paragraph",
+    content: [
+      { type: "text", text: "See ", styles: {} },
+      {
+        type: "link",
+        href: "https://x",
+        content: [{ type: "text", text: "docs", styles: {} }],
+      },
+      { type: "text", text: "\n```python\nprint(1)\n```\nEnd", styles: {} },
+    ],
+  };
+  assert.equal(extractPlainText(withLink), null);
+  assert.deepEqual(normalizeReadOnlyFencedCode([withLink]), [withLink]);
+});
+
+test("AC mixed: does not mutate input when splitting mixed paragraph", () => {
+  const input = [
+    para('Write:\n```python\nprint("x")\n```\nRun.'),
+  ];
+  const snapshot = structuredClone(input);
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(input, snapshot);
+  assert.equal(out.length, 3);
+  assert.notEqual(out, input);
+});
+
+test("AC mixed: parseSupportedFenceSegments returns null without fences", () => {
+  assert.equal(parseSupportedFenceSegments("just prose"), null);
+  assert.equal(parseSupportedFenceSegments("use `print()` inline"), null);
 });

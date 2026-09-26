@@ -7,6 +7,9 @@
  *
  * BlockNote's default codeBlock language id is `"text"` (plain text), so explicit
  * ```text fences map to language="text".
+ *
+ * Also splits a single plain-text paragraph that embeds complete supported fences
+ * together with surrounding prose (read-only only).
  */
 
 const OPEN_FENCE_RE = /^```([A-Za-z0-9_+-]*)\s*$/;
@@ -62,6 +65,11 @@ function hasNoChildren(block) {
 /**
  * Extract plain text from a paragraph-like block.
  * Returns null when content is not unambiguously plain text (links, non-text).
+ *
+ * BlockNote folds ProseMirror hardBreak nodes into "\n" characters inside
+ * styled-text InlineContent on serialization — so lossless line breaks appear
+ * as newlines in text nodes (or in a string content value), not as a separate
+ * InlineContent type.
  */
 export function extractPlainText(block) {
   if (!block || block.type !== "paragraph") return null;
@@ -93,6 +101,97 @@ function makeCodeBlock(code, language) {
   };
 }
 
+function makeParagraph(text) {
+  return {
+    type: "paragraph",
+    content: text,
+  };
+}
+
+/** Drop empty edge lines so we do not emit blank paragraph blocks. */
+function trimEmptyEdgeLines(lines) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start] === "") start += 1;
+  while (end > start && lines[end - 1] === "") end -= 1;
+  return lines.slice(start, end);
+}
+
+function flushProse(proseLines, out) {
+  const trimmed = trimEmptyEdgeLines(proseLines);
+  if (trimmed.length === 0) return;
+  out.push(makeParagraph(trimmed.join("\n")));
+}
+
+/**
+ * Line-oriented parser for one plain-text paragraph that may embed complete
+ * supported fences among prose. Returns derived blocks, or null to leave the
+ * original paragraph unchanged (no fences / ambiguous / unsupported).
+ *
+ * @param {string} text
+ * @returns {Array<object>|null}
+ */
+export function parseSupportedFenceSegments(text) {
+  if (typeof text !== "string") return null;
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  const proseLines = [];
+  let fenceCount = 0;
+  let i = 0;
+
+  while (i < lines.length) {
+    const lineClass = classifyFenceLine(lines[i]);
+
+    if (lineClass.kind === "unsupported-open") {
+      return null;
+    }
+
+    if (
+      lineClass.kind === "supported-open" ||
+      lineClass.kind === "bare-fence"
+    ) {
+      const language = lineClass.language;
+      const codeLines = [];
+      let j = i + 1;
+      let closed = false;
+      while (j < lines.length) {
+        const midClass = classifyFenceLine(lines[j]);
+        if (midClass.kind === "bare-fence") {
+          closed = true;
+          break;
+        }
+        if (
+          midClass.kind === "supported-open" ||
+          midClass.kind === "unsupported-open"
+        ) {
+          // Nested / overlapping fence — do not partially transform.
+          return null;
+        }
+        codeLines.push(lines[j]);
+        j += 1;
+      }
+      if (!closed) {
+        return null;
+      }
+      flushProse(proseLines, out);
+      proseLines.length = 0;
+      out.push(makeCodeBlock(codeLines.join("\n"), language));
+      fenceCount += 1;
+      i = j + 1;
+      continue;
+    }
+
+    proseLines.push(lines[i]);
+    i += 1;
+  }
+
+  if (fenceCount === 0) {
+    return null;
+  }
+  flushProse(proseLines, out);
+  return out.length > 0 ? out : null;
+}
+
 function tryParseSingleFenceBlock(block) {
   if (!hasNoChildren(block)) return null;
   const text = extractPlainText(block);
@@ -104,6 +203,17 @@ function tryParseSingleFenceBlock(block) {
   const language = mapFenceLanguage(match[1]);
   if (language == null) return null;
   return makeCodeBlock(match[2], language);
+}
+
+/**
+ * Mixed prose + complete supported fence(s) inside one plain-text paragraph.
+ * @returns {Array<object>|null}
+ */
+function tryParseMixedFenceParagraph(block) {
+  if (!hasNoChildren(block)) return null;
+  const text = extractPlainText(block);
+  if (text == null) return null;
+  return parseSupportedFenceSegments(text);
 }
 
 /**
@@ -126,6 +236,14 @@ export function normalizeReadOnlyFencedCode(documentJson) {
     const single = tryParseSingleFenceBlock(block);
     if (single) {
       out.push(single);
+      i += 1;
+      continue;
+    }
+
+    // Pattern 1b: mixed prose + complete supported fence(s) in one paragraph.
+    const mixed = tryParseMixedFenceParagraph(block);
+    if (mixed) {
+      out.push(...mixed);
       i += 1;
       continue;
     }
