@@ -216,23 +216,24 @@ function tryParseMixedFenceParagraph(block) {
   return parseSupportedFenceSegments(text);
 }
 
-/**
- * Derive a render document from lesson `document_json`.
- * Complete unambiguous fences → native codeBlock; everything else unchanged.
- * Input array/objects are never mutated.
- *
- * @param {unknown} documentJson
- * @returns {unknown}
- */
-export function normalizeReadOnlyFencedCode(documentJson) {
-  if (!Array.isArray(documentJson)) return documentJson;
+/** Safe recursion ceiling for BlockNote `children` nesting (not a generic walk). */
+const MAX_CHILDREN_DEPTH = 64;
 
+/**
+ * Sequence-level fence normalization for one sibling block array.
+ * Expects nested `children` to already be normalized. Never mutates `blocks`.
+ *
+ * @param {Array<object>} blocks
+ * @returns {Array<object>}
+ */
+function normalizeSiblingSequences(blocks) {
   const out = [];
   let i = 0;
-  while (i < documentJson.length) {
-    const block = documentJson[i];
+  while (i < blocks.length) {
+    const block = blocks[i];
 
     // Pattern 1: single paragraph whose entire text is a complete fence.
+    // hasNoChildren: refuse split when the paragraph still has child blocks.
     const single = tryParseSingleFenceBlock(block);
     if (single) {
       out.push(single);
@@ -259,8 +260,8 @@ export function normalizeReadOnlyFencedCode(documentJson) {
         let j = i + 1;
         const codeParts = [];
         let closed = false;
-        while (j < documentJson.length) {
-          const mid = documentJson[j];
+        while (j < blocks.length) {
+          const mid = blocks[j];
           if (mid?.type !== "paragraph" || !hasNoChildren(mid)) break;
           const midText = extractPlainText(mid);
           if (midText == null) break;
@@ -295,4 +296,74 @@ export function normalizeReadOnlyFencedCode(documentJson) {
   }
 
   return out;
+}
+
+/**
+ * Shallow-clone a block only when its `children` array actually changed.
+ * Does not walk other object/array fields.
+ *
+ * @param {unknown} block
+ * @param {number} depth
+ * @returns {unknown}
+ */
+function normalizeBlockChildren(block, depth) {
+  if (block == null || typeof block !== "object") return block;
+  if (!Array.isArray(block.children)) return block;
+  const nextChildren = normalizeBlockArray(block.children, depth);
+  if (nextChildren === block.children) return block;
+  return { ...block, children: nextChildren };
+}
+
+/**
+ * Normalize one BlockNote block-array level:
+ * (1) recursively normalize each block's `children`, then
+ * (2) apply sequence-level fence normalization to siblings.
+ *
+ * @param {Array<unknown>} blocks
+ * @param {number} depth
+ * @returns {Array<unknown>}
+ */
+function normalizeBlockArray(blocks, depth) {
+  if (!Array.isArray(blocks)) return blocks;
+  if (depth > MAX_CHILDREN_DEPTH) return blocks;
+
+  let anyChildrenChanged = false;
+  const prepared = new Array(blocks.length);
+  for (let i = 0; i < blocks.length; i += 1) {
+    const block = blocks[i];
+    const next = normalizeBlockChildren(block, depth + 1);
+    if (next !== block) anyChildrenChanged = true;
+    prepared[i] = next;
+  }
+
+  const sequenced = normalizeSiblingSequences(prepared);
+
+  if (!anyChildrenChanged) {
+    let sameAsInput = sequenced.length === blocks.length;
+    if (sameAsInput) {
+      for (let i = 0; i < blocks.length; i += 1) {
+        if (sequenced[i] !== blocks[i]) {
+          sameAsInput = false;
+          break;
+        }
+      }
+    }
+    if (sameAsInput) return blocks;
+  }
+
+  return sequenced;
+}
+
+/**
+ * Derive a render document from lesson `document_json`.
+ * Complete unambiguous fences → native codeBlock; everything else unchanged.
+ * Recurses only through BlockNote `children` block arrays (not a generic walk).
+ * Input array/objects are never mutated.
+ *
+ * @param {unknown} documentJson
+ * @returns {unknown}
+ */
+export function normalizeReadOnlyFencedCode(documentJson) {
+  if (!Array.isArray(documentJson)) return documentJson;
+  return normalizeBlockArray(documentJson, 0);
 }

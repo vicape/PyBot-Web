@@ -466,3 +466,207 @@ test("AC mixed: parseSupportedFenceSegments returns null without fences", () => 
   assert.equal(parseSupportedFenceSegments("just prose"), null);
   assert.equal(parseSupportedFenceSegments("use `print()` inline"), null);
 });
+
+test("AC nested: python fence sequence inside one level of children → codeBlock", () => {
+  // (e.g. nested column.children with paragraphs ```python / print(1) / ``` becomes
+  // [{ type: "codeBlock", props: { language: "python" }, content: "print(1)" }])
+  const fenceKids = [
+    para("```python"),
+    para("print(1)"),
+    para("```"),
+  ];
+  const column = {
+    type: "column",
+    props: { width: 1 },
+    children: fenceKids,
+  };
+  const input = [column];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].type, "column");
+  assert.deepEqual(out[0].props, { width: 1 });
+  // nested column.children becomes native codeBlock (parent type/props preserved)
+  assert.deepEqual(out[0].children, [
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: "print(1)",
+    },
+  ]);
+  assert.notEqual(out[0], column);
+  assert.deepEqual(fenceKids, [
+    para("```python"),
+    para("print(1)"),
+    para("```"),
+  ]);
+});
+
+test("AC nested: text fence sequence inside children → codeBlock(language=text)", () => {
+  const column = {
+    type: "column",
+    children: [para("```text"), para("when program starts"), para("```")],
+  };
+  const out = normalizeReadOnlyFencedCode([column]);
+  assert.deepEqual(out[0].children, [
+    {
+      type: "codeBlock",
+      props: { language: "text" },
+      content: "when program starts",
+    },
+  ]);
+});
+
+test("AC nested: supported fences normalize at least two children levels deep", () => {
+  // (e.g. nested column.children two levels deep becomes the same codeBlock shape)
+  const input = [
+    {
+      type: "columnList",
+      props: { layout: "equal" },
+      content: "ignore-me",
+      children: [
+        {
+          type: "column",
+          props: { width: 0.5 },
+          children: [
+            para("```python"),
+            para("print(1)"),
+            para("```"),
+          ],
+        },
+      ],
+    },
+  ];
+  const snapshot = structuredClone(input);
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(input, snapshot);
+  assert.equal(out[0].type, "columnList");
+  assert.deepEqual(out[0].props, { layout: "equal" });
+  assert.equal(out[0].content, "ignore-me");
+  assert.equal(out[0].children[0].type, "column");
+  assert.deepEqual(out[0].children[0].props, { width: 0.5 });
+  // column.children becomes [{ type: "codeBlock", props: { language: "python" }, content: "print(1)" }]
+  assert.deepEqual(out[0].children[0].children, [
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: "print(1)",
+    },
+  ]);
+});
+
+test("AC nested: mixed prose + fence paragraph inside children splits", () => {
+  const parent = {
+    type: "bulletListItem",
+    props: { checked: false },
+    children: [
+      para('Write:\n```python\nprint("Hello")\n```\nRun the program.'),
+    ],
+  };
+  const out = normalizeReadOnlyFencedCode([parent]);
+  assert.equal(out[0].type, "bulletListItem");
+  assert.deepEqual(out[0].props, { checked: false });
+  assert.deepEqual(out[0].children, [
+    { type: "paragraph", content: "Write:" },
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: 'print("Hello")',
+    },
+    { type: "paragraph", content: "Run the program." },
+  ]);
+});
+
+test("AC nested: parent type/props/content/order preserved; untouched sibling refs kept", () => {
+  const untouched = para("Keep me");
+  const native = {
+    type: "codeBlock",
+    props: { language: "python" },
+    content: "already()",
+  };
+  const nestedFenceParent = {
+    type: "column",
+    props: { width: 1 },
+    content: undefined,
+    children: [para("```python"), para("x = 1"), para("```")],
+  };
+  const input = [untouched, nestedFenceParent, native];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.equal(out.length, 3);
+  assert.equal(out[0], untouched);
+  assert.equal(out[2], native);
+  assert.equal(out[1].type, "column");
+  assert.deepEqual(out[1].props, { width: 1 });
+  assert.equal(out[1].content, undefined);
+  assert.deepEqual(out[1].children[0], {
+    type: "codeBlock",
+    props: { language: "python" },
+    content: "x = 1",
+  });
+});
+
+test("AC nested: unsupported/unmatched nested fences remain unchanged", () => {
+  const unsupported = {
+    type: "column",
+    children: [
+      para("```javascript"),
+      para("console.log(1)"),
+      para("```"),
+    ],
+  };
+  const unmatched = {
+    type: "column",
+    children: [para("```python"), para("print(1)"), para("still open")],
+  };
+  const out = normalizeReadOnlyFencedCode([unsupported, unmatched]);
+  assert.equal(out[0], unsupported);
+  assert.equal(out[1], unmatched);
+  assert.equal(out[0].children, unsupported.children);
+  assert.equal(out[1].children, unmatched.children);
+});
+
+test("AC nested: nested native codeBlock remains unchanged", () => {
+  const native = {
+    type: "codeBlock",
+    props: { language: "text" },
+    content: "when program starts",
+  };
+  const parent = { type: "column", children: [native] };
+  const out = normalizeReadOnlyFencedCode([parent]);
+  assert.equal(out[0], parent);
+  assert.equal(out[0].children[0], native);
+});
+
+test("AC nested: paragraph with non-empty children keeps content; only children normalize", () => {
+  const kidFence = [para("```text"), para("body"), para("```")];
+  const paragraph = {
+    type: "paragraph",
+    content: "```python\nprint(1)\n```",
+    children: kidFence,
+  };
+  const snapshot = structuredClone(paragraph);
+  const out = normalizeReadOnlyFencedCode([paragraph]);
+  assert.deepEqual(paragraph, snapshot);
+  assert.equal(out[0].type, "paragraph");
+  assert.equal(out[0].content, "```python\nprint(1)\n```");
+  assert.deepEqual(out[0].children, [
+    {
+      type: "codeBlock",
+      props: { language: "text" },
+      content: "body",
+    },
+  ]);
+  assert.notEqual(out[0], paragraph);
+});
+
+test("AC nested: does not mutate root, parents, or children arrays", () => {
+  const kids = [para("```python"), para("print(1)"), para("```")];
+  const parent = { type: "column", props: { width: 1 }, children: kids };
+  const input = [parent];
+  const snapshot = structuredClone(input);
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(input, snapshot);
+  assert.equal(parent.children, kids);
+  assert.notEqual(out, input);
+  assert.notEqual(out[0].children, kids);
+  assert.equal(out[0].children[0].type, "codeBlock");
+});
