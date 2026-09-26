@@ -355,6 +355,102 @@ test("AC preview: ```python for-i-in-range fence → native codeBlock; source un
   assert.equal(previewDoc[0].content, "for i in range(5):");
 });
 
+test("AC viewer: triple-backtick python fence → one native codeBlock (exact body)", () => {
+  // Reproduces the material viewer case on /dashboard/content/:contentId/lessons/:lessonId
+  // (Preview → buildLessonPreviewDocument): ``` + python + body + ```.
+  const source = [para("```python\nfor i in range(5):\n```")];
+  const before = JSON.parse(JSON.stringify(source));
+  const out = buildLessonPreviewDocument(source);
+  assert.deepEqual(source, before);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].type, "codeBlock");
+  assert.equal(out[0].props.language, "python");
+  assert.equal(out[0].content, "for i in range(5):");
+  assert.equal(JSON.stringify(out).includes("```"), false);
+});
+
+test("AC viewer: exactly three apostrophes (''') python fence → one native codeBlock", () => {
+  // AC5: At minimum this MUST support exactly three backticks (```) and exactly three apostrophes (''').
+  const source = [para("'''python\nfor i in range(5):\n'''")];
+  const before = JSON.parse(JSON.stringify(source));
+  const out = buildLessonPreviewDocument(source);
+  assert.deepEqual(source, before);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].type, "codeBlock");
+  assert.equal(out[0].props.language, "python");
+  assert.equal(out[0].content, "for i in range(5):");
+  assert.equal(JSON.stringify(out).includes("'''"), false);
+});
+
+test("AC viewer: mismatched delimiters left unchanged (no codeBlock)", () => {
+  const btOpenApClose = [para("```python\nfor i in range(5):\n'''")];
+  const apOpenBtClose = [para("'''python\nfor i in range(5):\n```")];
+  assert.deepEqual(buildLessonPreviewDocument(btOpenApClose), btOpenApClose);
+  assert.deepEqual(buildLessonPreviewDocument(apOpenBtClose), apOpenBtClose);
+  assert.equal(buildLessonPreviewDocument(btOpenApClose)[0].type, "paragraph");
+  assert.equal(buildLessonPreviewDocument(apOpenBtClose)[0].type, "paragraph");
+});
+
+test("AC viewer: open+body | close paragraphs → one codeBlock; delimiters hidden", () => {
+  const source = [
+    para("```python\nfor i in range(5):"),
+    para("```"),
+  ];
+  const before = JSON.parse(JSON.stringify(source));
+  const out = buildLessonPreviewDocument(source);
+  assert.deepEqual(source, before);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0], {
+    type: "codeBlock",
+    props: { language: "python" },
+    content: "for i in range(5):",
+  });
+});
+
+test("AC viewer: open | body+close paragraphs → one codeBlock; delimiters hidden", () => {
+  const source = [
+    para("```python"),
+    para("for i in range(5):\n```"),
+  ];
+  const before = JSON.parse(JSON.stringify(source));
+  const out = buildLessonPreviewDocument(source);
+  assert.deepEqual(source, before);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0], {
+    type: "codeBlock",
+    props: { language: "python" },
+    content: "for i in range(5):",
+  });
+});
+
+test("AC viewer: apostrophe open+body | close and open | body+close", () => {
+  const openBodyClose = [
+    para("'''python\nfor i in range(5):"),
+    para("'''"),
+  ];
+  const openThenBodyClose = [
+    para("'''python"),
+    para("for i in range(5):\n'''"),
+  ];
+  for (const source of [openBodyClose, openThenBodyClose]) {
+    const out = buildLessonPreviewDocument(source);
+    assert.equal(out.length, 1);
+    assert.deepEqual(out[0], {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: "for i in range(5):",
+    });
+  }
+});
+
+test("AC viewer: multi-para mismatched close left unchanged", () => {
+  const source = [
+    para("```python\nfor i in range(5):"),
+    para("'''"),
+  ];
+  assert.deepEqual(buildLessonPreviewDocument(source), source);
+});
+
 test("AC preview: LessonBlockNoteEditor Preview path uses buildLessonPreviewDocument", () => {
   assert.match(editorSrc, /function LessonPreviewDocument/);
   assert.match(editorSrc, /buildLessonPreviewDocument\(editor\.document\)/);

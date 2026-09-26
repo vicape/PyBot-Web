@@ -11,9 +11,11 @@
  * Also splits a single plain-text paragraph that embeds complete supported fences
  * together with surrounding prose (read-only only).
  *
- * Fence delimiters: three backticks (```) or three apostrophes ('''). Opening and
- * closing delimiter types must match. Only complete-line fence syntax is recognized
- * (inline ''' / ``` are never treated as fences).
+ * At minimum this MUST support exactly three backticks (```) and exactly three apostrophes (''').
+ * Opening and closing delimiter types must match (same 3 identical punctuation characters).
+ * Only complete-line fence syntax is recognized (inline ''' / ``` are never treated as fences).
+ * Across sibling paragraphs, the opening line may share its block with following body lines
+ * and the closing line may share its block with preceding body lines.
  */
 
 // Optional horizontal whitespace (space/tab) allowed between delimiter and language token.
@@ -280,50 +282,84 @@ function normalizeSiblingSequences(blocks) {
       continue;
     }
 
-    // Pattern 2: open-fence para + one or more plain paras + close-fence para.
+    // Pattern 2: paired fence spanning one or more plain paragraphs.
+    // Opening line may share its paragraph with following body lines; closing
+    // delimiter may share its paragraph with preceding body lines. Opening and
+    // closing must use the same 3-character delimiter (``` or ''').
     if (block?.type === "paragraph" && hasNoChildren(block)) {
       const openText = extractPlainText(block);
-      const openClass = classifyFenceLine(openText);
-      const canStart =
-        openClass.kind === "supported-open" || openClass.kind === "bare-fence";
-      if (canStart) {
-        const language = openClass.language;
-        const delimiter = openClass.delimiter;
-        let j = i + 1;
-        const codeParts = [];
-        let closed = false;
-        while (j < blocks.length) {
-          const mid = blocks[j];
-          if (mid?.type !== "paragraph" || !hasNoChildren(mid)) break;
-          const midText = extractPlainText(mid);
-          if (midText == null) break;
-          const midClass = classifyFenceLine(midText);
-          // Bare fence with the SAME delimiter closes the current sequence.
-          if (midClass.kind === "bare-fence") {
-            if (midClass.delimiter !== delimiter) {
-              // Mismatched delimiter — abort so originals stay unchanged.
+      if (openText != null) {
+        const openLines = openText.split(/\r?\n/);
+        const openClass = classifyFenceLine(openLines[0]);
+        const canStart =
+          openClass.kind === "supported-open" || openClass.kind === "bare-fence";
+        if (canStart) {
+          const language = openClass.language;
+          const delimiter = openClass.delimiter;
+          const codeParts = [];
+          // Body may begin on the lines after the opening delimiter.
+          if (openLines.length > 1) {
+            codeParts.push(openLines.slice(1).join("\n"));
+          }
+          let j = i + 1;
+          let closed = false;
+          while (j < blocks.length) {
+            const mid = blocks[j];
+            if (mid?.type !== "paragraph" || !hasNoChildren(mid)) break;
+            const midText = extractPlainText(mid);
+            if (midText == null) break;
+            const midClass = classifyFenceLine(midText);
+            // Whole mid paragraph is a bare close with the SAME delimiter.
+            if (midClass.kind === "bare-fence") {
+              if (midClass.delimiter !== delimiter) {
+                // Mismatched delimiter — abort so originals stay unchanged.
+                break;
+              }
+              closed = true;
               break;
             }
-            closed = true;
-            break;
+            // Any labeled opening fence (supported or not) is a boundary — abort
+            // so we never swallow later fences/prose into the current code block.
+            if (
+              midClass.kind === "supported-open" ||
+              midClass.kind === "unsupported-open"
+            ) {
+              break;
+            }
+            const midLines = midText.split(/\r?\n/);
+            const lastClass = classifyFenceLine(midLines[midLines.length - 1]);
+            // Close delimiter on the last line only (body lines may precede it).
+            if (lastClass.kind === "bare-fence") {
+              if (lastClass.delimiter !== delimiter) {
+                break;
+              }
+              const bodyFromMid = midLines.slice(0, -1).join("\n");
+              if (midLines.length > 1) {
+                codeParts.push(bodyFromMid);
+              }
+              closed = true;
+              break;
+            }
+            // Labeled open — or a bare fence that is not the whole paragraph —
+            // on the first line starts a new fence; abort this sequence.
+            const firstClass = classifyFenceLine(midLines[0]);
+            if (
+              firstClass.kind === "supported-open" ||
+              firstClass.kind === "unsupported-open" ||
+              (firstClass.kind === "bare-fence" && midLines.length > 1)
+            ) {
+              break;
+            }
+            codeParts.push(midText);
+            j += 1;
           }
-          // Any labeled opening fence (supported or not) is a boundary — abort
-          // so we never swallow later fences/prose into the current code block.
-          if (
-            midClass.kind === "supported-open" ||
-            midClass.kind === "unsupported-open"
-          ) {
-            break;
+          if (closed && codeParts.length >= 1) {
+            out.push(makeCodeBlock(codeParts.join("\n"), language));
+            i = j + 1;
+            continue;
           }
-          codeParts.push(midText);
-          j += 1;
+          // Incomplete / ambiguous: keep original blocks unchanged.
         }
-        if (closed && codeParts.length >= 1) {
-          out.push(makeCodeBlock(codeParts.join("\n"), language));
-          i = j + 1;
-          continue;
-        }
-        // Incomplete / ambiguous: keep original blocks unchanged.
       }
     }
 
