@@ -909,3 +909,195 @@ test("AC apostrophe: multi-paragraph '''python open/body/close → codeBlock", (
   });
   assert.equal(out[2].content, "Outro");
 });
+
+// --- Optional whitespace between delimiter and language token ---
+
+test("AC whitespace: one space before python (backtick) → codeBlock", () => {
+  assert.deepEqual(classifyFenceLine("``` python"), {
+    kind: "supported-open",
+    delimiter: "backtick",
+    language: "python",
+  });
+  const out = normalizeReadOnlyFencedCode([
+    para('``` python\nprint("Hi")\n```'),
+  ]);
+  assert.deepEqual(out, [
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: 'print("Hi")',
+    },
+  ]);
+});
+
+test("AC whitespace: two spaces before python (backtick) → codeBlock", () => {
+  assert.deepEqual(classifyFenceLine("```  python"), {
+    kind: "supported-open",
+    delimiter: "backtick",
+    language: "python",
+  });
+  const out = normalizeReadOnlyFencedCode([
+    para("```  python\nx = 1\n```"),
+  ]);
+  assert.deepEqual(out, [
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: "x = 1",
+    },
+  ]);
+});
+
+test("AC whitespace: tab before python (backtick) → codeBlock", () => {
+  assert.deepEqual(classifyFenceLine("```\tpython"), {
+    kind: "supported-open",
+    delimiter: "backtick",
+    language: "python",
+  });
+  const out = normalizeReadOnlyFencedCode([
+    para("```\tpython\nprint(1)\n```"),
+  ]);
+  assert.deepEqual(out, [
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: "print(1)",
+    },
+  ]);
+});
+
+test("AC whitespace: one space before text (backtick) → codeBlock(language=text)", () => {
+  assert.deepEqual(classifyFenceLine("``` text"), {
+    kind: "supported-open",
+    delimiter: "backtick",
+    language: "text",
+  });
+  const out = normalizeReadOnlyFencedCode([
+    para("``` text\nplain line\n```"),
+  ]);
+  assert.deepEqual(out, [
+    {
+      type: "codeBlock",
+      props: { language: "text" },
+      content: "plain line",
+    },
+  ]);
+});
+
+test("AC whitespace: apostrophe family with space/tab before python/text", () => {
+  assert.deepEqual(classifyFenceLine("''' python"), {
+    kind: "supported-open",
+    delimiter: "apostrophe",
+    language: "python",
+  });
+  assert.deepEqual(classifyFenceLine("'''\tpython"), {
+    kind: "supported-open",
+    delimiter: "apostrophe",
+    language: "python",
+  });
+  assert.deepEqual(classifyFenceLine("''' text"), {
+    kind: "supported-open",
+    delimiter: "apostrophe",
+    language: "text",
+  });
+  const pyOut = normalizeReadOnlyFencedCode([
+    para("''' python\nprint(1)\n'''"),
+  ]);
+  assert.deepEqual(pyOut, [
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: "print(1)",
+    },
+  ]);
+  const textOut = normalizeReadOnlyFencedCode([
+    para("''' text\nplain\n'''"),
+  ]);
+  assert.deepEqual(textOut, [
+    {
+      type: "codeBlock",
+      props: { language: "text" },
+      content: "plain",
+    },
+  ]);
+});
+
+test("AC whitespace: no-space forms still accepted (both delimiters)", () => {
+  assert.deepEqual(classifyFenceLine("```python"), {
+    kind: "supported-open",
+    delimiter: "backtick",
+    language: "python",
+  });
+  assert.deepEqual(classifyFenceLine("```text"), {
+    kind: "supported-open",
+    delimiter: "backtick",
+    language: "text",
+  });
+  assert.deepEqual(classifyFenceLine("'''python"), {
+    kind: "supported-open",
+    delimiter: "apostrophe",
+    language: "python",
+  });
+  assert.deepEqual(classifyFenceLine("'''text"), {
+    kind: "supported-open",
+    delimiter: "apostrophe",
+    language: "text",
+  });
+});
+
+test("AC whitespace: unsupported label with whitespace left unchanged", () => {
+  const jsBacktick = [para("``` javascript\nconsole.log(1)\n```")];
+  assert.deepEqual(normalizeReadOnlyFencedCode(jsBacktick), jsBacktick);
+  assert.deepEqual(classifyFenceLine("``` javascript"), {
+    kind: "unsupported-open",
+    delimiter: "backtick",
+    token: "javascript",
+  });
+  const jsApostrophe = [para("''' javascript\nconsole.log(1)\n'''")];
+  assert.deepEqual(normalizeReadOnlyFencedCode(jsApostrophe), jsApostrophe);
+});
+
+test("AC whitespace: inline fence-like text with spaces left unchanged", () => {
+  const input = [para("Use ``` python inline or ''' text inline")];
+  const out = normalizeReadOnlyFencedCode(input);
+  assert.deepEqual(out, input);
+  assert.equal(out[0], input[0]);
+});
+
+test("AC whitespace: mismatched delimiters with spaced open left unchanged", () => {
+  const btOpenApClose = [para("``` python\nprint(1)\n'''")];
+  assert.deepEqual(normalizeReadOnlyFencedCode(btOpenApClose), btOpenApClose);
+  const apOpenBtClose = [para("''' python\nprint(1)\n```")];
+  assert.deepEqual(normalizeReadOnlyFencedCode(apOpenBtClose), apOpenBtClose);
+});
+
+test("AC whitespace: mixed prose + spaced ``` python still splits", () => {
+  const out = normalizeReadOnlyFencedCode([
+    para('Write:\n``` python\nprint("Hi")\n```\nRun.'),
+  ]);
+  assert.deepEqual(out, [
+    { type: "paragraph", content: "Write:" },
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: 'print("Hi")',
+    },
+    { type: "paragraph", content: "Run." },
+  ]);
+});
+
+test("AC whitespace: nested children with spaced open → codeBlock", () => {
+  const column = {
+    type: "column",
+    props: { width: 1 },
+    children: [para("``` python"), para("print(1)"), para("```")],
+  };
+  const out = normalizeReadOnlyFencedCode([column]);
+  assert.deepEqual(out[0].children, [
+    {
+      type: "codeBlock",
+      props: { language: "python" },
+      content: "print(1)",
+    },
+  ]);
+});

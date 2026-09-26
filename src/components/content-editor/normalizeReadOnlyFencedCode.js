@@ -16,8 +16,9 @@
  * (inline ''' / ``` are never treated as fences).
  */
 
-const BACKTICK_OPEN_RE = /^```([A-Za-z0-9_+-]*)\s*$/;
-const APOSTROPHE_OPEN_RE = /^'''([A-Za-z0-9_+-]*)\s*$/;
+// Optional horizontal whitespace (space/tab) allowed between delimiter and language token.
+const BACKTICK_OPEN_RE = /^```[ \t]*([A-Za-z0-9_+-]*)\s*$/;
+const APOSTROPHE_OPEN_RE = /^'''[ \t]*([A-Za-z0-9_+-]*)\s*$/;
 const BACKTICK_CLOSE_RE = /^```\s*$/;
 const APOSTROPHE_CLOSE_RE = /^'''\s*$/;
 
