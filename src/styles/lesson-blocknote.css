@@ -897,8 +897,8 @@
   }
 
   /*
-   * Phones (≤480): educational-reader scale. BlockNote H1 --level:3em ≈48px is
-   * poster-like; cap near 32px with compact section rhythm for density.
+   * Phones (≤480): compact educational-reader scale. Hierarchy stays obvious;
+   * H1 ~29px / H2 ~23px / H3 ~19px — below prior 32/25/21 while body stays 16px.
    */
   .pbc-lesson-doc--preview .bn-default-styles {
     font-size: 16px;
@@ -914,50 +914,61 @@
   }
 
   .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"] {
-    --level: 2rem; /* 32px — within 30–34px phone H1 band */
-    padding-top: 0.55rem;
+    --level: 1.8125rem; /* 29px — within 28–30px phone H1 band */
+    padding-top: 0.35rem;
+    padding-bottom: 0;
     line-height: 1.12;
   }
 
   .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="2"] {
-    --level: 1.5625rem; /* 25px */
-    line-height: 1.16;
+    --level: 1.4375rem; /* 23px — within 22–24px */
+    padding-top: 0.45rem;
+    line-height: 1.18;
   }
 
   .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="3"] {
-    --level: 1.3125rem; /* 21px */
+    --level: 1.1875rem; /* 19px — within 18–20px */
+    padding-top: 0.35rem;
     line-height: 1.24;
   }
 
   .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="4"],
   .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="5"],
   .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="6"] {
-    --level: 1.125rem; /* 18px */
+    --level: 1.0625rem; /* 17px — within 16–18px */
+    padding-top: 0.3rem;
     line-height: 1.3;
   }
 
+  /* Compact block rhythm: avoid stacking BlockNote 3px + heading padding. */
   .pbc-lesson-doc--preview .bn-block-content {
-    padding-top: 0.15rem;
-    padding-bottom: 0.15rem;
+    padding-top: 0.08rem;
+    padding-bottom: 0.08rem;
   }
 
   .pbc-lesson-doc--preview .bn-block-content[data-content-type="divider"] hr {
-    margin: 0.45rem 0;
+    margin: 0.35rem 0;
+    border-top-color: #d8dee9;
   }
 
   .pbc-lesson-doc--preview .bn-block-group .bn-block-group {
-    margin-left: 1rem;
+    margin-left: 0.85rem;
   }
 
   .pbc-lesson-doc--preview .bn-block-content[data-content-type="codeBlock"] {
     font-size: 0.8125rem; /* 13px */
     line-height: 1.5;
+    margin-top: 0.2rem;
+    margin-bottom: 0.2rem;
   }
 
   .pbc-lesson-doc--preview .bn-block-content[data-content-type="codeBlock"] > pre {
-    padding: 0.65rem 0.75rem;
+    padding: 0.55rem 0.65rem;
     font-size: 0.8125rem;
     line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+    max-width: 100%;
   }
 }
 

@@ -11,12 +11,18 @@ import {
   buildSnapshotReaderModel,
   findLessonIndex,
 } from "../../platform/contentSnapshotReader.js";
+import { normalizeReadOnlyFencedCode } from "./normalizeReadOnlyFencedCode.js";
 
 function ReadOnlyDoc({ docKey, initialContent }) {
+  const renderContent = useMemo(
+    () => normalizeReadOnlyFencedCode(initialContent),
+    [initialContent],
+  );
+
   const editor = useCreateBlockNote(
     {
       schema: pybotContentSchema,
-      initialContent: initialContent?.length ? initialContent : undefined,
+      initialContent: renderContent?.length ? renderContent : undefined,
       dictionary: pybotDictionary,
       trailingBlock: false,
       animations: false,

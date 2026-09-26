@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { useCreateBlockNote } from "@blocknote/react";
 import "@blocknote/core/fonts/inter.css";
@@ -5,15 +6,21 @@ import "@blocknote/mantine/style.css";
 import "../../styles/lesson-blocknote.css";
 import { isSafeLessonLink, resolveContentMediaUrl } from "./contentMedia.js";
 import { pybotContentSchema, pybotDictionary } from "./pybotContentSchema.jsx";
+import { normalizeReadOnlyFencedCode } from "./normalizeReadOnlyFencedCode.js";
 
 /**
  * Documento de lección en solo lectura (actividades asignadas).
  */
 export default function AssignedLessonViewer({ lessonId, initialContent }) {
+  const renderContent = useMemo(
+    () => normalizeReadOnlyFencedCode(initialContent),
+    [initialContent],
+  );
+
   const editor = useCreateBlockNote(
     {
       schema: pybotContentSchema,
-      initialContent: initialContent?.length ? initialContent : undefined,
+      initialContent: renderContent?.length ? renderContent : undefined,
       dictionary: pybotDictionary,
       trailingBlock: false,
       animations: false,

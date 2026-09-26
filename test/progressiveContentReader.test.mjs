@@ -385,10 +385,10 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
   assert.ok(phoneBlock, "480px phone typography media query must exist");
   const body = phoneBlock[1];
 
-  // H1 / top-level: 2rem (32px) within 30–34px band — not BlockNote 3em.
+  // H1 / top-level: 1.8125rem (29px) within 28–30px band — not BlockNote 3em.
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*2rem/s,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*1\.8125rem/s,
   );
   assert.match(
     body,
@@ -396,21 +396,21 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
   );
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*0\.55rem/s,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*0\.35rem/s,
   );
 
-  // Hierarchy remains distinct.
+  // Hierarchy remains distinct (H2 ~23px, H3 ~19px, H4+ ~17px).
   assert.match(
     body,
-    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*--level:\s*1\.5625rem/s,
+    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*--level:\s*1\.4375rem/s,
   );
   assert.match(
     body,
-    /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*--level:\s*1\.3125rem/s,
+    /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*--level:\s*1\.1875rem/s,
   );
   assert.match(
     body,
-    /\[data-content-type="heading"\]\[data-level="4"\][\s\S]*?--level:\s*1\.125rem/s,
+    /\[data-content-type="heading"\]\[data-level="4"\][\s\S]*?--level:\s*1\.0625rem/s,
   );
 
   // Body ~16px / comfortable line-height.
@@ -430,31 +430,39 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
   // Compact vertical rhythm (not cramped).
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\s*\{[^}]*padding-top:\s*0\.15rem/s,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\s*\{[^}]*padding-top:\s*0\.08rem/s,
   );
   assert.match(
     body,
-    /\[data-content-type="divider"\]\s+hr\s*\{[^}]*margin:\s*0\.45rem\s+0/s,
+    /\[data-content-type="divider"\]\s+hr\s*\{[^}]*margin:\s*0\.35rem\s+0/s,
   );
 
-  // Code: mobile monospace + internal scroll, no giant padding.
+  // Code: mobile monospace + internal scroll, compact padding, preserve whitespace.
   assert.match(
     body,
     /\[data-content-type="codeBlock"\]\s*\{[^}]*font-size:\s*0\.8125rem/s,
   );
   assert.match(
     body,
-    /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*padding:\s*0\.65rem\s+0\.75rem/s,
+    /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*padding:\s*0\.55rem\s+0\.65rem/s,
   );
   assert.match(
     body,
     /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*font-size:\s*0\.8125rem/s,
   );
+  assert.match(
+    body,
+    /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*white-space:\s*pre/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="codeBlock"\]\s*>\s*pre\s*\{[^}]*overflow-x:\s*auto/s,
+  );
 
   // Nested lists: compact indent (not BlockNote 24px cascade).
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-group\s+\.bn-block-group\s*\{[^}]*margin-left:\s*1rem/s,
+    /\.pbc-lesson-doc--preview\s+\.bn-block-group\s+\.bn-block-group\s*\{[^}]*margin-left:\s*0\.85rem/s,
   );
 
   // Width repair preserved inside same phone query.
@@ -463,6 +471,9 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
     body,
     /\.pbc-lesson-doc--preview\s+\.bn-editor\s*\{[^}]*padding-inline:\s*0/s,
   );
+
+  // No text-match styling on Activity/Challenge/PREDICT strings.
+  assert.doesNotMatch(body, /Activity|Challenge|PREDICT/);
 });
 
 test("AC mobile typography: tablet ≤768 uses intermediate heading scale below BlockNote defaults", () => {
