@@ -1,19 +1,57 @@
 import { filterSuggestionItems } from "@blocknote/core/extensions";
 import { BlockNoteView } from "@blocknote/mantine";
 import { SuggestionMenuController, useCreateBlockNote } from "@blocknote/react";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import "../../styles/lesson-blocknote.css";
 import { saveLessonDocument } from "../../platform/contentApi.js";
 import { isSafeLessonLink, resolveContentMediaUrl, uploadContentMedia } from "./contentMedia.js";
 import LessonInsertToolbar from "./LessonInsertToolbar.jsx";
+import { buildLessonPreviewDocument } from "./normalizeReadOnlyFencedCode.js";
 import { getPybotSlashMenuItems, pybotContentSchema, pybotDictionary } from "./pybotContentSchema.jsx";
 
 const AUTOSAVE_MS = 1000;
 
 function snapshotDocument(editor) {
   return JSON.stringify(editor.document);
+}
+
+/** Read-only BlockNote surface for Preview; mounts only while preview is on. */
+function LessonPreviewDocument({ docKey, renderContent }) {
+  const editor = useCreateBlockNote(
+    {
+      schema: pybotContentSchema,
+      initialContent: renderContent?.length ? renderContent : undefined,
+      dictionary: pybotDictionary,
+      trailingBlock: false,
+      animations: false,
+      links: {
+        isValidLink: isSafeLessonLink,
+      },
+      resolveFileUrl: resolveContentMediaUrl,
+    },
+    [docKey],
+  );
+
+  return (
+    <div className="pbc-lesson-doc pbc-lesson-doc--preview">
+      <BlockNoteView
+        editor={editor}
+        theme="light"
+        editable={false}
+        slashMenu={false}
+        emojiPicker={false}
+        comments={false}
+        formattingToolbar={false}
+        sideMenu={false}
+        filePanel={false}
+        tableHandles={false}
+        linkToolbar={false}
+        className="pbc-bn"
+      />
+    </div>
+  );
 }
 
 const LessonBlockNoteEditor = forwardRef(function LessonBlockNoteEditor(
@@ -30,6 +68,8 @@ const LessonBlockNoteEditor = forwardRef(function LessonBlockNoteEditor(
   const versionRef = useRef(documentVersion ?? 1);
   const lastSavedRef = useRef(JSON.stringify(initialContent));
   const editorRef = useRef(null);
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
 
   const setStatus = useCallback(
     (next) => {
@@ -38,6 +78,7 @@ const LessonBlockNoteEditor = forwardRef(function LessonBlockNoteEditor(
     [onStatusChange],
   );
 
+  // Edit mode always seeds from the persisted document (never a preview transform).
   const editor = useCreateBlockNote(
     {
       schema: pybotContentSchema,
@@ -60,7 +101,14 @@ const LessonBlockNoteEditor = forwardRef(function LessonBlockNoteEditor(
 
   editorRef.current = editor;
 
+  // Preview render doc: normalize fences for display only (editable doc untouched).
+  const previewRenderDocument = useMemo(() => {
+    if (!preview) return null;
+    return buildLessonPreviewDocument(editor.document);
+  }, [preview, editor]);
+
   const persistNow = useCallback(async () => {
+    // Always persist the editable editor document (never the preview render tree).
     const currentEditor = editorRef.current;
     if (!currentEditor || !hydratedRef.current) return false;
     if (savingRef.current) return false;
@@ -114,6 +162,7 @@ const LessonBlockNoteEditor = forwardRef(function LessonBlockNoteEditor(
   }));
 
   const scheduleSave = useCallback(() => {
+    if (previewRef.current) return;
     if (!hydratedRef.current) return;
     dirtyRef.current = true;
     setStatus("saving");
@@ -168,27 +217,32 @@ const LessonBlockNoteEditor = forwardRef(function LessonBlockNoteEditor(
   return (
     <div className={`pbc-lesson-workspace${preview ? " pbc-lesson-workspace--preview" : ""}`}>
       {preview ? null : <LessonInsertToolbar editor={editor} disabled={!editor.isEditable} />}
-      <div className={`pbc-lesson-doc${preview ? " pbc-lesson-doc--preview" : ""}`}>
-        <BlockNoteView
-          editor={editor}
-          theme="light"
-          editable={!preview}
-          slashMenu={false}
-          emojiPicker={false}
-          comments={false}
-          formattingToolbar={!preview}
-          sideMenu={!preview}
-          filePanel={!preview}
-          tableHandles={!preview}
-          linkToolbar={!preview}
-          onChange={handleChange}
-          className="pbc-bn"
-        >
-          {preview ? null : (
+      {preview && previewRenderDocument ? (
+        <LessonPreviewDocument
+          docKey={`${lessonId}-preview`}
+          renderContent={previewRenderDocument}
+        />
+      ) : (
+        <div className="pbc-lesson-doc">
+          <BlockNoteView
+            editor={editor}
+            theme="light"
+            editable={true}
+            slashMenu={false}
+            emojiPicker={false}
+            comments={false}
+            formattingToolbar={true}
+            sideMenu={true}
+            filePanel={true}
+            tableHandles={true}
+            linkToolbar={true}
+            onChange={handleChange}
+            className="pbc-bn"
+          >
             <SuggestionMenuController triggerCharacter="/" getItems={getSlashItems} />
-          )}
-        </BlockNoteView>
-      </div>
+          </BlockNoteView>
+        </div>
+      )}
     </div>
   );
 });

@@ -403,3 +403,16 @@ export function normalizeReadOnlyFencedCode(documentJson) {
   if (!Array.isArray(documentJson)) return documentJson;
   return normalizeBlockArray(documentJson, 0);
 }
+
+/**
+ * Preview-only render document derived from a lesson document.
+ * Deep-clones first so callers' editable/persisted source is never mutated
+ * and never shares structure with the normalized preview tree.
+ *
+ * @param {unknown} sourceDocument
+ * @returns {unknown}
+ */
+export function buildLessonPreviewDocument(sourceDocument) {
+  if (!Array.isArray(sourceDocument)) return sourceDocument;
+  return normalizeReadOnlyFencedCode(JSON.parse(JSON.stringify(sourceDocument)));
+}

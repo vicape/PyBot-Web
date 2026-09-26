@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  buildLessonPreviewDocument,
   classifyFenceLine,
   extractPlainText,
   normalizeReadOnlyFencedCode,
@@ -325,10 +326,42 @@ test("AC fence: extractPlainText rejects link-bearing paragraphs", () => {
   assert.deepEqual(normalizeReadOnlyFencedCode([withLink]), [withLink]);
 });
 
-test("AC fence: read-only viewers apply normalizer; editor does not", () => {
+test("AC fence: read-only viewers and lesson preview apply normalizer; edit seed stays raw", () => {
   assert.match(viewerSrc, /normalizeReadOnlyFencedCode/);
   assert.match(lessonViewerSrc, /normalizeReadOnlyFencedCode/);
-  assert.doesNotMatch(editorSrc, /normalizeReadOnlyFencedCode/);
+  assert.match(editorSrc, /buildLessonPreviewDocument/);
+  // Edit-mode useCreateBlockNote still seeds from persisted initialContent directly.
+  assert.match(
+    editorSrc,
+    /useCreateBlockNote\(\s*\{[\s\S]*?initialContent,?[\s\S]*?\},\s*\[lessonId\]/,
+  );
+  // Page does not pre-normalize the editable seed (Preview derives its own render doc).
+  const pageSrc = readFileSync(
+    resolve(root, "src/pages/LessonEditorPage.jsx"),
+    "utf8",
+  );
+  assert.doesNotMatch(pageSrc, /normalizeReadOnlyFencedCode|buildLessonPreviewDocument/);
+  assert.match(pageSrc, /initialContent=\{editorSeed\.document\}/);
+});
+
+test("AC preview: ```python for-i-in-range fence → native codeBlock; source untouched", () => {
+  const source = [para("```python\nfor i in range(5):\n```")];
+  const sourceBefore = JSON.parse(JSON.stringify(source));
+  const previewDoc = buildLessonPreviewDocument(source);
+  assert.deepEqual(source, sourceBefore);
+  assert.equal(previewDoc.length, 1);
+  assert.equal(previewDoc[0].type, "codeBlock");
+  assert.equal(previewDoc[0].props.language, "python");
+  assert.equal(previewDoc[0].content, "for i in range(5):");
+});
+
+test("AC preview: LessonBlockNoteEditor Preview path uses buildLessonPreviewDocument", () => {
+  assert.match(editorSrc, /function LessonPreviewDocument/);
+  assert.match(editorSrc, /buildLessonPreviewDocument\(editor\.document\)/);
+  assert.match(
+    editorSrc,
+    /preview\s*&&\s*previewRenderDocument[\s\S]*LessonPreviewDocument/,
+  );
 });
 
 test("AC mixed: prose + ```python fence + prose → paragraph/codeBlock/paragraph", () => {
