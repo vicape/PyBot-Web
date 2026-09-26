@@ -20,6 +20,11 @@ const viewerSrc = readFileSync(
 );
 const sharedSrc = readFileSync(resolve(root, "src/pages/SharedContentPage.jsx"), "utf8");
 const cssSrc = readFileSync(resolve(root, "src/styles/pybotclass-dashboard.css"), "utf8");
+const lessonCss = readFileSync(resolve(root, "src/styles/lesson-blocknote.css"), "utf8");
+const blockNoteEditorCss = readFileSync(
+  resolve(root, "node_modules/@blocknote/core/src/editor/editor.css"),
+  "utf8",
+);
 
 const contentSnapshot = {
   sourceType: "content",
@@ -281,5 +286,74 @@ test("objectives helper only when real data exists; teacher actions secondary", 
   assert.doesNotMatch(
     sharedSrc,
     /pbc-content-editor__actions[\s\S]*pbc-btn--primary[\s\S]*pcCreateCopy/,
+  );
+});
+
+test("AC mobile width: BlockNote still reserves 54px side-menu gutter by default", () => {
+  // Root-cause anchor: installed BlockNote keeps padding-inline even when menus are hidden.
+  assert.match(blockNoteEditorCss, /\.bn-editor\s*\{[^}]*padding-inline:\s*54px/s);
+});
+
+test("AC mobile width: read-only lesson surface collapses BlockNote gutter + uses full width", () => {
+  const mobileBlock = lessonCss.match(
+    /@media \(max-width:\s*768px\)\s*\{([\s\S]*?)\n\}\s*\n@media \(max-width:\s*720px\)/,
+  );
+  assert.ok(mobileBlock, "768px mobile lesson media query must exist before 720px query");
+  const body = mobileBlock[1];
+
+  assert.match(body, /\.pbc-lesson-doc\s*\{[^}]*width:\s*100%/s);
+  assert.match(body, /\.pbc-lesson-doc\s*\{[^}]*max-width:\s*100%/s);
+  assert.match(body, /\.pbc-lesson-doc\s*\{[^}]*min-width:\s*0/s);
+  assert.match(body, /\.pbc-lesson-doc\s*\{[^}]*padding:\s*0\.85rem\s+0\.75rem/s);
+  assert.match(body, /\.pbc-lesson-doc\s*\{[^}]*min-height:\s*0/s);
+
+  assert.match(
+    body,
+    /\.pbc-lesson-doc--preview\s+\.bn-editor\s*\{[^}]*padding-inline:\s*0\.15rem/s,
+  );
+  assert.match(body, /\.pbc-lesson-doc\s+\.bn-editor\s*\{[^}]*width:\s*100%/s);
+  assert.match(body, /\.pbc-lesson-doc\s+\.bn-editor\s*\{[^}]*min-width:\s*0/s);
+  assert.match(body, /\.pbc-lesson-doc\s+\.bn-container/);
+  assert.match(body, /\.pbc-bn/);
+
+  // Compact phone padding at 480px keeps useful content width (≈360 − page pad − doc pad).
+  assert.match(
+    lessonCss,
+    /@media \(max-width:\s*480px\)\s*\{[\s\S]*?\.pbc-lesson-doc\s*\{[^}]*padding:\s*0\.75rem\s+0\.65rem/s,
+  );
+  assert.match(
+    lessonCss,
+    /@media \(max-width:\s*480px\)\s*\{[\s\S]*?\.pbc-lesson-doc--preview\s+\.bn-editor\s*\{[^}]*padding-inline:\s*0/s,
+  );
+});
+
+test("AC mobile wrapping: preview prose/headings use normal word-break, not break-all", () => {
+  const mobileBlock = lessonCss.match(
+    /@media \(max-width:\s*768px\)\s*\{([\s\S]*?)\n\}\s*\n@media \(max-width:\s*720px\)/,
+  );
+  assert.ok(mobileBlock, "768px mobile lesson media query must exist");
+  const body = mobileBlock[1];
+
+  assert.match(body, /\.pbc-lesson-doc--preview\s+\.bn-editor\s+h1/);
+  assert.match(body, /\.pbc-lesson-doc--preview\s+\.bn-editor\s+p/);
+  assert.match(body, /\.bn-inline-content/);
+  assert.match(body, /word-break:\s*normal/);
+  assert.match(body, /overflow-wrap:\s*break-word/);
+  assert.doesNotMatch(body, /word-break:\s*break-all/);
+  assert.doesNotMatch(lessonCss, /\.pbc-lesson-doc[^{\n]*\{[^}]*word-break:\s*break-all/s);
+});
+
+test("AC wide content: code/tables scroll internally inside lesson doc", () => {
+  assert.match(
+    lessonCss,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="table"\]\s*\{[^}]*overflow-x:\s*auto/s,
+  );
+  assert.match(
+    lessonCss,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="codeBlock"\][\s\S]*?overflow-x:\s*auto/s,
+  );
+  assert.match(
+    lessonCss,
+    /\.pbc-lesson-doc\s+(?:img|video)[\s\S]*?max-width:\s*100%/s,
   );
 });

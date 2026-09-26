@@ -200,6 +200,10 @@
   display: flex;
   flex-direction: column;
   gap: 1.35rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 /* —— Visual toolbar —— */
@@ -385,6 +389,9 @@
 /* —— Document surface —— */
 .pbc-lesson-doc {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   margin: 0;
   min-height: 600px;
   padding: 2rem 2.15rem 3rem;
@@ -408,9 +415,17 @@
 .pbc-lesson-doc .bn-mantine,
 .pbc-lesson-doc .pbc-bn {
   background: transparent;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .pbc-lesson-doc .bn-editor {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   min-height: 560px;
   padding-top: 0.35rem;
   padding-bottom: 3rem;
@@ -433,6 +448,12 @@
 .pbc-lesson-doc code,
 .pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"] {
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+.pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"],
+.pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"] > pre {
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .pbc-lesson-doc .bn-side-menu .bn-button,
@@ -710,9 +731,80 @@
   }
 }
 
+/* Phones: reclaim BlockNote side-menu gutter; compact readable surface */
+@media (max-width: 768px) {
+  .pbc-lesson-workspace,
+  .pbc-assigned-lesson,
+  .pbc-lesson-doc {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .pbc-lesson-doc {
+    padding: 0.85rem 0.75rem 1.35rem;
+    min-height: 0;
+  }
+
+  .pbc-lesson-doc .bn-container,
+  .pbc-lesson-doc .bn-mantine,
+  .pbc-lesson-doc .pbc-bn,
+  .pbc-lesson-doc .bn-editor {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .pbc-lesson-doc .bn-block-group,
+  .pbc-lesson-doc .bn-block-outer,
+  .pbc-lesson-doc .bn-block,
+  .pbc-lesson-doc .bn-block-content {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  /*
+   * BlockNote defaults `.bn-editor { padding-inline: 54px }` for the drag/side menu.
+   * In read-only preview that chrome is hidden, but the gutter still starves phones
+   * (~108px lost before page/doc padding). Collapse it on the preview surface only.
+   */
+  .pbc-lesson-doc--preview .bn-editor {
+    padding-inline: 0.15rem;
+    min-height: 0;
+    padding-bottom: 1.5rem;
+  }
+
+  /* Editable mobile: keep a smaller handle gutter than desktop 54px */
+  .pbc-lesson-doc:not(.pbc-lesson-doc--preview) .bn-editor {
+    padding-inline: 2.25rem;
+    min-height: 0;
+  }
+
+  /* Normal wrapping for headings/prose — never character-break ordinary text */
+  .pbc-lesson-doc--preview .bn-editor h1,
+  .pbc-lesson-doc--preview .bn-editor h2,
+  .pbc-lesson-doc--preview .bn-editor h3,
+  .pbc-lesson-doc--preview .bn-editor h4,
+  .pbc-lesson-doc--preview .bn-editor h5,
+  .pbc-lesson-doc--preview .bn-editor h6,
+  .pbc-lesson-doc--preview .bn-editor p,
+  .pbc-lesson-doc--preview .bn-editor li,
+  .pbc-lesson-doc--preview .bn-editor .bn-inline-content {
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+}
+
 @media (max-width: 720px) {
   .pbc-lesson-doc .bn-editor {
     padding-bottom: 2.5rem;
+  }
+
+  .pbc-lesson-doc--preview .bn-editor {
+    padding-bottom: 1.5rem;
   }
 
   .pbc-vbar {
@@ -722,6 +814,17 @@
   .pbc-vbar__icon-btn {
     width: 46px;
     height: 46px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pbc-lesson-doc {
+    padding: 0.75rem 0.65rem 1.15rem;
+    border-radius: 16px;
+  }
+
+  .pbc-lesson-doc--preview .bn-editor {
+    padding-inline: 0;
   }
 }
 
@@ -847,6 +950,8 @@
 
 .pbc-assigned-lesson {
   max-width: none;
+  width: 100%;
+  min-width: 0;
 }
 
 .pbc-assigned-lesson .pbc-lesson-doc {
