@@ -622,18 +622,18 @@ test("AC desktop typography: shared viewer/editor scale above 768px", () => {
   const body = desktopBlock[1];
 
   // Shared .pbc-lesson-doc selectors (viewer + editor), not preview-only.
-  assert.match(body, /\.pbc-lesson-doc\s+\.bn-default-styles\s*\{[^}]*font-size:\s*16px/s);
+  assert.match(body, /\.pbc-lesson-doc\s+\.bn-default-styles\s*\{[^}]*font-size:\s*14px/s);
   assert.match(
     body,
     /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="paragraph"\]/,
   );
   assert.match(
     body,
-    /\[data-content-type="paragraph"\][\s\S]*?font-size:\s*16px/,
+    /\[data-content-type="paragraph"\][\s\S]*?font-size:\s*14px/,
   );
   assert.match(
     body,
-    /\[data-content-type="bulletListItem"\][\s\S]*?font-size:\s*16px|font-size:\s*16px[\s\S]*?bulletListItem/,
+    /\[data-content-type="bulletListItem"\][\s\S]*?font-size:\s*14px|font-size:\s*14px[\s\S]*?bulletListItem/,
   );
   assert.match(
     body,
@@ -644,22 +644,22 @@ test("AC desktop typography: shared viewer/editor scale above 768px", () => {
     /\[data-content-type="checkListItem"\]/,
   );
 
-  // Heading hierarchy: H1 32px, H2 26px, H3 21px, H4–H6 18px (rem equivalents).
+  // Heading hierarchy: H1 25px, H2 20px, H3 17px, H4–H6 15px (rem equivalents).
   assert.match(
     body,
-    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*2rem/s,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*1\.5625rem/s,
   );
   assert.match(
     body,
-    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*--level:\s*1\.625rem/s,
+    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*--level:\s*1\.25rem/s,
   );
   assert.match(
     body,
-    /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*--level:\s*1\.3125rem/s,
+    /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*--level:\s*1\.0625rem/s,
   );
   assert.match(
     body,
-    /\[data-content-type="heading"\]\[data-level="4"\][\s\S]*?--level:\s*1\.125rem/,
+    /\[data-content-type="heading"\]\[data-level="4"\][\s\S]*?--level:\s*0\.9375rem/,
   );
   assert.match(
     body,
@@ -670,23 +670,47 @@ test("AC desktop typography: shared viewer/editor scale above 768px", () => {
     /\[data-content-type="heading"\]\[data-level="6"\]/,
   );
 
-  // Code 14px in both surfaces.
+  // Code 13px in both surfaces.
   assert.match(
     body,
-    /\[data-content-type="codeBlock"\][\s\S]*?font-size:\s*0\.875rem/,
+    /\[data-content-type="codeBlock"\][\s\S]*?font-size:\s*0\.8125rem/,
+  );
+
+  // Chrome / chrome spacing (compact desktop document editor).
+  assert.match(body, /\.pbc-content-breadcrumb\s*\{[^}]*font-size:\s*0\.75rem/s);
+  assert.match(body, /\.pbc-lesson-hero__subtitle\s*\{[^}]*font-size:\s*0\.875rem/s);
+  assert.match(body, /\.pbc-vbar__icon-btn\s*\{[^}]*width:\s*42px/s);
+  assert.match(body, /\.pbc-vbar__plus\s*\{[^}]*width:\s*40px/s);
+  assert.match(body, /\.pbc-vbar\s*\{[^}]*padding:\s*0\.8125rem/s);
+  assert.match(body, /\.pbc-lesson-doc\s*\{[^}]*padding:\s*1\.625rem/s);
+  assert.match(
+    body,
+    /\[data-content-type="paragraph"\]\s*\{[^}]*padding-top:\s*0\.3rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-level="2"\]\s*\{[^}]*padding-top:\s*0\.9375rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-level="3"\]\s*\{[^}]*padding-top:\s*0\.6875rem/s,
   );
 
   // Must not duplicate a preview-only desktop scale.
   assert.doesNotMatch(body, /\.pbc-lesson-doc--preview/);
 });
 
-test("AC desktop typography: lesson title capped ~32px–34px on desktop", () => {
+test("AC desktop typography: lesson title capped at 27px on desktop", () => {
   assert.match(
     lessonCss,
-    /\.pbc-lesson-title-input\s*\{[^}]*font-size:\s*clamp\(\s*1\.5rem\s*,\s*3\.2vw\s*,\s*34px\s*\)/s,
+    /\.pbc-lesson-title-input\s*\{[^}]*font-size:\s*clamp\(\s*1\.5rem\s*,\s*3\.2vw\s*,\s*27px\s*\)/s,
   );
   assert.doesNotMatch(
     lessonCss,
     /\.pbc-lesson-title-input\s*\{[^}]*font-size:\s*clamp\([^)]*2\.625rem/s,
+  );
+  assert.doesNotMatch(
+    lessonCss,
+    /\.pbc-lesson-title-input\s*\{[^}]*font-size:\s*clamp\([^)]*34px/s,
   );
 });
