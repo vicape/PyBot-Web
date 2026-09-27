@@ -9,6 +9,7 @@ import ShareContentModal from "../components/content-editor/ShareContentModal.js
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import MyContentEmptyIllustration from "../components/pybotclass/illustrations/MyContentEmptyIllustration.jsx";
 import { CompactContentIcon } from "../components/pybotclass/illustrations/ActionIcons.jsx";
+import { UxIcon } from "../components/pybotclass/illustrations/UxIcons.jsx";
 import { copyLearningContent, listMyContents } from "../platform/contentApi.js";
 import { listTeacherCoursesForAssign } from "../platform/contentAssignApi.js";
 import { getMyContentUsageMetrics } from "../platform/contentShareApi.js";
@@ -140,9 +141,14 @@ export default function MyContentPage() {
 
       <div className="pbc-content-page">
         <header className="pbc-hero-block pbc-content-page__head">
-          <div className="pbc-hero-block__text">
-            <h1 className="pbc-hero-block__title">{t("pcNavContent")}</h1>
-            <p className="pbc-hero-block__subtitle">{t("pcContentPageLead")}</p>
+          <div className="pbc-hero-block__identity">
+            <span aria-hidden>
+              <UxIcon name="content" size={48} />
+            </span>
+            <div className="pbc-hero-block__text">
+              <h1 className="pbc-hero-block__title">{t("pcNavContent")}</h1>
+              <p className="pbc-hero-block__subtitle">{t("pcContentPageLead")}</p>
+            </div>
           </div>
           <div className="pbc-hero-block__actions">
             {!assignToCourse ? (

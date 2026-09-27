@@ -22,6 +22,7 @@ import {
 } from "../illustrations/ActionIcons.jsx";
 import EmptyCoursesIllustration from "../illustrations/EmptyCoursesIllustration.jsx";
 import { GoogleClassroomIcon } from "../illustrations/SidebarIcons.jsx";
+import { UxIcon } from "../illustrations/UxIcons.jsx";
 import RoleBadges from "./RoleBadges.jsx";
 
 const ROLE_BADGE = {
@@ -307,9 +308,14 @@ export default function PyBotClassHome({
       <div className="pbc-home pbc-home--courses-view">
         <div className="pbc-home__main" style={{ gridColumn: "1 / -1" }}>
           <header className="pbc-hero-block">
-            <div className="pbc-hero-block__text">
-              <h1 className="pbc-hero-block__title">{t("pcCourses")}</h1>
-              <p className="pbc-hero-block__subtitle">{t("pcCoursesViewLead")}</p>
+            <div className="pbc-hero-block__identity">
+              <span aria-hidden>
+                <UxIcon name="courses" size={48} />
+              </span>
+              <div className="pbc-hero-block__text">
+                <h1 className="pbc-hero-block__title">{t("pcCourses")}</h1>
+                <p className="pbc-hero-block__subtitle">{t("pcCoursesViewLead")}</p>
+              </div>
             </div>
             <div className="pbc-hero-block__actions" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {hasStaffAccess ? (
@@ -392,11 +398,16 @@ export default function PyBotClassHome({
     <div className="pbc-home">
       <div className="pbc-home__main">
         <header className="pbc-hero-block">
-          <div className="pbc-hero-block__text">
-            <h1 className="pbc-hero-block__title">
-              {t("pcHello")}, {firstName}
-            </h1>
-            <p className="pbc-hero-block__subtitle">{t("pcHomeLead")}</p>
+          <div className="pbc-hero-block__identity">
+            <span aria-hidden>
+              <UxIcon name="home" size={48} />
+            </span>
+            <div className="pbc-hero-block__text">
+              <h1 className="pbc-hero-block__title">
+                {t("pcHello")}, {firstName}
+              </h1>
+              <p className="pbc-hero-block__subtitle">{t("pcHomeLead")}</p>
+            </div>
           </div>
           <div className="pbc-hero-block__actions">
             {hasStaffAccess ? (
@@ -485,7 +496,7 @@ export default function PyBotClassHome({
 
           <a href="/" className="pbc-action-card pbc-action-card--ide">
             <span className="pbc-action-card__icon pbc-action-card__icon--indigo" aria-hidden>
-              <CompactIdeIcon />
+              <UxIcon name="ide" size={36} />
             </span>
             <span className="pbc-action-card__body">
               <span className="pbc-action-card__title">{t("pcOpenIde")}</span>
@@ -553,6 +564,14 @@ export default function PyBotClassHome({
           >
             {t("pcAccount")}
           </Link>
+        </div>
+        <div className="pbc-panel-card" aria-label="Tutor IA">
+          <div className="pbc-panel-card__ux">
+            <span aria-hidden>
+              <UxIcon name="aiChat" size={56} />
+            </span>
+            <h3 className="pbc-panel-card__title">Tutor IA</h3>
+          </div>
         </div>
       </aside>
     </div>

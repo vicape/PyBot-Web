@@ -16,6 +16,18 @@ import {
   PbcListItem,
   PbcSection,
 } from "./PyBotClassUi.jsx";
+import { UxIcon } from "./illustrations/UxIcons.jsx";
+
+function activitiesSectionTitle() {
+  return (
+    <span className="pbc-section__title-with-icon">
+      <span aria-hidden>
+        <UxIcon name="checklist" size={40} />
+      </span>
+      <span>{t("pcActivities")}</span>
+    </span>
+  );
+}
 
 function ActivityForm({ initial, saving, err, onSubmit, onCancel, title }) {
   const [formTitle, setFormTitle] = useState(initial?.title || "");
@@ -313,7 +325,7 @@ export default function CourseActivitiesTab({
 
   if (mode === COURSE_ACCESS_MODES.STUDYING) {
     return (
-      <PbcSection title={t("pcActivities")}>
+      <PbcSection title={activitiesSectionTitle()}>
         {activities.length === 0 ? (
           <PbcEmpty title={t("pcNoActivities")} description={t("pcNoActivitiesStudentDesc")} />
         ) : (
@@ -330,7 +342,7 @@ export default function CourseActivitiesTab({
   if (mode === COURSE_ACCESS_MODES.ADMIN) {
     return (
       <PbcSection
-        title={t("pcActivities")}
+        title={activitiesSectionTitle()}
         description={t("pcAdminReadOnly")}
       >
         {activities.length === 0 ? (
@@ -355,7 +367,7 @@ export default function CourseActivitiesTab({
   return (
     <>
       <PbcSection
-        title={t("pcActivities")}
+        title={activitiesSectionTitle()}
         description={`${activities.length} ${t("pcActivities")}`}
         actions={
           <>

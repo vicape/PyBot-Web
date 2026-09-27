@@ -507,6 +507,59 @@
   flex-wrap: wrap;
 }
 
+.pbc-ux-icon {
+  display: block;
+  object-fit: contain;
+  object-position: center;
+  flex-shrink: 0;
+  user-select: none;
+  pointer-events: none;
+}
+
+.pbc-hero-block__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.pbc-hero-block__identity .pbc-hero-block__text {
+  flex: 1 1 auto;
+}
+
+.pbc-section__title-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pbc-section__title-with-icon .pbc-ux-icon {
+  flex-shrink: 0;
+}
+
+.pbc-action-card__icon .pbc-ux-icon {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.pbc-panel-card__ux {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0.75rem;
+}
+
+.pbc-panel-card__ux .pbc-panel-card__title {
+  margin: 0;
+}
+
+.pbc-empty__ux-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+}
+
 .pbc-hero-block__title {
   margin: 0;
   font-size: 28px;

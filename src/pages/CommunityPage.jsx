@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ContentMetaChips from "../components/pybotclass/content/ContentMetaChips.jsx";
 import { IconAssign, IconCommunityEmpty, IconCopy, IconOpen, CompactContentIcon } from "../components/pybotclass/illustrations/ActionIcons.jsx";
+import { UxIcon } from "../components/pybotclass/illustrations/UxIcons.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import { t } from "../i18n.js";
 import { copyLearningContent } from "../platform/contentApi.js";
@@ -111,9 +112,14 @@ export default function CommunityPage() {
 
       <div className="pbc-content-page">
       <header className="pbc-hero-block pbc-content-page__head">
-        <div className="pbc-hero-block__text">
-          <h1 className="pbc-hero-block__title">{t("pcCommunity")}</h1>
-          <p className="pbc-hero-block__subtitle">{t("pcCommunityExternalLead")}</p>
+        <div className="pbc-hero-block__identity">
+          <span aria-hidden>
+            <UxIcon name="community" size={48} />
+          </span>
+          <div className="pbc-hero-block__text">
+            <h1 className="pbc-hero-block__title">{t("pcCommunity")}</h1>
+            <p className="pbc-hero-block__subtitle">{t("pcCommunityExternalLead")}</p>
+          </div>
         </div>
       </header>
 

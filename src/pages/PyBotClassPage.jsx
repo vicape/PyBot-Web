@@ -5,6 +5,7 @@ import AccountSettings from "../components/dashboard/AccountSettings.jsx";
 import ClassroomPanel from "../components/dashboard/ClassroomPanel.jsx";
 import AppearanceSettings from "../components/pybotclass/layout/AppearanceSettings.jsx";
 import { useAppearanceContext } from "../components/pybotclass/layout/appearanceContext.js";
+import { UxIcon } from "../components/pybotclass/illustrations/UxIcons.jsx";
 import CreateCourseModal from "../components/pybotclass/layout/CreateCourseModal.jsx";
 import JoinCourseModal from "../components/pybotclass/layout/JoinCourseModal.jsx";
 import PyBotClassHome from "../components/pybotclass/layout/PyBotClassHome.jsx";
@@ -35,9 +36,14 @@ function PyBotClassAccountPanel({ user, onProfileUpdated }) {
 
   return (
     <div style={{ maxWidth: 560 }}>
-      <h1 className="pbc-hero-block__title" style={{ marginBottom: "1rem" }}>
-        {t("pcAccount")}
-      </h1>
+      <div className="pbc-hero-block__identity" style={{ marginBottom: "1rem" }}>
+        <span aria-hidden>
+          <UxIcon name="settings" size={48} />
+        </span>
+        <h1 className="pbc-hero-block__title" style={{ marginBottom: 0 }}>
+          {t("pcAccount")}
+        </h1>
+      </div>
       <AccountSettings user={user} onProfileUpdated={onProfileUpdated} />
       {ctx ? (
         <div style={{ marginTop: "1rem" }}>
