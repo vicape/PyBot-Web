@@ -229,7 +229,10 @@ test("ContentEditor: title/type entry uses TitleTypeDialog (no browser prompts)"
 
   assert.match(editor, /initialType:\s*"unit"/);
   assert.match(editor, /initialType:\s*"lesson"/);
-  assert.match(editor, /typeOptions=\{dialogIsUnit \? UNIT_TYPES : LESSON_ITEM_TYPES\}/);
+  assert.match(editor, /UNIT_DIRECT_CREATE_TYPES/);
+  assert.match(editor, /LESSON_CHILD_CREATE_TYPES/);
+  assert.match(editor, /itemTypeOptionsForEdit/);
+  assert.match(editor, /typeOptions=\{dialogTypeOptions\}/);
   assert.match(editor, /navigate\(`\/dashboard\/content\/\$\{contentId\}\/lessons\/\$\{lesson\.id\}`\)/);
 
   assert.match(dialog, /<select[\s\S]*className="pbc-input"/);
@@ -242,10 +245,11 @@ test("ContentEditor: title/type entry uses TitleTypeDialog (no browser prompts)"
 
   const meta = readFileSync(resolve(root, "src/platform/contentMetadata.js"), "utf8");
   assert.match(meta, /export const UNIT_TYPES = Object\.freeze\(\["chapter", "unit", "section"\]\)/);
-  assert.match(
-    meta,
-    /export const LESSON_ITEM_TYPES = Object\.freeze\(\[\s*"lesson",\s*"theory",\s*"example",\s*"activity",\s*"exercise",\s*"quiz",\s*"test",\s*"project",\s*"resource",\s*\]\)/,
-  );
+  assert.match(meta, /UNIT_DIRECT_CREATE_TYPES/);
+  assert.match(meta, /LESSON_CHILD_CREATE_TYPES/);
+  assert.match(meta, /"reading"/);
+  assert.match(meta, /"video"/);
+  assert.match(meta, /"assignment"/);
 
   assert.doesNotMatch(dialog, /chapter.*unit.*section/);
   assert.doesNotMatch(dialog, /\["lesson"/);

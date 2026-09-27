@@ -9,19 +9,22 @@ import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.j
 import { t } from "../i18n.js";
 import {
   UNIT_TYPES,
-  LESSON_ITEM_TYPES,
-  copyLearningContent,
+  UNIT_DIRECT_CREATE_TYPES,
+  LESSON_CHILD_CREATE_TYPES,
+  itemTypeOptionsForEdit,
   createContentUnit,
   createLesson,
   deleteContentUnit,
   deleteLesson,
   getContent,
   listContentUnits,
+  listLessonChildren,
   listUnitLessons,
   moveContentUnit,
   moveLesson,
   updateContentUnit,
   updateLesson,
+  copyLearningContent,
 } from "../platform/contentApi.js";
 import { listTeacherCoursesForAssign } from "../platform/contentAssignApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
@@ -48,19 +51,74 @@ function PencilIcon({ size = 16 }) {
   );
 }
 
-function DocumentIcon({ size = 18 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M7 3.75h7.5L19 8.25V20a1.25 1.25 0 0 1-1.25 1.25H7A1.25 1.25 0 0 1 5.75 20V5A1.25 1.25 0 0 1 7 3.75Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-      <path d="M14.5 3.75V8.5H19" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M9 12.5h6M9 16h4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
+function ItemTypeIcon({ itemType, size = 18 }) {
+  const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", "aria-hidden": true };
+  switch (itemType) {
+    case "video":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+          <path d="M10 8.5v7l6-3.5-6-3.5Z" fill="currentColor" />
+        </svg>
+      );
+    case "exercise":
+      return <PencilIcon size={size} />;
+    case "quiz":
+    case "test":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+          <path d="M9.5 12.5l1.8 1.8 3.7-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      );
+    case "assignment":
+      return (
+        <svg {...common}>
+          <path
+            d="M8 4.75h8A1.25 1.25 0 0 1 17.25 6v14L12 17.5 6.75 20V6A1.25 1.25 0 0 1 8 4.75Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "project":
+      return (
+        <svg {...common}>
+          <path
+            d="M3.75 8.5V18A1.25 1.25 0 0 0 5 19.25h14A1.25 1.25 0 0 0 20.25 18V9.75H10.5L8.75 7.5H5A1.25 1.25 0 0 0 3.75 8.5Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "resource":
+      return (
+        <svg {...common}>
+          <path
+            d="M7 4.75h7.5L19 9.25V19.5A.75.75 0 0 1 18.25 20.25H7A1.25 1.25 0 0 1 5.75 19V6A1.25 1.25 0 0 1 7 4.75Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+          <path d="M9 11h6M9 14.5h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...common}>
+          <path
+            d="M7 3.75h7.5L19 8.25V20a1.25 1.25 0 0 1-1.25 1.25H7A1.25 1.25 0 0 1 5.75 20V5A1.25 1.25 0 0 1 7 3.75Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+          <path d="M14.5 3.75V8.5H19" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+          <path d="M9 12.5h6M9 16h4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      );
+  }
 }
 
 export default function ContentEditorPage() {
@@ -72,6 +130,7 @@ export default function ContentEditorPage() {
   const [content, setContent] = useState(null);
   const [units, setUnits] = useState([]);
   const [lessonsByUnit, setLessonsByUnit] = useState({});
+  const [itemsByLesson, setItemsByLesson] = useState({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [superAdmin, setSuperAdmin] = useState(false);
@@ -141,10 +200,21 @@ export default function ContentEditorPage() {
     };
 
     const lessonMap = {};
-    for (const unit of unitRows) {
-      const { rows } = await listUnitLessons(unit.id);
-      lessonMap[unit.id] = rows;
-    }
+    const childMap = {};
+    await Promise.all(
+      unitRows.map(async (unit) => {
+        const { rows } = await listUnitLessons(unit.id);
+        lessonMap[unit.id] = rows;
+        const lessonContainers = rows.filter((r) => (r.item_type || "lesson") === "lesson");
+        await Promise.all(
+          lessonContainers.map(async (lesson) => {
+            const { rows: children, error: childErr } = await listLessonChildren(lesson.id);
+            // Missing V3 schema: no children; do not blank the editor.
+            childMap[lesson.id] = childErr ? [] : children;
+          }),
+        );
+      }),
+    );
 
     setContent({
       ...c,
@@ -155,6 +225,7 @@ export default function ContentEditorPage() {
     });
     setUnits(unitRows);
     setLessonsByUnit(lessonMap);
+    setItemsByLesson(childMap);
     setLoading(false);
   }, [user, contentId, navigate, supabase]);
 
@@ -191,19 +262,42 @@ export default function ContentEditorPage() {
     setTitleTypeDialog({
       kind: "item",
       mode: "create",
+      context: "unit",
       unitId,
+      parentLessonId: null,
       initialTitle: "",
       initialType: "lesson",
+      typeOptions: [...UNIT_DIRECT_CREATE_TYPES],
+    });
+  };
+
+  const openCreateChildItem = (unitId, lesson) => {
+    if (busy) return;
+    setTitleTypeDialog({
+      kind: "item",
+      mode: "create",
+      context: "lesson",
+      unitId,
+      parentLessonId: lesson.id,
+      initialTitle: "",
+      initialType: "reading",
+      typeOptions: [...LESSON_CHILD_CREATE_TYPES],
     });
   };
 
   const openEditItem = (lesson) => {
+    const parentLessonId = lesson.parent_lesson_id ?? null;
     setTitleTypeDialog({
       kind: "item",
       mode: "edit",
       target: lesson,
+      parentLessonId,
       initialTitle: lesson.title || "",
       initialType: lesson.item_type || "lesson",
+      typeOptions: itemTypeOptionsForEdit({
+        itemType: lesson.item_type || "lesson",
+        parentLessonId,
+      }),
     });
   };
 
@@ -211,7 +305,7 @@ export default function ContentEditorPage() {
 
   const submitTitleTypeDialog = async ({ title, type }) => {
     if (!titleTypeDialog) return { error: t("pcUnexpectedError") };
-    const { kind, mode, target, unitId } = titleTypeDialog;
+    const { kind, mode, target, unitId, parentLessonId } = titleTypeDialog;
 
     if (kind === "unit" && mode === "create") {
       setBusy(true);
@@ -247,6 +341,7 @@ export default function ContentEditorPage() {
       const { lesson, error } = await createLesson(unitId, {
         title,
         itemType: type,
+        parentLessonId: parentLessonId || null,
       });
       setBusy(false);
       if (error || !lesson) {
@@ -284,7 +379,12 @@ export default function ContentEditorPage() {
   };
 
   const removeLesson = async (lesson) => {
-    if (!window.confirm(`¿Eliminar «${lesson.title}»?`)) return;
+    const isContainer =
+      (lesson.item_type || "lesson") === "lesson" && (itemsByLesson[lesson.id]?.length ?? 0) > 0;
+    const msg = isContainer
+      ? t("pcDeleteLessonWithChildren").replace("{title}", lesson.title)
+      : `¿Eliminar «${lesson.title}»?`;
+    if (!window.confirm(msg)) return;
     setBusy(true);
     const { error } = await deleteLesson(lesson.id);
     setBusy(false);
@@ -329,7 +429,7 @@ export default function ContentEditorPage() {
       el?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    if (entry.type === "lesson") {
+    if (entry.type === "item" || entry.type === "lesson") {
       navigate(`/dashboard/content/${contentId}/lessons/${entry.id}`);
     }
   };
@@ -345,6 +445,137 @@ export default function ContentEditorPage() {
 
   const dialogIsUnit = titleTypeDialog?.kind === "unit";
   const dialogIsCreate = titleTypeDialog?.mode === "create";
+  const dialogTypeOptions = dialogIsUnit
+    ? UNIT_TYPES
+    : titleTypeDialog?.typeOptions || [...UNIT_DIRECT_CREATE_TYPES];
+  const dialogTitle = dialogIsCreate
+    ? dialogIsUnit
+      ? t("pcNewUnit")
+      : titleTypeDialog?.context === "lesson"
+        ? t("pcAddToLesson")
+        : t("pcNewItem")
+    : t("pcEdit");
+
+  const renderItemRow = ({
+    lesson,
+    lessonIndex,
+    siblingCount,
+    unitId,
+    numberLabel,
+    depth = 0,
+  }) => {
+    const itemType = lesson.item_type || "lesson";
+    const isLessonContainer = itemType === "lesson" && depth === 0;
+    const children = isLessonContainer ? itemsByLesson[lesson.id] ?? [] : [];
+
+    return (
+      <li
+        key={lesson.id}
+        id={`lesson-${lesson.id}`}
+        className={`pbc-lesson-row${depth > 0 ? " pbc-lesson-row--child" : ""}`}
+      >
+        <Link
+          to={`/dashboard/content/${contentId}/lessons/${lesson.id}`}
+          className="pbc-lesson-row__main"
+          aria-label={t("pcWriteContentOf").replace("{title}", lesson.title)}
+        >
+          <span className="pbc-lesson-row__icon" aria-hidden>
+            <ItemTypeIcon itemType={itemType} />
+          </span>
+          <span className="pbc-lesson-row__copy">
+            <span className="pbc-lesson-row__title">
+              <span className="pbc-type-badge">{t(`pcItemType_${itemType}`)}</span>{" "}
+              {numberLabel} — {lesson.title}
+            </span>
+            <span className="pbc-lesson-row__subtitle">{t("pcTapToWrite")}</span>
+          </span>
+          <span className="pbc-lesson-row__cta">
+            <PencilIcon size={15} />
+            {t("pcWriteContent")}
+          </span>
+        </Link>
+        <div className="pbc-lesson-row__actions">
+          <div className="pbc-order-btns">
+            <button
+              type="button"
+              className="pbc-order-btn"
+              onClick={() => void moveLessonItem(lesson.id, "up")}
+              disabled={busy || lessonIndex === 0}
+              aria-label={t("pcMoveItemUp")}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              className="pbc-order-btn"
+              onClick={() => void moveLessonItem(lesson.id, "down")}
+              disabled={busy || lessonIndex === siblingCount - 1}
+              aria-label={t("pcMoveItemDown")}
+            >
+              ↓
+            </button>
+          </div>
+          {canAssign && depth === 0 ? (
+            <button
+              type="button"
+              className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+              onClick={() =>
+                setAssignTarget({
+                  sourceType: "lesson",
+                  sourceId: lesson.id,
+                  defaultTitle: lesson.title,
+                  contextLabel: "lección",
+                })
+              }
+            >
+              {t("pcAssign")}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+            onClick={() => openEditItem(lesson)}
+          >
+            {t("pcEdit")}
+          </button>
+          <button
+            type="button"
+            className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-btn--danger-ghost"
+            onClick={() => void removeLesson(lesson)}
+          >
+            {t("pcDelete")}
+          </button>
+        </div>
+        {isLessonContainer ? (
+          <>
+            {children.length > 0 ? (
+              <ul className="pbc-lesson-list pbc-lesson-list--nested">
+                {children.map((child, childIndex) =>
+                  renderItemRow({
+                    lesson: child,
+                    lessonIndex: childIndex,
+                    siblingCount: children.length,
+                    unitId,
+                    numberLabel: `${numberLabel}.${childIndex + 1}`,
+                    depth: 1,
+                  }),
+                )}
+              </ul>
+            ) : null}
+            <button
+              type="button"
+              className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-lesson-row__add-child"
+              onClick={() => openCreateChildItem(unitId, lesson)}
+              disabled={busy}
+            >
+              <PencilIcon size={14} />
+              {t("pcAddToLesson")}
+            </button>
+          </>
+        ) : null}
+      </li>
+    );
+  };
 
   return (
     <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
@@ -402,7 +633,12 @@ export default function ContentEditorPage() {
           </button>
         </div>
 
-        <ContentTableOfContents units={units} lessonsByUnit={lessonsByUnit} onNavigate={onTocNavigate} />
+        <ContentTableOfContents
+          units={units}
+          lessonsByUnit={lessonsByUnit}
+          itemsByLesson={itemsByLesson}
+          onNavigate={onTocNavigate}
+        />
 
         {units.length === 0 ? (
           <div className="pbc-content-editor__empty" role="status">
@@ -476,86 +712,16 @@ export default function ContentEditorPage() {
                   </div>
                 ) : (
                   <ul className="pbc-lesson-list">
-                    {(lessonsByUnit[unit.id] ?? []).map((lesson, lessonIndex) => (
-                      <li key={lesson.id} id={`lesson-${lesson.id}`} className="pbc-lesson-row">
-                        <Link
-                          to={`/dashboard/content/${contentId}/lessons/${lesson.id}`}
-                          className="pbc-lesson-row__main"
-                          aria-label={t("pcWriteContentOf").replace("{title}", lesson.title)}
-                        >
-                          <span className="pbc-lesson-row__icon" aria-hidden>
-                            <DocumentIcon />
-                          </span>
-                          <span className="pbc-lesson-row__copy">
-                            <span className="pbc-lesson-row__title">
-                              <span className="pbc-type-badge">
-                                {t(`pcItemType_${lesson.item_type || "lesson"}`)}
-                              </span>{" "}
-                              {lessonIndex + 1} — {lesson.title}
-                            </span>
-                            <span className="pbc-lesson-row__subtitle">{t("pcTapToWrite")}</span>
-                          </span>
-                          <span className="pbc-lesson-row__cta">
-                            <PencilIcon size={15} />
-                            {t("pcWriteContent")}
-                          </span>
-                        </Link>
-                        <div className="pbc-lesson-row__actions">
-                          <div className="pbc-order-btns">
-                            <button
-                              type="button"
-                              className="pbc-order-btn"
-                              onClick={() => void moveLessonItem(lesson.id, "up")}
-                              disabled={busy || lessonIndex === 0}
-                              aria-label={t("pcMoveItemUp")}
-                            >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              className="pbc-order-btn"
-                              onClick={() => void moveLessonItem(lesson.id, "down")}
-                              disabled={
-                                busy || lessonIndex === (lessonsByUnit[unit.id]?.length ?? 0) - 1
-                              }
-                              aria-label={t("pcMoveItemDown")}
-                            >
-                              ↓
-                            </button>
-                          </div>
-                          {canAssign ? (
-                            <button
-                              type="button"
-                              className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                              onClick={() =>
-                                setAssignTarget({
-                                  sourceType: "lesson",
-                                  sourceId: lesson.id,
-                                  defaultTitle: lesson.title,
-                                  contextLabel: "lección",
-                                })
-                              }
-                            >
-                              {t("pcAssign")}
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                            onClick={() => openEditItem(lesson)}
-                          >
-                            {t("pcEdit")}
-                          </button>
-                          <button
-                            type="button"
-                            className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-btn--danger-ghost"
-                            onClick={() => void removeLesson(lesson)}
-                          >
-                            {t("pcDelete")}
-                          </button>
-                        </div>
-                      </li>
-                    ))}
+                    {(lessonsByUnit[unit.id] ?? []).map((lesson, lessonIndex) =>
+                      renderItemRow({
+                        lesson,
+                        lessonIndex,
+                        siblingCount: lessonsByUnit[unit.id]?.length ?? 0,
+                        unitId: unit.id,
+                        numberLabel: `${unitIndex + 1}.${lessonIndex + 1}`,
+                        depth: 0,
+                      }),
+                    )}
                   </ul>
                 )}
 
@@ -576,17 +742,11 @@ export default function ContentEditorPage() {
 
       <TitleTypeDialog
         open={Boolean(titleTypeDialog)}
-        dialogTitle={
-          dialogIsCreate
-            ? dialogIsUnit
-              ? t("pcNewUnit")
-              : t("pcNewItem")
-            : t("pcEdit")
-        }
+        dialogTitle={dialogTitle}
         submitLabel={dialogIsCreate ? t("pcCreate") : t("pcSave")}
         busyLabel={dialogIsCreate ? t("pcCreating") : t("pcSaving")}
         typeLabel={dialogIsUnit ? t("pcUnitType") : t("pcItemType")}
-        typeOptions={dialogIsUnit ? UNIT_TYPES : LESSON_ITEM_TYPES}
+        typeOptions={dialogTypeOptions}
         typeI18nPrefix={dialogIsUnit ? "pcUnitType_" : "pcItemType_"}
         initialTitle={titleTypeDialog?.initialTitle ?? ""}
         initialType={titleTypeDialog?.initialType}

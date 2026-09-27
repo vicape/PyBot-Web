@@ -1,6 +1,12 @@
 import { getSupabase } from "../supabaseClient.js";
 import {
+  CONTENT_V3_MIGRATION_HINT,
   LEARNING_CONTENT_SELECT_BASE,
+  LEARNING_CONTENT_SELECT_LEGACY,
+  LESSON_CHILD_CREATE_TYPES,
+  UNIT_DIRECT_CREATE_TYPES,
+  derivePreparationStatus,
+  isLegacyItemType,
   normalizeContentMetadataPatch,
   normalizeItemType,
   normalizeUnitType,
@@ -34,10 +40,18 @@ export const CONTENT_VISIBILITY_LABELS = {
 export {
   CONTENT_DIFFICULTIES,
   CONTENT_LANGUAGE_CODES,
+  CONTENT_V3_ITEM_TYPES,
+  CONTENT_V3_MIGRATION_HINT,
   UNIT_TYPES,
   LESSON_ITEM_TYPES,
+  UNIT_DIRECT_CREATE_TYPES,
+  LESSON_CHILD_CREATE_TYPES,
+  LEGACY_ITEM_TYPES,
   communityMetadataGaps,
+  derivePreparationStatus,
   isCommunityMetadataComplete,
+  isLegacyItemType,
+  itemTypeOptionsForEdit,
   normalizeContentMetadataPatch,
   normalizeItemType,
   normalizeUnitType,
@@ -90,6 +104,7 @@ function mapContentRow(row) {
     description: row.description,
     status: row.status,
     visibility: row.visibility || "private",
+    preparation_status: derivePreparationStatus(row),
     owner_id: row.owner_id,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -100,7 +115,11 @@ function mapContentRow(row) {
 const UNIT_SELECT =
   "id, content_id, title, description, position, unit_type, estimated_minutes, created_at, updated_at";
 const LESSON_SELECT =
+  "id, unit_id, parent_lesson_id, title, description, position, item_type, estimated_minutes, required, completion_rule, grading_mode, passing_score, completion_threshold, learning_objectives, created_at, updated_at";
+const LESSON_SELECT_LEGACY =
   "id, unit_id, title, description, position, item_type, estimated_minutes, created_at, updated_at";
+const LESSON_SELECT_PRE_V2 =
+  "id, unit_id, title, description, position, created_at, updated_at";
 
 const PROVENANCE_MIGRATION_HINT =
   "Falta aplicar la migración 20260925100049_learning_content_creator_community_provenance.sql";
@@ -117,10 +136,42 @@ function isMissingMaterialV2ColumnError(message) {
   );
 }
 
+function isMissingContentV3ColumnError(message) {
+  return /parent_lesson_id|preparation_status|completion_rule|grading_mode|passing_score|completion_threshold|learning_objectives|column ["']?required["']?/i.test(
+    String(message || ""),
+  );
+}
+
 function migrationErrorMessage(message) {
   if (isMissingProvenanceColumnError(message)) return PROVENANCE_MIGRATION_HINT;
+  if (isMissingContentV3ColumnError(message)) return CONTENT_V3_MIGRATION_HINT;
   if (isMissingMaterialV2ColumnError(message)) return MATERIAL_V2_MIGRATION_HINT;
   return null;
+}
+
+function mapLessonRow(row, { parentLessonId = null } = {}) {
+  if (!row) return null;
+  return {
+    ...row,
+    parent_lesson_id: row.parent_lesson_id ?? parentLessonId,
+    item_type: normalizeItemType(row.item_type),
+    required: row.required ?? true,
+    completion_rule: row.completion_rule ?? "none",
+    grading_mode: row.grading_mode ?? "none",
+    passing_score: row.passing_score ?? null,
+    completion_threshold: row.completion_threshold ?? null,
+    learning_objectives: Array.isArray(row.learning_objectives) ? row.learning_objectives : [],
+  };
+}
+
+function isAllowedCreateType(itemType, parentLessonId) {
+  if (parentLessonId) return LESSON_CHILD_CREATE_TYPES.includes(itemType);
+  return UNIT_DIRECT_CREATE_TYPES.includes(itemType);
+}
+
+function isTypeValidInContext(itemType, parentLessonId) {
+  if (isLegacyItemType(itemType)) return true;
+  return isAllowedCreateType(itemType, parentLessonId);
 }
 
 function attachProvenanceNames(row, profileNames) {
@@ -151,21 +202,33 @@ async function loadProfileNames(client, ids) {
 
 // --- Contenidos --------------------------------------------------------------
 
+async function selectLearningContents(client, { withUnits = false, ownerId = null, contentId = null } = {}) {
+  const unitSuffix = withUnits ? ", content_units ( id )" : "";
+  const run = async (selectCols) => {
+    let query = client.from("learning_contents").select(`${selectCols}${unitSuffix}`);
+    if (ownerId) query = query.eq("owner_id", ownerId).order("updated_at", { ascending: false });
+    if (contentId) return query.eq("id", contentId).maybeSingle();
+    return query;
+  };
+
+  let result = await run(LEARNING_CONTENT_SELECT_BASE);
+  if (result.error && /preparation_status/i.test(result.error.message)) {
+    result = await run(LEARNING_CONTENT_SELECT_LEGACY);
+  }
+  return result;
+}
+
 export async function listMyContents() {
   const client = sb();
   const { data: session } = await client.auth.getUser();
   const userId = session?.user?.id;
   if (!userId) return { rows: [], error: "no_session" };
 
-  const { data, error } = await client
-    .from("learning_contents")
-    .select(`${LEARNING_CONTENT_SELECT_BASE}, content_units ( id )`)
-    .eq("owner_id", userId)
-    .order("updated_at", { ascending: false });
+  const { data, error } = await selectLearningContents(client, { withUnits: true, ownerId: userId });
 
   if (error) {
     const hint = migrationErrorMessage(error.message);
-    if (hint) return { rows: [], error: hint };
+    if (hint && !/preparation_status/i.test(error.message)) return { rows: [], error: hint };
     return { rows: [], error: error.message };
   }
 
@@ -187,15 +250,13 @@ export async function listMyContents() {
 }
 
 export async function getContent(contentId) {
-  const { data, error } = await sb()
-    .from("learning_contents")
-    .select(LEARNING_CONTENT_SELECT_BASE)
-    .eq("id", contentId)
-    .maybeSingle();
+  const { data, error } = await selectLearningContents(sb(), { contentId });
 
   if (error) {
     const hint = migrationErrorMessage(error.message);
-    if (hint) return { content: null, error: hint };
+    // preparation_status missing is handled inside selectLearningContents; other V3-only
+    // content columns must not blank the Content screen when still on legacy schema.
+    if (hint && !/preparation_status/i.test(error.message)) return { content: null, error: hint };
     return { content: null, error: error.message };
   }
   if (!data) return { content: null, error: "not_found" };
@@ -226,6 +287,34 @@ export async function createContent(input = {}) {
     .single();
 
   if (error) {
+    if (/preparation_status/i.test(error.message)) {
+      const { data: legacy, error: legErr } = await client
+        .from("learning_contents")
+        .insert({
+          owner_id: userId,
+          title,
+          description: String(input.description ?? "").trim() || null,
+          ...meta,
+        })
+        .select(LEARNING_CONTENT_SELECT_LEGACY)
+        .single();
+      if (legErr) {
+        if (/original_creator|first_community/i.test(legErr.message)) {
+          return {
+            content: null,
+            error: "Falta aplicar la migración 20260925100049_learning_content_creator_community_provenance.sql",
+          };
+        }
+        if (/language_code|recommended_age|estimated_minutes|difficulty|check/i.test(legErr.message)) {
+          return {
+            content: null,
+            error: "Falta aplicar la migración 20260924100048_material_v2_ownership_copy_metadata.sql",
+          };
+        }
+        return { content: null, error: legErr.message };
+      }
+      return { content: mapContentRow(legacy), error: null };
+    }
     if (/original_creator|first_community/i.test(error.message)) {
       return {
         content: null,
@@ -261,7 +350,19 @@ export async function updateContent(contentId, patch = {}) {
     .select(LEARNING_CONTENT_SELECT_BASE)
     .single();
 
-  if (error) return { content: null, error: error.message };
+  if (error) {
+    if (/preparation_status/i.test(error.message)) {
+      const { data: legacy, error: legErr } = await sb()
+        .from("learning_contents")
+        .update(body)
+        .eq("id", contentId)
+        .select(LEARNING_CONTENT_SELECT_LEGACY)
+        .single();
+      if (legErr) return { content: null, error: legErr.message };
+      return { content: mapContentRow(legacy), error: null };
+    }
+    return { content: null, error: error.message };
+  }
   return { content: mapContentRow(data), error: null };
 }
 
@@ -579,32 +680,95 @@ export async function moveContentUnit(unitId, direction) {
   return result;
 }
 
-// --- Lecciones ---------------------------------------------------------------
+// --- Lecciones / Content V3 items --------------------------------------------
+
+function sortLessonRows(rows) {
+  return [...(rows || [])].sort(
+    (a, b) =>
+      (a.position ?? 0) - (b.position ?? 0) ||
+      String(a.id).localeCompare(String(b.id)),
+  );
+}
 
 export async function listUnitLessons(unitId) {
   const { data, error } = await sb()
     .from("content_lessons")
     .select(LESSON_SELECT)
     .eq("unit_id", unitId)
-    .order("position", { ascending: true });
+    .is("parent_lesson_id", null)
+    .order("position", { ascending: true })
+    .order("id", { ascending: true });
 
   if (error) {
+    if (isMissingContentV3ColumnError(error.message) || /parent_lesson_id/i.test(error.message)) {
+      // Legacy / pre-V3: all rows are top-level; parent_lesson_id represented as null.
+      const { data: mid, error: midErr } = await sb()
+        .from("content_lessons")
+        .select(LESSON_SELECT_LEGACY)
+        .eq("unit_id", unitId)
+        .order("position", { ascending: true })
+        .order("id", { ascending: true });
+
+      if (midErr) {
+        if (/item_type|estimated_minutes/i.test(midErr.message)) {
+          const { data: legacy, error: legErr } = await sb()
+            .from("content_lessons")
+            .select(LESSON_SELECT_PRE_V2)
+            .eq("unit_id", unitId)
+            .order("position", { ascending: true });
+          if (legErr) return { rows: [], error: legErr.message };
+          return {
+            rows: sortLessonRows(legacy ?? []).map((r) =>
+              mapLessonRow({ ...r, item_type: "lesson", estimated_minutes: null }, { parentLessonId: null }),
+            ),
+            error: null,
+          };
+        }
+        return { rows: [], error: midErr.message };
+      }
+      return {
+        rows: sortLessonRows(mid ?? []).map((r) => mapLessonRow(r, { parentLessonId: null })),
+        error: null,
+      };
+    }
     if (/item_type|estimated_minutes/i.test(error.message)) {
       const { data: legacy, error: legErr } = await sb()
         .from("content_lessons")
-        .select("id, unit_id, title, description, position, created_at, updated_at")
+        .select(LESSON_SELECT_PRE_V2)
         .eq("unit_id", unitId)
         .order("position", { ascending: true });
       if (legErr) return { rows: [], error: legErr.message };
       return {
-        rows: (legacy ?? []).map((r) => ({ ...r, item_type: "lesson", estimated_minutes: null })),
+        rows: sortLessonRows(legacy ?? []).map((r) =>
+          mapLessonRow({ ...r, item_type: "lesson", estimated_minutes: null }, { parentLessonId: null }),
+        ),
         error: null,
       };
     }
     return { rows: [], error: error.message };
   }
   return {
-    rows: (data ?? []).map((r) => ({ ...r, item_type: normalizeItemType(r.item_type) })),
+    rows: sortLessonRows(data ?? []).map((r) => mapLessonRow(r)),
+    error: null,
+  };
+}
+
+export async function listLessonChildren(parentLessonId) {
+  const { data, error } = await sb()
+    .from("content_lessons")
+    .select(LESSON_SELECT)
+    .eq("parent_lesson_id", parentLessonId)
+    .order("position", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) {
+    if (isMissingContentV3ColumnError(error.message) || /parent_lesson_id/i.test(error.message)) {
+      return { rows: [], error: CONTENT_V3_MIGRATION_HINT };
+    }
+    return { rows: [], error: error.message };
+  }
+  return {
+    rows: sortLessonRows(data ?? []).map((r) => mapLessonRow(r)),
     error: null,
   };
 }
@@ -619,6 +783,55 @@ export async function getLesson(lessonId) {
     .maybeSingle();
 
   if (error) {
+    if (isMissingContentV3ColumnError(error.message) || /parent_lesson_id/i.test(error.message)) {
+      const { data: mid, error: midErr } = await sb()
+        .from("content_lessons")
+        .select(
+          `${LESSON_SELECT_LEGACY}, document_json, document_version, content_units ( content_id, title, position, unit_type )`,
+        )
+        .eq("id", lessonId)
+        .maybeSingle();
+      if (midErr) {
+        if (/item_type|unit_type|estimated_minutes/i.test(midErr.message)) {
+          const { data: legacy, error: legErr } = await sb()
+            .from("content_lessons")
+            .select(
+              "id, unit_id, title, description, position, created_at, updated_at, document_json, document_version, content_units ( content_id, title, position )",
+            )
+            .eq("id", lessonId)
+            .maybeSingle();
+          if (legErr) return { lesson: null, error: legErr.message };
+          if (!legacy) return { lesson: null, error: "not_found" };
+          return {
+            lesson: {
+              ...mapLessonRow(
+                { ...legacy, item_type: "lesson", estimated_minutes: null },
+                { parentLessonId: null },
+              ),
+              document_json: legacy.document_json,
+              document_version: legacy.document_version,
+              content_units: legacy.content_units
+                ? { ...legacy.content_units, unit_type: "unit" }
+                : legacy.content_units,
+            },
+            error: null,
+          };
+        }
+        return { lesson: null, error: midErr.message };
+      }
+      if (!mid) return { lesson: null, error: "not_found" };
+      return {
+        lesson: {
+          ...mapLessonRow(mid, { parentLessonId: null }),
+          document_json: mid.document_json,
+          document_version: mid.document_version,
+          content_units: mid.content_units
+            ? { ...mid.content_units, unit_type: normalizeUnitType(mid.content_units.unit_type) }
+            : mid.content_units,
+        },
+        error: null,
+      };
+    }
     if (/item_type|unit_type|estimated_minutes/i.test(error.message)) {
       const { data: legacy, error: legErr } = await sb()
         .from("content_lessons")
@@ -631,9 +844,12 @@ export async function getLesson(lessonId) {
       if (!legacy) return { lesson: null, error: "not_found" };
       return {
         lesson: {
-          ...legacy,
-          item_type: "lesson",
-          estimated_minutes: null,
+          ...mapLessonRow(
+            { ...legacy, item_type: "lesson", estimated_minutes: null },
+            { parentLessonId: null },
+          ),
+          document_json: legacy.document_json,
+          document_version: legacy.document_version,
           content_units: legacy.content_units
             ? { ...legacy.content_units, unit_type: "unit" }
             : legacy.content_units,
@@ -646,8 +862,9 @@ export async function getLesson(lessonId) {
   if (!data) return { lesson: null, error: "not_found" };
   return {
     lesson: {
-      ...data,
-      item_type: normalizeItemType(data.item_type),
+      ...mapLessonRow(data),
+      document_json: data.document_json,
+      document_version: data.document_version,
       content_units: data.content_units
         ? { ...data.content_units, unit_type: normalizeUnitType(data.content_units.unit_type) }
         : data.content_units,
@@ -674,73 +891,280 @@ export async function saveLessonDocument(lessonId, documentJson, documentVersion
   return { lesson: data, error: null };
 }
 
-export async function createLesson(unitId, { title, description, itemType, estimatedMinutes } = {}) {
+async function nextSiblingPosition({ unitId, parentLessonId }) {
   const client = sb();
-  const contentId = await contentIdForUnit(unitId);
-
-  const { data: maxRow } = await client
-    .from("content_lessons")
-    .select("position")
-    .eq("unit_id", unitId)
+  let query = client.from("content_lessons").select("position");
+  if (parentLessonId) {
+    query = query.eq("parent_lesson_id", parentLessonId);
+  } else {
+    query = query.eq("unit_id", unitId).is("parent_lesson_id", null);
+  }
+  const { data: maxRow, error } = await query
     .order("position", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (error && (isMissingContentV3ColumnError(error.message) || /parent_lesson_id/i.test(error.message))) {
+    if (parentLessonId) return { position: null, error: CONTENT_V3_MIGRATION_HINT };
+    const { data: legacyMax } = await client
+      .from("content_lessons")
+      .select("position")
+      .eq("unit_id", unitId)
+      .order("position", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return { position: (legacyMax?.position ?? -1) + 1, error: null, legacy: true };
+  }
+  if (error) return { position: null, error: error.message };
+  return { position: (maxRow?.position ?? -1) + 1, error: null, legacy: false };
+}
 
-  const position = (maxRow?.position ?? -1) + 1;
+export async function createLesson(
+  unitId,
+  {
+    title,
+    description,
+    itemType,
+    estimatedMinutes,
+    parentLessonId = null,
+    required,
+    completionRule,
+    gradingMode,
+    passingScore,
+    completionThreshold,
+    learningObjectives,
+  } = {},
+) {
+  const client = sb();
+  const normalizedType = normalizeItemType(itemType);
+  let resolvedUnitId = unitId;
+  let resolvedParentId = parentLessonId || null;
+
+  if (resolvedParentId) {
+    if (!isAllowedCreateType(normalizedType, resolvedParentId)) {
+      return { lesson: null, error: "invalid_item_type_for_lesson_child" };
+    }
+    const { lesson: parent, error: parentErr } = await getLesson(resolvedParentId);
+    if (parentErr || !parent) {
+      if (parentErr === CONTENT_V3_MIGRATION_HINT || isMissingContentV3ColumnError(parentErr)) {
+        return { lesson: null, error: CONTENT_V3_MIGRATION_HINT };
+      }
+      return { lesson: null, error: parentErr || "parent_not_found" };
+    }
+    if (normalizeItemType(parent.item_type) !== "lesson") {
+      return { lesson: null, error: "invalid_hierarchy: parent_not_lesson" };
+    }
+    if (parent.parent_lesson_id != null) {
+      return { lesson: null, error: "invalid_hierarchy: parent_is_nested" };
+    }
+    if (unitId && parent.unit_id && unitId !== parent.unit_id) {
+      return { lesson: null, error: "invalid_hierarchy: unit_mismatch" };
+    }
+    resolvedUnitId = parent.unit_id;
+  } else if (!isAllowedCreateType(normalizedType, null)) {
+    return { lesson: null, error: "invalid_item_type_for_unit" };
+  }
+
+  const contentId = await contentIdForUnit(resolvedUnitId);
+  const {
+    position,
+    error: posErr,
+    legacy,
+  } = await nextSiblingPosition({ unitId: resolvedUnitId, parentLessonId: resolvedParentId });
+  if (posErr) return { lesson: null, error: posErr };
+
   const insert = {
-    unit_id: unitId,
+    unit_id: resolvedUnitId,
     title: String(title ?? "").trim(),
     description: String(description ?? "").trim() || null,
     position,
-    item_type: normalizeItemType(itemType),
+    item_type: normalizedType,
   };
+  if (resolvedParentId) insert.parent_lesson_id = resolvedParentId;
+  else if (!legacy) insert.parent_lesson_id = null;
+
   if (estimatedMinutes !== undefined && estimatedMinutes !== null && estimatedMinutes !== "") {
     insert.estimated_minutes = Number(estimatedMinutes);
+  }
+  if (required !== undefined) insert.required = Boolean(required);
+  if (completionRule !== undefined) insert.completion_rule = completionRule;
+  if (gradingMode !== undefined) insert.grading_mode = gradingMode;
+  if (passingScore !== undefined) {
+    insert.passing_score = passingScore === null || passingScore === "" ? null : Number(passingScore);
+  }
+  if (completionThreshold !== undefined) {
+    insert.completion_threshold =
+      completionThreshold === null || completionThreshold === "" ? null : Number(completionThreshold);
+  }
+  if (learningObjectives !== undefined) {
+    insert.learning_objectives = Array.isArray(learningObjectives)
+      ? learningObjectives
+      : [];
   }
 
   const { data, error } = await client.from("content_lessons").insert(insert).select(LESSON_SELECT).single();
 
   if (error) {
+    if (resolvedParentId && (isMissingContentV3ColumnError(error.message) || /parent_lesson_id/i.test(error.message))) {
+      return { lesson: null, error: CONTENT_V3_MIGRATION_HINT };
+    }
+    if (/parent_lesson_id|required|completion_rule|grading_mode|learning_objectives/i.test(error.message)) {
+      if (resolvedParentId) return { lesson: null, error: CONTENT_V3_MIGRATION_HINT };
+      const legacyInsert = {
+        unit_id: resolvedUnitId,
+        title: insert.title,
+        description: insert.description,
+        position,
+        item_type: insert.item_type,
+      };
+      if (insert.estimated_minutes !== undefined) legacyInsert.estimated_minutes = insert.estimated_minutes;
+      const { data: mid, error: midErr } = await client
+        .from("content_lessons")
+        .insert(legacyInsert)
+        .select(LESSON_SELECT_LEGACY)
+        .single();
+      if (midErr) {
+        if (/item_type/i.test(midErr.message)) {
+          const { data: pre, error: preErr } = await client
+            .from("content_lessons")
+            .insert({
+              unit_id: resolvedUnitId,
+              title: insert.title,
+              description: insert.description,
+              position,
+            })
+            .select(LESSON_SELECT_PRE_V2)
+            .single();
+          if (preErr) return { lesson: null, error: preErr.message };
+          await touchContent(contentId);
+          return {
+            lesson: mapLessonRow(
+              { ...pre, item_type: "lesson", estimated_minutes: null },
+              { parentLessonId: null },
+            ),
+            error: null,
+          };
+        }
+        return { lesson: null, error: midErr.message };
+      }
+      await touchContent(contentId);
+      return { lesson: mapLessonRow(mid, { parentLessonId: null }), error: null };
+    }
     if (/item_type/i.test(error.message)) {
-      const { data: legacy, error: legErr } = await client
+      const { data: legacyRow, error: legErr } = await client
         .from("content_lessons")
         .insert({
-          unit_id: unitId,
+          unit_id: resolvedUnitId,
           title: insert.title,
           description: insert.description,
           position,
         })
-        .select("id, unit_id, title, description, position, created_at, updated_at")
+        .select(LESSON_SELECT_PRE_V2)
         .single();
       if (legErr) return { lesson: null, error: legErr.message };
       await touchContent(contentId);
-      return { lesson: { ...legacy, item_type: "lesson", estimated_minutes: null }, error: null };
+      return {
+        lesson: mapLessonRow(
+          { ...legacyRow, item_type: "lesson", estimated_minutes: null },
+          { parentLessonId: null },
+        ),
+        error: null,
+      };
     }
     return { lesson: null, error: error.message };
   }
   await touchContent(contentId);
-  return { lesson: { ...data, item_type: normalizeItemType(data.item_type) }, error: null };
+  return { lesson: mapLessonRow(data), error: null };
 }
 
 export async function updateLesson(lessonId, patch = {}) {
+  const { lesson: current, error: curErr } = await getLesson(lessonId);
+  if (curErr || !current) return { lesson: null, error: curErr || "not_found" };
+
   const body = { updated_at: new Date().toISOString() };
   if (patch.title !== undefined) body.title = String(patch.title).trim();
   if (patch.description !== undefined) body.description = String(patch.description).trim() || null;
   if (patch.position !== undefined) body.position = patch.position;
-  if (patch.itemType !== undefined || patch.item_type !== undefined) {
-    body.item_type = normalizeItemType(patch.itemType ?? patch.item_type);
+
+  const nextTypeRaw = patch.itemType ?? patch.item_type;
+  if (nextTypeRaw !== undefined) {
+    const nextType = normalizeItemType(nextTypeRaw);
+    const parentId = current.parent_lesson_id ?? null;
+    const unchanged = nextType === normalizeItemType(current.item_type);
+
+    if (!unchanged) {
+      if (parentId != null && nextType === "lesson") {
+        return { lesson: null, error: "invalid_hierarchy: lesson_under_lesson" };
+      }
+      if (!isTypeValidInContext(nextType, parentId)) {
+        return { lesson: null, error: "invalid_item_type_for_context" };
+      }
+      if (normalizeItemType(current.item_type) === "lesson" && nextType !== "lesson") {
+        const { rows: children } = await listLessonChildren(lessonId);
+        if (children.length > 0) {
+          return { lesson: null, error: "invalid_hierarchy: container_with_children" };
+        }
+      }
+    }
+    body.item_type = nextType;
   }
+
   if (patch.estimatedMinutes !== undefined || patch.estimated_minutes !== undefined) {
     const v = patch.estimatedMinutes ?? patch.estimated_minutes;
     body.estimated_minutes = v === null || v === "" ? null : Number(v);
   }
+  if (patch.required !== undefined) body.required = Boolean(patch.required);
+  if (patch.completionRule !== undefined || patch.completion_rule !== undefined) {
+    body.completion_rule = patch.completionRule ?? patch.completion_rule;
+  }
+  if (patch.gradingMode !== undefined || patch.grading_mode !== undefined) {
+    body.grading_mode = patch.gradingMode ?? patch.grading_mode;
+  }
+  if (patch.passingScore !== undefined || patch.passing_score !== undefined) {
+    const v = patch.passingScore ?? patch.passing_score;
+    body.passing_score = v === null || v === "" ? null : Number(v);
+  }
+  if (patch.completionThreshold !== undefined || patch.completion_threshold !== undefined) {
+    const v = patch.completionThreshold ?? patch.completion_threshold;
+    body.completion_threshold = v === null || v === "" ? null : Number(v);
+  }
+  if (patch.learningObjectives !== undefined || patch.learning_objectives !== undefined) {
+    const v = patch.learningObjectives ?? patch.learning_objectives;
+    body.learning_objectives = Array.isArray(v) ? v : [];
+  }
 
-  const { data, error } = await sb().from("content_lessons").update(body).eq("id", lessonId).select(LESSON_SELECT).single();
+  const { data, error } = await sb()
+    .from("content_lessons")
+    .update(body)
+    .eq("id", lessonId)
+    .select(LESSON_SELECT)
+    .single();
 
-  if (error) return { lesson: null, error: error.message };
+  if (error) {
+    if (isMissingContentV3ColumnError(error.message) || /parent_lesson_id/i.test(error.message)) {
+      const legacyBody = { ...body };
+      delete legacyBody.parent_lesson_id;
+      delete legacyBody.required;
+      delete legacyBody.completion_rule;
+      delete legacyBody.grading_mode;
+      delete legacyBody.passing_score;
+      delete legacyBody.completion_threshold;
+      delete legacyBody.learning_objectives;
+      const { data: mid, error: midErr } = await sb()
+        .from("content_lessons")
+        .update(legacyBody)
+        .eq("id", lessonId)
+        .select(LESSON_SELECT_LEGACY)
+        .single();
+      if (midErr) return { lesson: null, error: midErr.message };
+      const contentId = await contentIdForUnit(mid.unit_id);
+      await touchContent(contentId);
+      return { lesson: mapLessonRow(mid, { parentLessonId: null }), error: null };
+    }
+    return { lesson: null, error: error.message };
+  }
   const contentId = await contentIdForUnit(data.unit_id);
   await touchContent(contentId);
-  return { lesson: { ...data, item_type: normalizeItemType(data.item_type) }, error: null };
+  return { lesson: mapLessonRow(data), error: null };
 }
 
 export async function deleteLesson(lessonId) {
@@ -756,17 +1180,54 @@ export async function moveLesson(lessonId, direction) {
   const client = sb();
   const { data: current, error: curErr } = await client
     .from("content_lessons")
-    .select("id, unit_id, position")
+    .select("id, unit_id, position, parent_lesson_id")
     .eq("id", lessonId)
     .maybeSingle();
 
-  if (curErr) return { ok: false, error: curErr.message };
+  if (curErr) {
+    if (isMissingContentV3ColumnError(curErr.message) || /parent_lesson_id/i.test(curErr.message)) {
+      const { data: legacy, error: legErr } = await client
+        .from("content_lessons")
+        .select("id, unit_id, position")
+        .eq("id", lessonId)
+        .maybeSingle();
+      if (legErr) return { ok: false, error: legErr.message };
+      if (!legacy) return { ok: false, error: "not_found" };
+      const neighborQuery = client
+        .from("content_lessons")
+        .select("id, position")
+        .eq("unit_id", legacy.unit_id);
+      if (direction === "up") {
+        neighborQuery.lt("position", legacy.position).order("position", { ascending: false });
+      } else {
+        neighborQuery.gt("position", legacy.position).order("position", { ascending: true });
+      }
+      const { data: neighbor, error: nErr } = await neighborQuery.limit(1).maybeSingle();
+      if (nErr) return { ok: false, error: nErr.message };
+      if (!neighbor) return { ok: true, error: null };
+      const result = await swapPositions(
+        "content_lessons",
+        legacy.id,
+        legacy.position,
+        neighbor.id,
+        neighbor.position,
+      );
+      if (result.ok) {
+        const contentId = await contentIdForUnit(legacy.unit_id);
+        await touchContent(contentId);
+      }
+      return result;
+    }
+    return { ok: false, error: curErr.message };
+  }
   if (!current) return { ok: false, error: "not_found" };
 
-  const neighborQuery = client
-    .from("content_lessons")
-    .select("id, position")
-    .eq("unit_id", current.unit_id);
+  const neighborQuery = client.from("content_lessons").select("id, position");
+  if (current.parent_lesson_id) {
+    neighborQuery.eq("parent_lesson_id", current.parent_lesson_id);
+  } else {
+    neighborQuery.eq("unit_id", current.unit_id).is("parent_lesson_id", null);
+  }
 
   if (direction === "up") {
     neighborQuery.lt("position", current.position).order("position", { ascending: false });
@@ -778,12 +1239,92 @@ export async function moveLesson(lessonId, direction) {
   if (nErr) return { ok: false, error: nErr.message };
   if (!neighbor) return { ok: true, error: null };
 
-  const result = await swapPositions("content_lessons", current.id, current.position, neighbor.id, neighbor.position);
+  const result = await swapPositions(
+    "content_lessons",
+    current.id,
+    current.position,
+    neighbor.id,
+    neighbor.position,
+  );
   if (result.ok) {
     const contentId = await contentIdForUnit(current.unit_id);
     await touchContent(contentId);
   }
   return result;
+}
+
+/**
+ * Cross-container move for Content V3. Preserves item ID.
+ * @returns {{ ok: boolean, error: string|null }}
+ */
+export async function moveLessonToContainer(lessonId, { unitId, parentLessonId = null } = {}) {
+  const client = sb();
+  const { lesson: current, error: curErr } = await getLesson(lessonId);
+  if (curErr || !current) {
+    if (curErr === CONTENT_V3_MIGRATION_HINT || isMissingContentV3ColumnError(curErr)) {
+      return { ok: false, error: CONTENT_V3_MIGRATION_HINT };
+    }
+    return { ok: false, error: curErr || "not_found" };
+  }
+
+  const itemType = normalizeItemType(current.item_type);
+  let targetUnitId = unitId || current.unit_id;
+  let targetParentId = parentLessonId ?? null;
+
+  if (itemType === "lesson") {
+    if (targetParentId != null) {
+      return { ok: false, error: "invalid_hierarchy: lesson_under_lesson" };
+    }
+    if (!targetUnitId) return { ok: false, error: "unit_required" };
+  } else if (targetParentId != null) {
+    const { lesson: parent, error: parentErr } = await getLesson(targetParentId);
+    if (parentErr || !parent) {
+      return { ok: false, error: parentErr || "parent_not_found" };
+    }
+    if (normalizeItemType(parent.item_type) !== "lesson") {
+      return { ok: false, error: "invalid_hierarchy: parent_not_lesson" };
+    }
+    if (parent.parent_lesson_id != null) {
+      return { ok: false, error: "invalid_hierarchy: parent_is_nested" };
+    }
+    if (unitId && parent.unit_id && unitId !== parent.unit_id) {
+      return { ok: false, error: "invalid_hierarchy: unit_mismatch" };
+    }
+    targetUnitId = parent.unit_id;
+  } else if (!targetUnitId) {
+    return { ok: false, error: "unit_required" };
+  }
+
+  const { position, error: posErr } = await nextSiblingPosition({
+    unitId: targetUnitId,
+    parentLessonId: targetParentId,
+  });
+  if (posErr) return { ok: false, error: posErr };
+
+  const { data, error } = await client
+    .from("content_lessons")
+    .update({
+      unit_id: targetUnitId,
+      parent_lesson_id: targetParentId,
+      position,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", lessonId)
+    .select("id")
+    .single();
+
+  if (error) {
+    if (isMissingContentV3ColumnError(error.message) || /parent_lesson_id/i.test(error.message)) {
+      return { ok: false, error: CONTENT_V3_MIGRATION_HINT };
+    }
+    return { ok: false, error: error.message };
+  }
+  if (!data || data.id !== lessonId) {
+    return { ok: false, error: "id_changed" };
+  }
+
+  await touchContent(await contentIdForUnit(targetUnitId));
+  return { ok: true, error: null };
 }
 
 // --- Bloques -----------------------------------------------------------------

@@ -60,6 +60,7 @@ export const TEST_SUITES = Object.freeze({
     "contentMetadataFields.test.mjs",
     "contentProvenance.test.mjs",
     "contentV3Structure.test.mjs",
+    "contentV3AppLayer.test.mjs",
     "communityPageViews.test.mjs",
     "micropythonNativeBle.test.mjs",
     "micropythonNetwork.test.mjs",

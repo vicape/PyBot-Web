@@ -1,5 +1,5 @@
 /**
- * Material V2 — first-class pedagogical metadata helpers.
+ * Material V2 / Content V3 — pedagogical metadata helpers.
  * Stable internal codes only (not translated labels).
  */
 
@@ -9,6 +9,7 @@ export const CONTENT_LANGUAGE_CODES = Object.freeze(["es", "en", "fr", "pt", "de
 
 export const UNIT_TYPES = Object.freeze(["chapter", "unit", "section"]);
 
+/** All valid stored item_type values (legacy + Content V3). */
 export const LESSON_ITEM_TYPES = Object.freeze([
   "lesson",
   "theory",
@@ -19,7 +20,47 @@ export const LESSON_ITEM_TYPES = Object.freeze([
   "test",
   "project",
   "resource",
+  "reading",
+  "video",
+  "assignment",
 ]);
+
+/** Canonical Content V3 preferred types for new work. */
+export const CONTENT_V3_ITEM_TYPES = Object.freeze([
+  "lesson",
+  "reading",
+  "video",
+  "exercise",
+  "quiz",
+  "assignment",
+  "project",
+  "resource",
+]);
+
+/** Exact types offered when creating directly under a Unit. */
+export const UNIT_DIRECT_CREATE_TYPES = Object.freeze([
+  "lesson",
+  "quiz",
+  "assignment",
+  "project",
+  "resource",
+]);
+
+/** Exact types offered when creating inside a Lesson container. */
+export const LESSON_CHILD_CREATE_TYPES = Object.freeze([
+  "reading",
+  "video",
+  "exercise",
+  "quiz",
+  "assignment",
+  "resource",
+]);
+
+/** Legacy-only types: readable/editable, never offered for NEW creation. */
+export const LEGACY_ITEM_TYPES = Object.freeze(["theory", "example", "activity", "test"]);
+
+export const CONTENT_V3_MIGRATION_HINT =
+  "Falta aplicar la migración 20260927190051_content_v3_structure.sql";
 
 export const AGE_BOUNDS = Object.freeze({ min: 3, max: 120 });
 
@@ -42,6 +83,10 @@ const CONTENT_META_SELECT = [
 ].join(", ");
 
 export const LEARNING_CONTENT_SELECT_BASE =
+  `id, title, description, status, visibility, preparation_status, owner_id, created_at, updated_at, ${CONTENT_META_SELECT}`;
+
+/** Legacy select when preparation_status column is absent. */
+export const LEARNING_CONTENT_SELECT_LEGACY =
   `id, title, description, status, visibility, owner_id, created_at, updated_at, ${CONTENT_META_SELECT}`;
 
 function asTrimmedOrNull(value) {
@@ -182,6 +227,37 @@ export function normalizeUnitType(value) {
 export function normalizeItemType(value) {
   const v = String(value || "lesson").trim();
   return LESSON_ITEM_TYPES.includes(v) ? v : "lesson";
+}
+
+export function isLegacyItemType(value) {
+  return LEGACY_ITEM_TYPES.includes(String(value || "").trim());
+}
+
+/**
+ * Type options when editing an existing item.
+ * Legacy current type is kept + valid V3 types for context; never duplicates.
+ */
+export function itemTypeOptionsForEdit({ itemType, parentLessonId = null } = {}) {
+  const contextTypes = parentLessonId != null ? LESSON_CHILD_CREATE_TYPES : UNIT_DIRECT_CREATE_TYPES;
+  const current = String(itemType || "").trim();
+  const normalized = normalizeItemType(current);
+  const options = [];
+  if (isLegacyItemType(current) || isLegacyItemType(normalized)) {
+    const legacy = isLegacyItemType(current) ? current : normalized;
+    if (!options.includes(legacy)) options.push(legacy);
+  }
+  for (const t of contextTypes) {
+    if (!options.includes(t)) options.push(t);
+  }
+  return options;
+}
+
+/** In-memory only: never written back when V3 column is absent. */
+export function derivePreparationStatus(row) {
+  if (row && row.preparation_status != null && row.preparation_status !== "") {
+    return row.preparation_status;
+  }
+  return row?.status === "published" ? "ready" : "draft";
 }
 
 export function pickContentMetadata(row) {

@@ -9,10 +9,14 @@ const files = filesForSuite(suite).map((name) => join(testDir, name));
 
 console.log(`[tests] suite=${suite} files=${files.length}`);
 
-const result = spawnSync(process.execPath, ["--test", ...files], {
-  stdio: "inherit",
-  env: process.env,
-});
+const result = spawnSync(
+  process.execPath,
+  ["--experimental-test-module-mocks", "--test", ...files],
+  {
+    stdio: "inherit",
+    env: process.env,
+  },
+);
 
 if (result.error) {
   throw result.error;
