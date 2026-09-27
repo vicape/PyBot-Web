@@ -459,7 +459,8 @@
 
 /*
  * Desktop (>768px): one shared compact document type scale for viewer/preview AND
- * editable editor. Mobile ≤768 / ≤480 overrides below stay unchanged.
+ * editable editor. Mobile ≤768 / ≤480 use the same shared document selectors below
+ * (viewer values preserved; editable now matches that scale).
  */
 @media (min-width: 769px) {
   .pbc-lesson-page .pbc-content-breadcrumb {
@@ -862,22 +863,22 @@
     padding-bottom: 1.5rem;
   }
 
-  /* Editable mobile: keep a smaller handle gutter than desktop 54px */
+  /* Editable ≤768: ~24px inline gutter — keeps side-menu/drag usable, more reading width */
   .pbc-lesson-doc:not(.pbc-lesson-doc--preview) .bn-editor {
-    padding-inline: 2.25rem;
+    padding-inline: 24px;
     min-height: 0;
   }
 
   /* Normal wrapping for headings/prose — never character-break ordinary text */
-  .pbc-lesson-doc--preview .bn-editor h1,
-  .pbc-lesson-doc--preview .bn-editor h2,
-  .pbc-lesson-doc--preview .bn-editor h3,
-  .pbc-lesson-doc--preview .bn-editor h4,
-  .pbc-lesson-doc--preview .bn-editor h5,
-  .pbc-lesson-doc--preview .bn-editor h6,
-  .pbc-lesson-doc--preview .bn-editor p,
-  .pbc-lesson-doc--preview .bn-editor li,
-  .pbc-lesson-doc--preview .bn-editor .bn-inline-content {
+  .pbc-lesson-doc .bn-editor h1,
+  .pbc-lesson-doc .bn-editor h2,
+  .pbc-lesson-doc .bn-editor h3,
+  .pbc-lesson-doc .bn-editor h4,
+  .pbc-lesson-doc .bn-editor h5,
+  .pbc-lesson-doc .bn-editor h6,
+  .pbc-lesson-doc .bn-editor p,
+  .pbc-lesson-doc .bn-editor li,
+  .pbc-lesson-doc .bn-editor .bn-inline-content {
     word-break: normal;
     overflow-wrap: break-word;
   }
@@ -886,36 +887,37 @@
    * Tablet / small-tablet (≤768): BlockNote defaults heading --level to 3em/2em
    * (48px/32px at 16px base) — poster-scale on phones. Cap below desktop sizes
    * while keeping clear hierarchy; phones tighten further at ≤480.
-   * Shared reader rhythm: more space before major headings than after.
+   * Shared viewer/preview AND editable editor scale; more space before major
+   * headings than after.
    */
-  .pbc-lesson-doc--preview .bn-default-styles {
+  .pbc-lesson-doc .bn-default-styles {
     font-size: 16px;
     line-height: 1.55;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="paragraph"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="bulletListItem"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="numberedListItem"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="checkListItem"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="paragraph"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="bulletListItem"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="numberedListItem"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="checkListItem"] {
     font-size: 16px;
     line-height: 1.55;
     font-weight: normal;
     color: var(--pbc-lesson-ink);
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="paragraph"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="paragraph"] {
     padding-top: 0.12rem;
     padding-bottom: 0.22rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="bulletListItem"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="numberedListItem"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="checkListItem"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="bulletListItem"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="numberedListItem"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="checkListItem"] {
     padding-top: 0.12rem;
     padding-bottom: 0.12rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"] {
     --level: 2.25rem; /* ~36px — below BlockNote 3em, above phone cap */
     padding-top: 0.85rem;
     padding-bottom: 0.05rem;
@@ -923,7 +925,7 @@
     font-weight: 700;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="2"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="2"] {
     --level: 1.75rem; /* ~28px */
     padding-top: 1rem;
     padding-bottom: 0.05rem;
@@ -931,7 +933,7 @@
     font-weight: 700;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="3"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="3"] {
     --level: 1.375rem; /* ~22px */
     padding-top: 0.45rem;
     padding-bottom: 0.04rem;
@@ -939,9 +941,9 @@
     font-weight: 600;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="4"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="5"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="6"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="4"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="5"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="6"] {
     --level: 1.1875rem; /* ~19px */
     padding-top: 0.35rem;
     padding-bottom: 0.04rem;
@@ -950,24 +952,24 @@
   }
 
   /* Avoid stacking generic block padding on top of heading rhythm. */
-  .pbc-lesson-doc--preview .bn-block-content {
+  .pbc-lesson-doc .bn-block-content {
     padding-top: 0.12rem;
     padding-bottom: 0.12rem;
   }
 
-  .pbc-lesson-doc--preview
+  .pbc-lesson-doc
     .bn-block-outer:first-child
     > .bn-block
     > .bn-block-content[data-content-type="heading"] {
     padding-top: 0.15rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="divider"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="divider"] {
     padding-top: 0.1rem;
     padding-bottom: 0.1rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="divider"] hr {
+  .pbc-lesson-doc .bn-block-content[data-content-type="divider"] hr {
     margin: 0.5rem 0;
     width: 100%;
     border: none;
@@ -975,18 +977,18 @@
     opacity: 0.9;
   }
 
-  .pbc-lesson-doc--preview .bn-block-group .bn-block-group {
+  .pbc-lesson-doc .bn-block-group .bn-block-group {
     margin-left: 1rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="codeBlock"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"] {
     font-size: 0.875rem;
     line-height: 1.5;
     margin-top: 0.25rem;
     margin-bottom: 0.25rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="codeBlock"] > pre {
+  .pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"] > pre {
     padding: 0.65rem 0.75rem;
     font-size: 0.875rem;
     line-height: 1.5;
@@ -1025,37 +1027,43 @@
     padding-inline: 0;
   }
 
+  /* Editable ≤480: ~20px inline gutter — side menu remains usable */
+  .pbc-lesson-doc:not(.pbc-lesson-doc--preview) .bn-editor {
+    padding-inline: 20px;
+  }
+
   /*
-   * Phones (≤480): compact educational-reader scale. Hierarchy stays obvious;
+   * Phones (≤480): compact educational-reader scale for viewer/preview AND
+   * editable editor. Hierarchy stays obvious;
    * H1 ~26px / H2 ~23px / H3 ~19px — H1 tightened only; lower levels unchanged.
    */
-  .pbc-lesson-doc--preview .bn-default-styles {
+  .pbc-lesson-doc .bn-default-styles {
     font-size: 16px;
     line-height: 1.55;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="paragraph"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="bulletListItem"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="numberedListItem"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="checkListItem"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="paragraph"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="bulletListItem"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="numberedListItem"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="checkListItem"] {
     font-size: 16px;
     line-height: 1.55;
     color: var(--pbc-lesson-ink);
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="paragraph"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="paragraph"] {
     padding-top: 0.1rem;
     padding-bottom: 0.2rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="bulletListItem"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="numberedListItem"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="checkListItem"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="bulletListItem"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="numberedListItem"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="checkListItem"] {
     padding-top: 0.1rem;
     padding-bottom: 0.1rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"] {
     --level: 1.625rem; /* 26px — tighter phone H1 without touching H2+ */
     padding-top: 0.65rem;
     padding-bottom: 0.04rem;
@@ -1063,7 +1071,7 @@
     font-weight: 700;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="2"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="2"] {
     --level: 1.4375rem; /* 23px — within 22–24px */
     padding-top: 1rem;
     padding-bottom: 0.04rem;
@@ -1071,7 +1079,7 @@
     font-weight: 700;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="3"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="3"] {
     --level: 1.1875rem; /* 19px — within 18–20px */
     padding-top: 0.4rem;
     padding-bottom: 0.03rem;
@@ -1079,9 +1087,9 @@
     font-weight: 600;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="4"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="5"],
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="heading"][data-level="6"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="4"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="5"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="6"] {
     --level: 1.0625rem; /* 17px — within 16–18px */
     padding-top: 0.28rem;
     padding-bottom: 0.03rem;
@@ -1090,24 +1098,24 @@
   }
 
   /* Compact block rhythm: headings own pre-section space; wrappers stay tight. */
-  .pbc-lesson-doc--preview .bn-block-content {
+  .pbc-lesson-doc .bn-block-content {
     padding-top: 0.06rem;
     padding-bottom: 0.06rem;
   }
 
-  .pbc-lesson-doc--preview
+  .pbc-lesson-doc
     .bn-block-outer:first-child
     > .bn-block
     > .bn-block-content[data-content-type="heading"] {
     padding-top: 0.12rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="divider"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="divider"] {
     padding-top: 0.08rem;
     padding-bottom: 0.08rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="divider"] hr {
+  .pbc-lesson-doc .bn-block-content[data-content-type="divider"] hr {
     margin: 0.5rem 0;
     width: 100%;
     border: none;
@@ -1115,18 +1123,18 @@
     opacity: 0.9;
   }
 
-  .pbc-lesson-doc--preview .bn-block-group .bn-block-group {
+  .pbc-lesson-doc .bn-block-group .bn-block-group {
     margin-left: 0.75rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="codeBlock"] {
+  .pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"] {
     font-size: 0.8125rem; /* 13px */
     line-height: 1.45;
     margin-top: 0.28rem;
     margin-bottom: 0.28rem;
   }
 
-  .pbc-lesson-doc--preview .bn-block-content[data-content-type="codeBlock"] > pre {
+  .pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"] > pre {
     padding: 0.5rem 0.6rem;
     font-size: 0.8125rem;
     line-height: 1.45;

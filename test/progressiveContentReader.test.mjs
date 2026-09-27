@@ -331,15 +331,15 @@ test("AC mobile width: read-only lesson surface collapses BlockNote gutter + use
   );
 });
 
-test("AC mobile wrapping: preview prose/headings use normal word-break, not break-all", () => {
+test("AC mobile wrapping: lesson prose/headings use normal word-break, not break-all", () => {
   const mobileBlock = lessonCss.match(
     /@media \(max-width:\s*768px\)\s*\{([\s\S]*?)\n\}\s*\n@media \(max-width:\s*720px\)/,
   );
   assert.ok(mobileBlock, "768px mobile lesson media query must exist");
   const body = mobileBlock[1];
 
-  assert.match(body, /\.pbc-lesson-doc--preview\s+\.bn-editor\s+h1/);
-  assert.match(body, /\.pbc-lesson-doc--preview\s+\.bn-editor\s+p/);
+  assert.match(body, /\.pbc-lesson-doc\s+\.bn-editor\s+h1/);
+  assert.match(body, /\.pbc-lesson-doc\s+\.bn-editor\s+p/);
   assert.match(body, /\.bn-inline-content/);
   assert.match(body, /word-break:\s*normal/);
   assert.match(body, /overflow-wrap:\s*break-word/);
@@ -378,7 +378,7 @@ test("AC mobile typography: BlockNote default heading --level is poster-scale (3
   );
 });
 
-test("AC mobile typography: phone ≤480 caps preview heading scale + body readability", () => {
+test("AC mobile typography: phone ≤480 caps shared viewer/editor heading scale + body readability", () => {
   const phoneBlock = lessonCss.match(
     /@media \(max-width:\s*480px\)\s*\{([\s\S]*?)\n\}\s*\n\/\* —— Asignar lección/,
   );
@@ -386,26 +386,27 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
   const body = phoneBlock[1];
 
   // H1 / top-level: 1.625rem (26px) — not BlockNote 3em; H2+ unchanged.
+  // Shared .pbc-lesson-doc selectors (viewer + editable editor).
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*1\.625rem/s,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*1\.625rem/s,
   );
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*line-height:\s*1\.10/s,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*line-height:\s*1\.10/s,
   );
   // Compact pre-section space before H1; tight post-heading association.
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*0\.65rem/s,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-top:\s*0\.65rem/s,
   );
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-bottom:\s*0\.04rem/s,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*padding-bottom:\s*0\.04rem/s,
   );
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*font-weight:\s*700/s,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*font-weight:\s*700/s,
   );
 
   // Hierarchy remains distinct (H2 ~23px, H3 ~19px, H4+ ~17px).
@@ -445,11 +446,11 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
   // Body ~16px / comfortable line-height (1.5–1.6).
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-default-styles\s*\{[^}]*font-size:\s*16px/s,
+    /\.pbc-lesson-doc\s+\.bn-default-styles\s*\{[^}]*font-size:\s*16px/s,
   );
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-default-styles\s*\{[^}]*line-height:\s*1\.55/s,
+    /\.pbc-lesson-doc\s+\.bn-default-styles\s*\{[^}]*line-height:\s*1\.55/s,
   );
   assert.match(
     body,
@@ -463,7 +464,7 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
   // Compact block rhythm (not cramped); headings own section spacing.
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\s*\{[^}]*padding-top:\s*0\.06rem/s,
+    /\.pbc-lesson-doc\s+\.bn-block-content\s*\{[^}]*padding-top:\s*0\.06rem/s,
   );
   assert.match(
     body,
@@ -503,7 +504,7 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
   // Nested lists: compact indent (preserve line width; not BlockNote 24px cascade).
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-group\s+\.bn-block-group\s*\{[^}]*margin-left:\s*0\.75rem/s,
+    /\.pbc-lesson-doc\s+\.bn-block-group\s+\.bn-block-group\s*\{[^}]*margin-left:\s*0\.75rem/s,
   );
   assert.match(
     body,
@@ -522,6 +523,11 @@ test("AC mobile typography: phone ≤480 caps preview heading scale + body reada
     body,
     /\.pbc-lesson-doc--preview\s+\.bn-editor\s*\{[^}]*padding-inline:\s*0/s,
   );
+  // Editable phone gutter ~20px (not collapsed like preview).
+  assert.match(
+    body,
+    /\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)\s+\.bn-editor\s*\{[^}]*padding-inline:\s*20px/s,
+  );
 
   // No text-match styling on Activity/Challenge/PREDICT strings.
   assert.doesNotMatch(body, /Activity|Challenge|PREDICT/);
@@ -534,9 +540,10 @@ test("AC mobile typography: tablet ≤768 uses intermediate heading scale below 
   assert.ok(tabletBlock, "768px tablet typography media query must exist");
   const body = tabletBlock[1];
 
+  // Shared .pbc-lesson-doc selectors (viewer + editable) — same values as prior preview scale.
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*2\.25rem/s,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*2\.25rem/s,
   );
   assert.match(
     body,
@@ -556,7 +563,7 @@ test("AC mobile typography: tablet ≤768 uses intermediate heading scale below 
   );
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-default-styles\s*\{[^}]*font-size:\s*16px/s,
+    /\.pbc-lesson-doc\s+\.bn-default-styles\s*\{[^}]*font-size:\s*16px/s,
   );
   assert.match(
     body,
@@ -568,27 +575,32 @@ test("AC mobile typography: tablet ≤768 uses intermediate heading scale below 
   );
   assert.match(
     body,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-group\s+\.bn-block-group\s*\{[^}]*margin-left:\s*1rem/s,
+    /\.pbc-lesson-doc\s+\.bn-block-group\s+\.bn-block-group\s*\{[^}]*margin-left:\s*1rem/s,
   );
 
-  // Width gutter collapse still present (second-pass must not regress width fix).
+  // Width gutter collapse still present on preview (second-pass must not regress width fix).
   assert.match(
     body,
     /\.pbc-lesson-doc--preview\s+\.bn-editor\s*\{[^}]*padding-inline:\s*0\.15rem/s,
   );
+  // Editable tablet gutter ~24px (side menu remains usable).
+  assert.match(
+    body,
+    /\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)\s+\.bn-editor\s*\{[^}]*padding-inline:\s*24px/s,
+  );
 });
 
-test("AC mobile typography: overrides stay scoped to read-only preview (desktop Design C untouched)", () => {
-  // Mobile typography (--level / body) remains preview-scoped inside ≤768 / ≤480.
+test("AC mobile typography: shared viewer/editor scale; gutters differ; desktop Design C untouched", () => {
+  // Mobile typography (--level / body) is shared via .pbc-lesson-doc inside ≤768 / ≤480.
   const tabletBlock = lessonCss.match(
     /@media \(max-width:\s*768px\)\s*\{([\s\S]*?)\n\}\s*\n@media \(max-width:\s*720px\)/,
   );
   assert.ok(tabletBlock, "768px mobile lesson media query must exist");
   assert.match(
     tabletBlock[1],
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:/s,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:/s,
   );
-  // Editable mobile path must not set heading --level (only gutter padding).
+  // Editable-only gutter path must not invent a divergent --level (shared selectors cover type).
   assert.doesNotMatch(
     tabletBlock[1],
     /\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)[^{]*\{[^}]*--level:/s,
@@ -600,17 +612,31 @@ test("AC mobile typography: overrides stay scoped to read-only preview (desktop 
   assert.ok(phoneBlock, "480px phone typography media query must exist");
   assert.match(
     phoneBlock[1],
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:/s,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:/s,
   );
   assert.doesNotMatch(
     phoneBlock[1],
     /\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)[^{]*\{[^}]*--level:/s,
   );
 
-  // Editable path retains mobile handle gutter (not zeroed like preview).
+  // Editable path retains mobile handle gutters (not zeroed like preview).
   assert.match(
     lessonCss,
-    /\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)\s+\.bn-editor\s*\{[^}]*padding-inline:\s*2\.25rem/s,
+    /\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)\s+\.bn-editor\s*\{[^}]*padding-inline:\s*24px/s,
+  );
+  assert.match(
+    lessonCss,
+    /@media \(max-width:\s*480px\)\s*\{[\s\S]*?\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)\s+\.bn-editor\s*\{[^}]*padding-inline:\s*20px/s,
+  );
+
+  // Preview gutters remain collapsed (viewer layout preserved).
+  assert.match(
+    lessonCss,
+    /\.pbc-lesson-doc--preview\s+\.bn-editor\s*\{[^}]*padding-inline:\s*0\.15rem/s,
+  );
+  assert.match(
+    lessonCss,
+    /@media \(max-width:\s*480px\)\s*\{[\s\S]*?\.pbc-lesson-doc--preview\s+\.bn-editor\s*\{[^}]*padding-inline:\s*0/s,
   );
 });
 
