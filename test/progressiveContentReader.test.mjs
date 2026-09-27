@@ -579,22 +579,114 @@ test("AC mobile typography: tablet ≤768 uses intermediate heading scale below 
 });
 
 test("AC mobile typography: overrides stay scoped to read-only preview (desktop Design C untouched)", () => {
-  // No unscoped heading --level overrides outside mobile media queries.
-  const outsideMobile = lessonCss
-    .replace(/@media\s*\([^)]*max-width:\s*768px\)\s*\{[\s\S]*?\n\}\s*\n@media \(max-width:\s*720px\)/, "")
-    .replace(/@media\s*\([^)]*max-width:\s*480px\)\s*\{[\s\S]*?\n\}\s*\n\/\* —— Asignar lección/, "/* —— Asignar lección");
-
-  assert.doesNotMatch(
-    outsideMobile,
-    /\.pbc-lesson-doc(?!--preview)[^{]*\{[^}]*--level:/s,
+  // Mobile typography (--level / body) remains preview-scoped inside ≤768 / ≤480.
+  const tabletBlock = lessonCss.match(
+    /@media \(max-width:\s*768px\)\s*\{([\s\S]*?)\n\}\s*\n@media \(max-width:\s*720px\)/,
   );
+  assert.ok(tabletBlock, "768px mobile lesson media query must exist");
   assert.match(
-    lessonCss,
-    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]/,
+    tabletBlock[1],
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:/s,
   );
+  // Editable mobile path must not set heading --level (only gutter padding).
+  assert.doesNotMatch(
+    tabletBlock[1],
+    /\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)[^{]*\{[^}]*--level:/s,
+  );
+
+  const phoneBlock = lessonCss.match(
+    /@media \(max-width:\s*480px\)\s*\{([\s\S]*?)\n\}\s*\n\/\* —— Asignar lección/,
+  );
+  assert.ok(phoneBlock, "480px phone typography media query must exist");
+  assert.match(
+    phoneBlock[1],
+    /\.pbc-lesson-doc--preview\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:/s,
+  );
+  assert.doesNotMatch(
+    phoneBlock[1],
+    /\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)[^{]*\{[^}]*--level:/s,
+  );
+
   // Editable path retains mobile handle gutter (not zeroed like preview).
   assert.match(
     lessonCss,
     /\.pbc-lesson-doc:not\(\.pbc-lesson-doc--preview\)\s+\.bn-editor\s*\{[^}]*padding-inline:\s*2\.25rem/s,
+  );
+});
+
+test("AC desktop typography: shared viewer/editor scale above 768px", () => {
+  const desktopBlock = lessonCss.match(
+    /@media \(min-width:\s*769px\)\s*\{([\s\S]*?)\n\}/,
+  );
+  assert.ok(desktopBlock, "769px desktop typography media query must exist");
+  const body = desktopBlock[1];
+
+  // Shared .pbc-lesson-doc selectors (viewer + editor), not preview-only.
+  assert.match(body, /\.pbc-lesson-doc\s+\.bn-default-styles\s*\{[^}]*font-size:\s*16px/s);
+  assert.match(
+    body,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="paragraph"\]/,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="paragraph"\][\s\S]*?font-size:\s*16px/,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="bulletListItem"\][\s\S]*?font-size:\s*16px|font-size:\s*16px[\s\S]*?bulletListItem/,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="numberedListItem"\]/,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="checkListItem"\]/,
+  );
+
+  // Heading hierarchy: H1 32px, H2 26px, H3 21px, H4–H6 18px (rem equivalents).
+  assert.match(
+    body,
+    /\.pbc-lesson-doc\s+\.bn-block-content\[data-content-type="heading"\]\s*\{[^}]*--level:\s*2rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="2"\]\s*\{[^}]*--level:\s*1\.625rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="3"\]\s*\{[^}]*--level:\s*1\.3125rem/s,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="4"\][\s\S]*?--level:\s*1\.125rem/,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="5"\]/,
+  );
+  assert.match(
+    body,
+    /\[data-content-type="heading"\]\[data-level="6"\]/,
+  );
+
+  // Code 14px in both surfaces.
+  assert.match(
+    body,
+    /\[data-content-type="codeBlock"\][\s\S]*?font-size:\s*0\.875rem/,
+  );
+
+  // Must not duplicate a preview-only desktop scale.
+  assert.doesNotMatch(body, /\.pbc-lesson-doc--preview/);
+});
+
+test("AC desktop typography: lesson title capped ~32px–34px on desktop", () => {
+  assert.match(
+    lessonCss,
+    /\.pbc-lesson-title-input\s*\{[^}]*font-size:\s*clamp\(\s*1\.5rem\s*,\s*3\.2vw\s*,\s*34px\s*\)/s,
+  );
+  assert.doesNotMatch(
+    lessonCss,
+    /\.pbc-lesson-title-input\s*\{[^}]*font-size:\s*clamp\([^)]*2\.625rem/s,
   );
 });

@@ -78,7 +78,8 @@
   background: transparent;
   color: var(--pbc-lesson-ink);
   font-family: inherit;
-  font-size: clamp(1.5rem, 3.2vw, 2.625rem);
+  /* Desktop max 32px–34px (was 2.625rem / 42px); mobile still bottoms at 1.5rem */
+  font-size: clamp(1.5rem, 3.2vw, 34px);
   font-weight: 700;
   letter-spacing: -0.035em;
   line-height: 1.1;
@@ -454,6 +455,48 @@
 .pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"] > pre {
   max-width: 100%;
   overflow-x: auto;
+}
+
+/*
+ * Desktop (>768px): one shared educational type scale for viewer/preview AND
+ * editable editor. Mobile ≤768 / ≤480 overrides below stay unchanged.
+ */
+@media (min-width: 769px) {
+  .pbc-lesson-doc .bn-default-styles {
+    font-size: 16px;
+    line-height: 1.55;
+  }
+
+  .pbc-lesson-doc .bn-block-content[data-content-type="paragraph"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="bulletListItem"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="numberedListItem"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="checkListItem"] {
+    font-size: 16px;
+    line-height: 1.55;
+  }
+
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"] {
+    --level: 2rem; /* 32px */
+  }
+
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="2"] {
+    --level: 1.625rem; /* 26px */
+  }
+
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="3"] {
+    --level: 1.3125rem; /* 21px */
+  }
+
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="4"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="5"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="heading"][data-level="6"] {
+    --level: 1.125rem; /* 18px */
+  }
+
+  .pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"],
+  .pbc-lesson-doc .bn-block-content[data-content-type="codeBlock"] > pre {
+    font-size: 0.875rem; /* 14px */
+  }
 }
 
 .pbc-lesson-doc .bn-side-menu .bn-button,
