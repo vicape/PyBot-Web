@@ -831,3 +831,51 @@ test("Content V3 desktop layout contract (>= 901px)", () => {
   assert.match(css, /@media \(max-width:\s*480px\)[\s\S]*\.pbc-lesson-row__cta\s*\{[^}]*flex:\s*1\s+1\s+100%/s);
   assert.match(css, /\.pbc-lesson-row--child\s*\{[^}]*border-left:\s*2px\s+solid\s+#e2e8f0/s);
 });
+
+// ── Editor width desktop contracts ───────────────────────────────────────────
+
+function extractMediaQueryBlock(css, marker) {
+  const start = css.indexOf(marker);
+  assert.ok(start >= 0, `media query block must exist: ${marker}`);
+  let i = css.indexOf("{", start);
+  assert.ok(i >= 0, `media query opening brace: ${marker}`);
+  let depth = 0;
+  for (; i < css.length; i += 1) {
+    const ch = css[i];
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return css.slice(start, i + 1);
+    }
+  }
+  assert.fail(`unclosed media query: ${marker}`);
+}
+
+test("Content/Lesson editor desktop width contracts", () => {
+  const css = readFileSync(resolve(root, "src/styles/pybotclass-dashboard.css"), "utf8");
+
+  // Base/mobile rule preserved
+  assert.match(
+    css,
+    /\.pbc-content-editor\s*,\s*\.pbc-lesson-editor\s*\{\s*max-width:\s*820px\s*;\s*\}/,
+  );
+
+  // AC1: >=1201px → width 100%, max-width 1180px
+  const wide = extractMediaQueryBlock(css, "@media (min-width: 1201px)");
+  assert.match(
+    wide,
+    /\.pbc-content-editor\s*,\s*\.pbc-lesson-editor\s*\{[^}]*width:\s*100%\s*;[^}]*max-width:\s*1180px\s*;/s,
+  );
+  assert.doesNotMatch(wide, /margin\s*:\s*[^;]*auto/);
+
+  // AC2: 901px–1200px → width 100%, max-width 100%
+  const mid = extractMediaQueryBlock(
+    css,
+    "@media (min-width: 901px) and (max-width: 1200px)",
+  );
+  assert.match(
+    mid,
+    /\.pbc-content-editor\s*,\s*\.pbc-lesson-editor\s*\{[^}]*width:\s*100%\s*;[^}]*max-width:\s*100%\s*;/s,
+  );
+  assert.doesNotMatch(mid, /margin\s*:\s*[^;]*auto/);
+});

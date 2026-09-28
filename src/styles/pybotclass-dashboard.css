@@ -2328,6 +2328,10 @@
   max-width: 820px;
 }
 
+@media (min-width: 1201px) { .pbc-content-editor, .pbc-lesson-editor { width: 100%; max-width: 1180px; } }
+
+@media (min-width: 901px) and (max-width: 1200px) { .pbc-content-editor, .pbc-lesson-editor { width: 100%; max-width: 100%; } }
+
 .pbc-visually-hidden {
   position: absolute;
   width: 1px;
