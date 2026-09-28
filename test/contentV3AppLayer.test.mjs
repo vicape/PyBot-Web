@@ -727,3 +727,107 @@ test("CONTENT_V3 migration hint constant exact", () => {
     "Falta aplicar la migración 20260927190051_content_v3_structure.sql",
   );
 });
+
+// ── Desktop layout contract (>= 901px) ───────────────────────────────────────
+
+function extractMinWidth901Block(css) {
+  const marker = "@media (min-width: 901px)";
+  const start = css.lastIndexOf(marker);
+  assert.ok(start >= 0, "desktop @media (min-width: 901px) block must exist");
+  let i = css.indexOf("{", start);
+  assert.ok(i >= 0, "desktop media query opening brace");
+  let depth = 0;
+  for (; i < css.length; i += 1) {
+    const ch = css[i];
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return css.slice(start, i + 1);
+    }
+  }
+  assert.fail("unclosed desktop media query");
+}
+
+test("Content V3 desktop layout contract (>= 901px)", () => {
+  const css = readFileSync(resolve(root, "src/styles/pybotclass-dashboard.css"), "utf8");
+  const editor = readFileSync(resolve(root, "src/pages/ContentEditorPage.jsx"), "utf8");
+  const desktop = extractMinWidth901Block(css);
+
+  // AC13: corrections live in dedicated desktop media query
+  assert.match(css, /@media \(min-width:\s*901px\)/);
+
+  // AC15: JSX unchanged structure (DOM contract still present; no reorder needed)
+  assert.match(editor, /className=\{`pbc-lesson-row\$\{depth > 0 \? " pbc-lesson-row--child" : ""\}`\}/);
+  assert.match(editor, /className="pbc-lesson-row__main"/);
+  assert.match(editor, /className="pbc-lesson-row__actions"/);
+  assert.match(editor, /pbc-lesson-row__add-child/);
+  assert.match(editor, /pbc-lesson-list--nested/);
+  assert.match(editor, /pbc-unit-card__head/);
+  assert.match(editor, /pbc-unit-card__title-row/);
+  assert.match(editor, /canAssign && depth === 0/);
+
+  // AC8: Unit header two-column grid
+  assert.match(
+    desktop,
+    /\.pbc-unit-card__head\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s,
+  );
+  assert.match(desktop, /\.pbc-unit-card__head\s*\{[^}]*column-gap:\s*12px/s);
+  assert.match(desktop, /\.pbc-unit-card__head\s*\{[^}]*align-items:\s*center/s);
+  assert.match(
+    desktop,
+    /\.pbc-unit-card__title-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s,
+  );
+
+  // AC1 / AC11: Lesson row two-column grid (no third horizontal column for add-child)
+  assert.match(desktop, /\.pbc-lesson-row\s*\{[^}]*display:\s*grid/s);
+  assert.match(
+    desktop,
+    /\.pbc-lesson-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s,
+  );
+  assert.match(desktop, /\.pbc-lesson-row\s*\{[^}]*column-gap:\s*12px/s);
+  assert.match(desktop, /\.pbc-lesson-row\s*\{[^}]*row-gap:\s*8px/s);
+  assert.match(desktop, /\.pbc-lesson-row\s*\{[^}]*align-items:\s*center/s);
+  assert.match(desktop, /\.pbc-lesson-row\s*\{[^}]*width:\s*100%/s);
+
+  // AC2: Lesson card internal three columns
+  assert.match(desktop, /\.pbc-lesson-row__main\s*\{[^}]*grid-column:\s*1/s);
+  assert.match(desktop, /\.pbc-lesson-row__main\s*\{[^}]*grid-row:\s*1/s);
+  assert.match(
+    desktop,
+    /\.pbc-lesson-row__main\s*\{[^}]*grid-template-columns:\s*36px\s+minmax\(0,\s*1fr\)\s+auto/s,
+  );
+  assert.match(desktop, /\.pbc-lesson-row__main\s*\{[^}]*column-gap:\s*12px/s);
+  assert.match(desktop, /\.pbc-lesson-row__main\s*\{[^}]*min-width:\s*0/s);
+  assert.match(desktop, /\.pbc-lesson-row__main\s*\{[^}]*width:\s*100%/s);
+
+  // AC7: normal word wrapping
+  assert.match(desktop, /\.pbc-lesson-row__copy\s*\{[^}]*min-width:\s*0/s);
+  assert.match(desktop, /\.pbc-lesson-row__copy\s*\{[^}]*word-break:\s*normal/s);
+
+  // AC5–AC6 / AC3–AC4: add-child and nested placement + hierarchy guide
+  assert.match(desktop, /\.pbc-lesson-row__actions\s*\{[^}]*grid-column:\s*2/s);
+  assert.match(desktop, /\.pbc-lesson-row__actions\s*\{[^}]*grid-row:\s*1/s);
+  assert.match(desktop, /\.pbc-lesson-row__add-child\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
+  assert.match(desktop, /\.pbc-lesson-row__add-child\s*\{[^}]*grid-row:\s*2/s);
+  assert.match(
+    desktop,
+    /\.pbc-lesson-row__add-child\s*\{[^}]*margin-left:\s*calc\(0\.95rem\s*\+\s*36px\s*\+\s*0\.75rem\)/s,
+  );
+  assert.match(desktop, /\.pbc-lesson-list--nested\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
+  assert.match(desktop, /\.pbc-lesson-list--nested\s*\{[^}]*grid-row:\s*3/s);
+  assert.match(desktop, /\.pbc-lesson-list--nested\s*\{[^}]*margin-left:\s*32px/s);
+  assert.match(desktop, /\.pbc-lesson-list--nested\s*\{[^}]*border-left:\s*2px\s+solid\s+#e2e8f0/s);
+  assert.match(
+    desktop,
+    /\.pbc-dashboard\[data-pbc-theme="dark"\]\s+\.pbc-lesson-list--nested\s*\{[^}]*border-left-color:\s*var\(--pbc-border/s,
+  );
+  assert.match(desktop, /\.pbc-lesson-row--child\s*\{[^}]*border-left:\s*none/s);
+  assert.match(desktop, /\.pbc-lesson-row--child\s*\{[^}]*margin-left:\s*0/s);
+
+  // CTA stays inside card grid (no margin-left: auto dependency)
+  assert.match(desktop, /\.pbc-lesson-row__cta\s*\{[^}]*margin-left:\s*0/s);
+
+  // AC14: existing mobile declarations remain intact outside the desktop block
+  assert.match(css, /@media \(max-width:\s*480px\)[\s\S]*\.pbc-lesson-row__cta\s*\{[^}]*flex:\s*1\s+1\s+100%/s);
+  assert.match(css, /\.pbc-lesson-row--child\s*\{[^}]*border-left:\s*2px\s+solid\s+#e2e8f0/s);
+});
