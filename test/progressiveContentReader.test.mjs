@@ -214,6 +214,88 @@ test("SharedContentPage uses progressive viewer; no scroll-to-anchor TOC reader"
   assert.match(sharedSrc, /owner_id === user\.id/);
 });
 
+test("overview hierarchy CSS: unit container, delimited lesson rows, lighter titles, stable Abrir grid", () => {
+  const overviewBlock = viewerSrc.match(
+    /function OverviewMode[\s\S]*?function LessonMode/,
+  );
+  assert.ok(overviewBlock, "OverviewMode must exist");
+  assert.match(overviewBlock[0], /pbc-content-reader__unit/);
+  assert.match(overviewBlock[0], /pbc-content-reader__unit-title/);
+  assert.match(overviewBlock[0], /pbc-content-reader__unit-head/);
+  assert.match(overviewBlock[0], /pbc-content-reader__lesson-row/);
+  assert.match(overviewBlock[0], /pbc-content-reader__lesson-title/);
+  assert.match(overviewBlock[0], /pbc-btn--ghost pbc-content-reader__open-btn/);
+  assert.match(overviewBlock[0], /pcStartLesson/);
+  assert.match(overviewBlock[0], /pcOpen/);
+  assert.match(overviewBlock[0], /pbc-content-toc__badge/);
+  assert.match(overviewBlock[0], /pcUnitType_\$\{unit\.unitType\}/);
+  assert.match(overviewBlock[0], /LessonTypeBadge/);
+  // Existing badge vocabulary preserved (Capítulo / Lección) — no new badge labels.
+  assert.equal(PYBOTCLASS_STRINGS.es.pcUnitType_chapter, "Capítulo");
+  assert.equal(PYBOTCLASS_STRINGS.es.pcItemType_lesson, "Lección");
+
+  const unitRule = cssSrc.match(/\.pbc-content-reader__unit\s*\{([^}]+)\}/);
+  assert.ok(unitRule, "unit container rule");
+  assert.match(unitRule[1], /border:\s*1px\s+solid\s+var\(--pbc-border/);
+  assert.match(unitRule[1], /border-radius:\s*var\(--pbc-radius-md/);
+  assert.match(unitRule[1], /background:\s*var\(--pbc-secondary-surface/);
+  assert.match(unitRule[1], /box-shadow:\s*none/);
+
+  const unitTitle = cssSrc.match(/\.pbc-content-reader__unit-title\s*\{([^}]+)\}/);
+  assert.ok(unitTitle, "unit title rule");
+  assert.match(unitTitle[1], /font-size:\s*1rem/);
+  assert.match(unitTitle[1], /font-weight:\s*700/);
+
+  const unitDesc = cssSrc.match(/\.pbc-content-reader__unit-desc\s*\{([^}]+)\}/);
+  assert.ok(unitDesc, "unit desc rule");
+  assert.match(unitDesc[1], /font-weight:\s*400/);
+  assert.match(unitDesc[1], /color:\s*var\(--pbc-text-muted/);
+
+  const lessonList = cssSrc.match(/\.pbc-content-reader__lesson-list\s*\{([^}]+)\}/);
+  assert.ok(lessonList, "lesson list rule");
+  assert.match(lessonList[1], /gap:\s*0\.5rem/);
+
+  const lessonRow = cssSrc.match(/\.pbc-content-reader__lesson-row\s*\{([^}]+)\}/);
+  assert.ok(lessonRow, "lesson row rule");
+  assert.match(lessonRow[1], /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/);
+  assert.match(lessonRow[1], /border:\s*1px\s+solid\s+var\(--pbc-border/);
+  assert.match(lessonRow[1], /border-radius:\s*var\(--pbc-radius-sm/);
+  assert.match(lessonRow[1], /background:\s*var\(--pbc-panel-solid/);
+  assert.match(lessonRow[1], /box-shadow:\s*none/);
+  assert.match(lessonRow[1], /padding:\s*0\.7rem\s+0\.85rem/);
+
+  assert.match(
+    cssSrc,
+    /\.pbc-dashboard\[data-pbc-theme="dark"\]\s+\.pbc-content-reader__lesson-row\s*\{[^}]*background:\s*var\(--pbc-panel/,
+  );
+
+  const lessonTitle = cssSrc.match(/\.pbc-content-reader__lesson-title\s*\{([^}]+)\}/);
+  assert.ok(lessonTitle, "lesson title rule");
+  assert.match(lessonTitle[1], /font-size:\s*0\.9375rem/);
+  assert.match(lessonTitle[1], /font-weight:\s*500/);
+  assert.match(lessonTitle[1], /line-height:\s*1\.4/);
+  assert.match(lessonTitle[1], /overflow-wrap:\s*break-word/);
+  assert.match(lessonTitle[1], /word-break:\s*normal/);
+  assert.doesNotMatch(lessonTitle[1], /word-break:\s*break-word|word-break:\s*break-all/);
+
+  const openBtn = cssSrc.match(/\.pbc-content-reader__open-btn\s*\{([^}]+)\}/);
+  assert.ok(openBtn, "open button rule");
+  assert.match(openBtn[1], /justify-self:\s*end/);
+
+  const narrow = cssSrc.match(
+    /@media \(max-width:\s*480px\)\s*\{([\s\S]*?)\n\}\s*\n\s*\.pbc-content-reader__article|\n@media|\n\/\*|$/,
+  );
+  assert.ok(narrow, "480px media query must exist");
+  assert.match(
+    cssSrc,
+    /@media \(max-width:\s*480px\)\s*\{[\s\S]*?\.pbc-content-reader__lesson-row\s*\{[^}]*grid-template-columns:\s*1fr/s,
+  );
+  assert.match(
+    cssSrc,
+    /@media \(max-width:\s*480px\)\s*\{[\s\S]*?\.pbc-content-reader__open-btn\s*\{[^}]*justify-self:\s*start/s,
+  );
+});
+
 test("responsive contract: Design C on-demand index, no permanent local rail", () => {
   assert.match(cssSrc, /\.pbc-content-reader__layout/);
   assert.match(cssSrc, /\.pbc-content-reader__nav--drawer/);
