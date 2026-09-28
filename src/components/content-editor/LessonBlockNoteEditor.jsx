@@ -5,7 +5,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import "../../styles/lesson-blocknote.css";
-import { saveLessonDocument } from "../../platform/contentApi.js";
+import { saveContentItemDocument, saveLessonDocument } from "../../platform/contentApi.js";
 import { isSafeLessonLink, resolveContentMediaUrl, uploadContentMedia } from "./contentMedia.js";
 import LessonInsertToolbar from "./LessonInsertToolbar.jsx";
 import { buildLessonPreviewDocument } from "./normalizeReadOnlyFencedCode.js";
@@ -55,11 +55,21 @@ function LessonPreviewDocument({ docKey, renderContent }) {
 }
 
 const LessonBlockNoteEditor = forwardRef(function LessonBlockNoteEditor(
-  { lessonId, contentId, initialContent, documentVersion = 1, preview = false, onStatusChange },
+  {
+    lessonId,
+    contentId,
+    initialContent,
+    documentVersion = 1,
+    preview = false,
+    onStatusChange,
+    saveTarget = "lesson",
+  },
   ref,
 ) {
   const idsRef = useRef({ contentId, lessonId });
   idsRef.current = { contentId, lessonId };
+  const saveTargetRef = useRef(saveTarget);
+  saveTargetRef.current = saveTarget;
 
   const hydratedRef = useRef(false);
   const dirtyRef = useRef(false);
@@ -122,21 +132,49 @@ const LessonBlockNoteEditor = forwardRef(function LessonBlockNoteEditor(
 
     savingRef.current = true;
     setStatus("saving");
-    const { lesson, error } = await saveLessonDocument(
-      idsRef.current.lessonId,
-      JSON.parse(snapshot),
-      versionRef.current,
-    );
+    let nextVersion = versionRef.current;
+    let saveError = null;
+    if (saveTargetRef.current === "item") {
+      const { item, error } = await saveContentItemDocument(
+        idsRef.current.lessonId,
+        JSON.parse(snapshot),
+        versionRef.current,
+      );
+      saveError = error;
+      if (item?.content?.document_version != null) {
+        nextVersion = item.content.document_version;
+      }
+      if (error || !item) {
+        dirtyRef.current = true;
+        setStatus("error");
+        savingRef.current = false;
+        return false;
+      }
+    } else {
+      const { lesson, error } = await saveLessonDocument(
+        idsRef.current.lessonId,
+        JSON.parse(snapshot),
+        versionRef.current,
+      );
+      saveError = error;
+      if (error || !lesson) {
+        dirtyRef.current = true;
+        setStatus("error");
+        savingRef.current = false;
+        return false;
+      }
+      nextVersion = lesson.document_version ?? versionRef.current;
+    }
     savingRef.current = false;
 
-    if (error || !lesson) {
+    if (saveError) {
       dirtyRef.current = true;
       setStatus("error");
       return false;
     }
 
     lastSavedRef.current = snapshot;
-    versionRef.current = lesson.document_version ?? versionRef.current;
+    versionRef.current = nextVersion;
     const latest = snapshotDocument(currentEditor);
     if (latest !== snapshot) {
       dirtyRef.current = true;

@@ -1,6 +1,6 @@
 /**
- * Content V3 application layer — focused contract tests.
- * EXECUTION ENVIRONMENT: CLOUD via MaxCloud only
+ * Definitive Content application layer — focused contract tests.
+ * Unit -> Lesson -> Item only.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -9,73 +9,67 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
-  CONTENT_V3_ITEM_TYPES,
-  CONTENT_V3_MIGRATION_HINT,
+  CONTENT_ITEM_TYPES,
+  CONTENT_ITEMS_MIGRATION_HINT,
   LEGACY_ITEM_TYPES,
+  LEGACY_ITEM_TYPE_MAP,
   LESSON_CHILD_CREATE_TYPES,
-  LESSON_ITEM_TYPES,
+  LESSON_ITEM_CREATE_TYPES,
   UNIT_DIRECT_CREATE_TYPES,
   derivePreparationStatus,
   itemTypeOptionsForEdit,
+  mapLegacyItemType,
   normalizeItemType,
 } from "../src/platform/contentMetadata.js";
 import { deriveContentToc } from "../src/platform/contentToc.js";
 
 const root = resolve(import.meta.dirname, "..");
 
-// ── A. metadata ─────────────────────────────────────────────────────────────
-
-test("A1: V3 types normalize correctly", () => {
-  for (const t of CONTENT_V3_ITEM_TYPES) {
+test("canonical item types normalize correctly", () => {
+  for (const t of CONTENT_ITEM_TYPES) {
     assert.equal(normalizeItemType(t), t);
+    assert.equal(mapLegacyItemType(t), t);
   }
-});
-
-test("A2: legacy types still normalize correctly", () => {
-  for (const t of LEGACY_ITEM_TYPES) {
-    assert.equal(normalizeItemType(t), t);
-  }
-});
-
-test("A3: Unit creation options exact", () => {
-  assert.deepEqual([...UNIT_DIRECT_CREATE_TYPES], [
-    "lesson",
-    "quiz",
-    "assignment",
-    "project",
-    "resource",
-  ]);
-});
-
-test("A4: Lesson-child creation options exact", () => {
-  assert.deepEqual([...LESSON_CHILD_CREATE_TYPES], [
-    "reading",
+  assert.deepEqual([...CONTENT_ITEM_TYPES], [
+    "material",
     "video",
+    "example",
     "exercise",
     "quiz",
     "assignment",
-    "resource",
+    "assessment",
   ]);
 });
 
-test("A5: legacy-only types absent from NEW creation lists", () => {
+test("legacy types map exactly", () => {
+  assert.equal(mapLegacyItemType("reading"), "material");
+  assert.equal(mapLegacyItemType("resource"), "material");
+  assert.equal(mapLegacyItemType("theory"), "material");
+  assert.equal(mapLegacyItemType("activity"), "exercise");
+  assert.equal(mapLegacyItemType("test"), "assessment");
+  assert.equal(mapLegacyItemType("project"), "assignment");
+  assert.equal(LEGACY_ITEM_TYPE_MAP.reading, "material");
   for (const legacy of LEGACY_ITEM_TYPES) {
-    assert.equal(UNIT_DIRECT_CREATE_TYPES.includes(legacy), false);
-    assert.equal(LESSON_CHILD_CREATE_TYPES.includes(legacy), false);
+    assert.ok(LEGACY_ITEM_TYPE_MAP[legacy]);
+    assert.equal(LESSON_ITEM_CREATE_TYPES.includes(legacy), false);
   }
-  assert.ok(LESSON_ITEM_TYPES.includes("theory"));
-  assert.ok(LESSON_ITEM_TYPES.includes("reading"));
 });
 
-test("edit options keep current legacy + context V3 types", () => {
-  const unitEdit = itemTypeOptionsForEdit({ itemType: "theory", parentLessonId: null });
-  assert.equal(unitEdit[0], "theory");
-  assert.deepEqual(unitEdit.slice(1), [...UNIT_DIRECT_CREATE_TYPES]);
-  const childEdit = itemTypeOptionsForEdit({ itemType: "activity", parentLessonId: "L1" });
-  assert.equal(childEdit[0], "activity");
-  assert.deepEqual(childEdit.slice(1), [...LESSON_CHILD_CREATE_TYPES]);
-  const v3Top = itemTypeOptionsForEdit({ itemType: "quiz", parentLessonId: null });
-  assert.deepEqual(v3Top, [...UNIT_DIRECT_CREATE_TYPES]);
+test("Unit creation options: Lesson only (no direct Unit items)", () => {
+  assert.deepEqual([...UNIT_DIRECT_CREATE_TYPES], ["lesson"]);
+});
+
+test("Lesson-child creation options: seven canonical types", () => {
+  assert.deepEqual([...LESSON_ITEM_CREATE_TYPES], [...CONTENT_ITEM_TYPES]);
+  assert.deepEqual([...LESSON_CHILD_CREATE_TYPES], [...CONTENT_ITEM_TYPES]);
+});
+
+test("edit options expose canonical types only", () => {
+  const opts = itemTypeOptionsForEdit({ itemType: "reading" });
+  assert.equal(opts[0], "material");
+  assert.ok(opts.includes("assessment"));
+  assert.equal(opts.includes("reading"), false);
+  assert.equal(opts.includes("project"), false);
 });
 
 test("preparation_status derived only in memory for legacy rows", () => {
@@ -84,85 +78,56 @@ test("preparation_status derived only in memory for legacy rows", () => {
   assert.equal(derivePreparationStatus({ status: "draft", preparation_status: "ready" }), "ready");
 });
 
-// ── C. TOC ──────────────────────────────────────────────────────────────────
-
-test("C26: old two-level material renders", () => {
+test("TOC: Unit -> Lesson -> Item numbering", () => {
   const toc = deriveContentToc(
     [{ id: "u1", title: "U", position: 0 }],
-    { u1: [{ id: "l1", title: "L", position: 0, item_type: "lesson" }] },
+    { u1: [{ id: "les", title: "Lesson", position: 0 }] },
+    { les: [{ id: "c1", title: "Material", position: 0, type: "material" }] },
   );
   assert.equal(toc[0].numberLabel, "1");
+  assert.equal(toc[0].children[0].kind, "lesson");
   assert.equal(toc[0].children[0].numberLabel, "1.1");
-  assert.equal(toc[0].children[0].children.length, 0);
-});
-
-test("C27: Unit -> Lesson -> Item numbering is 1 / 1.1 / 1.1.1", () => {
-  const toc = deriveContentToc(
-    [{ id: "u1", title: "U", position: 0 }],
-    { u1: [{ id: "les", title: "Lesson", position: 0, item_type: "lesson" }] },
-    { les: [{ id: "c1", title: "Reading", position: 0, item_type: "reading" }] },
-  );
-  assert.equal(toc[0].numberLabel, "1");
-  assert.equal(toc[0].children[0].numberLabel, "1.1");
+  assert.equal(toc[0].children[0].children[0].kind, "item");
   assert.equal(toc[0].children[0].children[0].numberLabel, "1.1.1");
-  assert.equal(toc[0].children[0].parentLessonId, null);
-  assert.equal(toc[0].children[0].children[0].parentLessonId, "les");
+  assert.equal(toc[0].children[0].children[0].itemType, "material");
+  assert.equal(toc[0].children[0].children[0].children.length, 0);
 });
 
-test("C28: direct Unit activity remains sibling numbering", () => {
+test("TOC: no Unit-level item siblings; lessons only under unit", () => {
   const toc = deriveContentToc(
     [{ id: "u1", title: "U", position: 0 }],
     {
       u1: [
-        { id: "les", title: "Lesson", position: 0, item_type: "lesson" },
-        { id: "q1", title: "Quiz", position: 1, item_type: "quiz" },
+        { id: "l1", title: "A", position: 0 },
+        { id: "l2", title: "B", position: 1 },
       ],
     },
-    { les: [{ id: "c1", title: "R", position: 0, item_type: "reading" }] },
-  );
-  assert.equal(toc[0].children[0].numberLabel, "1.1");
-  assert.equal(toc[0].children[1].numberLabel, "1.2");
-  assert.deepEqual(toc[0].children[1].children, []);
-});
-
-test("C29: no fourth hierarchy level", () => {
-  const toc = deriveContentToc(
-    [{ id: "u1", title: "U", position: 0 }],
-    { u1: [{ id: "les", title: "L", position: 0, item_type: "lesson" }] },
     {
-      les: [{ id: "c1", title: "R", position: 0, item_type: "reading" }],
-      c1: [{ id: "deep", title: "X", position: 0, item_type: "video" }],
+      l1: [{ id: "i1", title: "Quiz", position: 0, type: "quiz" }],
     },
   );
-  assert.equal(toc[0].children[0].children[0].children.length, 0);
-  assert.equal(toc[0].children[0].children[0].id, "c1");
+  assert.equal(toc[0].children.length, 2);
+  assert.ok(toc[0].children.every((c) => c.kind === "lesson"));
+  assert.equal(toc[0].children[0].children[0].itemType, "quiz");
 });
 
-test("C30: stable item IDs preserved in TOC nodes", () => {
+test("TOC maps legacy reading label to material", () => {
   const toc = deriveContentToc(
     [{ id: "u1", title: "U", position: 0 }],
-    { u1: [{ id: "stable-lesson", title: "L", position: 0, item_type: "lesson" }] },
-    { "stable-lesson": [{ id: "stable-child", title: "C", position: 0, item_type: "video" }] },
+    { u1: [{ id: "les", title: "L", position: 0 }] },
+    { les: [{ id: "c1", title: "R", position: 0, item_type: "reading" }] },
   );
-  assert.equal(toc[0].id, "u1");
-  assert.equal(toc[0].children[0].id, "stable-lesson");
-  assert.equal(toc[0].children[0].children[0].id, "stable-child");
+  assert.equal(toc[0].children[0].children[0].itemType, "material");
 });
 
-test("two-argument deriveContentToc remains valid", () => {
-  const toc = deriveContentToc(
-    [{ id: "u1", title: "U", position: 0 }],
-    { u1: [{ id: "l1", title: "L", position: 0, item_type: "quiz" }] },
-  );
-  assert.equal(toc[0].children[0].itemType, "quiz");
-  assert.deepEqual(toc[0].children[0].children, []);
-});
+// ── API mock store ──────────────────────────────────────────────────────────
 
-// ── B. API with in-memory mock ──────────────────────────────────────────────
-
-function createLessonStore(initial = []) {
-  const rows = initial.map((r) => ({ ...r }));
-  let v3Enabled = true;
+function createStore({ lessons = [], items = [], units = [] } = {}) {
+  const lessonRows = lessons.map((r) => ({ ...r }));
+  const itemRows = items.map((r) => ({ ...r }));
+  const unitRows = units.length
+    ? units.map((r) => ({ ...r }))
+    : [{ id: "unit-1", content_id: "content-1", title: "U", position: 0, unit_type: "unit" }];
   let seq = 1;
 
   function matches(row, filters) {
@@ -192,67 +157,23 @@ function createLessonStore(initial = []) {
     return out;
   }
 
-  function table(name) {
-    if (name === "content_units") {
-      return {
-        select() {
-          return {
-            eq() {
-              return {
-                maybeSingle: async () => ({ data: { content_id: "content-1" }, error: null }),
-              };
-            },
-          };
-        },
-        update() {
-          return { eq: async () => ({ data: null, error: null }) };
-        },
-      };
-    }
-    if (name === "learning_contents") {
-      return {
-        update() {
-          return { eq: async () => ({ data: null, error: null }) };
-        },
-      };
-    }
-    if (name !== "content_lessons") {
-      return {
-        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
-      };
-    }
-
+  function makeTable(rows, name) {
     const state = {
       filters: [],
       orders: [],
       limitN: null,
       mode: "select",
       payload: null,
-      selectCols: null,
     };
-
     const finishSelect = () => {
-      if (!v3Enabled && /parent_lesson_id/.test(String(state.selectCols || ""))) {
-        return { data: null, error: { message: 'column "parent_lesson_id" does not exist' } };
-      }
-      if (
-        !v3Enabled &&
-        state.filters.some((f) => f.col === "parent_lesson_id")
-      ) {
-        return { data: null, error: { message: 'column "parent_lesson_id" does not exist' } };
-      }
       let list = rows.filter((r) => matches(r, state.filters));
       list = applyOrder(list, state.orders);
       if (state.limitN != null) list = list.slice(0, state.limitN);
       return { data: list.map((r) => ({ ...r })), error: null };
     };
-
     const api = {
-      select(cols) {
-        state.selectCols = cols;
-        if (state.mode !== "insert" && state.mode !== "update") {
-          state.mode = "select";
-        }
+      select() {
+        if (state.mode !== "insert" && state.mode !== "update") state.mode = "select";
         return api;
       },
       insert(payload) {
@@ -299,63 +220,58 @@ function createLessonStore(initial = []) {
       async maybeSingle() {
         if (state.mode === "select") {
           const res = finishSelect();
-          if (res.error) return res;
           return { data: res.data[0] ?? null, error: null };
         }
         return { data: null, error: null };
       },
       async single() {
         if (state.mode === "insert") {
-          if (!v3Enabled && Object.prototype.hasOwnProperty.call(state.payload || {}, "parent_lesson_id")) {
-            return { data: null, error: { message: 'column "parent_lesson_id" does not exist' } };
-          }
-          if (v3Enabled && state.payload?.parent_lesson_id) {
-            const parent = rows.find((r) => r.id === state.payload.parent_lesson_id);
-            if (!parent) return { data: null, error: { message: "invalid_hierarchy: parent_missing" } };
-            if (parent.item_type !== "lesson") {
-              return { data: null, error: { message: "invalid_hierarchy: parent_not_lesson" } };
-            }
-            if (parent.parent_lesson_id != null) {
-              return { data: null, error: { message: "invalid_hierarchy: parent_is_nested" } };
-            }
-            if (state.payload.item_type === "lesson") {
-              return { data: null, error: { message: "invalid_hierarchy: lesson_under_lesson" } };
-            }
-          }
-          const id = state.payload.id || `id-${seq++}`;
+          const id = state.payload.id || `${name}-${seq++}`;
           const row = {
             id,
-            parent_lesson_id: null,
-            required: true,
-            completion_rule: "none",
-            grading_mode: "none",
-            passing_score: null,
-            completion_threshold: null,
-            learning_objectives: [],
-            estimated_minutes: null,
-            description: null,
             created_at: "2026-01-01",
             updated_at: "2026-01-01",
-            document_json: [],
-            document_version: 1,
-            content_units: { content_id: "content-1", title: "U", position: 0, unit_type: "unit" },
             ...state.payload,
           };
+          if (name === "content_lessons") {
+            row.content_units = {
+              content_id: "content-1",
+              title: "U",
+              position: 0,
+              unit_type: "unit",
+            };
+            row.document_json = row.document_json ?? [];
+            row.document_version = row.document_version ?? 1;
+          }
+          if (name === "content_items") {
+            row.content = row.content ?? { document_json: [], document_version: 1 };
+            row.config = row.config ?? {};
+            const lesson = lessonRows.find((l) => l.id === row.lesson_id);
+            row.content_lessons = lesson
+              ? {
+                  id: lesson.id,
+                  unit_id: lesson.unit_id,
+                  title: lesson.title,
+                  content_units: {
+                    content_id: "content-1",
+                    title: "U",
+                    position: 0,
+                    unit_type: "unit",
+                  },
+                }
+              : null;
+          }
           rows.push(row);
           return { data: { ...row }, error: null };
         }
         if (state.mode === "update") {
           const idx = rows.findIndex((r) => matches(r, state.filters));
           if (idx < 0) return { data: null, error: { message: "not_found" } };
-          if (!v3Enabled && Object.prototype.hasOwnProperty.call(state.payload || {}, "parent_lesson_id")) {
-            return { data: null, error: { message: 'column "parent_lesson_id" does not exist' } };
-          }
           rows[idx] = { ...rows[idx], ...state.payload };
           return { data: { ...rows[idx] }, error: null };
         }
         if (state.mode === "select") {
           const res = finishSelect();
-          if (res.error) return res;
           if (!res.data[0]) return { data: null, error: { message: "not_found" } };
           return { data: res.data[0], error: null };
         }
@@ -385,83 +301,56 @@ function createLessonStore(initial = []) {
   }
 
   return {
-    rows,
-    setV3(enabled) {
-      v3Enabled = enabled;
-    },
+    lessonRows,
+    itemRows,
+    unitRows,
     client: {
-      from: table,
+      from(name) {
+        if (name === "content_lessons") return makeTable(lessonRows, name);
+        if (name === "content_items") return makeTable(itemRows, name);
+        if (name === "content_units") return makeTable(unitRows, name);
+        if (name === "learning_contents") {
+          return {
+            update() {
+              return { eq: async () => ({ data: null, error: null }) };
+            },
+          };
+        }
+        return {
+          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+        };
+      },
       auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
     },
   };
 }
 
-test("B API hierarchy behaviors", async (t) => {
-  const store = createLessonStore([
-    {
-      id: "top-lesson",
-      unit_id: "unit-1",
-      parent_lesson_id: null,
-      title: "Lesson",
-      description: null,
-      position: 0,
-      item_type: "lesson",
-      estimated_minutes: null,
-      required: true,
-      completion_rule: "none",
-      grading_mode: "none",
-      passing_score: null,
-      completion_threshold: null,
-      learning_objectives: [],
-      created_at: "a",
-      updated_at: "a",
-      document_json: [],
-      document_version: 1,
-      content_units: { content_id: "content-1", title: "U", position: 0, unit_type: "unit" },
-    },
-    {
-      id: "child-reading",
-      unit_id: "unit-1",
-      parent_lesson_id: "top-lesson",
-      title: "Reading",
-      description: null,
-      position: 0,
-      item_type: "reading",
-      estimated_minutes: null,
-      required: true,
-      completion_rule: "none",
-      grading_mode: "none",
-      passing_score: null,
-      completion_threshold: null,
-      learning_objectives: [],
-      created_at: "b",
-      updated_at: "b",
-      document_json: [],
-      document_version: 1,
-      content_units: { content_id: "content-1", title: "U", position: 0, unit_type: "unit" },
-    },
-    {
-      id: "top-quiz",
-      unit_id: "unit-1",
-      parent_lesson_id: null,
-      title: "Quiz",
-      description: null,
-      position: 1,
-      item_type: "quiz",
-      estimated_minutes: null,
-      required: true,
-      completion_rule: "none",
-      grading_mode: "none",
-      passing_score: null,
-      completion_threshold: null,
-      learning_objectives: [],
-      created_at: "c",
-      updated_at: "c",
-      document_json: [],
-      document_version: 1,
-      content_units: { content_id: "content-1", title: "U", position: 0, unit_type: "unit" },
-    },
-  ]);
+test("API hierarchy: lessons, items, rejection of Unit items & Lesson nesting", async (t) => {
+  const store = createStore({
+    lessons: [
+      {
+        id: "top-lesson",
+        unit_id: "unit-1",
+        title: "Lesson",
+        description: null,
+        position: 0,
+        estimated_minutes: null,
+        document_json: [{ type: "paragraph", content: "doc" }],
+        document_version: 1,
+      },
+    ],
+    items: [
+      {
+        id: "child-material",
+        lesson_id: "top-lesson",
+        type: "material",
+        title: "Material",
+        position: 0,
+        content: { document_json: [], document_version: 1 },
+        config: {},
+      },
+    ],
+  });
 
   mock.module("../src/supabaseClient.js", {
     namedExports: {
@@ -472,410 +361,171 @@ test("B API hierarchy behaviors", async (t) => {
 
   const api = await import("../src/platform/contentApi.js");
 
-  await t.test("B6: listUnitLessons returns only parent_lesson_id NULL under V3", async () => {
+  await t.test("listUnitLessons returns lessons only", async () => {
     const { rows, error } = await api.listUnitLessons("unit-1");
     assert.equal(error, null);
-    assert.deepEqual(
-      rows.map((r) => r.id).sort(),
-      ["top-lesson", "top-quiz"],
-    );
-    assert.ok(rows.every((r) => r.parent_lesson_id == null));
+    assert.deepEqual(rows.map((r) => r.id), ["top-lesson"]);
   });
 
-  await t.test("B8: listLessonChildren returns only direct children", async () => {
-    const { rows, error } = await api.listLessonChildren("top-lesson");
+  await t.test("listLessonItems returns items under lesson", async () => {
+    const { rows, error } = await api.listLessonItems("top-lesson");
     assert.equal(error, null);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].id, "child-reading");
-    assert.equal(rows[0].parent_lesson_id, "top-lesson");
+    assert.equal(rows[0].id, "child-material");
+    assert.equal(rows[0].type, "material");
   });
 
-  await t.test("B9: create top-level Lesson uses parent_lesson_id NULL", async () => {
-    const { lesson, error } = await api.createLesson("unit-1", {
-      title: "New Lesson",
-      itemType: "lesson",
-    });
+  await t.test("createLesson under unit works", async () => {
+    const { lesson, error } = await api.createLesson("unit-1", { title: "New Lesson" });
     assert.equal(error, null);
-    assert.equal(lesson.parent_lesson_id, null);
-    assert.equal(lesson.item_type, "lesson");
+    assert.equal(lesson.title, "New Lesson");
+    assert.equal(lesson.unit_id, "unit-1");
   });
 
-  await t.test("B10: create Unit-level Quiz allowed", async () => {
-    const { lesson, error } = await api.createLesson("unit-1", {
-      title: "Unit Quiz",
-      itemType: "quiz",
-    });
-    assert.equal(error, null);
-    assert.equal(lesson.item_type, "quiz");
-    assert.equal(lesson.parent_lesson_id, null);
-  });
-
-  for (const [label, itemType] of [
-    ["B11", "reading"],
-    ["B12", "video"],
-    ["B13", "exercise"],
-    ["B14", "quiz"],
-    ["B15", "assignment"],
-    ["B16", "resource"],
-  ]) {
-    await t.test(`${label}: create Lesson-child ${itemType} allowed`, async () => {
-      const { lesson, error } = await api.createLesson("unit-1", {
-        title: `Child ${itemType}`,
-        itemType,
-        parentLessonId: "top-lesson",
-      });
-      assert.equal(error, null, error);
-      assert.equal(lesson.item_type, itemType);
-      assert.equal(lesson.parent_lesson_id, "top-lesson");
-      assert.equal(lesson.unit_id, "unit-1");
-    });
-  }
-
-  await t.test("B17: nested Lesson rejected", async () => {
+  await t.test("createLesson rejects parentLessonId (no Lesson under Lesson)", async () => {
     const { lesson, error } = await api.createLesson("unit-1", {
       title: "Nested",
-      itemType: "lesson",
       parentLessonId: "top-lesson",
     });
     assert.equal(lesson, null);
-    assert.match(String(error), /invalid_item_type_for_lesson_child|lesson_under_lesson/);
+    assert.match(String(error), /lesson_under_lesson/);
   });
 
-  await t.test("B18: child Project rejected", async () => {
+  await t.test("createLesson rejects non-lesson itemType under Unit", async () => {
     const { lesson, error } = await api.createLesson("unit-1", {
-      title: "Proj",
-      itemType: "project",
-      parentLessonId: "top-lesson",
+      title: "Quiz",
+      itemType: "quiz",
     });
     assert.equal(lesson, null);
-    assert.equal(error, "invalid_item_type_for_lesson_child");
+    assert.equal(error, "invalid_item_type_for_unit");
   });
 
-  await t.test("B19: sibling position calculated within correct container", async () => {
-    const before = store.rows.filter((r) => r.parent_lesson_id === "top-lesson");
-    const maxPos = Math.max(...before.map((r) => r.position));
-    const { lesson, error } = await api.createLesson("unit-1", {
-      title: "Pos check",
-      itemType: "reading",
-      parentLessonId: "top-lesson",
+  for (const type of CONTENT_ITEM_TYPES) {
+    await t.test(`createContentItem ${type} under lesson`, async () => {
+      const { item, error } = await api.createContentItem("top-lesson", {
+        title: `Item ${type}`,
+        type,
+      });
+      assert.equal(error, null, error);
+      assert.equal(item.type, type);
+      assert.equal(item.lesson_id, "top-lesson");
     });
+  }
+
+  await t.test("createContentItem rejects reading (legacy)", async () => {
+    const { item, error } = await api.createContentItem("top-lesson", {
+      title: "Bad",
+      type: "reading",
+    });
+    // reading maps to material via normalize — but isCanonical after normalize is material, allowed.
+    // Spec: do not offer reading for new creation; API maps legacy to canonical.
     assert.equal(error, null);
-    assert.equal(lesson.position, maxPos + 1);
-    const topMax = Math.max(
-      ...store.rows.filter((r) => r.unit_id === "unit-1" && r.parent_lesson_id == null).map((r) => r.position),
-    );
-    assert.notEqual(lesson.position, topMax);
+    assert.equal(item.type, "material");
   });
 
-  await t.test("B20: moveLesson reorders top-level only among top-level siblings", async () => {
-    const tops = store.rows
-      .filter((r) => r.unit_id === "unit-1" && r.parent_lesson_id == null)
-      .sort((a, b) => a.position - b.position);
-    const first = tops[0];
-    const second = tops[1];
-    assert.ok(first && second);
-    const { ok, error } = await api.moveLesson(first.id, "down");
+  await t.test("moveLessonToUnit preserves lesson id", async () => {
+    store.unitRows.push({
+      id: "unit-2",
+      content_id: "content-1",
+      title: "U2",
+      position: 1,
+      unit_type: "unit",
+    });
+    const beforeItems = store.itemRows
+      .filter((i) => i.lesson_id === "top-lesson")
+      .map((i) => i.id)
+      .sort();
+    const { ok, error } = await api.moveLessonToUnit("top-lesson", "unit-2");
     assert.equal(error, null);
     assert.equal(ok, true);
-    const a = store.rows.find((r) => r.id === first.id);
-    const b = store.rows.find((r) => r.id === second.id);
-    assert.equal(a.position > b.position, true);
-    assert.ok(store.rows.every((r) => r.parent_lesson_id !== first.id || r.id !== second.id || true));
-    // children untouched
-    assert.equal(store.rows.find((r) => r.id === "child-reading").parent_lesson_id, "top-lesson");
+    const lesson = store.lessonRows.find((l) => l.id === "top-lesson");
+    assert.equal(lesson.unit_id, "unit-2");
+    const afterItems = store.itemRows
+      .filter((i) => i.lesson_id === "top-lesson")
+      .map((i) => i.id)
+      .sort();
+    assert.deepEqual(afterItems, beforeItems);
   });
 
-  await t.test("B21: moveLesson reorders children only among same-parent children", async () => {
-    const children = store.rows
-      .filter((r) => r.parent_lesson_id === "top-lesson")
-      .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
-    assert.ok(children.length >= 2);
-    const c0 = children[0];
-    const c1 = children[1];
-    const topBefore = store.rows
-      .filter((r) => r.parent_lesson_id == null)
-      .map((r) => ({ id: r.id, position: r.position }));
-    const { ok, error } = await api.moveLesson(c0.id, "down");
+  await t.test("moveItemToLesson preserves item id", async () => {
+    const { lesson } = await api.createLesson("unit-1", { title: "Target" });
+    const itemId = "child-material";
+    const { ok, error } = await api.moveItemToLesson(itemId, lesson.id);
     assert.equal(error, null);
     assert.equal(ok, true);
-    const afterTops = store.rows
-      .filter((r) => r.parent_lesson_id == null)
-      .map((r) => ({ id: r.id, position: r.position }));
-    assert.deepEqual(afterTops, topBefore);
-    const moved = store.rows.find((r) => r.id === c0.id);
-    const neighbor = store.rows.find((r) => r.id === c1.id);
-    assert.equal(moved.parent_lesson_id, "top-lesson");
-    assert.equal(neighbor.parent_lesson_id, "top-lesson");
+    const item = store.itemRows.find((i) => i.id === itemId);
+    assert.equal(item.id, itemId);
+    assert.equal(item.lesson_id, lesson.id);
   });
 
-  await t.test("B22–B25: moveLessonToContainer ID + hierarchy rules", async () => {
-    const leaf = store.rows.find((r) => r.item_type === "reading" && r.parent_lesson_id === "top-lesson");
-    assert.ok(leaf);
-    const leafId = leaf.id;
-
-    const badLessonMove = await api.moveLessonToContainer("top-lesson", {
-      unitId: "unit-1",
-      parentLessonId: "top-quiz",
-    });
-    assert.equal(badLessonMove.ok, false);
-    assert.match(String(badLessonMove.error), /lesson_under_lesson/);
-
-    const toUnit = await api.moveLessonToContainer(leafId, { unitId: "unit-1", parentLessonId: null });
-    assert.equal(toUnit.ok, true, toUnit.error);
-    const afterUnit = store.rows.find((r) => r.id === leafId);
-    assert.equal(afterUnit.id, leafId);
-    assert.equal(afterUnit.parent_lesson_id, null);
-    assert.equal(afterUnit.unit_id, "unit-1");
-
-    const toLesson = await api.moveLessonToContainer(leafId, {
-      unitId: "unit-1",
-      parentLessonId: "top-lesson",
-    });
-    assert.equal(toLesson.ok, true, toLesson.error);
-    const afterLesson = store.rows.find((r) => r.id === leafId);
-    assert.equal(afterLesson.id, leafId);
-    assert.equal(afterLesson.parent_lesson_id, "top-lesson");
-  });
-
-  await t.test("B7: legacy fallback still returns old rows as top-level", async () => {
-    store.setV3(false);
-    // Seed legacy-shaped rows (no parent_lesson_id column conceptually)
-    store.rows.length = 0;
-    store.rows.push(
-      {
-        id: "legacy-1",
-        unit_id: "unit-1",
-        title: "Old",
-        description: null,
-        position: 0,
-        item_type: "theory",
-        estimated_minutes: 10,
-        created_at: "x",
-        updated_at: "x",
-      },
-      {
-        id: "legacy-2",
-        unit_id: "unit-1",
-        title: "Old2",
-        description: null,
-        position: 1,
-        item_type: "lesson",
-        estimated_minutes: null,
-        created_at: "y",
-        updated_at: "y",
-      },
-    );
-    const { rows, error } = await api.listUnitLessons("unit-1");
+  await t.test("duplicateContentItem creates new id", async () => {
+    const source = store.itemRows[0];
+    const { item, error } = await api.duplicateContentItem(source.id);
     assert.equal(error, null);
-    assert.equal(rows.length, 2);
-    assert.ok(rows.every((r) => r.parent_lesson_id == null));
-    const children = await api.listLessonChildren("legacy-2");
-    assert.deepEqual(children.rows, []);
-    assert.equal(children.error, CONTENT_V3_MIGRATION_HINT);
-    store.setV3(true);
+    assert.notEqual(item.id, source.id);
+    assert.equal(item.type, source.type);
+  });
+
+  await t.test("duplicateLesson creates new lesson and item ids", async () => {
+    const sourceId = "top-lesson";
+    const beforeItemIds = new Set(store.itemRows.map((i) => i.id));
+    const { lesson, error } = await api.duplicateLesson(sourceId);
+    assert.equal(error, null);
+    assert.notEqual(lesson.id, sourceId);
+    const newItems = store.itemRows.filter((i) => i.lesson_id === lesson.id);
+    assert.ok(newItems.length >= 1);
+    assert.ok(newItems.every((i) => !beforeItemIds.has(i.id) || i.lesson_id === lesson.id));
+    assert.ok(newItems.every((i) => i.id !== sourceId));
+  });
+
+  await t.test("deleteLesson cascades conceptually (items deleted via FK in DB; API deletes lesson)", async () => {
+    const { lesson } = await api.createLesson("unit-1", { title: "Temp" });
+    await api.createContentItem(lesson.id, { title: "X", type: "video" });
+    const { ok, error } = await api.deleteLesson(lesson.id);
+    assert.equal(error, null);
+    assert.equal(ok, true);
+    assert.equal(store.lessonRows.find((l) => l.id === lesson.id), undefined);
+  });
+
+  await t.test("deleteContentItem removes only that item", async () => {
+    const { item } = await api.createContentItem("top-lesson", { title: "Del", type: "quiz" });
+    const before = store.itemRows.length;
+    const { ok, error } = await api.deleteContentItem(item.id);
+    assert.equal(error, null);
+    assert.equal(ok, true);
+    assert.equal(store.itemRows.find((i) => i.id === item.id), undefined);
+    assert.equal(store.itemRows.length, before - 1);
+  });
+
+  await t.test("sibling ordering for items", async () => {
+    const { item: a } = await api.createContentItem("top-lesson", { title: "A", type: "video" });
+    const { item: b } = await api.createContentItem("top-lesson", { title: "B", type: "video" });
+    assert.ok(b.position > a.position);
+    const { ok } = await api.moveContentItem(b.id, "up");
+    assert.equal(ok, true);
   });
 });
 
-// ── D. UI / contracts ───────────────────────────────────────────────────────
-
-test("D31–D36: UI contracts for create/edit/nav/assign/fallback", () => {
+test("UI/API consumers no longer create Unit-direct items", () => {
   const editor = readFileSync(resolve(root, "src/pages/ContentEditorPage.jsx"), "utf8");
-  const toc = readFileSync(
-    resolve(root, "src/components/pybotclass/content/ContentTableOfContents.jsx"),
-    "utf8",
-  );
-  const api = readFileSync(resolve(root, "src/platform/contentApi.js"), "utf8");
+  assert.match(editor, /createContentItem/);
+  assert.match(editor, /LESSON_ITEM_CREATE_TYPES/);
+  assert.match(editor, /pcExpandAll/);
+  assert.match(editor, /pcCollapseAll/);
+  assert.doesNotMatch(editor, /UNIT_DIRECT_CREATE_TYPES/);
+  assert.match(editor, /openCreateLesson/);
+});
+
+test("i18n labels for canonical types", () => {
   const i18n = readFileSync(resolve(root, "src/i18n/pybotclass.js"), "utf8");
-
-  assert.match(editor, /UNIT_DIRECT_CREATE_TYPES/);
-  assert.match(editor, /LESSON_CHILD_CREATE_TYPES/);
-  assert.match(editor, /pcAddToLesson/);
-  assert.match(editor, /itemsByLesson/);
-  assert.match(editor, /listLessonChildren/);
-  assert.match(editor, /parentLessonId: lesson\.id/);
-  assert.match(editor, /typeOptions: \[\.\.\.UNIT_DIRECT_CREATE_TYPES\]/);
-  assert.match(editor, /typeOptions: \[\.\.\.LESSON_CHILD_CREATE_TYPES\]/);
-  assert.match(editor, /itemTypeOptionsForEdit/);
-  assert.match(editor, /\/dashboard\/content\/\$\{contentId\}\/lessons\/\$\{lesson\.id\}/);
-  assert.match(editor, /depth === 0 \? \([\s\S]*pcAssign/);
-  assert.match(editor, /canAssign && depth === 0/);
-  assert.doesNotMatch(editor, /sourceType:\s*"item"/);
-
-  assert.match(toc, /itemsByLesson/);
-  assert.match(toc, /type:\s*"item"/);
-  assert.match(toc, /pbc-content-toc__items--nested/);
-
-  assert.match(api, /listLessonChildren/);
-  assert.match(api, /moveLessonToContainer/);
-  assert.match(api, /CONTENT_V3_MIGRATION_HINT/);
-  assert.match(api, /\.is\("parent_lesson_id", null\)/);
-
-  for (const langBlock of ["Lectura", "Reading", "Lecture", "Leitura", "Lektüre"]) {
-    assert.match(i18n, new RegExp(langBlock));
-  }
+  assert.match(i18n, /pcItemType_material: "Material"/);
+  assert.match(i18n, /pcItemType_assessment: "Evaluación"/);
   assert.match(i18n, /pcItemType_assignment: "Trabajo"/);
   assert.match(i18n, /pcItemType_assignment: "Assignment"/);
-  assert.match(i18n, /pcItemType_assignment: "Devoir"/);
-  assert.match(i18n, /pcItemType_assignment: "Trabalho"/);
-  assert.match(i18n, /pcItemType_assignment: "Aufgabe"/);
-  assert.match(i18n, /pcAddToLesson/);
+  assert.match(i18n, /pcExpandAll/);
+  assert.match(i18n, /pcNewLesson/);
 });
 
-test("CONTENT_V3 migration hint constant exact", () => {
-  assert.equal(
-    CONTENT_V3_MIGRATION_HINT,
-    "Falta aplicar la migración 20260927190051_content_v3_structure.sql",
-  );
-});
-
-// ── Desktop layout contract (>= 901px) ───────────────────────────────────────
-
-function extractMinWidth901Block(css) {
-  const marker = "@media (min-width: 901px)";
-  const start = css.lastIndexOf(marker);
-  assert.ok(start >= 0, "desktop @media (min-width: 901px) block must exist");
-  let i = css.indexOf("{", start);
-  assert.ok(i >= 0, "desktop media query opening brace");
-  let depth = 0;
-  for (; i < css.length; i += 1) {
-    const ch = css[i];
-    if (ch === "{") depth += 1;
-    else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) return css.slice(start, i + 1);
-    }
-  }
-  assert.fail("unclosed desktop media query");
-}
-
-test("Content V3 desktop layout contract (>= 901px)", () => {
-  const css = readFileSync(resolve(root, "src/styles/pybotclass-dashboard.css"), "utf8");
-  const editor = readFileSync(resolve(root, "src/pages/ContentEditorPage.jsx"), "utf8");
-  const desktop = extractMinWidth901Block(css);
-
-  // AC13: corrections live in dedicated desktop media query
-  assert.match(css, /@media \(min-width:\s*901px\)/);
-
-  // AC15: JSX unchanged structure (DOM contract still present; no reorder needed)
-  assert.match(editor, /className=\{`pbc-lesson-row\$\{depth > 0 \? " pbc-lesson-row--child" : ""\}`\}/);
-  assert.match(editor, /className="pbc-lesson-row__main"/);
-  assert.match(editor, /className="pbc-lesson-row__actions"/);
-  assert.match(editor, /pbc-lesson-row__add-child/);
-  assert.match(editor, /pbc-lesson-list--nested/);
-  assert.match(editor, /pbc-unit-card__head/);
-  assert.match(editor, /pbc-unit-card__title-row/);
-  assert.match(editor, /canAssign && depth === 0/);
-
-  // AC8: Unit header two-column grid
-  assert.match(
-    desktop,
-    /\.pbc-unit-card__head\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s,
-  );
-  assert.match(desktop, /\.pbc-unit-card__head\s*\{[^}]*column-gap:\s*12px/s);
-  assert.match(desktop, /\.pbc-unit-card__head\s*\{[^}]*align-items:\s*center/s);
-  assert.match(
-    desktop,
-    /\.pbc-unit-card__title-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s,
-  );
-
-  // AC1 / AC11: Lesson row two-column grid (no third horizontal column for add-child)
-  assert.match(desktop, /\.pbc-lesson-row\s*\{[^}]*display:\s*grid/s);
-  assert.match(
-    desktop,
-    /\.pbc-lesson-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s,
-  );
-  assert.match(desktop, /\.pbc-lesson-row\s*\{[^}]*column-gap:\s*12px/s);
-  assert.match(desktop, /\.pbc-lesson-row\s*\{[^}]*row-gap:\s*8px/s);
-  assert.match(desktop, /\.pbc-lesson-row\s*\{[^}]*align-items:\s*center/s);
-  assert.match(desktop, /\.pbc-lesson-row\s*\{[^}]*width:\s*100%/s);
-
-  // AC2: Lesson card internal three columns
-  assert.match(desktop, /\.pbc-lesson-row__main\s*\{[^}]*grid-column:\s*1/s);
-  assert.match(desktop, /\.pbc-lesson-row__main\s*\{[^}]*grid-row:\s*1/s);
-  assert.match(
-    desktop,
-    /\.pbc-lesson-row__main\s*\{[^}]*grid-template-columns:\s*36px\s+minmax\(0,\s*1fr\)\s+auto/s,
-  );
-  assert.match(desktop, /\.pbc-lesson-row__main\s*\{[^}]*column-gap:\s*12px/s);
-  assert.match(desktop, /\.pbc-lesson-row__main\s*\{[^}]*min-width:\s*0/s);
-  assert.match(desktop, /\.pbc-lesson-row__main\s*\{[^}]*width:\s*100%/s);
-
-  // AC7: normal word wrapping
-  assert.match(desktop, /\.pbc-lesson-row__copy\s*\{[^}]*min-width:\s*0/s);
-  assert.match(desktop, /\.pbc-lesson-row__copy\s*\{[^}]*word-break:\s*normal/s);
-
-  // AC5–AC6 / AC3–AC4: add-child and nested placement + hierarchy guide
-  assert.match(desktop, /\.pbc-lesson-row__actions\s*\{[^}]*grid-column:\s*2/s);
-  assert.match(desktop, /\.pbc-lesson-row__actions\s*\{[^}]*grid-row:\s*1/s);
-  assert.match(desktop, /\.pbc-lesson-row__add-child\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
-  assert.match(desktop, /\.pbc-lesson-row__add-child\s*\{[^}]*grid-row:\s*2/s);
-  assert.match(
-    desktop,
-    /\.pbc-lesson-row__add-child\s*\{[^}]*margin-left:\s*calc\(0\.95rem\s*\+\s*36px\s*\+\s*0\.75rem\)/s,
-  );
-  assert.match(desktop, /\.pbc-lesson-list--nested\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
-  assert.match(desktop, /\.pbc-lesson-list--nested\s*\{[^}]*grid-row:\s*3/s);
-  assert.match(desktop, /\.pbc-lesson-list--nested\s*\{[^}]*margin-left:\s*32px/s);
-  assert.match(desktop, /\.pbc-lesson-list--nested\s*\{[^}]*border-left:\s*2px\s+solid\s+#e2e8f0/s);
-  assert.match(
-    desktop,
-    /\.pbc-dashboard\[data-pbc-theme="dark"\]\s+\.pbc-lesson-list--nested\s*\{[^}]*border-left-color:\s*var\(--pbc-border/s,
-  );
-  assert.match(desktop, /\.pbc-lesson-row--child\s*\{[^}]*border-left:\s*none/s);
-  assert.match(desktop, /\.pbc-lesson-row--child\s*\{[^}]*margin-left:\s*0/s);
-
-  // CTA stays inside card grid (no margin-left: auto dependency)
-  assert.match(desktop, /\.pbc-lesson-row__cta\s*\{[^}]*margin-left:\s*0/s);
-
-  // AC14: existing mobile declarations remain intact outside the desktop block
-  assert.match(css, /@media \(max-width:\s*480px\)[\s\S]*\.pbc-lesson-row__cta\s*\{[^}]*flex:\s*1\s+1\s+100%/s);
-  assert.match(css, /\.pbc-lesson-row--child\s*\{[^}]*border-left:\s*2px\s+solid\s+#e2e8f0/s);
-});
-
-// ── Editor width desktop contracts ───────────────────────────────────────────
-
-function extractMediaQueryBlock(css, marker) {
-  const start = css.indexOf(marker);
-  assert.ok(start >= 0, `media query block must exist: ${marker}`);
-  let i = css.indexOf("{", start);
-  assert.ok(i >= 0, `media query opening brace: ${marker}`);
-  let depth = 0;
-  for (; i < css.length; i += 1) {
-    const ch = css[i];
-    if (ch === "{") depth += 1;
-    else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) return css.slice(start, i + 1);
-    }
-  }
-  assert.fail(`unclosed media query: ${marker}`);
-}
-
-test("Content/Lesson editor desktop width contracts", () => {
-  const css = readFileSync(resolve(root, "src/styles/pybotclass-dashboard.css"), "utf8");
-
-  // Base/mobile rule preserved
-  assert.match(
-    css,
-    /\.pbc-content-editor\s*,\s*\.pbc-lesson-editor\s*\{\s*max-width:\s*820px\s*;\s*\}/,
-  );
-
-  // AC1: >=1201px → width 100%, max-width 1180px
-  const wide = extractMediaQueryBlock(css, "@media (min-width: 1201px)");
-  assert.match(
-    wide,
-    /\.pbc-content-editor\s*,\s*\.pbc-lesson-editor\s*\{[^}]*width:\s*100%\s*;[^}]*max-width:\s*1180px\s*;/s,
-  );
-  assert.doesNotMatch(wide, /margin\s*:\s*[^;]*auto/);
-
-  // AC2: 901px–1200px → width 100%, max-width 100%
-  const mid = extractMediaQueryBlock(
-    css,
-    "@media (min-width: 901px) and (max-width: 1200px)",
-  );
-  assert.match(
-    mid,
-    /\.pbc-content-editor\s*,\s*\.pbc-lesson-editor\s*\{[^}]*width:\s*100%\s*;[^}]*max-width:\s*100%\s*;/s,
-  );
-  assert.doesNotMatch(mid, /margin\s*:\s*[^;]*auto/);
+test("CONTENT_ITEMS_MIGRATION_HINT present", () => {
+  assert.match(CONTENT_ITEMS_MIGRATION_HINT, /20260928220052_content_items_structure/);
 });

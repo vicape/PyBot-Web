@@ -116,7 +116,7 @@ export default function SharedContentPage() {
             title: l.title,
             description: l.description || "",
             position: l.position,
-            itemType: l.item_type || "lesson",
+            itemType: "lesson",
             estimatedMinutes: l.estimated_minutes ?? null,
             document_json: Array.isArray(lesson?.document_json) ? lesson.document_json : [],
           });

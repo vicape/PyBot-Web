@@ -100,7 +100,7 @@ export async function buildContentSnapshot(opts) {
         sourceId: lesson.id,
         title: lesson.title,
         description: lesson.description || "",
-        itemType: lesson.item_type || "lesson",
+        itemType: "lesson",
         estimatedMinutes: lesson.estimated_minutes ?? null,
         mediaOwnerId: content?.owner_id || mediaOwnerId,
         contentId: contentId || null,
@@ -132,7 +132,7 @@ export async function buildContentSnapshot(opts) {
         title: l.title,
         description: l.description || "",
         position: l.position,
-        itemType: l.item_type || lesson?.item_type || "lesson",
+        itemType: "lesson",
         estimatedMinutes: l.estimated_minutes ?? lesson?.estimated_minutes ?? null,
         document_json: Array.isArray(lesson?.document_json) ? lesson.document_json : [],
       });
@@ -171,7 +171,7 @@ export async function buildContentSnapshot(opts) {
           title: l.title,
           description: l.description || "",
           position: l.position,
-          itemType: l.item_type || lesson?.item_type || "lesson",
+          itemType: "lesson",
           estimatedMinutes: l.estimated_minutes ?? lesson?.estimated_minutes ?? null,
           document_json: Array.isArray(lesson?.document_json) ? lesson.document_json : [],
         });

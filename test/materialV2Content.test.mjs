@@ -89,31 +89,36 @@ test("unit/item types tienen defaults seguros", () => {
   assert.equal(normalizeUnitType(undefined), "unit");
   assert.equal(normalizeUnitType("chapter"), "chapter");
   assert.equal(normalizeUnitType("weird"), "unit");
-  assert.equal(normalizeItemType(undefined), "lesson");
+  assert.equal(normalizeItemType(undefined), "material");
   assert.equal(normalizeItemType("quiz"), "quiz");
-  assert.equal(normalizeItemType("nope"), "lesson");
+  assert.equal(normalizeItemType("nope"), "material");
 });
 
-test("TOC se deriva solo del orden real units+items (sin TOC manual)", () => {
+test("TOC se deriva solo del orden real units+lessons+items (sin TOC manual)", () => {
   const units = [
     { id: "u2", title: "Condicionales", position: 1, unit_type: "chapter" },
     { id: "u1", title: "Variables", position: 0, unit_type: "chapter" },
   ];
   const lessonsByUnit = {
     u1: [
-      { id: "l2", title: "Práctica", position: 1, item_type: "exercise", estimated_minutes: 15 },
-      { id: "l1", title: "Primera", position: 0, item_type: "lesson" },
+      { id: "l2", title: "Práctica", position: 1 },
+      { id: "l1", title: "Primera", position: 0 },
     ],
-    u2: [{ id: "l3", title: "If", position: 0, item_type: "theory" }],
+    u2: [{ id: "l3", title: "If", position: 0 }],
   };
-  const toc = deriveContentToc(units, lessonsByUnit);
+  const itemsByLesson = {
+    l2: [{ id: "i1", title: "Ej", position: 0, type: "exercise", config: { estimated_minutes: 15 } }],
+  };
+  const toc = deriveContentToc(units, lessonsByUnit, itemsByLesson);
   assert.equal(toc.length, 2);
   assert.equal(toc[0].title, "Variables");
   assert.equal(toc[0].numberLabel, "1");
   assert.equal(toc[0].children[0].numberLabel, "1.1");
   assert.equal(toc[0].children[0].title, "Primera");
-  assert.equal(toc[0].children[1].itemType, "exercise");
-  assert.equal(toc[0].children[1].estimatedMinutes, 15);
+  assert.equal(toc[0].children[0].kind, "lesson");
+  assert.equal(toc[0].children[1].kind, "lesson");
+  assert.equal(toc[0].children[1].children[0].itemType, "exercise");
+  assert.equal(toc[0].children[1].children[0].estimatedMinutes, 15);
   assert.equal(toc[1].numberLabel, "2");
   assert.equal(toc[1].children[0].numberLabel, "2.1");
 });
@@ -229,11 +234,10 @@ test("ContentEditor: title/type entry uses TitleTypeDialog (no browser prompts)"
 
   assert.match(editor, /initialType:\s*"unit"/);
   assert.match(editor, /initialType:\s*"lesson"/);
-  assert.match(editor, /UNIT_DIRECT_CREATE_TYPES/);
-  assert.match(editor, /LESSON_CHILD_CREATE_TYPES/);
+  assert.match(editor, /LESSON_ITEM_CREATE_TYPES/);
   assert.match(editor, /itemTypeOptionsForEdit/);
   assert.match(editor, /typeOptions=\{dialogTypeOptions\}/);
-  assert.match(editor, /navigate\(`\/dashboard\/content\/\$\{contentId\}\/lessons\/\$\{lesson\.id\}`\)/);
+  assert.match(editor, /navigate\(`\/dashboard\/content\/\$\{contentId\}\/lessons\/\$\{item\.id\}`\)/);
 
   assert.match(dialog, /<select[\s\S]*className="pbc-input"/);
   assert.match(dialog, /typeOptions\.map/);
@@ -246,8 +250,8 @@ test("ContentEditor: title/type entry uses TitleTypeDialog (no browser prompts)"
   const meta = readFileSync(resolve(root, "src/platform/contentMetadata.js"), "utf8");
   assert.match(meta, /export const UNIT_TYPES = Object\.freeze\(\["chapter", "unit", "section"\]\)/);
   assert.match(meta, /UNIT_DIRECT_CREATE_TYPES/);
-  assert.match(meta, /LESSON_CHILD_CREATE_TYPES/);
-  assert.match(meta, /"reading"/);
+  assert.match(meta, /LESSON_ITEM_CREATE_TYPES|LESSON_CHILD_CREATE_TYPES/);
+  assert.match(meta, /"material"/);
   assert.match(meta, /"video"/);
   assert.match(meta, /"assignment"/);
 

@@ -30,6 +30,7 @@ function TypeIcon({ itemType, size = 14 }) {
         </svg>
       );
     case "quiz":
+    case "assessment":
     case "test":
       return (
         <svg {...common}>
@@ -92,13 +93,14 @@ function TypeIcon({ itemType, size = 14 }) {
 }
 
 function TocItemButton({ item, depth, onNavigate }) {
+  const navType = item.kind === "lesson" ? "lesson" : "item";
   return (
     <button
       type="button"
       className={`pbc-content-toc__link${depth > 0 ? ` pbc-content-toc__link--depth-${depth}` : ""}`}
       onClick={() =>
         onNavigate?.({
-          type: "item",
+          type: navType,
           id: item.id,
           unitId: item.unitId,
           parentLessonId: item.parentLessonId,

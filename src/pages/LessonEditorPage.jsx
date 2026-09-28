@@ -12,9 +12,12 @@ import {
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import {
   getContent,
+  getContentItem,
   getLesson,
   listLessonBlocks,
+  saveContentItemDocument,
   saveLessonDocument,
+  updateContentItem,
   updateLesson,
 } from "../platform/contentApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
@@ -118,6 +121,7 @@ export default function LessonEditorPage() {
 
   const [content, setContent] = useState(null);
   const [lesson, setLesson] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
   const [editorSeed, setEditorSeed] = useState(null);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
@@ -166,17 +170,23 @@ export default function LessonEditorPage() {
         titleDirtyRef.current = false;
         return true;
       }
-      const { error } = await updateLesson(lessonId, { title: trimmed });
+      const { error } = editingItem
+        ? await updateContentItem(lessonId, { title: trimmed })
+        : await updateLesson(lessonId, { title: trimmed });
       if (error) {
         setSaveStatus("error");
         return false;
       }
       lastSavedTitleRef.current = trimmed;
       titleDirtyRef.current = false;
-      setLesson((prev) => (prev ? { ...prev, title: trimmed } : prev));
+      if (editingItem) {
+        setEditingItem((prev) => (prev ? { ...prev, title: trimmed } : prev));
+      } else {
+        setLesson((prev) => (prev ? { ...prev, title: trimmed } : prev));
+      }
       return true;
     },
-    [lessonId],
+    [lessonId, editingItem],
   );
 
   const load = useCallback(async () => {
@@ -185,17 +195,17 @@ export default function LessonEditorPage() {
     setErr("");
     setPreview(false);
     setEditorSeed(null);
+    setEditingItem(null);
 
-    const [{ content: c, error: cErr }, { lesson: l, error: lErr }, { profile }] = await Promise.all([
+    const [{ content: c, error: cErr }, { profile }] = await Promise.all([
       getContent(contentId),
-      getLesson(lessonId),
       fetchProfile(user.id),
     ]);
 
     setSuperAdmin(isSuperAdmin(profile));
 
-    if (cErr || !c || lErr || !l) {
-      setErr(cErr || lErr || "Lección no encontrada.");
+    if (cErr || !c) {
+      setErr(cErr || "Contenido no encontrado.");
       setLoading(false);
       return;
     }
@@ -205,39 +215,67 @@ export default function LessonEditorPage() {
       return;
     }
 
-    let documentJson = l.document_json;
-    let documentVersion = l.document_version ?? 1;
+    // Resolve as Lesson container or as content_items leaf (same URL param).
+    const { lesson: l, error: lErr } = await getLesson(lessonId);
+    if (!lErr && l) {
+      let documentJson = l.document_json;
+      let documentVersion = l.document_version ?? 1;
 
-    if (!hasSavedLessonDocument(documentJson)) {
-      const { rows } = await listLessonBlocks(lessonId);
-      if (rows.length > 0) {
-        documentJson = legacyBlocksToDocument(rows);
-        const { lesson: saved, error: saveErr } = await saveLessonDocument(
-          lessonId,
-          documentJson,
-          documentVersion,
-        );
-        if (saveErr) {
-          setErr("Se pudo abrir el contenido anterior, pero no se guardó el documento nuevo.");
-        } else if (saved) {
-          documentVersion = saved.document_version;
-          l.document_version = saved.document_version;
-          l.document_json = saved.document_json;
+      if (!hasSavedLessonDocument(documentJson)) {
+        const { rows } = await listLessonBlocks(lessonId);
+        if (rows.length > 0) {
+          documentJson = legacyBlocksToDocument(rows);
+          const { lesson: saved, error: saveErr } = await saveLessonDocument(
+            lessonId,
+            documentJson,
+            documentVersion,
+          );
+          if (saveErr) {
+            setErr("Se pudo abrir el contenido anterior, pero no se guardó el documento nuevo.");
+          } else if (saved) {
+            documentVersion = saved.document_version;
+            l.document_version = saved.document_version;
+            l.document_json = saved.document_json;
+          }
+        } else {
+          documentJson = normalizeLessonDocument(null);
         }
-      } else {
-        documentJson = normalizeLessonDocument(null);
       }
+
+      setContent(c);
+      setLesson(l);
+      setTitle(l.title || "");
+      lastSavedTitleRef.current = l.title || "";
+      titleDirtyRef.current = false;
+      setEditorSeed({
+        lessonId,
+        document: JSON.parse(JSON.stringify(normalizeLessonDocument(documentJson))),
+        documentVersion,
+      });
+      setLoading(false);
+      return;
     }
 
+    const { item, error: itemErr } = await getContentItem(lessonId);
+    if (itemErr || !item) {
+      setErr(lErr || itemErr || "Lección no encontrada.");
+      setLoading(false);
+      return;
+    }
+
+    const documentJson = item.content?.document_json ?? null;
+    const documentVersion = item.content?.document_version ?? 1;
     setContent(c);
-    setLesson(l);
-    setTitle(l.title || "");
-    lastSavedTitleRef.current = l.title || "";
+    setLesson(null);
+    setEditingItem(item);
+    setTitle(item.title || "");
+    lastSavedTitleRef.current = item.title || "";
     titleDirtyRef.current = false;
     setEditorSeed({
-      lessonId,
+      lessonId: item.id,
       document: JSON.parse(JSON.stringify(normalizeLessonDocument(documentJson))),
       documentVersion,
+      isItem: true,
     });
     setLoading(false);
   }, [user, contentId, lessonId, navigate]);
@@ -280,13 +318,14 @@ export default function LessonEditorPage() {
       </main>
     );
   }
-  if (!user || !content || !lesson) return null;
+  if (!user || !content || (!lesson && !editingItem)) return null;
 
-  const unit = lesson.content_units;
+  const unit = lesson?.content_units || editingItem?.content_lessons?.content_units;
   const unitPosition = Number.isFinite(unit?.position) ? unit.position + 1 : null;
   const unitLabel = unit
     ? `${unitPosition ? t("pcUnitLabeled").replace("{n}", String(unitPosition)) : t("pcUnitFallback")} · ${unit.title || t("pcUntitled")}`
     : t("pcUnitFallback");
+  const displayTitle = title || lesson?.title || editingItem?.title || "";
 
   return (
     <PyBotClassLayout user={user} showAdmin={superAdmin} hideSearch onSignOut={() => void signOut()}>
@@ -309,7 +348,7 @@ export default function LessonEditorPage() {
           <span aria-hidden> › </span>
           <span>{unitLabel}</span>
           <span aria-hidden> › </span>
-          <span>{title || lesson.title}</span>
+          <span>{displayTitle}</span>
         </nav>
 
         <header className="pbc-lesson-hero">
@@ -367,7 +406,7 @@ export default function LessonEditorPage() {
                 setAssignTarget(null);
                 setAssignOpen(true);
               }}
-              disabled={preview}
+              disabled={preview || Boolean(editingItem)}
             >
               <AssignIcon />
               {t("pcAssign")}
@@ -394,6 +433,7 @@ export default function LessonEditorPage() {
             documentVersion={editorSeed.documentVersion}
             preview={preview}
             onStatusChange={setSaveStatus}
+            saveTarget={editingItem ? "item" : "lesson"}
           />
         ) : null}
       </div>
@@ -413,9 +453,9 @@ export default function LessonEditorPage() {
         sourceType={assignTarget?.sourceType || "lesson"}
         sourceId={assignTarget?.sourceId || lessonId}
         lessonId={lessonId}
-        lessonTitle={title || lesson.title}
+        lessonTitle={displayTitle}
         contentTitle={content.title}
-        defaultTitle={assignTarget?.defaultTitle || title || lesson.title}
+        defaultTitle={assignTarget?.defaultTitle || displayTitle}
         contextLabel={assignTarget?.contextLabel || "lección"}
         blockId={assignTarget?.blockId}
         blockProps={assignTarget?.blockProps}

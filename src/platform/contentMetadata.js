@@ -1,6 +1,7 @@
 /**
- * Material V2 / Content V3 — pedagogical metadata helpers.
- * Stable internal codes only (not translated labels).
+ * Content pedagogical metadata helpers.
+ * Definitive hierarchy: Content -> Unit -> Lesson -> Item.
+ * Canonical item types only for new Content.
  */
 
 export const CONTENT_DIFFICULTIES = Object.freeze(["beginner", "intermediate", "advanced"]);
@@ -9,58 +10,72 @@ export const CONTENT_LANGUAGE_CODES = Object.freeze(["es", "en", "fr", "pt", "de
 
 export const UNIT_TYPES = Object.freeze(["chapter", "unit", "section"]);
 
-/** All valid stored item_type values (legacy + Content V3). */
-export const LESSON_ITEM_TYPES = Object.freeze([
-  "lesson",
-  "theory",
+/** Canonical item types for new Content (exact). */
+export const CONTENT_ITEM_TYPES = Object.freeze([
+  "material",
+  "video",
   "example",
-  "activity",
   "exercise",
   "quiz",
+  "assignment",
+  "assessment",
+]);
+
+/** @deprecated Use CONTENT_ITEM_TYPES — kept as alias for transitional imports. */
+export const CONTENT_V3_ITEM_TYPES = CONTENT_ITEM_TYPES;
+
+/** Exact types offered when creating an Item under a Lesson. */
+export const LESSON_ITEM_CREATE_TYPES = CONTENT_ITEM_TYPES;
+
+/** @deprecated Alias — Unit may only create Lessons, never Items. */
+export const UNIT_DIRECT_CREATE_TYPES = Object.freeze(["lesson"]);
+
+/** @deprecated Alias for LESSON_ITEM_CREATE_TYPES. */
+export const LESSON_CHILD_CREATE_TYPES = LESSON_ITEM_CREATE_TYPES;
+
+/**
+ * Legacy stored types (readable via mapping only; never offered for NEW creation).
+ * lesson is not an item type in the definitive model.
+ */
+export const LEGACY_ITEM_TYPES = Object.freeze([
+  "reading",
+  "resource",
+  "theory",
+  "activity",
   "test",
   "project",
-  "resource",
-  "reading",
-  "video",
-  "assignment",
 ]);
 
-/** Canonical Content V3 preferred types for new work. */
-export const CONTENT_V3_ITEM_TYPES = Object.freeze([
+/** All historically known type strings (legacy + canonical). Not for new creation lists. */
+export const LESSON_ITEM_TYPES = Object.freeze([
+  ...CONTENT_ITEM_TYPES,
+  ...LEGACY_ITEM_TYPES,
   "lesson",
-  "reading",
-  "video",
-  "exercise",
-  "quiz",
-  "assignment",
-  "project",
-  "resource",
 ]);
-
-/** Exact types offered when creating directly under a Unit. */
-export const UNIT_DIRECT_CREATE_TYPES = Object.freeze([
-  "lesson",
-  "quiz",
-  "assignment",
-  "project",
-  "resource",
-]);
-
-/** Exact types offered when creating inside a Lesson container. */
-export const LESSON_CHILD_CREATE_TYPES = Object.freeze([
-  "reading",
-  "video",
-  "exercise",
-  "quiz",
-  "assignment",
-  "resource",
-]);
-
-/** Legacy-only types: readable/editable, never offered for NEW creation. */
-export const LEGACY_ITEM_TYPES = Object.freeze(["theory", "example", "activity", "test"]);
 
 export const CONTENT_V3_MIGRATION_HINT =
   "Falta aplicar la migración 20260927190051_content_v3_structure.sql";
+
+export const CONTENT_ITEMS_MIGRATION_HINT =
+  "Falta aplicar la migración 20260928220052_content_items_structure.sql";
+
+/** Exact legacy -> canonical item type mapping. */
+export const LEGACY_ITEM_TYPE_MAP = Object.freeze({
+  reading: "material",
+  resource: "material",
+  theory: "material",
+  activity: "exercise",
+  test: "assessment",
+  project: "assignment",
+  example: "example",
+  exercise: "exercise",
+  quiz: "quiz",
+  video: "video",
+  assignment: "assignment",
+  material: "material",
+  assessment: "assessment",
+  task: "assignment",
+});
 
 export const AGE_BOUNDS = Object.freeze({ min: 3, max: 120 });
 
@@ -224,9 +239,25 @@ export function normalizeUnitType(value) {
   return UNIT_TYPES.includes(v) ? v : "unit";
 }
 
+/** Map any stored/legacy type to a canonical item type. */
+export function mapLegacyItemType(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (!v) return "material";
+  if (LEGACY_ITEM_TYPE_MAP[v]) return LEGACY_ITEM_TYPE_MAP[v];
+  if (CONTENT_ITEM_TYPES.includes(v)) return v;
+  return "material";
+}
+
+/** Normalize a canonical item type; rejects unknown for new writes when strict. */
 export function normalizeItemType(value) {
-  const v = String(value || "lesson").trim();
-  return LESSON_ITEM_TYPES.includes(v) ? v : "lesson";
+  const v = String(value || "").trim().toLowerCase();
+  if (CONTENT_ITEM_TYPES.includes(v)) return v;
+  if (LEGACY_ITEM_TYPE_MAP[v]) return LEGACY_ITEM_TYPE_MAP[v];
+  return "material";
+}
+
+export function isCanonicalItemType(value) {
+  return CONTENT_ITEM_TYPES.includes(String(value || "").trim());
 }
 
 export function isLegacyItemType(value) {
@@ -234,19 +265,16 @@ export function isLegacyItemType(value) {
 }
 
 /**
- * Type options when editing an existing item.
- * Legacy current type is kept + valid V3 types for context; never duplicates.
+ * Type options when editing an existing item — canonical types only.
+ * Legacy current type is mapped to canonical and included.
  */
-export function itemTypeOptionsForEdit({ itemType, parentLessonId = null } = {}) {
-  const contextTypes = parentLessonId != null ? LESSON_CHILD_CREATE_TYPES : UNIT_DIRECT_CREATE_TYPES;
-  const current = String(itemType || "").trim();
-  const normalized = normalizeItemType(current);
+export function itemTypeOptionsForEdit({ itemType } = {}) {
+  const mapped = mapLegacyItemType(itemType);
   const options = [];
-  if (isLegacyItemType(current) || isLegacyItemType(normalized)) {
-    const legacy = isLegacyItemType(current) ? current : normalized;
-    if (!options.includes(legacy)) options.push(legacy);
+  if (CONTENT_ITEM_TYPES.includes(mapped) && !options.includes(mapped)) {
+    options.push(mapped);
   }
-  for (const t of contextTypes) {
+  for (const t of CONTENT_ITEM_TYPES) {
     if (!options.includes(t)) options.push(t);
   }
   return options;
