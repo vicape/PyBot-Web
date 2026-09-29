@@ -56,7 +56,8 @@ export default function SharedContentPage() {
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
-  }, [supabase]);
+    navigate("/login", { replace: true });
+  }, [supabase, navigate]);
 
   useEffect(() => {
     if (!user || !contentId || !isSupabaseConfigured()) return;
