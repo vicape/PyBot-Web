@@ -34,7 +34,8 @@ export default function CommunityPage() {
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
-  }, [supabase]);
+    navigate("/login", { replace: true });
+  }, [supabase, navigate]);
 
   const load = useCallback(
     async (term) => {
