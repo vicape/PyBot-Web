@@ -289,6 +289,14 @@ export async function getContent(contentId) {
   return { content: mapContentRow(data), error: null };
 }
 
+/**
+ * Insert learning_contents owned by auth.uid(). Personal capability for every
+ * authenticated person — independent of profiles.preferred_role ('student' or
+ * 'teacher'), organization_members, institution, or course_members role.
+ * Assigning Content to a course is a separate capability (contentAssignApi).
+ * No migration / DECISION REQUIRED: RLS learning_contents_insert_own already
+ * allows authenticated insert when owner_id = auth.uid().
+ */
 export async function createContent(input = {}) {
   const client = sb();
   const { data: session } = await client.auth.getUser();

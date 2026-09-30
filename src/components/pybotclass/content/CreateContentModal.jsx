@@ -15,6 +15,7 @@ const EMPTY_META = {
   prerequisites: "",
 };
 
+/** Modal to create personal Content (Crear contenido (i18n key `pcCreateContent`)); no teacher/staff/profiles.preferred_role gate. */
 export default function CreateContentModal({ open, onClose, onCreated }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");

@@ -14,9 +14,10 @@ const DAILY_NAV = [
 
 /**
  * Sidebar presentation vs authorization:
- * - showMyContent = owned Content area (available to every authenticated person)
+ * - showMyContent = owned Content area (every authenticated person, including
+ *   profiles.preferred_role exactly 'student' and profiles.preferred_role exactly 'teacher')
  * - showInstitutions = optional organization/membership context
- * - preferredRole never unlocks Classroom or other protected teacher mutations
+ * - preferredRole / profiles.preferred_role never unlocks Classroom or other protected teacher mutations
  */
 export default function PyBotClassSidebar({
   id = "pbc-sidebar",

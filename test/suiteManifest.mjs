@@ -20,6 +20,7 @@ export const TEST_SUITES = Object.freeze({
     "orgRole.test.mjs",
     "orgRoleMulti.test.mjs",
     "personCenteredModel.test.mjs",
+    "personalContentOwnership.test.mjs",
     "platformRole.test.mjs",
     "platformModePreference.test.mjs",
     "platformSchoolCycle.test.mjs",

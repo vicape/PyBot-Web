@@ -19,6 +19,13 @@ import { isSupabaseConfigured } from "../supabaseClient.js";
 import { isSuperAdmin } from "../platformRole.js";
 import { t } from "../i18n.js";
 
+/**
+ * Personal Content home: create/edit/delete own Content is a person capability
+ * (not gated on profiles.preferred_role exactly 'student' or exactly 'teacher',
+ * institution, or course_members role). Action Crear contenido (i18n key
+ * `pcCreateContent`) is visible/enabled for every authenticated person.
+ * Course assignment (canAssign) stays separate and requires factual 'teacher' courses.
+ */
 export default function MyContentPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();

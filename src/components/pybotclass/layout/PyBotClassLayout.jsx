@@ -89,7 +89,7 @@ export default function PyBotClassLayout({
           open={sidebarOpen}
           onClose={closeDrawer}
           showAdmin={showAdmin}
-          showMyContent
+          showMyContent /* every authenticated person; independent of profiles.preferred_role ('student'|'teacher') / staff */
           showInstitutions={showInstitutions}
           preferredRole={preferredRole}
         />
