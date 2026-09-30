@@ -1,10 +1,48 @@
 import { getSupabase } from "../supabaseClient.js";
-import { getContent, getLesson, listContentUnits, listUnitLessons } from "./contentApi.js";
+import {
+  getContent,
+  getLesson,
+  listContentUnits,
+  listLessonItems,
+  listUnitLessons,
+} from "./contentApi.js";
 import { pickContentMetadata } from "./contentMetadata.js";
 import { normalizeCourseRole } from "./courseRole.js";
 import { listPybotclassMyCourses } from "./pybotClassApi.js";
 
-export const CONTENT_SNAPSHOT_SCHEMA_VERSION = 2;
+/** Schema v3 freezes Unit → Lesson → Item. Legacy v1/v2 snapshots remain readable. */
+export const CONTENT_SNAPSHOT_SCHEMA_VERSION = 3;
+
+/**
+ * Freeze a live content_items row into snapshot shape.
+ * snapshotItemId is stable for the assignment lifetime; sourceItemId is audit-only.
+ */
+export function freezeSnapshotItem(item) {
+  if (!item?.id) return null;
+  const type = item.type || item.item_type || "material";
+  const content = item.content && typeof item.content === "object" ? item.content : {};
+  const config = item.config && typeof item.config === "object" ? item.config : {};
+  return {
+    snapshotItemId: String(item.id),
+    sourceItemId: item.id,
+    type,
+    title: item.title || "",
+    position: item.position ?? 0,
+    content: JSON.parse(JSON.stringify(content)),
+    config: JSON.parse(JSON.stringify(config)),
+  };
+}
+
+async function loadFrozenLessonItems(lessonId) {
+  if (!lessonId) return [];
+  const { rows, error } = await listLessonItems(lessonId);
+  if (error) {
+    // Missing content_items migration: assign without items (legacy-compatible).
+    if (/content_items|migración|migration/i.test(String(error))) return [];
+    return [];
+  }
+  return (rows || []).map(freezeSnapshotItem).filter(Boolean);
+}
 
 function contentMetaForSnapshot(content) {
   const meta = pickContentMetadata(content) || {};
@@ -93,6 +131,7 @@ export async function buildContentSnapshot(opts) {
     if (error || !lesson) return { snapshot: null, error: error || "not_found" };
     const contentId = lesson.content_units?.content_id;
     const { content } = contentId ? await getContent(contentId) : { content: null };
+    const items = await loadFrozenLessonItems(lesson.id);
     return {
       snapshot: {
         schemaVersion: CONTENT_SNAPSHOT_SCHEMA_VERSION,
@@ -110,6 +149,7 @@ export async function buildContentSnapshot(opts) {
         unitTitle: lesson.content_units?.title || "",
         unitType: lesson.content_units?.unit_type || "unit",
         document_json: Array.isArray(lesson.document_json) ? lesson.document_json : [],
+        items,
       },
       error: null,
     };
@@ -127,6 +167,7 @@ export async function buildContentSnapshot(opts) {
     const lessonSnaps = [];
     for (const l of lessons) {
       const { lesson } = await getLesson(l.id);
+      const items = await loadFrozenLessonItems(l.id);
       lessonSnaps.push({
         id: l.id,
         title: l.title,
@@ -135,6 +176,7 @@ export async function buildContentSnapshot(opts) {
         itemType: "lesson",
         estimatedMinutes: l.estimated_minutes ?? lesson?.estimated_minutes ?? null,
         document_json: Array.isArray(lesson?.document_json) ? lesson.document_json : [],
+        items,
       });
     }
     return {
@@ -166,6 +208,7 @@ export async function buildContentSnapshot(opts) {
       const lessonSnaps = [];
       for (const l of lessons) {
         const { lesson } = await getLesson(l.id);
+        const items = await loadFrozenLessonItems(l.id);
         lessonSnaps.push({
           id: l.id,
           title: l.title,
@@ -174,6 +217,7 @@ export async function buildContentSnapshot(opts) {
           itemType: "lesson",
           estimatedMinutes: l.estimated_minutes ?? lesson?.estimated_minutes ?? null,
           document_json: Array.isArray(lesson?.document_json) ? lesson.document_json : [],
+          items,
         });
       }
       unitSnaps.push({

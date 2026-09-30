@@ -9,6 +9,7 @@ import { fetchMySubmission, submissionVersionLabel } from "../../platform/activi
 import { deriveProcessStatus } from "../../platform/submissionWorkflow.js";
 import { COURSE_ACCESS_MODES } from "../../platform/courseRole.js";
 import { formatDueDate, processStatusLabel } from "./pyclassI18n.js";
+import CourseContentProgressPanel from "./CourseContentProgressPanel.jsx";
 import {
   PbcEmpty,
   PbcFormPanel,
@@ -366,6 +367,8 @@ export default function CourseActivitiesTab({
   // teaching — controles docentes existentes
   return (
     <>
+      <CourseContentProgressPanel courseId={courseId} />
+
       <PbcSection
         title={activitiesSectionTitle()}
         description={`${activities.length} ${t("pcActivities")}`}

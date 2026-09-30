@@ -123,8 +123,8 @@ test("TOC se deriva solo del orden real units+lessons+items (sin TOC manual)", (
   assert.equal(toc[1].children[0].numberLabel, "2.1");
 });
 
-test("snapshot assignment incluye metadata/itemType (schema v2)", async () => {
-  assert.equal(CONTENT_SNAPSHOT_SCHEMA_VERSION, 2);
+test("snapshot assignment incluye metadata/itemType (schema v3)", async () => {
+  assert.equal(CONTENT_SNAPSHOT_SCHEMA_VERSION, 3);
 
   const fakeLesson = {
     id: "lesson-1",

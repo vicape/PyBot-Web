@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AssignedContentSnapshotViewer from "../components/content-editor/AssignedContentSnapshotViewer.jsx";
 import AssignedLessonViewer from "../components/content-editor/AssignedLessonViewer.jsx";
@@ -24,6 +24,13 @@ import {
 } from "../platform/activityIdeSession.js";
 import { writeActivityLaunchCache } from "../platform/courseActivityApi.js";
 import { fetchActivityProgress } from "../platform/activityProgress.js";
+import {
+  completeActivityItemProgress,
+  deriveProgressAggregates,
+  fetchActivityItemProgress,
+  listSnapshotItems,
+  startActivityItemProgress,
+} from "../platform/activityItemProgress.js";
 import {
   closeSubmission,
   fetchActiveReopen,
@@ -124,6 +131,8 @@ export default function ActivityPage() {
   const [lessonMeta, setLessonMeta] = useState(null);
   const [lessonErr, setLessonErr] = useState("");
   const [snapshot, setSnapshot] = useState(null);
+  const [itemProgressMap, setItemProgressMap] = useState({});
+  const [itemProgressBusy, setItemProgressBusy] = useState(null);
   const [superAdmin, setSuperAdmin] = useState(false);
   const focusRowRef = useRef(null);
   const didFocusStudent = useRef(false);
@@ -287,6 +296,19 @@ export default function ActivityPage() {
     const teach = canTeachCourse({ orgRole: nextOrgRole, courseRole: nextCourseRole });
     const student = isCourseStudent({ courseRole: nextCourseRole });
 
+    // Point 4: pedagogical item progress (distinct from IDE activity_progress)
+    const snap = act.content_snapshot || null;
+    if (snap && listSnapshotItems(snap).length > 0) {
+      const progressUserId =
+        isCourseStudent({ courseRole: nextCourseRole })
+          ? user.id
+          : focusStudentId || user.id;
+      const { map } = await fetchActivityItemProgress(activityId, progressUserId);
+      setItemProgressMap(map || {});
+    } else {
+      setItemProgressMap({});
+    }
+
     if (student) {
       const sub = await fetchMySubmission(activityId, user.id);
       setMySubmission(sub.submission);
@@ -374,11 +396,66 @@ export default function ActivityPage() {
     }
 
     setLoading(false);
-  }, [supabase, activityId, user]);
+  }, [supabase, activityId, user, focusStudentId]);
 
   useEffect(() => {
     if (!authLoading && user) void load();
   }, [authLoading, user, load]);
+
+  const snapshotItems = useMemo(() => listSnapshotItems(snapshot), [snapshot]);
+  const itemAggregates = useMemo(
+    () => deriveProgressAggregates(snapshotItems, itemProgressMap),
+    [snapshotItems, itemProgressMap],
+  );
+
+  const handleStartItem = useCallback(
+    async (item) => {
+      if (!activityId || !item?.snapshotItemId || !isStudent) return;
+      setItemProgressBusy(item.snapshotItemId);
+      const { ok, row } = await startActivityItemProgress({
+        activityId,
+        snapshotItemId: item.snapshotItemId,
+        itemType: item.type,
+        sourceItemId: item.sourceItemId,
+      });
+      if (ok) {
+        setItemProgressMap((prev) => ({
+          ...prev,
+          [item.snapshotItemId]: row || {
+            snapshot_item_id: item.snapshotItemId,
+            status: "in_progress",
+          },
+        }));
+      }
+      setItemProgressBusy(null);
+    },
+    [activityId, isStudent],
+  );
+
+  const handleCompleteItem = useCallback(
+    async (item, metadata) => {
+      if (!activityId || !item?.snapshotItemId || !isStudent) return;
+      setItemProgressBusy(item.snapshotItemId);
+      const { ok, row } = await completeActivityItemProgress({
+        activityId,
+        snapshotItemId: item.snapshotItemId,
+        itemType: item.type,
+        sourceItemId: item.sourceItemId,
+        metadata: metadata || {},
+      });
+      if (ok) {
+        setItemProgressMap((prev) => ({
+          ...prev,
+          [item.snapshotItemId]: row || {
+            snapshot_item_id: item.snapshotItemId,
+            status: "completed",
+          },
+        }));
+      }
+      setItemProgressBusy(null);
+    },
+    [activityId, isStudent],
+  );
 
   // Deep-link desde tab Entregas: ?alumno= → abrir código de esa entrega
   useEffect(() => {
@@ -955,7 +1032,15 @@ export default function ActivityPage() {
               <h2 className="pbc-activity-lesson__title">
                 {isMaterial ? "Material" : activityKind === "task" ? "Tarea" : "Ejercicio"}
               </h2>
-              <AssignedContentSnapshotViewer snapshot={snapshot} />
+              <AssignedContentSnapshotViewer
+                snapshot={snapshot}
+                aggregates={snapshotItems.length ? itemAggregates : null}
+                progressByItemId={itemProgressMap}
+                interactive={Boolean(isStudent && snapshotItems.length)}
+                busyId={itemProgressBusy}
+                onStartItem={handleStartItem}
+                onCompleteItem={handleCompleteItem}
+              />
             </section>
           ) : lessonDoc && activity?.content_lesson_id ? (
             <section className="pbc-activity-lesson" aria-label="Contenido de la lección">

@@ -3,8 +3,33 @@ import assert from "node:assert/strict";
 import {
   ACTIVITY_UPDATE_PERMISSION_HINT,
   STARTER_CODE_SCHEMA_HINT,
+  listCourseAssignedContentActivities,
   updateCourseActivity,
 } from "../src/platform/courseActivityApi.js";
+
+test("listCourseAssignedContentActivities filters activities with content_snapshot", async () => {
+  const supabase = {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          not: () => ({
+            order: async () => ({
+              data: [
+                { id: "a1", content_snapshot: { schemaVersion: 3 }, course_id: "c1" },
+                { id: "a2", content_snapshot: null, course_id: "c1" },
+              ],
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    }),
+  };
+  const { rows, error } = await listCourseAssignedContentActivities(supabase, "c1");
+  assert.equal(error, null);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, "a1");
+});
 
 test("updateCourseActivity informa si falta la columna starter_code", async () => {
   const supabase = {

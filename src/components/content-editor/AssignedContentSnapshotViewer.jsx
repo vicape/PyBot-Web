@@ -11,6 +11,12 @@ import {
   buildSnapshotReaderModel,
   findLessonIndex,
 } from "../../platform/contentSnapshotReader.js";
+import {
+  ITEM_PROGRESS_STATUS,
+  evaluateVideoPlayerCompletion,
+  resolveItemCompletionRule,
+  resolveVideoCompletionThreshold,
+} from "../../platform/activityItemProgress.js";
 import { normalizeReadOnlyFencedCode } from "./normalizeReadOnlyFencedCode.js";
 
 function ReadOnlyDoc({ docKey, initialContent }) {
@@ -88,6 +94,167 @@ function MinutesBadge({ minutes }) {
   return <span className="pbc-content-toc__mins">{minutes}′</span>;
 }
 
+function statusLabel(status) {
+  switch (status) {
+    case ITEM_PROGRESS_STATUS.COMPLETED:
+      return "Completado";
+    case ITEM_PROGRESS_STATUS.IN_PROGRESS:
+      return "En progreso";
+    default:
+      return "Sin comenzar";
+  }
+}
+
+function ProgressPercent({ aggregates }) {
+  if (!aggregates?.trackable) return null;
+  const { percent, completed, total, emptyRequired } = aggregates.content;
+  return (
+    <p className="auth-card__muted" style={{ margin: "0.25rem 0 0" }} aria-live="polite">
+      {t("pcYourProgress")}:{" "}
+      <strong>
+        {emptyRequired ? "—" : `${percent}%`}
+        {!emptyRequired ? ` (${completed}/${total})` : " (sin ítems requeridos)"}
+      </strong>
+    </p>
+  );
+}
+
+function SnapshotItemCard({
+  item,
+  status,
+  interactive,
+  busyId,
+  onStart,
+  onComplete,
+}) {
+  const rule = resolveItemCompletionRule(item);
+  const isDone = status === ITEM_PROGRESS_STATUS.COMPLETED;
+  const isBusy = busyId === item.snapshotItemId;
+  const videoUrl =
+    item.type === "video"
+      ? item.content?.url || item.content?.src || item.content?.videoUrl || null
+      : null;
+
+  useEffect(() => {
+    if (!interactive || isDone || !onStart) return;
+    // Opening may start material/example; video starts on interaction below.
+    if (item.type === "material" || item.type === "example") {
+      if (status === ITEM_PROGRESS_STATUS.NOT_STARTED) {
+        void onStart(item);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on mount/open of item
+  }, [item.snapshotItemId]);
+
+  const showMarkComplete =
+    interactive &&
+    !isDone &&
+    (rule === "marked_complete" ||
+      rule === "viewed" ||
+      // Embedded exercise/quiz/assignment without activity-level submit runtime
+      ((item.type === "exercise" ||
+        item.type === "quiz" ||
+        item.type === "assignment" ||
+        item.type === "assessment") &&
+        rule !== "video_threshold"));
+
+  return (
+    <li className="pbc-content-reader__item-row" data-status={status}>
+      <div className="pbc-content-reader__lesson-meta">
+        <span className="pbc-content-reader__lesson-title">{item.title || t("pcUntitled")}</span>
+        <LessonTypeBadge itemType={item.type} />
+        {item.config?.required === false ? (
+          <span className="pbc-content-toc__badge">Opcional</span>
+        ) : null}
+        <span className="pbc-pill pbc-pill--muted">{statusLabel(status)}</span>
+      </div>
+
+      {videoUrl && interactive ? (
+        <div className="pbc-content-reader__item-media" style={{ marginTop: "0.5rem" }}>
+          <video
+            controls
+            src={videoUrl}
+            style={{ maxWidth: "100%", maxHeight: 320 }}
+            onPlay={() => {
+              if (!isDone && status === ITEM_PROGRESS_STATUS.NOT_STARTED) void onStart?.(item);
+            }}
+            onTimeUpdate={(e) => {
+              if (isDone) return;
+              const el = e.currentTarget;
+              if (
+                evaluateVideoPlayerCompletion(item, {
+                  currentTime: el.currentTime,
+                  duration: el.duration,
+                  ended: false,
+                })
+              ) {
+                void onComplete?.(item, {
+                  videoProgress: el.currentTime / (el.duration || 1),
+                  threshold: resolveVideoCompletionThreshold(item),
+                });
+              }
+            }}
+            onEnded={() => {
+              if (!isDone) {
+                void onComplete?.(item, {
+                  videoProgress: 1,
+                  threshold: resolveVideoCompletionThreshold(item),
+                  ended: true,
+                });
+              }
+            }}
+          />
+        </div>
+      ) : null}
+
+      {showMarkComplete ? (
+        <div style={{ marginTop: "0.5rem" }}>
+          <button
+            type="button"
+            className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+            disabled={isBusy}
+            onClick={() => void onComplete?.(item)}
+          >
+            {isBusy ? "…" : "Marcar completado"}
+          </button>
+        </div>
+      ) : null}
+
+      {interactive &&
+      !isDone &&
+      (rule === "submitted" || rule === "quiz_finished") &&
+      !showMarkComplete ? (
+        <p className="auth-card__muted" style={{ margin: "0.35rem 0 0", fontSize: "0.9em" }}>
+          Se completa al entregar la actividad.
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+function SnapshotItemsList({ items, progressByItemId, interactive, busyId, onStart, onComplete }) {
+  if (!items?.length) return null;
+  return (
+    <ul className="pbc-content-reader__lesson-list" aria-label="Ítems de la lección">
+      {items.map((item) => {
+        const row = progressByItemId?.[item.snapshotItemId];
+        const status = row?.status || ITEM_PROGRESS_STATUS.NOT_STARTED;
+        return (
+          <SnapshotItemCard
+            key={item.snapshotItemId}
+            item={item}
+            status={status}
+            interactive={interactive}
+            busyId={busyId}
+            onStart={onStart}
+            onComplete={onComplete}
+          />
+        );
+      })}
+    </ul>
+  );
+}
+
 /** Real learning objectives only — never invent placeholders. */
 function resolveLearningObjectives(snapshot) {
   const raw =
@@ -132,6 +299,7 @@ function ReaderOutline({
   onClose,
   onBackToOverview,
   overviewTitle,
+  lessonProgress,
 }) {
   const panelRef = useRef(null);
 
@@ -200,6 +368,7 @@ function ReaderOutline({
                   {unit.lessons.map((lesson) => {
                     const isCurrent = lesson.id === selectedLessonId;
                     const title = lesson.title || t("pcUntitled");
+                    const lp = lessonProgress?.[lesson.id];
                     return (
                       <li key={lesson.id}>
                         <button
@@ -219,6 +388,9 @@ function ReaderOutline({
                           <span className="pbc-content-reader__outline-lesson-title">{title}</span>
                           <LessonTypeBadge itemType={lesson.itemType} />
                           <MinutesBadge minutes={lesson.estimatedMinutes} />
+                          {lp && !lp.emptyRequired ? (
+                            <span className="pbc-content-toc__mins">{lp.percent}%</span>
+                          ) : null}
                         </button>
                       </li>
                     );
@@ -233,7 +405,7 @@ function ReaderOutline({
   );
 }
 
-function OverviewMode({ model, onOpenLesson }) {
+function OverviewMode({ model, onOpenLesson, aggregates }) {
   const firstLessonId = model.orderedLessons[0]?.id;
 
   return (
@@ -243,6 +415,7 @@ function OverviewMode({ model, onOpenLesson }) {
         {model.description ? (
           <p className="pbc-content-reader__description">{model.description}</p>
         ) : null}
+        <ProgressPercent aggregates={aggregates} />
         {firstLessonId ? (
           <button
             type="button"
@@ -255,46 +428,70 @@ function OverviewMode({ model, onOpenLesson }) {
       </header>
 
       <div className="pbc-content-reader__structure" aria-label={t("pcReaderOutline")}>
-        {(model.units || []).map((unit) => (
-          <section key={unit.id} className="pbc-content-reader__unit">
-            <div className="pbc-content-reader__unit-head">
-              <h3 className="pbc-content-reader__unit-title">{unit.title || t("pcUnitFallback")}</h3>
-              {unit.unitType ? (
-                <span className="pbc-content-toc__badge">{t(`pcUnitType_${unit.unitType}`)}</span>
+        {(model.units || []).map((unit) => {
+          const unitAgg = aggregates?.units?.[unit.id];
+          return (
+            <section key={unit.id} className="pbc-content-reader__unit">
+              <div className="pbc-content-reader__unit-head">
+                <h3 className="pbc-content-reader__unit-title">{unit.title || t("pcUnitFallback")}</h3>
+                {unit.unitType ? (
+                  <span className="pbc-content-toc__badge">{t(`pcUnitType_${unit.unitType}`)}</span>
+                ) : null}
+                <MinutesBadge minutes={unit.estimatedMinutes} />
+                {unitAgg && !unitAgg.emptyRequired ? (
+                  <span className="pbc-pill pbc-pill--muted">{unitAgg.percent}%</span>
+                ) : null}
+              </div>
+              {unit.description ? (
+                <p className="pbc-content-reader__unit-desc">{unit.description}</p>
               ) : null}
-              <MinutesBadge minutes={unit.estimatedMinutes} />
-            </div>
-            {unit.description ? (
-              <p className="pbc-content-reader__unit-desc">{unit.description}</p>
-            ) : null}
-            <ul className="pbc-content-reader__lesson-list">
-              {(unit.lessons || []).map((lesson) => (
-                <li key={lesson.id} className="pbc-content-reader__lesson-row">
-                  <div className="pbc-content-reader__lesson-meta">
-                    <span className="pbc-content-reader__lesson-title">
-                      {lesson.title || t("pcUntitled")}
-                    </span>
-                    <LessonTypeBadge itemType={lesson.itemType} />
-                    <MinutesBadge minutes={lesson.estimatedMinutes} />
-                  </div>
-                  <button
-                    type="button"
-                    className="pbc-btn pbc-btn--ghost pbc-content-reader__open-btn"
-                    onClick={() => onOpenLesson(lesson.id)}
-                  >
-                    {t("pcOpen")}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
+              <ul className="pbc-content-reader__lesson-list">
+                {(unit.lessons || []).map((lesson) => {
+                  const lp = aggregates?.lessons?.[lesson.id];
+                  return (
+                    <li key={lesson.id} className="pbc-content-reader__lesson-row">
+                      <div className="pbc-content-reader__lesson-meta">
+                        <span className="pbc-content-reader__lesson-title">
+                          {lesson.title || t("pcUntitled")}
+                        </span>
+                        <LessonTypeBadge itemType={lesson.itemType} />
+                        <MinutesBadge minutes={lesson.estimatedMinutes} />
+                        {lp && !lp.emptyRequired ? (
+                          <span className="pbc-pill pbc-pill--muted">{lp.percent}%</span>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        className="pbc-btn pbc-btn--ghost pbc-content-reader__open-btn"
+                        onClick={() => onOpenLesson(lesson.id)}
+                      >
+                        {t("pcOpen")}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function LessonMode({ model, selectedLessonId, onSelectLesson, onBack, learningObjectives }) {
+function LessonMode({
+  model,
+  selectedLessonId,
+  onSelectLesson,
+  onBack,
+  learningObjectives,
+  aggregates,
+  progressByItemId,
+  interactive,
+  busyId,
+  onStart,
+  onComplete,
+}) {
   const [indexOpen, setIndexOpen] = useState(false);
   const index = findLessonIndex(model.orderedLessons, selectedLessonId);
   const lesson = index >= 0 ? model.orderedLessons[index] : null;
@@ -306,6 +503,7 @@ function LessonMode({ model, selectedLessonId, onSelectLesson, onBack, learningO
     .replace("{total}", String(total));
   const prev = index > 0 ? model.orderedLessons[index - 1] : null;
   const next = index < total - 1 ? model.orderedLessons[index + 1] : null;
+  const lessonAgg = aggregates?.lessons?.[lesson.id];
 
   return (
     <div className="pbc-content-reader pbc-content-reader--lesson">
@@ -327,6 +525,11 @@ function LessonMode({ model, selectedLessonId, onSelectLesson, onBack, learningO
             {lesson.unitTitle ? (
               <p className="pbc-content-reader__context-unit">{lesson.unitTitle}</p>
             ) : null}
+            {lessonAgg && !lessonAgg.emptyRequired ? (
+              <p className="auth-card__muted" style={{ margin: 0 }}>
+                Lección: {lessonAgg.percent}%
+              </p>
+            ) : null}
           </div>
         </div>
         <h2 id="pbc-reader-lesson-title" className="pbc-content-reader__lesson-heading">
@@ -343,6 +546,7 @@ function LessonMode({ model, selectedLessonId, onSelectLesson, onBack, learningO
           onClose={() => setIndexOpen(false)}
           onBackToOverview={onBack}
           overviewTitle={model.title}
+          lessonProgress={aggregates?.lessons}
         />
 
         <article className="pbc-content-reader__article" aria-labelledby="pbc-reader-lesson-title">
@@ -351,6 +555,15 @@ function LessonMode({ model, selectedLessonId, onSelectLesson, onBack, learningO
           <div className="pbc-lesson-workspace pbc-lesson-workspace--preview">
             <ReadOnlyDoc docKey={lesson.id} initialContent={lesson.document_json} />
           </div>
+
+          <SnapshotItemsList
+            items={lesson.items}
+            progressByItemId={progressByItemId}
+            interactive={interactive}
+            busyId={busyId}
+            onStart={onStart}
+            onComplete={onComplete}
+          />
 
           <div className="pbc-content-reader__pager">
             <button
@@ -378,7 +591,15 @@ function LessonMode({ model, selectedLessonId, onSelectLesson, onBack, learningO
   );
 }
 
-function ProgressiveMultiLessonReader({ snapshot }) {
+function ProgressiveMultiLessonReader({
+  snapshot,
+  aggregates,
+  progressByItemId,
+  interactive,
+  busyId,
+  onStart,
+  onComplete,
+}) {
   const model = useMemo(() => buildSnapshotReaderModel(snapshot), [snapshot]);
   const learningObjectives = useMemo(() => resolveLearningObjectives(snapshot), [snapshot]);
   const [selectedLessonId, setSelectedLessonId] = useState(null);
@@ -394,7 +615,9 @@ function ProgressiveMultiLessonReader({ snapshot }) {
   }
 
   if (!selectedLessonId) {
-    return <OverviewMode model={model} onOpenLesson={setSelectedLessonId} />;
+    return (
+      <OverviewMode model={model} onOpenLesson={setSelectedLessonId} aggregates={aggregates} />
+    );
   }
 
   return (
@@ -404,6 +627,12 @@ function ProgressiveMultiLessonReader({ snapshot }) {
       onSelectLesson={setSelectedLessonId}
       onBack={() => setSelectedLessonId(null)}
       learningObjectives={learningObjectives}
+      aggregates={aggregates}
+      progressByItemId={progressByItemId}
+      interactive={interactive}
+      busyId={busyId}
+      onStart={onStart}
+      onComplete={onComplete}
     />
   );
 }
@@ -413,11 +642,21 @@ function ProgressiveMultiLessonReader({ snapshot }) {
  * For sourceType="content" and sourceType="unit", default view does not render all lesson documents
  * (progressive overview + one lesson at a time).
  * Single lesson/exercise/task: direct render (no forced overview).
+ * Optional progress props integrate Point 4 without a parallel app.
  */
-export default function AssignedContentSnapshotViewer({ snapshot }) {
+export default function AssignedContentSnapshotViewer({
+  snapshot,
+  aggregates = null,
+  progressByItemId = null,
+  interactive = false,
+  busyId = null,
+  onStartItem = null,
+  onCompleteItem = null,
+}) {
   if (!snapshot) return null;
 
   const type = snapshot.sourceType;
+  const progressMap = progressByItemId || {};
 
   if (type === "exercise" || type === "task") {
     return (
@@ -428,9 +667,19 @@ export default function AssignedContentSnapshotViewer({ snapshot }) {
   }
 
   if (type === "lesson") {
+    const items = Array.isArray(snapshot.items) ? snapshot.items : [];
     return (
       <div className="pbc-lesson-workspace pbc-lesson-workspace--preview pbc-assigned-lesson">
+        <ProgressPercent aggregates={aggregates} />
         <ReadOnlyDoc docKey={snapshot.sourceId} initialContent={snapshot.document_json} />
+        <SnapshotItemsList
+          items={items}
+          progressByItemId={progressMap}
+          interactive={interactive}
+          busyId={busyId}
+          onStart={onStartItem}
+          onComplete={onCompleteItem}
+        />
       </div>
     );
   }
@@ -439,7 +688,15 @@ export default function AssignedContentSnapshotViewer({ snapshot }) {
   if (type === "unit" || type === "content") {
     return (
       <div className="pbc-assigned-lesson">
-        <ProgressiveMultiLessonReader snapshot={snapshot} />
+        <ProgressiveMultiLessonReader
+          snapshot={snapshot}
+          aggregates={aggregates}
+          progressByItemId={progressMap}
+          interactive={interactive}
+          busyId={busyId}
+          onStart={onStartItem}
+          onComplete={onCompleteItem}
+        />
       </div>
     );
   }

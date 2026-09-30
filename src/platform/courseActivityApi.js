@@ -7,6 +7,29 @@ export const STARTER_CODE_SCHEMA_HINT =
 export const ACTIVITY_UPDATE_PERMISSION_HINT =
   "Sin permiso para editar actividades. En Supabase ejecutá las migraciones 024 y 025.";
 
+/**
+ * Point 4: activities remain the Content Assignment boundary.
+ * Lists course activities that carry a frozen content_snapshot (no parallel assignment entity).
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabase
+ * @param {string} courseId
+ */
+export async function listCourseAssignedContentActivities(supabase, courseId) {
+  if (!supabase || !courseId) return { rows: [], error: "missing_args" };
+
+  const { data, error } = await supabase
+    .from("activities")
+    .select("id, title, course_id, content_snapshot, created_at")
+    .eq("course_id", courseId)
+    .not("content_snapshot", "is", null)
+    .order("created_at", { ascending: false });
+
+  if (error) return { rows: [], error: error.message };
+  const rows = (data || []).filter(
+    (row) => row?.content_snapshot && typeof row.content_snapshot === "object",
+  );
+  return { rows, error: null };
+}
+
 /** @param {string} activityId @param {string} code */
 export function writeActivityLaunchCache(activityId, code) {
   if (!activityId) return;

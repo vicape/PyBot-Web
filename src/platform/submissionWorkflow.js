@@ -149,6 +149,20 @@ export function canStudentSubmit({
   );
 }
 
+/**
+ * Point 4 bridge: item progress completes when the existing submission workflow
+ * reaches a submitted (or later) process state. Grades/return/rubric remain performance.
+ * Does not invent a second submissions/results system.
+ */
+export function submissionReachesItemProgressComplete(processStatus) {
+  return (
+    processStatus === PROCESS_STATUS.SUBMITTED ||
+    processStatus === PROCESS_STATUS.RESUBMITTED ||
+    processStatus === PROCESS_STATUS.GRADED ||
+    processStatus === PROCESS_STATUS.CLOSED
+  );
+}
+
 /** Filtros de bandeja docente (proceso, no puntualidad). */
 export const INBOX_FILTERS = [
   { id: "todas", label: "Todas" },

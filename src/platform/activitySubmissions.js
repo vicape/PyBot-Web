@@ -64,6 +64,24 @@ export async function submitActivity(activityId, code) {
   if (error) return { ok: false, error: error.message };
   if (!data?.ok) return { ok: false, error: data?.error || "submit_failed" };
 
+  // Point 4 bridge: submitted/quiz_finished items complete with activity submission.
+  try {
+    const { data: act } = await sb
+      .from("activities")
+      .select("content_snapshot")
+      .eq("id", activityId)
+      .maybeSingle();
+    if (act?.content_snapshot) {
+      const { bridgeSubmissionToItemProgress } = await import("./activityItemProgress.js");
+      await bridgeSubmissionToItemProgress(activityId, act.content_snapshot, {
+        status: "submitted",
+        version: data?.version ?? 1,
+      });
+    }
+  } catch {
+    /* non-fatal: submission already succeeded */
+  }
+
   let classroom = { ok: true, skipped: true };
   try {
     classroom = await turnInPybotActivityToClassroom(activityId);
