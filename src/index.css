@@ -1541,6 +1541,32 @@ body {
   gap: 0.35rem;
 }
 
+.pbc-list-item__actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.pbc-course-role-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pbc-course-role-action__label {
+  font-size: 0.7rem;
+  line-height: 1.2;
+  color: var(--pbc-text-muted, rgba(148, 163, 184, 0.95));
+  white-space: nowrap;
+}
+
 .pbc-list-item__actions {
   display: flex;
   flex-wrap: wrap;

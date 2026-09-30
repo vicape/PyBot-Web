@@ -13,6 +13,7 @@ export const TEST_SUITES = Object.freeze({
     "courseActivityApi.test.mjs",
     "courseInvites.test.mjs",
     "courseMembers.test.mjs",
+    "courseMemberRoleChange.test.mjs",
     "courseRole.test.mjs",
     "courseRosterPending.test.mjs",
     "micropythonFeatureFlags.test.mjs",

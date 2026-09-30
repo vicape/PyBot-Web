@@ -10,6 +10,10 @@ import { getValidClassroomToken } from "../../platform/classroomToken.js";
 import { isStaffRole } from "../../orgRole.js";
 import { mapClassroomSyncUserError, shouldAutoCreateInviteOnNavigate } from "../../platform/uxIaHelpers.js";
 import {
+  canShowCourseRoleChangeAction,
+  updateCourseMemberRole,
+} from "../../platform/courseMemberRoleApi.js";
+import {
   PbcAlert,
   PbcEmpty,
   PbcList,
@@ -40,32 +44,143 @@ async function copyText(text) {
   }
 }
 
-function MemberList({ rows, onRemove, removingId, badge }) {
+function RoleChangeConfirmModal({ open, member, busy, error, onCancel, onConfirm }) {
+  if (!open || !member) return null;
+  const promoting = member.nextRole === "teacher";
+  const titleId = "course-role-change-title";
+  const descId = "course-role-change-desc";
+  return (
+    <div
+      className="pbc-modal-backdrop pbc-modal-backdrop--create-content"
+      role="presentation"
+      onClick={busy ? undefined : onCancel}
+    >
+      <div
+        className="pbc-modal pbc-modal--create-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descId}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id={titleId} className="pbc-modal__title">
+          {t("pcCourseRoleLabel")}
+        </h2>
+        <p id={descId} className="pbc-modal--create-content__subtitle">
+          {(promoting ? t("pcCourseRolePromoteConfirm") : t("pcCourseRoleDemoteConfirm")).replace(
+            "{name}",
+            member.name,
+          )}
+        </p>
+        <p className="pbc-modal--create-content__subtitle">
+          {promoting ? t("pcCourseRolePromoteDetail") : t("pcCourseRoleDemoteDetail")}
+        </p>
+        {error ? <p className="pbc-alert pbc-alert--error">{error}</p> : null}
+        <div className="pbc-modal__actions">
+          <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onCancel} disabled={busy}>
+            {t("pcCancel")}
+          </button>
+          <button
+            type="button"
+            className="pbc-btn pbc-btn--primary"
+            onClick={() => void onConfirm()}
+            disabled={busy}
+          >
+            {busy
+              ? "…"
+              : promoting
+                ? t("pcCourseRoleChangeToTeacher")
+                : t("pcCourseRoleChangeToStudent")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MemberList({
+  rows,
+  onRemove,
+  removingId,
+  badge,
+  canManageRoster,
+  actorUserId,
+  onRequestRoleChange,
+  roleChangingId,
+}) {
   if (!rows.length) {
     return <p className="auth-card__muted">{t("pcNoRecords")}</p>;
   }
   return (
     <PbcList>
-      {rows.map((m) => (
-        <PbcListItem
-          key={m.key}
-          title={m.name}
-          meta={m.meta}
-          badges={badge ? <span className="pbc-pill pbc-pill--muted">{badge(m)}</span> : null}
-          actions={
-            onRemove && m.userId ? (
-              <button
-                type="button"
-                className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                disabled={removingId === m.userId}
-                onClick={() => void onRemove(m.userId)}
-              >
-                {removingId === m.userId ? "…" : t("pcRemove")}
-              </button>
-            ) : null
-          }
-        />
-      ))}
+      {rows.map((m) => {
+        const showRoleChange = canShowCourseRoleChangeAction({
+          memberUserId: m.userId,
+          actorUserId,
+          canManageRoster,
+          isPending: !m.userId,
+        });
+        const showRemove = Boolean(onRemove && m.userId);
+        const nextRole = m.courseRole === "teacher" ? "student" : "teacher";
+        const actions =
+          showRoleChange || showRemove ? (
+            <div className="pbc-list-item__actions-row">
+              {showRoleChange ? (
+                <div className="pbc-course-role-action">
+                  <span className="pbc-course-role-action__label" id={`course-role-${m.userId}`}>
+                    {t("pcCourseRoleLabel")}
+                  </span>
+                  <button
+                    type="button"
+                    className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                    aria-labelledby={`course-role-${m.userId}`}
+                    aria-label={`${t("pcCourseRoleLabel")}: ${
+                      m.courseRole === "teacher" ? t("pcTeacher") : t("pcStudent")
+                    }. ${
+                      nextRole === "teacher"
+                        ? t("pcCourseRoleChangeToTeacher")
+                        : t("pcCourseRoleChangeToStudent")
+                    }`}
+                    disabled={roleChangingId === m.userId}
+                    onClick={() =>
+                      onRequestRoleChange?.({
+                        userId: m.userId,
+                        name: m.name,
+                        currentRole: m.courseRole,
+                        nextRole,
+                      })
+                    }
+                  >
+                    {roleChangingId === m.userId
+                      ? "…"
+                      : nextRole === "teacher"
+                        ? t("pcCourseRoleChangeToTeacher")
+                        : t("pcCourseRoleChangeToStudent")}
+                  </button>
+                </div>
+              ) : null}
+              {showRemove ? (
+                <button
+                  type="button"
+                  className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                  disabled={removingId === m.userId}
+                  onClick={() => void onRemove(m.userId)}
+                >
+                  {removingId === m.userId ? "…" : t("pcRemove")}
+                </button>
+              ) : null}
+            </div>
+          ) : null;
+        return (
+          <PbcListItem
+            key={m.key}
+            title={m.name}
+            meta={m.meta}
+            badges={badge ? <span className="pbc-pill pbc-pill--muted">{badge(m)}</span> : null}
+            actions={actions}
+          />
+        );
+      })}
     </PbcList>
   );
 }
@@ -94,6 +209,12 @@ export default function CourseRosterTab({
   const [inviteLink, setInviteLink] = useState("");
   const [generatingInvite, setGeneratingInvite] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [roleErr, setRoleErr] = useState("");
+  const [roleChangingId, setRoleChangingId] = useState(null);
+  const [roleConfirm, setRoleConfirm] = useState(null);
+
+  // Personas is only mounted in teaching mode; keep explicit gate for the control.
+  const canManageRoster = true;
 
   // Invite generation remains explicit — opening/navigating never creates one.
   if (shouldAutoCreateInviteOnNavigate()) {
@@ -121,6 +242,7 @@ export default function CourseRosterTab({
           name: r.display_name || r.email || r.user_id,
           meta: r.email || "",
           source: r.source,
+          courseRole: "student",
         })),
     );
     setTeachers(
@@ -132,6 +254,7 @@ export default function CourseRosterTab({
           name: r.display_name || r.email || r.user_id,
           meta: r.email || "",
           source: r.source,
+          courseRole: "teacher",
         })),
     );
 
@@ -208,6 +331,44 @@ export default function CourseRosterTab({
     await load();
   };
 
+  const requestRoleChange = (member) => {
+    setRoleErr("");
+    setFeedback("");
+    setRoleConfirm(member);
+  };
+
+  const confirmRoleChange = async () => {
+    if (!roleConfirm || !sb) return;
+    setRoleChangingId(roleConfirm.userId);
+    setRoleErr("");
+    setFeedback("");
+
+    const result = await updateCourseMemberRole(sb, {
+      courseId,
+      userId: roleConfirm.userId,
+      role: roleConfirm.nextRole,
+      actorUserId: user?.id,
+    });
+
+    if (!result.ok) {
+      setRoleErr(t("pcCourseRoleChangeError"));
+      setRoleChangingId(null);
+      await load();
+      return;
+    }
+
+    const nextSubTab = roleConfirm.nextRole === "teacher" ? "docentes" : "alumnos";
+    setRoleConfirm(null);
+    setRoleChangingId(null);
+    setFeedback(
+      roleConfirm.nextRole === "teacher"
+        ? t("pcCourseRoleChangedToTeacher").replace("{name}", roleConfirm.name)
+        : t("pcCourseRoleChangedToStudent").replace("{name}", roleConfirm.name),
+    );
+    setSubTab(nextSubTab);
+    await load();
+  };
+
   const generateInvite = async () => {
     setGeneratingInvite(true);
     setFeedback("");
@@ -237,6 +398,7 @@ export default function CourseRosterTab({
       userId: null,
       name: p.display_name || p.email,
       meta: p.email,
+      courseRole: "student",
       badge: () => t("pcNoLogin"),
     })),
   ];
@@ -254,6 +416,7 @@ export default function CourseRosterTab({
       userId: null,
       name: p.display_name || p.email,
       meta: p.email,
+      courseRole: "teacher",
       badge: () => t("pcNoLogin"),
     })),
   ];
@@ -272,6 +435,11 @@ export default function CourseRosterTab({
       />
 
       {feedback ? <p className="pbc-feedback" role="status">{feedback}</p> : null}
+      {roleErr && !roleConfirm ? (
+        <PbcAlert variant="error">
+          <p className="pbc-alert__text">{roleErr}</p>
+        </PbcAlert>
+      ) : null}
       {syncErr ? (
         <PbcAlert variant="error">
           <p className="pbc-alert__text">{syncErr}</p>
@@ -409,7 +577,16 @@ export default function CourseRosterTab({
               }
             />
           ) : (
-            <MemberList rows={studentRows} onRemove={removeMember} removingId={removingId} badge={(m) => m.badge?.()} />
+            <MemberList
+              rows={studentRows}
+              onRemove={removeMember}
+              removingId={removingId}
+              badge={(m) => m.badge?.()}
+              canManageRoster={canManageRoster}
+              actorUserId={user?.id}
+              onRequestRoleChange={requestRoleChange}
+              roleChangingId={roleChangingId}
+            />
           )}
         </>
       ) : (
@@ -431,10 +608,30 @@ export default function CourseRosterTab({
           {loading ? (
             <PbcLoading label={t("pcLoadingTeachers")} />
           ) : (
-            <MemberList rows={teacherRows} badge={(m) => m.badge?.()} />
+            <MemberList
+              rows={teacherRows}
+              badge={(m) => m.badge?.()}
+              canManageRoster={canManageRoster}
+              actorUserId={user?.id}
+              onRequestRoleChange={requestRoleChange}
+              roleChangingId={roleChangingId}
+            />
           )}
         </>
       )}
+
+      <RoleChangeConfirmModal
+        open={Boolean(roleConfirm)}
+        member={roleConfirm}
+        busy={Boolean(roleChangingId)}
+        error={roleErr && roleConfirm ? roleErr : ""}
+        onCancel={() => {
+          if (roleChangingId) return;
+          setRoleConfirm(null);
+          setRoleErr("");
+        }}
+        onConfirm={confirmRoleChange}
+      />
     </PbcSection>
   );
 }
