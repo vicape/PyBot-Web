@@ -6,6 +6,7 @@ import "../../../styles/pybotclass-dashboard.css";
 import { AppearanceContext } from "./appearanceContext.js";
 import PyBotClassSidebar from "./PyBotClassSidebar.jsx";
 import PyBotClassTopbar from "./PyBotClassTopbar.jsx";
+import { canShowInstitutionsEntry } from "../../../orgRole.js";
 import { useHasStaffAccess } from "./useHasStaffAccess.js";
 
 /* Desktop viewport: >= 961px — sidebar defaults open and hamburger is a real toggle. */
@@ -28,6 +29,7 @@ export default function PyBotClassLayout({
   onSearchChange,
   onSignOut,
   hasStaffAccess: hasStaffAccessProp,
+  preferredRole = null,
   contextualRoleLabel = null,
   contextualRoleCompact = null,
   children,
@@ -38,6 +40,11 @@ export default function PyBotClassLayout({
   const hasStaffAccess = useHasStaffAccess(user, hasStaffAccessProp);
   // Fail closed while resolving: hide teacher tools until known
   const showTeacherTools = hasStaffAccess === true;
+  // Presentation-only Institutions onboarding; does not unlock Create Course / Classroom / content
+  const showInstitutions = canShowInstitutionsEntry({
+    hasStaffAccess: showTeacherTools,
+    preferredRole,
+  });
 
   const meta = user?.user_metadata || {};
   const name =
@@ -83,7 +90,7 @@ export default function PyBotClassLayout({
           onClose={closeDrawer}
           showAdmin={showAdmin}
           showMyContent={showTeacherTools}
-          showInstitutions={showTeacherTools}
+          showInstitutions={showInstitutions}
         />
 
         <div className="pbc-dashboard__main">

@@ -31,7 +31,7 @@ function PyBotClassLoading() {
   );
 }
 
-function PyBotClassAccountPanel({ user, onProfileUpdated }) {
+function PyBotClassAccountPanel({ user, onProfileUpdated, onPreferredRoleUpdated }) {
   const ctx = useAppearanceContext();
 
   return (
@@ -44,7 +44,11 @@ function PyBotClassAccountPanel({ user, onProfileUpdated }) {
           {t("pcAccount")}
         </h1>
       </div>
-      <AccountSettings user={user} onProfileUpdated={onProfileUpdated} />
+      <AccountSettings
+        user={user}
+        onProfileUpdated={onProfileUpdated}
+        onPreferredRoleUpdated={onPreferredRoleUpdated}
+      />
       {ctx ? (
         <div style={{ marginTop: "1rem" }}>
           <AppearanceSettings appearance={ctx.appearance} onChange={ctx.updateAppearance} />
@@ -66,6 +70,7 @@ export default function PyBotClassPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [superAdmin, setSuperAdmin] = useState(false);
+  const [preferredRole, setPreferredRole] = useState(null);
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
@@ -103,6 +108,11 @@ export default function PyBotClassPage() {
     ]);
 
     setSuperAdmin(isSuperAdmin(profile));
+    setPreferredRole(
+      profile?.preferred_role === "teacher" || profile?.preferred_role === "student"
+        ? profile.preferred_role
+        : null,
+    );
 
     const mergedOrgs = orgRows.map((o) => {
       const extra = memberOrgs.find((m) => m.id === o.org_id);
@@ -184,7 +194,9 @@ export default function PyBotClassPage() {
 
   let content;
   if (panel === "account") {
-    content = <PyBotClassAccountPanel user={user} />;
+    content = (
+      <PyBotClassAccountPanel user={user} onPreferredRoleUpdated={setPreferredRole} />
+    );
   } else if (panel === "classroom") {
     if (!hasStaffAccess) {
       content = null;
@@ -228,6 +240,7 @@ export default function PyBotClassPage() {
       user={user}
       showAdmin={superAdmin}
       hasStaffAccess={hasStaffAccess}
+      preferredRole={preferredRole}
       search={search}
       onSearchChange={setSearch}
       hideSearch={hideSearch}

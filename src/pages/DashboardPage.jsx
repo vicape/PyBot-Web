@@ -6,6 +6,7 @@ import { clearClassroomTokenCache } from "../platform/classroomToken.js";
 import { signOutGoogleClient } from "../authGoogle.js";
 import { getSupabase, isSupabaseConfigured } from "../supabaseClient.js";
 import {
+  canShowInstitutionsEntry,
   getDashboardNavCapabilities,
   getStaffOrganizations,
   roleLabelEs,
@@ -63,6 +64,7 @@ export default function DashboardPage() {
   const [profileWarn, setProfileWarn] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [preferredRole, setPreferredRole] = useState(null);
+  const [profileReady, setProfileReady] = useState(false);
   const [superAdmin, setSuperAdmin] = useState(false);
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [coursesError, setCoursesError] = useState("");
@@ -80,11 +82,16 @@ export default function DashboardPage() {
       }),
     [orgs, enrolledCourses.length],
   );
-  const { showSchoolsTab, showCoursesTab, showClassroomTab } = nav;
+  const { showCoursesTab, showClassroomTab, hasStaffAccess } = nav;
+  // Presentation-only: teacher preference can open Institutions onboarding without staff auth
+  const showInstitutionsEntry = canShowInstitutionsEntry({
+    hasStaffAccess,
+    preferredRole,
+  });
   const activeTab = (() => {
     if (!VALID_TABS.has(rawTab)) return "home";
-    if (rawTab === "schools" && !showSchoolsTab) return showCoursesTab ? "courses" : "home";
-    if (rawTab === "courses" && !showCoursesTab) return showSchoolsTab ? "schools" : "home";
+    if (rawTab === "schools" && !showInstitutionsEntry) return showCoursesTab ? "courses" : "home";
+    if (rawTab === "courses" && !showCoursesTab) return showInstitutionsEntry ? "schools" : "home";
     if (rawTab === "classroom" && !showClassroomTab) return "home";
     return rawTab;
   })();
@@ -206,7 +213,11 @@ export default function DashboardPage() {
         }
         const { profile } = await fetchProfile(u.id);
         if (cancelled) return;
-        if (profile?.preferred_role) setPreferredRole(profile.preferred_role);
+        setPreferredRole(
+          profile?.preferred_role === "teacher" || profile?.preferred_role === "student"
+            ? profile.preferred_role
+            : null,
+        );
         setSuperAdmin(isSuperAdmin(profile));
         const meta = u.user_metadata || {};
         setDisplayName(
@@ -217,6 +228,8 @@ export default function DashboardPage() {
         );
       } catch (ex) {
         console.error("DashboardPage.applyProfile:", ex);
+      } finally {
+        if (!cancelled) setProfileReady(true);
       }
     };
 
@@ -252,6 +265,7 @@ export default function DashboardPage() {
       } else {
         setProfileWarn("");
         setPreferredRole(null);
+        setProfileReady(true);
         setSuperAdmin(false);
         setDisplayName("");
       }
@@ -295,8 +309,8 @@ export default function DashboardPage() {
   }, [useCloud, sessionUser, rawTab, navigate]);
 
   useEffect(() => {
-    if (!orgsLoaded) return;
-    if (rawTab === "schools" && !showSchoolsTab) {
+    if (!orgsLoaded || !profileReady) return;
+    if (rawTab === "schools" && !showInstitutionsEntry) {
       navigate("/dashboard/classes", { replace: true });
       return;
     }
@@ -305,8 +319,9 @@ export default function DashboardPage() {
     }
   }, [
     orgsLoaded,
+    profileReady,
     rawTab,
-    showSchoolsTab,
+    showInstitutionsEntry,
     navigate,
   ]);
 
@@ -406,13 +421,15 @@ export default function DashboardPage() {
       <PyBotClassLayout
         user={sessionUser}
         showAdmin={superAdmin}
+        hasStaffAccess={hasStaffAccess}
+        preferredRole={preferredRole}
         hideSearch
         onSignOut={() => void signOutSupabase()}
       >
         <div className="pbc-legacy-panel">
           {profileWarn ? <p className="pbc-alert pbc-alert--info">{profileWarn}</p> : null}
 
-          {activeTab === "schools" && showSchoolsTab ? (
+          {activeTab === "schools" && showInstitutionsEntry ? (
             <section className="pbc-panel-card">
               <h2 className="pbc-section-head__title">Instituciones</h2>
               {orgError ? <p className="pbc-alert pbc-alert--error">{orgError}</p> : null}

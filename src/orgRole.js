@@ -58,6 +58,18 @@ export function hasTeacherPreference(preferredRole) {
 }
 
 /**
+ * Visibilidad presentation-only del entry Instituciones / onboarding.
+ * hasStaffAccess OR preferred_role === 'teacher'.
+ * NO concede roster, grading, Create Course ni otras capacidades teacher.
+ */
+export function canShowInstitutionsEntry({
+  hasStaffAccess = false,
+  preferredRole = null,
+} = {}) {
+  return hasStaffAccess === true || preferredRole === "teacher";
+}
+
+/**
  * Permiso docente real (solo membresía).
  * El segundo argumento se ignora (compatibilidad).
  */

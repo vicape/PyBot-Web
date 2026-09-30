@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  canShowInstitutionsEntry,
   getDashboardNavCapabilities,
   getStaffOrganizations,
   getStudentOrganizations,
@@ -55,14 +56,19 @@ test("caso C: solo teacher → Colegios + Classroom", () => {
   assert.equal(nav.showClassroomTab, true);
 });
 
-test("caso D: preferred teacher sin membership → sin staff, crear colegio OK", () => {
+test("caso D: preferred teacher sin membership → sin staff; Institutions entry por preferencia", () => {
   const orgs = [];
   const preferredRole = "teacher";
   const nav = getDashboardNavCapabilities({ orgs, enrolledCourseCount: 0 });
 
   assert.equal(hasStaffMembership(orgs), false);
   assert.equal(nav.showClassroomTab, false);
+  assert.equal(nav.showSchoolsTab, false);
   assert.equal(hasTeacherPreference(preferredRole), true);
+  assert.equal(
+    canShowInstitutionsEntry({ hasStaffAccess: nav.hasStaffAccess, preferredRole }),
+    true,
+  );
 });
 
 test("caso E: student A + teacher B → staffOrgId = B", () => {
