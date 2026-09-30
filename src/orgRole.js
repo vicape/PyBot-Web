@@ -21,30 +21,48 @@ export function roleLabelEs(role) {
   }
 }
 
+function memberRoles(org) {
+  if (Array.isArray(org?.organization_members) && org.organization_members.length) {
+    return org.organization_members.map((m) => m?.role).filter(Boolean);
+  }
+  if (Array.isArray(org?.roles) && org.roles.length) return org.roles.filter(Boolean);
+  if (org?.role) return [org.role];
+  return [];
+}
+
 function memberRole(org) {
-  return org?.organization_members?.[0]?.role ?? null;
+  const roles = memberRoles(org);
+  if (roles.includes("owner")) return "owner";
+  if (roles.includes("teacher")) return "teacher";
+  if (roles.includes("student")) return "student";
+  return roles[0] ?? null;
 }
 
 /** Permiso real: owner o teacher en al menos un colegio. */
 export function hasStaffMembership(orgs) {
   if (!Array.isArray(orgs)) return false;
-  return orgs.some((o) => isStaffRole(memberRole(o)));
+  return orgs.some((o) => memberRoles(o).some(isStaffRole));
 }
 
 /** Membresía student explícita (no se infiere por ausencia de staff). */
 export function hasStudentMembership(orgs) {
   if (!Array.isArray(orgs)) return false;
-  return orgs.some((o) => isStudentRole(memberRole(o)));
+  return orgs.some((o) => memberRoles(o).some(isStudentRole));
 }
 
 export function getStaffOrganizations(orgs) {
   if (!Array.isArray(orgs)) return [];
-  return orgs.filter((o) => isStaffRole(memberRole(o)));
+  return orgs.filter((o) => memberRoles(o).some(isStaffRole));
 }
 
 export function getStudentOrganizations(orgs) {
   if (!Array.isArray(orgs)) return [];
-  return orgs.filter((o) => isStudentRole(memberRole(o)));
+  return orgs.filter((o) => memberRoles(o).some(isStudentRole));
+}
+
+/** True when the person holds more than one existing role in the same institution. */
+export function hasMultipleRolesInOrg(org) {
+  return new Set(memberRoles(org)).size > 1;
 }
 
 /** @deprecated Alias de hasStaffMembership */
@@ -74,18 +92,13 @@ export function canUseTeacherCapabilities(hasStaffAccess) {
 }
 
 /**
- * Visibilidad presentation-only del entry Instituciones / onboarding.
- * hasStaffAccess OR preferred_role === 'teacher'.
- * NO concede roster, grading, Create Course ni otras capacidades teacher.
+ * Instituciones es contexto opcional de organización/admin para toda persona autenticada.
+ * preferred_role / staff solo orientan presentación — NO conceden Create Course ni otras capacidades.
+ * @param {{ hasStaffAccess?: boolean, preferredRole?: string | null, hasOrgMembership?: boolean }} [_opts]
  */
-export function canShowInstitutionsEntry({
-  hasStaffAccess = false,
-  preferredRole = null,
-} = {}) {
-  return (
-    canUseTeacherCapabilities(hasStaffAccess) ||
-    wantsTeacherExperience(preferredRole)
-  );
+export function canShowInstitutionsEntry(_opts = {}) {
+  void _opts;
+  return true;
 }
 
 /**
@@ -109,14 +122,17 @@ export function resolveStaffOrgId(orgs) {
  */
 export function getDashboardNavCapabilities({ orgs = [], enrolledCourseCount = 0 } = {}) {
   const hasStaffAccess = hasStaffMembership(orgs);
+  const hasOrgMembership = Array.isArray(orgs) && orgs.length > 0;
   const hasStudentAccess = hasStudentMembership(orgs) || enrolledCourseCount > 0;
   return {
     hasStaffAccess,
     hasStudentAccess,
-    showSchoolsTab: hasStaffAccess,
-    showCoursesTab: hasStudentAccess,
+    hasOrgMembership,
+    // Institutions = optional membership/admin context (not staff-only)
+    showSchoolsTab: true,
+    showCoursesTab: true,
     showClassroomTab: hasStaffAccess,
-    showPyBotClassTab: hasStaffAccess || hasStudentAccess,
+    showPyBotClassTab: true,
   };
 }
 
@@ -133,11 +149,15 @@ export async function fetchMyOrgRole(supabase, orgId, userId) {
     .from("organization_members")
     .select("role")
     .eq("org_id", orgId)
-    .eq("user_id", userId)
-    .maybeSingle();
+    .eq("user_id", userId);
+
   if (error) {
     console.error("fetchMyOrgRole:", error);
     return null;
   }
-  return data?.role ?? null;
+  const roles = (data ?? []).map((r) => r.role).filter(Boolean);
+  if (roles.includes("owner")) return "owner";
+  if (roles.includes("teacher")) return "teacher";
+  if (roles.includes("student")) return "student";
+  return roles[0] ?? null;
 }

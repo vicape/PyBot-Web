@@ -38,9 +38,9 @@ export default function PyBotClassLayout({
   const [sidebarOpen, setSidebarOpen] = useState(() => isDesktopViewport());
   const { appearance, updateAppearance } = useAppearance(user?.id, containerRef);
   const hasStaffAccess = useHasStaffAccess(user, hasStaffAccessProp);
-  // Authorization only — preferredRole must never unlock teacher tools
+  // Authorization probe only — preferredRole must never unlock Classroom / mutations
   const showTeacherTools = canUseTeacherCapabilities(hasStaffAccess);
-  // Presentation-only Institutions onboarding; does not unlock Create Course / Classroom / content
+  // Institutions = optional context for every authenticated person (membership ≠ administration)
   const showInstitutions = canShowInstitutionsEntry({
     hasStaffAccess: showTeacherTools,
     preferredRole,
@@ -89,7 +89,7 @@ export default function PyBotClassLayout({
           open={sidebarOpen}
           onClose={closeDrawer}
           showAdmin={showAdmin}
-          showMyContent={showTeacherTools}
+          showMyContent
           showInstitutions={showInstitutions}
           preferredRole={preferredRole}
         />

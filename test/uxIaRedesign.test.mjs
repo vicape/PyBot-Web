@@ -167,8 +167,8 @@ test("AC6/AC7: role-aware Home attention + student hides teacher create actions"
   assert.equal(items.some((i) => i.courseId === "c4"), false);
   assert.match(homeSrc, /hasStaffAccess/);
   assert.match(homeSrc, /pcCreateCourse/);
-  // Create course button gated by hasStaffAccess
-  assert.match(homeSrc, /\{hasStaffAccess \? \([\s\S]*pcCreateCourse/);
+  // Create course available without institution staff (personal course path)
+  assert.match(homeSrc, /canCreateCourse = true/);
 });
 
 test("AC8–AC10: course contextual shortcuts reuse canonical flows", () => {

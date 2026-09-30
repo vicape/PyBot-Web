@@ -38,7 +38,7 @@ const INSTITUTIONS_HREF = "/dashboard?tab=schools";
 
 function emptyCoursesDesc({ canTeach, wantsTeacher }) {
   if (canTeach) return t("pcNoCoursesStaffDesc");
-  if (wantsTeacher) return t("pcWorkAsTeacher");
+  if (wantsTeacher) return t("pcNoCoursesPersonalDesc");
   return t("pcNoCoursesStudentDesc");
 }
 
@@ -50,8 +50,6 @@ function CourseCards({
   onJoinCourse,
 }) {
   if (filtered.length === 0) {
-    const showCreate = canTeach;
-    const showInstitutionsCta = wantsTeacher && !canTeach;
     return (
       <div className="pbc-empty-state">
         <span className="pbc-empty-state__illus" aria-hidden>
@@ -62,27 +60,13 @@ function CourseCards({
           {emptyCoursesDesc({ canTeach, wantsTeacher })}
         </p>
         <div className="pbc-empty-state__actions">
-          {showCreate ? (
-            <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
-              <span aria-hidden>
-                <CompactCreateIcon />
-              </span>
-              {t("pcCreateCourse")}
-            </button>
-          ) : null}
-          {showInstitutionsCta ? (
-            <Link to={INSTITUTIONS_HREF} className="pbc-btn pbc-btn--primary">
-              <span aria-hidden>
-                <SidebarIcon id="institutions" />
-              </span>
-              {t("pcInstitutions")}
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            className={`pbc-btn ${showCreate || showInstitutionsCta ? "pbc-btn--ghost" : "pbc-btn--primary"}`}
-            onClick={onJoinCourse}
-          >
+          <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
+            <span aria-hidden>
+              <CompactCreateIcon />
+            </span>
+            {t("pcCreateCourse")}
+          </button>
+          <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onJoinCourse}>
             <span aria-hidden>
               <CompactJoinIcon />
             </span>
@@ -115,7 +99,9 @@ function CourseCards({
                 </span>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p className="pbc-course-card__title">{c.course_title}</p>
-                  <p className="pbc-course-card__meta">{c.org_name || t("pcInstitution")}</p>
+                  <p className="pbc-course-card__meta">
+                    {c.org_name || (c.org_id ? t("pcInstitution") : t("pcPersonalCourse"))}
+                  </p>
                 </div>
               </div>
               <div className="pbc-course-card__footer">
@@ -215,8 +201,16 @@ export default function PyBotClassHome({
 
   // Presentation vs authorization — never merge these concepts.
   const wantsTeacher = wantsTeacherExperience(preferredRole);
+  // Create course is available to every authenticated person (personal course path).
+  const canCreateCourse = true;
+  // Factual org-staff capabilities (Classroom import, etc.) — never preferred_role.
   const canTeach = canUseTeacherCapabilities(hasStaffAccess);
-  const needsTeacherOnboarding = wantsTeacher && !canTeach;
+  const teachesAnyCourse = useMemo(
+    () => courses.some((c) => normalizeCourseRole(c.my_course_role) === "teacher"),
+    [courses],
+  );
+  // Attention / teaching affordances follow factual course teacher roles OR org staff.
+  const hasTeachingContext = canTeach || teachesAnyCourse;
 
   const view = classesView || resolveClassesView({
     view: new URLSearchParams(location.search).get("view"),
@@ -226,7 +220,7 @@ export default function PyBotClassHome({
 
   useEffect(() => {
     let cancelled = false;
-    // Authorization: Classroom teacher link only when hasStaffAccess
+    // Authorization: Classroom teacher link only when hasStaffAccess (org staff)
     if (!user?.id || !hasStaffAccess) {
       setClassroomLinked(false);
       return undefined;
@@ -319,16 +313,22 @@ export default function PyBotClassHome({
   }, [courses, roleFilter, orgFilter]);
 
   const attentionItems = useMemo(
-    () => (hasStaffAccess ? buildTeacherAttentionItems(courses) : []),
-    [courses, hasStaffAccess],
+    () => (hasTeachingContext ? buildTeacherAttentionItems(courses) : []),
+    [courses, hasTeachingContext],
   );
 
   const recentCourses = useMemo(() => {
     const teaching = courses.filter((c) => normalizeCourseRole(c.my_course_role) === "teacher");
     const studying = courses.filter((c) => normalizeCourseRole(c.my_course_role) === "student");
-    const pool = hasStaffAccess ? (teaching.length ? teaching : courses) : studying.length ? studying : courses;
+    const pool = hasTeachingContext
+      ? teaching.length
+        ? teaching
+        : courses
+      : studying.length
+        ? studying
+        : courses;
     return pool.slice(0, 6);
-  }, [courses, hasStaffAccess]);
+  }, [courses, hasTeachingContext]);
 
   const primaryCountry = orgMemberships.find((o) => o.country_code)?.country_code;
   const onClassroomConnect = () => {
@@ -338,7 +338,7 @@ export default function PyBotClassHome({
   const classroomStatusLabel =
     classroomLinked == null ? "…" : classroomLinked ? t("pcLinked") : t("pcNotLinked");
 
-  const homeLead = needsTeacherOnboarding ? t("pcWorkAsTeacher") : t("pcHomeLead");
+  const homeLead = t("pcHomeLead");
 
   if (isCoursesView) {
     return (
@@ -351,38 +351,28 @@ export default function PyBotClassHome({
               </span>
               <div className="pbc-hero-block__text">
                 <h1 className="pbc-hero-block__title">{t("pcCourses")}</h1>
-                <p className="pbc-hero-block__subtitle">
-                  {needsTeacherOnboarding ? t("pcWorkAsTeacher") : t("pcCoursesViewLead")}
-                </p>
+                <p className="pbc-hero-block__subtitle">{t("pcCoursesViewLead")}</p>
               </div>
             </div>
             <div className="pbc-hero-block__actions" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {hasStaffAccess ? (
-                <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
-                  <span aria-hidden>
-                    <CompactCreateIcon />
-                  </span>
-                  {t("pcCreateCourse")}
-                </button>
-              ) : null}
-              {needsTeacherOnboarding ? (
-                <Link to={INSTITUTIONS_HREF} className="pbc-btn pbc-btn--primary">
-                  <span aria-hidden>
-                    <SidebarIcon id="institutions" />
-                  </span>
-                  {t("pcInstitutions")}
-                </Link>
-              ) : null}
-              <button
-                type="button"
-                className={`pbc-btn ${hasStaffAccess || needsTeacherOnboarding ? "pbc-btn--ghost" : "pbc-btn--primary"}`}
-                onClick={onJoinCourse}
-              >
+              <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
+                <span aria-hidden>
+                  <CompactCreateIcon />
+                </span>
+                {t("pcCreateCourse")}
+              </button>
+              <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onJoinCourse}>
                 <span aria-hidden>
                   <CompactJoinIcon />
                 </span>
                 {t("pcJoinCourse")}
               </button>
+              <Link to={INSTITUTIONS_HREF} className="pbc-btn pbc-btn--ghost">
+                <span aria-hidden>
+                  <SidebarIcon id="institutions" />
+                </span>
+                {t("pcInstitutions")}
+              </Link>
             </div>
           </header>
 
@@ -430,7 +420,7 @@ export default function PyBotClassHome({
 
             <CourseCards
               filtered={filtered}
-              canTeach={hasStaffAccess}
+              canTeach={canCreateCourse}
               wantsTeacher={wantsTeacher}
               onCreateCourse={onCreateCourse}
               onJoinCourse={onJoinCourse}
@@ -458,22 +448,12 @@ export default function PyBotClassHome({
             </div>
           </div>
           <div className="pbc-hero-block__actions">
-            {hasStaffAccess ? (
-              <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
-                <span aria-hidden>
-                  <CompactCreateIcon />
-                </span>
-                {t("pcCreateCourse")}
-              </button>
-            ) : null}
-            {needsTeacherOnboarding ? (
-              <Link to={INSTITUTIONS_HREF} className="pbc-btn pbc-btn--primary">
-                <span aria-hidden>
-                  <SidebarIcon id="institutions" />
-                </span>
-                {t("pcInstitutions")}
-              </Link>
-            ) : null}
+            <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
+              <span aria-hidden>
+                <CompactCreateIcon />
+              </span>
+              {t("pcCreateCourse")}
+            </button>
             <a href="/" className="pbc-btn pbc-btn--ghost">
               <span aria-hidden>
                 <CompactIdeIcon />
@@ -516,41 +496,25 @@ export default function PyBotClassHome({
         <MetricsRow summary={summary} />
 
         <div className="pbc-action-grid">
-          {hasStaffAccess ? (
-            <button type="button" className="pbc-action-card pbc-action-card--create" onClick={onCreateCourse}>
-              <span className="pbc-action-card__icon pbc-action-card__icon--blue" aria-hidden>
-                <CompactCreateIcon />
-              </span>
-              <span className="pbc-action-card__body">
-                <span className="pbc-action-card__title">{t("pcCreateCourse")}</span>
-                <span className="pbc-action-card__desc">{t("pcActionCreateCourseHint")}</span>
-              </span>
-            </button>
-          ) : null}
+          <button type="button" className="pbc-action-card pbc-action-card--create" onClick={onCreateCourse}>
+            <span className="pbc-action-card__icon pbc-action-card__icon--blue" aria-hidden>
+              <CompactCreateIcon />
+            </span>
+            <span className="pbc-action-card__body">
+              <span className="pbc-action-card__title">{t("pcCreateCourse")}</span>
+              <span className="pbc-action-card__desc">{t("pcActionCreateCourseHint")}</span>
+            </span>
+          </button>
 
-          {hasStaffAccess ? (
-            <Link to="/dashboard/content" className="pbc-action-card pbc-action-card--content">
-              <span className="pbc-action-card__icon" aria-hidden>
-                <CompactContentIcon />
-              </span>
-              <span className="pbc-action-card__body">
-                <span className="pbc-action-card__title">{t("pcCreateContent")}</span>
-                <span className="pbc-action-card__desc">{t("pcActionCreateContentHint")}</span>
-              </span>
-            </Link>
-          ) : null}
-
-          {needsTeacherOnboarding ? (
-            <Link to={INSTITUTIONS_HREF} className="pbc-action-card pbc-action-card--create">
-              <span className="pbc-action-card__icon pbc-action-card__icon--blue" aria-hidden>
-                <SidebarIcon id="institutions" />
-              </span>
-              <span className="pbc-action-card__body">
-                <span className="pbc-action-card__title">{t("pcInstitutions")}</span>
-                <span className="pbc-action-card__desc">{t("pcWorkAsTeacher")}</span>
-              </span>
-            </Link>
-          ) : null}
+          <Link to="/dashboard/content" className="pbc-action-card pbc-action-card--content">
+            <span className="pbc-action-card__icon" aria-hidden>
+              <CompactContentIcon />
+            </span>
+            <span className="pbc-action-card__body">
+              <span className="pbc-action-card__title">{t("pcCreateContent")}</span>
+              <span className="pbc-action-card__desc">{t("pcActionCreateContentHint")}</span>
+            </span>
+          </Link>
 
           <button type="button" className="pbc-action-card pbc-action-card--join" onClick={onJoinCourse}>
             <span className="pbc-action-card__icon pbc-action-card__icon--violet" aria-hidden>
@@ -573,7 +537,7 @@ export default function PyBotClassHome({
           </a>
         </div>
 
-        {hasStaffAccess && attentionItems.length > 0 ? (
+        {hasTeachingContext && attentionItems.length > 0 ? (
           <section className="pbc-attention" aria-labelledby="attention-heading">
             <h2 id="attention-heading" className="pbc-section-head__title">
               {t("pcNeedsAttention")}
@@ -610,7 +574,7 @@ export default function PyBotClassHome({
           </div>
           <CourseCards
             filtered={recentCourses}
-            canTeach={hasStaffAccess}
+            canTeach={canCreateCourse}
             wantsTeacher={wantsTeacher}
             onCreateCourse={onCreateCourse}
             onJoinCourse={onJoinCourse}

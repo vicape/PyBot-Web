@@ -81,9 +81,13 @@ test("D: failed save reconcilia al valor guardado y no afirma éxito", () => {
   assert.ok(src.indexOf("setPreferredRole(savedPreferredRole)") < src.indexOf("Modo de uso actualizado."));
 });
 
-test("E: teacher preference sin staff puede ver Institutions onboarding", () => {
+test("E: Institutions entry is always available as optional context", () => {
   assert.equal(
     canShowInstitutionsEntry({ hasStaffAccess: false, preferredRole: "teacher" }),
+    true,
+  );
+  assert.equal(
+    canShowInstitutionsEntry({ hasStaffAccess: false, preferredRole: null }),
     true,
   );
   const layout = readSrc("src/components/pybotclass/layout/PyBotClassLayout.jsx");
@@ -101,7 +105,7 @@ test("E: teacher preference sin staff puede ver Institutions onboarding", () => 
   assert.match(orgApi, /export async function createOrganizationWithOwner/);
 });
 
-test("F: teacher preference sin staff NO otorga Create Course / roster / grade / teach", () => {
+test("F: teacher preference sin staff NO otorga Classroom / roster / grade / teach", () => {
   const orgs = [];
   assert.equal(hasStaffMembership(orgs), false);
   assert.equal(isTeacherProfile(orgs, "teacher"), false);
@@ -109,12 +113,12 @@ test("F: teacher preference sin staff NO otorga Create Course / roster / grade /
   const nav = getDashboardNavCapabilities({ orgs, enrolledCourseCount: 0 });
   assert.equal(nav.hasStaffAccess, false);
   assert.equal(nav.showClassroomTab, false);
-  assert.equal(nav.showSchoolsTab, false);
   assert.equal(canTeachCourse({ orgRole: null, courseRole: null }), false);
   assert.equal(canManageRoster({ orgRole: null, courseRole: null }), false);
   assert.equal(canGradeCourse({ orgRole: null, courseRole: null }), false);
   const layout = readSrc("src/components/pybotclass/layout/PyBotClassLayout.jsx");
-  assert.match(layout, /showMyContent=\{showTeacherTools\}/);
+  // Content is owned-home for every authenticated person; Classroom remains staff-gated
+  assert.match(layout, /showMyContent/);
   assert.match(layout, /showInstitutions=\{showInstitutions\}/);
 });
 
@@ -164,7 +168,7 @@ test("K: Account display-name save sigue presente", () => {
 });
 
 test("null preferred_role: estado neutral, sin inventar permisos ni persistir adivinanza", () => {
-  assert.equal(canShowInstitutionsEntry({ hasStaffAccess: false, preferredRole: null }), false);
+  assert.equal(canShowInstitutionsEntry({ hasStaffAccess: false, preferredRole: null }), true);
   assert.equal(hasTeacherPreference(null), false);
   const src = readSrc("src/components/dashboard/AccountSettings.jsx");
   assert.match(src, /normalizePreferredRole|preferredRole === "student"/);
@@ -173,11 +177,12 @@ test("null preferred_role: estado neutral, sin inventar permisos ni persistir ad
   assert.match(src, /checked=\{preferredRole === "teacher"\}/);
 });
 
-test("getDashboardNavCapabilities no otorga schools por preferred_role", () => {
+test("getDashboardNavCapabilities: Institutions optional; Classroom still staff-only", () => {
   const nav = getDashboardNavCapabilities({ orgs: [], enrolledCourseCount: 0 });
-  assert.equal(nav.showSchoolsTab, false);
+  assert.equal(nav.showSchoolsTab, true);
+  assert.equal(nav.showClassroomTab, false);
   const src = readSrc("src/orgRole.js");
-  assert.match(src, /showSchoolsTab: hasStaffAccess/);
+  assert.match(src, /showSchoolsTab: true/);
   assert.match(src, /canShowInstitutionsEntry/);
 });
 
@@ -188,7 +193,7 @@ test("no new migration; historical preferred_role migration preserved", () => {
   assert.doesNotMatch(account, /create table|alter table/i);
 });
 
-test("1: teacher preference changes Home presentation (not student-only UX)", () => {
+test("1: teacher preference remains presentation-only on Home", () => {
   assert.equal(wantsTeacherExperience("teacher"), true);
   assert.equal(wantsTeacherExperience("student"), false);
   assert.equal(canUseTeacherCapabilities(false), false);
@@ -197,38 +202,30 @@ test("1: teacher preference changes Home presentation (not student-only UX)", ()
   assert.match(home, /preferredRole/);
   assert.match(home, /wantsTeacherExperience/);
   assert.match(home, /canUseTeacherCapabilities/);
-  assert.match(home, /needsTeacherOnboarding/);
-  assert.match(home, /pcWorkAsTeacher/);
-  assert.match(home, /dashboard\?tab=schools/);
+  assert.match(home, /pcHomeLead/);
   assert.match(page, /preferredRole=\{preferredRole\}/);
-  // Page passes preferredRole into Home (alongside hasStaffAccess)
   assert.match(
     page,
     /<PyBotClassHome[\s\S]*hasStaffAccess=\{hasStaffAccess\}[\s\S]*preferredRole=\{preferredRole\}/,
   );
 });
 
-test("2: teacher preference without membership does not grant protected capabilities", () => {
+test("2: teacher preference without membership does not grant Classroom / course mutations", () => {
   assert.equal(canUseTeacherCapabilities(false), false);
   assert.equal(wantsTeacherExperience("teacher"), true);
   assert.equal(hasStaffMembership([]), false);
   const home = readSrc("src/components/pybotclass/layout/PyBotClassHome.jsx");
   const layout = readSrc("src/components/pybotclass/layout/PyBotClassLayout.jsx");
   const sidebar = readSrc("src/components/pybotclass/layout/PyBotClassSidebar.jsx");
-  // Protected actions remain gated by hasStaffAccess / showTeacherTools
-  assert.match(home, /\{hasStaffAccess \? \([\s\S]*pcCreateCourse/);
-  assert.match(home, /\{hasStaffAccess \? \([\s\S]*pcCreateContent/);
+  // Personal create/content available; Classroom remains staff-gated; preferredRole never unlocks mutations
+  assert.match(home, /canCreateCourse = true/);
   assert.match(home, /\{hasStaffAccess \? \([\s\S]*pbc-classroom-status/);
-  assert.match(home, /hasStaffAccess && attentionItems/);
-  assert.match(layout, /showMyContent=\{showTeacherTools\}/);
+  assert.match(layout, /showMyContent/);
   assert.match(layout, /canUseTeacherCapabilities/);
-  // Sidebar: Content = authorization; Institutions = presentation; preferredRole never unlocks content
   assert.match(sidebar, /preferredRole = null/);
-  assert.match(sidebar, /teacherOnly/);
   assert.match(sidebar, /showMyContent/);
   assert.match(layout, /preferredRole=\{preferredRole\}/);
   assert.match(layout, /showInstitutions=\{showInstitutions\}/);
-  // Preference alone must not redefine hasStaffAccess
   const orgRole = readSrc("src/orgRole.js");
   assert.match(orgRole, /canUseTeacherCapabilities\(hasStaffAccess\)/);
   assert.doesNotMatch(
@@ -251,9 +248,8 @@ test("3: student preference does not remove factual staff capabilities", () => {
     true,
   );
   const home = readSrc("src/components/pybotclass/layout/PyBotClassHome.jsx");
-  // Onboarding CTA only when wantsTeacher && !canTeach — staff still sees Create Course via hasStaffAccess
-  assert.match(home, /needsTeacherOnboarding = wantsTeacher && !canTeach/);
-  assert.match(home, /\{hasStaffAccess \? \([\s\S]*pcCreateCourse/);
+  assert.match(home, /canCreateCourse = true/);
+  assert.match(home, /canUseTeacherCapabilities\(hasStaffAccess\)/);
 });
 
 test("4: Account switch propagates immediately to Home/Layout via preferredRole state", () => {

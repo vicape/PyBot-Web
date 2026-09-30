@@ -34,13 +34,13 @@ test("caso A multirol: teacher A + student B → ambas pestañas", () => {
   );
 });
 
-test("caso B: solo student → Mis cursos, sin Colegios/Classroom", () => {
+test("caso B: solo student → Mis cursos; Institutions optional; sin Classroom", () => {
   const orgs = [org("A", "student")];
   const nav = getDashboardNavCapabilities({ orgs, enrolledCourseCount: 2 });
 
   assert.equal(nav.hasStaffAccess, false);
   assert.equal(nav.hasStudentAccess, true);
-  assert.equal(nav.showSchoolsTab, false);
+  assert.equal(nav.showSchoolsTab, true);
   assert.equal(nav.showCoursesTab, true);
   assert.equal(nav.showClassroomTab, false);
 });
@@ -52,18 +52,18 @@ test("caso C: solo teacher → Colegios + Classroom", () => {
   assert.equal(nav.hasStaffAccess, true);
   assert.equal(nav.hasStudentAccess, false);
   assert.equal(nav.showSchoolsTab, true);
-  assert.equal(nav.showCoursesTab, false);
+  assert.equal(nav.showCoursesTab, true);
   assert.equal(nav.showClassroomTab, true);
 });
 
-test("caso D: preferred teacher sin membership → sin staff; Institutions entry por preferencia", () => {
+test("caso D: preferred teacher sin membership → sin staff; Institutions sigue disponible", () => {
   const orgs = [];
   const preferredRole = "teacher";
   const nav = getDashboardNavCapabilities({ orgs, enrolledCourseCount: 0 });
 
   assert.equal(hasStaffMembership(orgs), false);
   assert.equal(nav.showClassroomTab, false);
-  assert.equal(nav.showSchoolsTab, false);
+  assert.equal(nav.showSchoolsTab, true);
   assert.equal(hasTeacherPreference(preferredRole), true);
   assert.equal(
     canShowInstitutionsEntry({ hasStaffAccess: nav.hasStaffAccess, preferredRole }),
@@ -85,5 +85,6 @@ test("hasStudentMembership no se infiere por ausencia de staff", () => {
 test("alumno con cursos inscritos sin org student explícita → Mis cursos", () => {
   const nav = getDashboardNavCapabilities({ orgs: [], enrolledCourseCount: 3 });
   assert.equal(nav.showCoursesTab, true);
-  assert.equal(nav.showSchoolsTab, false);
+  assert.equal(nav.showSchoolsTab, true);
+  assert.equal(nav.showClassroomTab, false);
 });

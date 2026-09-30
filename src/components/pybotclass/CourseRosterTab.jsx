@@ -372,15 +372,17 @@ export default function CourseRosterTab({
   const generateInvite = async () => {
     setGeneratingInvite(true);
     setFeedback("");
+    const payload = {
+      course_id: courseId,
+      role: "student",
+      max_uses: 100,
+      created_by: user.id,
+    };
+    // Personal courses have no institution; institutional invites keep org_id.
+    if (orgId) payload.org_id = orgId;
     const { data } = await sb
       .from("organization_invites")
-      .insert({
-        org_id: orgId,
-        course_id: courseId,
-        role: "student",
-        max_uses: 100,
-        created_by: user.id,
-      })
+      .insert(payload)
       .select("code")
       .maybeSingle();
     setGeneratingInvite(false);

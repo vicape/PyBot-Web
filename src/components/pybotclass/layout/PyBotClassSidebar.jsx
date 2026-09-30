@@ -7,16 +7,16 @@ import { IconSuperAdmin, SidebarIcon } from "../illustrations/SidebarIcons.jsx";
 const DAILY_NAV = [
   { id: "home", labelKey: "pcHome", to: "/dashboard/classes" },
   { id: "courses", labelKey: "pcCourses", to: "/dashboard/classes?view=courses" },
-  { id: "content", labelKey: "pcNavContent", to: "/dashboard/content", teacherOnly: true },
+  { id: "content", labelKey: "pcNavContent", to: "/dashboard/content" },
   { id: "community", labelKey: "pcCommunity", to: "/dashboard/community" },
   { id: "ide", labelKey: "pcOpenIde", to: "/", external: true },
 ];
 
 /**
  * Sidebar presentation vs authorization:
- * - showMyContent / teacherOnly nav = authorization (hasStaffAccess) only
- * - showInstitutions = presentation onboarding (staff OR preferredRole teacher)
- * - preferredRole never unlocks Content or other protected teacher tools
+ * - showMyContent = owned Content area (available to every authenticated person)
+ * - showInstitutions = optional organization/membership context
+ * - preferredRole never unlocks Classroom or other protected teacher mutations
  */
 export default function PyBotClassSidebar({
   id = "pbc-sidebar",
@@ -40,8 +40,7 @@ export default function PyBotClassSidebar({
   const nav = useMemo(
     () =>
       DAILY_NAV.filter((item) => {
-        // Authorization: Content stays gated by showMyContent, never by preferredRole
-        if (item.teacherOnly || item.id === "content") return showMyContent;
+        if (item.id === "content") return showMyContent;
         return PRIMARY_NAV_IDS.includes(item.id);
       }),
     [showMyContent],

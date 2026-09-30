@@ -19,6 +19,7 @@ export const TEST_SUITES = Object.freeze({
     "micropythonFeatureFlags.test.mjs",
     "orgRole.test.mjs",
     "orgRoleMulti.test.mjs",
+    "personCenteredModel.test.mjs",
     "platformRole.test.mjs",
     "platformModePreference.test.mjs",
     "platformSchoolCycle.test.mjs",

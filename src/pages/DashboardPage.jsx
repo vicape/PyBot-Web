@@ -18,6 +18,16 @@ import { isSuperAdmin } from "../platformRole.js";
 import { createOrganizationWithOwner } from "../platform/organizationApi.js";
 import { COUNTRIES, countryNameByCode } from "../data/countries.js";
 
+function institutionsLead(allOrgs, staffOrgs) {
+  if (!allOrgs.length) {
+    return "Las instituciones son opcionales. Podés crear cursos personales, unirte con un código o crear/unirte a una institución cuando lo necesites.";
+  }
+  if (!staffOrgs.length) {
+    return "Sos miembro de estas instituciones. La administración queda reservada a roles owner/teacher.";
+  }
+  return "Tus instituciones: membresía y, cuando corresponde, administración.";
+}
+
 function LegacyDashboard({ profile, onSignOut }) {
   return (
     <main className="auth-root">
@@ -150,11 +160,17 @@ export default function DashboardPage() {
         setOrgsLoaded(true);
         return;
       }
-      const roleByOrg = new Map((memberships ?? []).map((m) => [m.org_id, m.role]));
+      const rolesByOrg = new Map();
+      for (const m of memberships ?? []) {
+        if (!m?.org_id) continue;
+        const list = rolesByOrg.get(m.org_id) || [];
+        if (m.role && !list.includes(m.role)) list.push(m.role);
+        rolesByOrg.set(m.org_id, list);
+      }
       const merged = (fb.data ?? []).map((o) => ({
         ...o,
         country_code: null,
-        organization_members: [{ role: roleByOrg.get(o.id) }],
+        organization_members: (rolesByOrg.get(o.id) || []).map((role) => ({ role })),
       }));
       setOrgs(merged);
       setOrgsLoaded(true);
@@ -169,12 +185,21 @@ export default function DashboardPage() {
       return;
     }
 
-    // 3) Merge — formato compatible con el resto del UI (organization_members[0].role)
-    const roleByOrg = new Map((memberships ?? []).map((m) => [m.org_id, m.role]));
-    const merged = (orgRows ?? []).map((o) => ({
-      ...o,
-      organization_members: [{ role: roleByOrg.get(o.id) }],
-    }));
+    // 3) Merge — multi-role aware (organization_members may return multiple rows per org)
+    const rolesByOrg = new Map();
+    for (const m of memberships ?? []) {
+      if (!m?.org_id) continue;
+      const list = rolesByOrg.get(m.org_id) || [];
+      if (m.role && !list.includes(m.role)) list.push(m.role);
+      rolesByOrg.set(m.org_id, list);
+    }
+    const merged = (orgRows ?? []).map((o) => {
+      const roles = rolesByOrg.get(o.id) || [];
+      return {
+        ...o,
+        organization_members: roles.map((role) => ({ role })),
+      };
+    });
 
     setOrgs(merged);
     setOrgsLoaded(true);
@@ -432,26 +457,60 @@ export default function DashboardPage() {
           {activeTab === "schools" && showInstitutionsEntry ? (
             <section className="pbc-panel-card">
               <h2 className="pbc-section-head__title">Instituciones</h2>
+              <p className="auth-card__muted" style={{ marginTop: 0 }}>
+                {institutionsLead(orgs, staffOrgs)}
+              </p>
               {orgError ? <p className="pbc-alert pbc-alert--error">{orgError}</p> : null}
-              {staffOrgs.length === 0 ? (
-                <p className="auth-card__muted">Todavía no administrás ninguna institución.</p>
+              {orgs.length === 0 ? (
+                <p className="auth-card__muted">
+                  Todavía no pertenecés a ninguna institución. Eso no bloquea cursos personales, Contenido ni Comunidad.
+                </p>
               ) : (
                 <ul className="auth-org-list">
-                  {staffOrgs.map((o) => (
-                    <li key={o.id} className="auth-org-row auth-org-row--link">
-                      <Link className="auth-org-row__link" to={`/dashboard/org/${o.id}`}>
-                        <span className="auth-org-row__name">{o.name}</span>
-                        <span className="auth-org-row__meta">
-                          @{o.slug} · {roleLabelEs(o.organization_members?.[0]?.role)}
-                          {o.country_code
-                            ? ` · ${countryNameByCode(o.country_code) || o.country_code}`
-                            : " · País sin definir"}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
+                  {orgs.map((o) => {
+                    const roles = (o.organization_members || []).map((m) => m.role).filter(Boolean);
+                    const primary = roles.includes("owner")
+                      ? "owner"
+                      : roles.includes("teacher")
+                        ? "teacher"
+                        : roles[0];
+                    const isAdmin = primary === "owner" || primary === "teacher";
+                    return (
+                      <li key={o.id} className="auth-org-row auth-org-row--link">
+                        {isAdmin ? (
+                          <Link className="auth-org-row__link" to={`/dashboard/org/${o.id}`}>
+                            <span className="auth-org-row__name">{o.name}</span>
+                            <span className="auth-org-row__meta">
+                              @{o.slug} · {roles.map(roleLabelEs).join(", ") || roleLabelEs(primary)}
+                              {o.country_code
+                                ? ` · ${countryNameByCode(o.country_code) || o.country_code}`
+                                : " · País sin definir"}
+                              {" · Administración"}
+                            </span>
+                          </Link>
+                        ) : (
+                          <div className="auth-org-row__link" style={{ cursor: "default" }}>
+                            <span className="auth-org-row__name">{o.name}</span>
+                            <span className="auth-org-row__meta">
+                              @{o.slug} · {roles.map(roleLabelEs).join(", ") || roleLabelEs(primary)}
+                              {o.country_code
+                                ? ` · ${countryNameByCode(o.country_code) || o.country_code}`
+                                : ""}
+                              {" · Membresía"}
+                            </span>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
+              <p className="auth-card__muted">
+                ¿Tenés un código de invitación?{" "}
+                <Link to="/join" className="auth-link">
+                  Unirse con código
+                </Link>
+              </p>
               <form className="auth-org-form" onSubmit={createOrganization}>
                 <label className="auth-org-label" htmlFor="new-org-name">
                   Crear institución

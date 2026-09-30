@@ -92,12 +92,52 @@ export async function fetchOrganizationsForUser(supabase, userId) {
 
   const rpc = await supabase.rpc("list_my_org_memberships");
   if (!rpc.error && Array.isArray(rpc.data)) {
-    return rpc.data.map((m) => ({
-      id: m.org_id,
-      name: m.org_name,
-      slug: m.org_slug,
-      role: m.role,
-      country_code: m.country_code ?? null,
+    const byOrg = new Map();
+    for (const m of rpc.data) {
+      if (!m?.org_id) continue;
+      const prev = byOrg.get(m.org_id) || {
+        id: m.org_id,
+        name: m.org_name,
+        slug: m.org_slug,
+        roles: [],
+        country_code: m.country_code ?? null,
+      };
+      if (m.org_name) prev.name = m.org_name;
+      if (m.org_slug) prev.slug = m.org_slug;
+      if (m.country_code) prev.country_code = m.country_code;
+      if (m.role && !prev.roles.includes(m.role)) prev.roles.push(m.role);
+      byOrg.set(m.org_id, prev);
+    }
+    // Enrich names when RPC only returns org_id/role (legacy shape)
+    const rows = [...byOrg.values()];
+    const needNames = rows.filter((r) => !r.name);
+    if (needNames.length) {
+      const { data: orgs } = await supabase
+        .from("organizations")
+        .select("id, name, slug, country_code")
+        .in(
+          "id",
+          needNames.map((r) => r.id),
+        );
+      for (const o of orgs ?? []) {
+        const row = byOrg.get(o.id);
+        if (!row) continue;
+        row.name = o.name;
+        row.slug = o.slug;
+        row.country_code = o.country_code ?? row.country_code;
+      }
+    }
+    return [...byOrg.values()].map((r) => ({
+      id: r.id,
+      name: r.name,
+      slug: r.slug,
+      role: r.roles.includes("owner")
+        ? "owner"
+        : r.roles.includes("teacher")
+          ? "teacher"
+          : r.roles[0] ?? null,
+      roles: r.roles,
+      country_code: r.country_code ?? null,
     }));
   }
 
@@ -106,11 +146,30 @@ export async function fetchOrganizationsForUser(supabase, userId) {
     .select("role, organizations ( id, name, slug, country_code )")
     .eq("user_id", userId);
 
-  return (data ?? []).map((row) => ({
-    id: row.organizations?.id,
-    name: row.organizations?.name,
-    slug: row.organizations?.slug,
-    role: row.role,
-    country_code: row.organizations?.country_code ?? null,
+  const byOrg = new Map();
+  for (const row of data ?? []) {
+    const id = row.organizations?.id;
+    if (!id) continue;
+    const prev = byOrg.get(id) || {
+      id,
+      name: row.organizations?.name,
+      slug: row.organizations?.slug,
+      roles: [],
+      country_code: row.organizations?.country_code ?? null,
+    };
+    if (row.role && !prev.roles.includes(row.role)) prev.roles.push(row.role);
+    byOrg.set(id, prev);
+  }
+  return [...byOrg.values()].map((r) => ({
+    id: r.id,
+    name: r.name,
+    slug: r.slug,
+    role: r.roles.includes("owner")
+      ? "owner"
+      : r.roles.includes("teacher")
+        ? "teacher"
+        : r.roles[0] ?? null,
+    roles: r.roles,
+    country_code: r.country_code ?? null,
   }));
 }

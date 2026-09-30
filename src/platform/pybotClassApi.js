@@ -107,7 +107,8 @@ async function fallbackListPybotclassMyCourses(sb, orgId) {
     const c = row.courses;
     if (!c?.id) continue;
     if (orgId && c.org_id !== orgId) continue;
-    if (!byCourse.has(c.id)) {
+    const existing = byCourse.get(c.id);
+    if (!existing) {
       byCourse.set(c.id, {
         course_id: c.id,
         course_title: c.title,
@@ -120,6 +121,11 @@ async function fallbackListPybotclassMyCourses(sb, orgId) {
         submission_count: 0,
         pending_grade_count: 0,
       });
+    } else if (row.role === "student") {
+      // Explicit course student overrides inferred org-staff teacher (AC6)
+      existing.my_course_role = "student";
+    } else if (row.role === "teacher") {
+      existing.my_course_role = "teacher";
     }
   }
 

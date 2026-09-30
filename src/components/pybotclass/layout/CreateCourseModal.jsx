@@ -2,14 +2,21 @@ import { t } from "../../../i18n.js";
 import { useEffect, useState } from "react";
 import { COUNTRIES } from "../../../data/countries.js";
 import {
+  createInstitutionalCourse,
+  createPersonalCourse,
+} from "../../../platform/courseCreateApi.js";
+import {
   createOrganizationWithOwner,
   ensureOrgTeacherAccess,
   fetchOrganizationsForUser,
 } from "../../../platform/organizationApi.js";
-import { slugifyOrganizationName } from "../../../slugify.js";
 
+/**
+ * Create course modal — personal course is the default path (no institution required).
+ * Optional institutional attachment remains available when the person already has orgs.
+ */
 export default function CreateCourseModal({ open, onClose, supabase, user, onCreated }) {
-  const [step, setStep] = useState(1);
+  const [mode, setMode] = useState("personal"); // personal | institution
   const [orgs, setOrgs] = useState([]);
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [createOrg, setCreateOrg] = useState(false);
@@ -30,7 +37,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
 
   useEffect(() => {
     if (!open) {
-      setStep(1);
+      setMode("personal");
       setCreateOrg(false);
       setOrgName("");
       setCourseTitle("");
@@ -41,13 +48,33 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
 
   if (!open) return null;
 
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!supabase || !user || busy) return;
+  const submitPersonal = async () => {
+    const title = courseTitle.trim();
+    if (!title) {
+      setErr(t("pcEnterCourseName"));
+      return;
+    }
     setBusy(true);
     setErr("");
+    try {
+      const { courseId, error } = await createPersonalCourse({ title });
+      if (error || !courseId) {
+        setErr(error || t("pcUnexpectedError"));
+        setBusy(false);
+        return;
+      }
+      onCreated?.();
+      onClose?.();
+    } catch (ex) {
+      setErr(ex?.message || t("pcUnexpectedError"));
+    }
+    setBusy(false);
+  };
 
+  const submitInstitutional = async () => {
     let orgId = selectedOrgId;
+    setBusy(true);
+    setErr("");
 
     try {
       if (createOrg || !orgId) {
@@ -77,15 +104,14 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
         return;
       }
 
-      const { error } = await supabase.from("courses").insert({
-        org_id: orgId,
+      const { courseId, error } = await createInstitutionalCourse({
+        orgId,
         title,
-        slug: slugifyOrganizationName(title),
-        created_by: user.id,
+        userId: user.id,
       });
 
-      if (error) {
-        setErr(error.message);
+      if (error || !courseId) {
+        setErr(error || t("pcUnexpectedError"));
         setBusy(false);
         return;
       }
@@ -96,6 +122,16 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
       setErr(ex?.message || t("pcUnexpectedError"));
     }
     setBusy(false);
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!supabase || !user || busy) return;
+    if (mode === "personal") {
+      await submitPersonal();
+      return;
+    }
+    await submitInstitutional();
   };
 
   return (
@@ -112,7 +148,60 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
         {err ? <p className="pbc-alert pbc-alert--error">{err}</p> : null}
 
         <form onSubmit={submit}>
-          {step === 1 ? (
+          <div className="pbc-filter-tabs" role="tablist" aria-label={t("pcCreateCourse")} style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "personal"}
+              className={`pbc-filter-tab${mode === "personal" ? " pbc-filter-tab--active" : ""}`}
+              onClick={() => {
+                setMode("personal");
+                setErr("");
+              }}
+            >
+              {t("pcPersonalCourse")}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "institution"}
+              className={`pbc-filter-tab${mode === "institution" ? " pbc-filter-tab--active" : ""}`}
+              onClick={() => {
+                setMode("institution");
+                setErr("");
+              }}
+            >
+              {t("pcInstitutionalCourse")}
+            </button>
+          </div>
+
+          {mode === "personal" ? (
+            <>
+              <p className="pbc-modal__step-label">{t("pcPersonalCourseHint")}</p>
+              <div className="pbc-modal__field">
+                <label className="pbc-label" htmlFor="course-title-personal">
+                  {t("pcCourseName")}
+                </label>
+                <input
+                  id="course-title-personal"
+                  className="pbc-input"
+                  value={courseTitle}
+                  onChange={(e) => setCourseTitle(e.target.value)}
+                  placeholder={t("pcCoursePlaceholder")}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="pbc-modal__actions">
+                <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose}>
+                  {t("pcCancel")}
+                </button>
+                <button type="submit" className="pbc-btn pbc-btn--primary" disabled={busy}>
+                  {busy ? t("pcCreating") : t("pcCreateCourse")}
+                </button>
+              </div>
+            </>
+          ) : (
             <>
               <p className="pbc-modal__step-label">{t("pcStep1Institution")}</p>
               {orgs.length > 0 ? (
@@ -160,7 +249,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                       value={orgName}
                       onChange={(e) => setOrgName(e.target.value)}
                       placeholder={t("pcOrgPlaceholder")}
-                      required
+                      required={mode === "institution"}
                     />
                   </div>
                   <div className="pbc-modal__field">
@@ -172,7 +261,7 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                       className="pbc-select"
                       value={countryCode}
                       onChange={(e) => setCountryCode(e.target.value)}
-                      required
+                      required={mode === "institution"}
                     >
                       {COUNTRIES.map((c) => (
                         <option key={c.code} value={c.code}>
@@ -184,53 +273,40 @@ export default function CreateCourseModal({ open, onClose, supabase, user, onCre
                 </>
               ) : null}
 
-              <div className="pbc-modal__actions">
-                <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose}>
-                  {t("pcCancel")}
-                </button>
-                <button
-                  type="button"
-                  className="pbc-btn pbc-btn--primary"
-                  onClick={() => {
-                    if (createOrg || orgs.length === 0) {
-                      if (!orgName.trim()) {
-                        setErr(t("pcEnterInstitutionName"));
-                        return;
-                      }
-                    } else if (!selectedOrgId) {
-                      setErr(t("pcChooseInstitution"));
-                      return;
-                    }
-                    setErr("");
-                    setStep(2);
-                  }}
-                >
-                  {t("pcNext")}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="pbc-modal__step-label">{t("pcStep2Course")}</p>
               <div className="pbc-modal__field">
-                <label className="pbc-label" htmlFor="course-title">
+                <label className="pbc-label" htmlFor="course-title-org">
                   {t("pcCourseName")}
                 </label>
                 <input
-                  id="course-title"
+                  id="course-title-org"
                   className="pbc-input"
                   value={courseTitle}
                   onChange={(e) => setCourseTitle(e.target.value)}
                   placeholder={t("pcCoursePlaceholder")}
                   required
-                  autoFocus
                 />
               </div>
+
               <div className="pbc-modal__actions">
-                <button type="button" className="pbc-btn pbc-btn--ghost" onClick={() => setStep(1)}>
-                  {t("pcBack")}
+                <button type="button" className="pbc-btn pbc-btn--ghost" onClick={onClose}>
+                  {t("pcCancel")}
                 </button>
-                <button type="submit" className="pbc-btn pbc-btn--primary" disabled={busy}>
+                <button
+                  type="submit"
+                  className="pbc-btn pbc-btn--primary"
+                  disabled={busy}
+                  onClick={(e) => {
+                    if (createOrg || orgs.length === 0) {
+                      if (!orgName.trim()) {
+                        e.preventDefault();
+                        setErr(t("pcEnterInstitutionName"));
+                      }
+                    } else if (!selectedOrgId) {
+                      e.preventDefault();
+                      setErr(t("pcChooseInstitution"));
+                    }
+                  }}
+                >
                   {busy ? t("pcCreating") : t("pcCreateCourse")}
                 </button>
               </div>

@@ -173,9 +173,9 @@ test("Primary/secondary actions use icon + text labels (not icon-only)", () => {
   assert.match(communitySrc, /IconOpen[\s\S]*pcRead|IconCopy[\s\S]*pcCreateCopy/);
 });
 
-test("Role-safe: teacher create/attention gated; assign gated by canAssign", () => {
-  assert.match(homeSrc, /hasStaffAccess && attentionItems/);
-  assert.match(homeSrc, /\{hasStaffAccess \? \([\s\S]*pcCreateCourse/);
+test("Role-safe: attention/Classroom staff-gated; create course always; assign gated by canAssign", () => {
+  assert.match(homeSrc, /hasTeachingContext && attentionItems/);
+  assert.match(homeSrc, /canCreateCourse = true/);
   assert.match(contentCardSrc, /canAssign && Boolean\(onAssign\)/);
 });
 

@@ -12,12 +12,17 @@ export function computeAccountRoleBadges({ orgs = [], courses = [], isSuperAdmin
     badges.push({ id: "superadmin", label: "SuperAdmin", variant: "gold" });
   }
 
-  if (orgs.some((o) => o.role === "owner")) {
+  if (orgs.some((o) => o.role === "owner" || (Array.isArray(o.roles) && o.roles.includes("owner")))) {
     badges.push({ id: "gestion", label: "Gestión", variant: "purple" });
   }
 
   const teachesCourse = courses.some((c) => normalizeCourseRole(c.my_course_role) === "teacher");
-  const hasStaffOrg = orgs.some((o) => o.role === "owner" || o.role === "teacher");
+  const hasStaffOrg = orgs.some(
+    (o) =>
+      o.role === "owner" ||
+      o.role === "teacher" ||
+      (Array.isArray(o.roles) && o.roles.some((r) => r === "owner" || r === "teacher")),
+  );
   if (teachesCourse || hasStaffOrg) {
     badges.push({ id: "docente", label: "Docente", variant: "blue" });
   }
