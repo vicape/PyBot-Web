@@ -136,7 +136,7 @@ export default function ContentCard({
   const showMenu = isOwner || showCopy || (canAssign && !showDirectAssign);
 
   return (
-    <article className="pbc-content-card" style={{ minWidth: 0, maxWidth: "100%", overflowWrap: "anywhere" }}>
+    <article className="pbc-content-card" style={{ minWidth: 0, maxWidth: "100%" }}>
       <div className="pbc-content-card__header">
         <span className="pbc-content-card__icon" aria-hidden>
           <IconContentType />

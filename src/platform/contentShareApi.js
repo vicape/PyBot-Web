@@ -265,8 +265,13 @@ export async function listCommunityContents({ search = "", excludeOwnerId } = {}
 
 async function loadOwnerNames(sb, ownerIds) {
   const profiles = {};
-  if (!ownerIds.length) return profiles;
-  const { data: profs } = await sb.from("profiles").select("id, display_name, email").in("id", ownerIds);
+  // Path that produced `.in("id", [..., null, ...])` for Community: listCommunityContents()
+  // flatMaps provenance ids (owner/original_owner/original_creator/first_community_published_by)
+  // which may be null. Same defensive principle as contentApi.loadProfileNames(): filter falsy,
+  // dedupe, and skip the profiles query when empty — never query with null IDs.
+  const unique = [...new Set((ownerIds || []).filter(Boolean))];
+  if (!unique.length) return profiles;
+  const { data: profs } = await sb.from("profiles").select("id, display_name, email").in("id", unique);
   for (const p of profs ?? []) {
     profiles[p.id] = p.display_name || p.email || "Docente";
   }

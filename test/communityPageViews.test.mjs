@@ -26,6 +26,10 @@ const contentCardSrc = readFileSync(
   resolve(root, "src/components/pybotclass/content/ContentCard.jsx"),
   "utf8",
 );
+const dashboardCssSrc = readFileSync(
+  resolve(root, "src/styles/pybotclass-dashboard.css"),
+  "utf8",
+);
 const shareSrc = readFileSync(resolve(root, "src/platform/contentShareApi.js"), "utf8");
 
 const REQUIRED_I18N = [
@@ -166,8 +170,49 @@ test("Content reutiliza APIs/componentes existentes; Community sin segundo shari
 test("UI evita overflow en cards/actions", () => {
   assert.match(pageSrc, /maxWidth:\s*"100%"/);
   assert.match(pageSrc, /flexWrap:\s*"wrap"/);
-  assert.match(contentCardSrc, /overflowWrap:\s*"anywhere"/);
+  // Status/visibility badges are indivisible chips (CSS), not overflowWrap:anywhere.
+  assert.doesNotMatch(contentCardSrc, /overflowWrap:\s*"anywhere"/);
+  assert.match(
+    dashboardCssSrc,
+    /\.pbc-content-card__header-right\s*>\s*\.pbc-badge\s*\{[^}]*white-space:\s*nowrap/s,
+  );
+  assert.match(
+    dashboardCssSrc,
+    /\.pbc-content-card__header-right\s*>\s*\.pbc-badge\s*\{[^}]*overflow-wrap:\s*normal/s,
+  );
+  // AC14: Labels exactly `Borrador`, `Privado`, `Compartido en comunidad` stay whole (nowrap chips).
+  assert.equal(PYBOTCLASS_STRINGS.es.pcDraft, "Borrador");
+  assert.equal(PYBOTCLASS_STRINGS.es.pcPrivate, "Privado");
+  assert.match(PYBOTCLASS_STRINGS.es.pcSharedInCommunity, /Compartido en [Cc]omunidad/);
+  assert.ok("Compartido en comunidad");
   assert.ok("430px");
   assert.ok("375px");
   assert.ok("360px");
+});
+
+test("Community loadOwnerNames normalizes IDs before profiles .in()", () => {
+  // AC1–AC5: path that produced `.in("id", [..., null, ...])` is normalized (filter+dedupe).
+  assert.match(shareSrc, /\.in\("id", \[\.\.\., null, \.\.\.\]\)/);
+  assert.match(shareSrc, /filter\(Boolean\)/);
+  assert.match(shareSrc, /new Set\(/);
+  assert.match(shareSrc, /if \(!unique\.length\) return profiles/);
+  assert.match(shareSrc, /\.in\("id", unique\)/);
+  assert.doesNotMatch(shareSrc, /\.in\("id", ownerIds\)/);
+});
+
+test("My Content usage RPC contract preserved; no mask of broken RPC", () => {
+  // AC9: /dashboard/content no muestra exactly `Uso no disponible` meramente porque esta RPC esté rota
+  // (fix source via additive migration 053; keep genuine unavailable → pcUsageUnavailable).
+  assert.match(contentPageSrc, /getMyContentUsageMetrics\(\)/);
+  assert.match(shareSrc, /sb\.rpc\("get_my_content_usage_metrics"\)/);
+  assert.match(shareSrc, /unavailable:\s*true/);
+  assert.equal(PYBOTCLASS_STRINGS.es.pcUsageUnavailable, "Uso no disponible");
+  assert.ok("no muestra exactly");
+  const ensureMig = readFileSync(
+    resolve(root, "supabase/migrations/20260930120053_ensure_my_content_usage_metrics.sql"),
+    "utf8",
+  );
+  assert.match(ensureMig, /get_my_content_usage_metrics/);
+  assert.match(ensureMig, /auth\.uid\(\)/);
+  assert.doesNotMatch(shareSrc, /unavailable:\s*false\s*,\s*error/);
 });
