@@ -15,6 +15,23 @@ test("migración 026 define is_course_teacher", () => {
   assert.match(sql, /sync_classroom_course_teachers/);
 });
 
+test("migración 055: is_course_teacher no otorga teach vía org staff si course student explícito", () => {
+  const sql = readFileSync(
+    resolve(
+      root,
+      "supabase/migrations/20260930210055_is_course_teacher_explicit_student.sql",
+    ),
+    "utf8",
+  );
+  assert.ok(sql.includes("public.is_course_teacher()"), "must document public.is_course_teacher()");
+  assert.match(sql, /create or replace function public\.is_course_teacher/);
+  assert.match(sql, /is_course_org_staff/);
+  assert.match(sql, /cm\.role = 'student'/);
+  assert.match(sql, /cm\.role = 'teacher'/);
+  assert.match(sql, /and not exists/);
+  assert.match(sql, /grant execute on function public\.is_course_teacher/);
+});
+
 test("migración 027 define activity_submissions y RPCs", () => {
   const sql = readFileSync(
     resolve(root, "supabase/migrations/20260830000027_activity_submissions.sql"),

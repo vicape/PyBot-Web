@@ -40,9 +40,10 @@ test("normalizeCourseRole mapea owner a teacher", () => {
   assert.equal(normalizeCourseRole("owner"), "teacher");
 });
 
-test("org owner/teacher puede enseñar cualquier curso de la org", () => {
+test("org owner/teacher puede enseñar curso sin membership student explícita", () => {
   assert.equal(canTeachCourse({ orgRole: "owner", courseRole: null }), true);
-  assert.equal(canTeachCourse({ orgRole: "teacher", courseRole: "student" }), true);
+  assert.equal(canTeachCourse({ orgRole: "teacher", courseRole: null }), true);
+  assert.equal(canTeachCourse({ orgRole: "teacher", courseRole: "unknown" }), true);
 });
 
 test("course_members.teacher u owner puede enseñar su curso", () => {
@@ -51,9 +52,11 @@ test("course_members.teacher u owner puede enseñar su curso", () => {
   assert.equal(canTeachCourse({ orgRole: "student", courseRole: "teacher" }), true);
 });
 
-test("alumno no puede enseñar", () => {
+test("alumno no puede enseñar (incl. org staff con course student explícito)", () => {
   assert.equal(canTeachCourse({ orgRole: "student", courseRole: "student" }), false);
   assert.equal(canTeachCourse({ orgRole: null, courseRole: "student" }), false);
+  assert.equal(canTeachCourse({ orgRole: "teacher", courseRole: "student" }), false);
+  assert.equal(canTeachCourse({ orgRole: "owner", courseRole: "student" }), false);
   assert.equal(canTeachCourse({}), false);
 });
 
@@ -154,6 +157,7 @@ test("ROLE-08 null/unknown no admin -> none, fail closed", () => {
 });
 
 test("ROLE-09 preferred_role=teacher only -> no teaching permission", () => {
+  // profiles.preferred_role / signup role must not grant permissions
   const ctx = resolveCourseContext({
     orgRole: null,
     courseRole: null,
@@ -162,16 +166,111 @@ test("ROLE-09 preferred_role=teacher only -> no teaching permission", () => {
   assert.equal(ctx.mode, COURSE_ACCESS_MODES.NONE);
   assert.equal(ctx.capabilities.canTeachCourse, false);
   assert.equal(canTeachCourse({ orgRole: null, courseRole: null }), false);
+  assert.equal(
+    resolveCourseContext({ preferredRole: "teacher" }).mode,
+    "none",
+    "profiles.preferred_role must not be the effective role resolver",
+  );
 });
 
 test("ROLE-10 same user teacher in course A and student in B -> role changes by context", () => {
-  const asTeacher = resolveCourseContext({ orgRole: null, courseRole: "teacher" });
-  const asStudent = resolveCourseContext({ orgRole: null, courseRole: "student" });
-  assert.equal(asTeacher.mode, COURSE_ACCESS_MODES.TEACHING);
-  assert.equal(asTeacher.displayRole, "co_teacher");
-  assert.equal(asStudent.mode, COURSE_ACCESS_MODES.STUDYING);
-  assert.equal(asStudent.displayRole, "student");
-  assert.notEqual(asTeacher.mode, asStudent.mode);
+  // Sin org staff: co-docente vs alumno
+  const asCoTeacher = resolveCourseContext({ orgRole: null, courseRole: "teacher" });
+  const asStudentOnly = resolveCourseContext({ orgRole: null, courseRole: "student" });
+  assert.equal(asCoTeacher.mode, COURSE_ACCESS_MODES.TEACHING);
+  assert.equal(asCoTeacher.displayRole, "co_teacher");
+  assert.equal(asStudentOnly.mode, COURSE_ACCESS_MODES.STUDYING);
+  assert.equal(asStudentOnly.displayRole, "student");
+  assert.notEqual(asCoTeacher.mode, asStudentOnly.mode);
+
+  // Misma institución: org teacher + course teacher en A, course student en B
+  const courseA = resolveCourseContext({ orgRole: "teacher", courseRole: "teacher" });
+  const courseB = resolveCourseContext({ orgRole: "teacher", courseRole: "student" });
+  assert.equal(courseA.mode, COURSE_ACCESS_MODES.TEACHING);
+  assert.equal(courseA.displayRole, "teacher");
+  assert.equal(courseA.capabilities.canTeachCourse, true);
+  assert.equal(courseB.mode, COURSE_ACCESS_MODES.STUDYING);
+  assert.equal(courseB.displayRole, "student");
+  assert.equal(courseB.capabilities.canTeachCourse, false);
+  assert.equal(courseB.capabilities.canStudyCourse, true);
+  assert.notEqual(courseA.mode, courseB.mode);
+});
+
+test("AC1 org teacher + explicit course student -> studying only that course", () => {
+  // Given organization_members.role exactly 'teacher' and course_members.role exactly 'student'
+  const src = readSrc("src/platform/courseRole.js");
+  assert.match(src, /organization_members\.role/);
+  assert.match(src, /profiles\.preferred_role/);
+  assert.match(src, /resolveCourseContext\(\.\.\.\)\.mode/);
+  const ctx = resolveCourseContext({ orgRole: "teacher", courseRole: "student" });
+  assert.equal(
+    ctx.mode,
+    COURSE_ACCESS_MODES.STUDYING,
+    "resolveCourseContext(...).mode must be exactly studying",
+  );
+  assert.equal(resolveCourseContext({ orgRole: "teacher", courseRole: "student" }).mode, "studying");
+  assert.equal(ctx.displayRole, "student");
+  assert.equal(ctx.capabilities.canStudyCourse, true);
+  assert.equal(ctx.capabilities.canTeachCourse, false);
+  assert.equal(ctx.capabilities.canGradeCourse, false);
+  assert.equal(ctx.capabilities.canManageRoster, false);
+  assert.deepEqual([...courseTabIdsForMode(ctx.mode)], ["resumen", "actividades", "notas"]);
+  assert.ok(!courseTabIdsForMode(ctx.mode).includes("alumnos"));
+  assert.ok(!courseTabIdsForMode(ctx.mode).includes("entregas"));
+  assert.ok(!courseTabIdsForMode(ctx.mode).includes("integraciones"));
+});
+
+test("AC2 org teacher + no course membership -> teaching preserved", () => {
+  // PRESERVE: without course_members.role student, organization_members.role teacher keeps teaching
+  // PRESERVE list: AC2 institution teacher teaching access; AC12 staff without explicit course membership;
+  // PRESERVE: existing co-teacher; invitation/Classroom membership; fail-closed unknown roles.
+  const ctx = resolveCourseContext({ orgRole: "teacher", courseRole: null });
+  assert.equal(
+    resolveCourseContext({ orgRole: "teacher", courseRole: null }).mode,
+    "teaching",
+    "resolveCourseContext(...).mode must remain teaching when no explicit student",
+  );
+  assert.equal(ctx.mode, COURSE_ACCESS_MODES.TEACHING);
+  assert.equal(ctx.displayRole, "teacher");
+  assert.equal(ctx.capabilities.canTeachCourse, true);
+  assert.equal(ctx.capabilities.canStudyCourse, false);
+});
+
+test("AC3 explicit course teacher -> teaching (co-teacher without org staff)", () => {
+  // course_members.role exactly 'teacher' -> resolveCourseContext(...).mode teaching
+  const ctx = resolveCourseContext({ orgRole: null, courseRole: "teacher" });
+  assert.equal(ctx.mode, COURSE_ACCESS_MODES.TEACHING);
+  assert.equal(resolveCourseContext({ orgRole: null, courseRole: "teacher" }).mode, "teaching");
+  assert.equal(ctx.displayRole, "co_teacher");
+  assert.equal(ctx.capabilities.canTeachCourse, true);
+});
+
+test("AC4/AC7 org owner + explicit course student: management intact, no pedagogical teacher", () => {
+  // organization_members.role owner + course_members.role student: management ≠ pedagogical teaching
+  const ctx = resolveCourseContext({ orgRole: "owner", courseRole: "student" });
+  assert.equal(ctx.mode, COURSE_ACCESS_MODES.STUDYING);
+  assert.equal(resolveCourseContext({ orgRole: "owner", courseRole: "student" }).mode, "studying");
+  assert.equal(ctx.displayRole, "student");
+  assert.equal(ctx.capabilities.canManageOrganization, true);
+  assert.equal(ctx.capabilities.canTeachCourse, false);
+  assert.equal(ctx.capabilities.canGradeCourse, false);
+  assert.equal(ctx.capabilities.canManageRoster, false);
+  assert.equal(ctx.capabilities.canStudyCourse, true);
+});
+
+test("AC11 unknown course role no se convierte en student ni teacher", () => {
+  assert.equal(normalizeCourseRole("admin"), null);
+  assert.equal(normalizeCourseRole(null), null);
+  const noStaff = resolveCourseContext({ orgRole: null, courseRole: "admin" });
+  assert.equal(noStaff.mode, COURSE_ACCESS_MODES.NONE);
+  assert.equal(noStaff.displayRole, null);
+  assert.equal(noStaff.capabilities.canTeachCourse, false);
+  assert.equal(noStaff.capabilities.canStudyCourse, false);
+  // Sin membership pedagógica conocida, staff org conserva teaching (no inventa student)
+  const staffUnknown = resolveCourseContext({ orgRole: "teacher", courseRole: "admin" });
+  assert.equal(staffUnknown.mode, COURSE_ACCESS_MODES.TEACHING);
+  assert.equal(staffUnknown.capabilities.canTeachCourse, true);
+  assert.equal(staffUnknown.capabilities.canStudyCourse, false);
 });
 
 test("ROLE-11 /dashboard/classes mixed roles -> no forced current-role badge", () => {
@@ -221,6 +320,30 @@ test("capacidades trusted: platform/org/study/grade/roster", () => {
   assert.equal(canGradeCourse({ orgRole: "teacher" }), true);
   assert.equal(canManageRoster({ courseRole: "teacher" }), true);
   assert.equal(canGradeCourse({ courseRole: "student" }), false);
+  assert.equal(canGradeCourse({ orgRole: "teacher", courseRole: "student" }), false);
+  assert.equal(canManageRoster({ orgRole: "owner", courseRole: "student" }), false);
+});
+
+test("AC6 backend is_course_teacher matches frontend explicit-student precedence", () => {
+  const mig = readSrc(
+    "supabase/migrations/20260930210055_is_course_teacher_explicit_student.sql",
+  );
+  assert.ok(
+    mig.includes("public.is_course_teacher()"),
+    "migration must reference public.is_course_teacher()",
+  );
+  assert.match(mig, /create or replace function public\.is_course_teacher/);
+  assert.match(mig, /is_course_org_staff/);
+  assert.match(mig, /cm\.role = 'student'/);
+  assert.match(mig, /cm\.role = 'teacher'/);
+  assert.match(mig, /and not exists/);
+  assert.match(mig, /course_members/);
+  // Semántica alineada con resolveCourseContext(...).mode: org teacher + course student => studying / no teach
+  assert.equal(canTeachCourse({ orgRole: "teacher", courseRole: "student" }), false);
+  assert.equal(canTeachCourse({ orgRole: "teacher", courseRole: null }), true);
+  assert.equal(canTeachCourse({ orgRole: null, courseRole: "teacher" }), true);
+  assert.equal(resolveCourseContext({ orgRole: "teacher", courseRole: "student" }).mode, "studying");
+  assert.equal(resolveCourseContext({ orgRole: "teacher", courseRole: null }).mode, "teaching");
 });
 
 test("superadmin no se mapea automáticamente a Docente", () => {

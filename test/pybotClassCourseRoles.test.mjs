@@ -84,6 +84,33 @@ test("P19 multirol: Gestión + Docente + Alumno cuando hay student explícito", 
   assert.ok(ids.includes("alumno"));
 });
 
+test("AC5 org teacher + student course: badges Docente y Alumno from real memberships", () => {
+  // organization_members.role teacher + course_members teacher/student — not profiles.preferred_role
+  const badges = computeAccountRoleBadges({
+    orgs: [{ role: "teacher" }],
+    courses: [
+      { my_course_role: "teacher" },
+      { my_course_role: "student" },
+    ],
+  });
+  const labels = badges.map((b) => b.label);
+  assert.ok(labels.includes("Docente"));
+  assert.ok(labels.includes("Alumno"));
+  assert.ok(!labels.includes("Gestión"));
+  const summary = computeQuickSummary({
+    courses: [
+      { my_course_role: "teacher", student_count: 3, activity_count: 1, pending_grade_count: 0 },
+      { my_course_role: "student", student_count: 0, activity_count: 0, pending_grade_count: 0 },
+    ],
+  });
+  assert.equal(summary.find((i) => i.id === "teacher")?.value, "1");
+  assert.equal(summary.find((i) => i.id === "student")?.value, "1");
+  const accountRolesSrc = readSrc("src/platform/accountRoles.js");
+  assert.match(accountRolesSrc, /profiles\.preferred_role/);
+  assert.match(accountRolesSrc, /organization_members\.role/);
+  assert.doesNotMatch(accountRolesSrc, /preferredRole/);
+});
+
 test("P19 unknown no cuenta como docente ni alumno", () => {
   const items = computeQuickSummary({
     courses: [{ my_course_role: null }, { my_course_role: "admin" }],

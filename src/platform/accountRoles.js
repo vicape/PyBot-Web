@@ -1,7 +1,8 @@
 import { normalizeCourseRole } from "./courseRole.js";
 
 /**
- * Badges de rol derivados de datos reales (no preferred_role).
+ * Badges de rol derivados de memberships reales (organization_members.role / course_members.role).
+ * profiles.preferred_role must not invent Docente/Alumno badges.
  * @param {{ orgs?: {role?: string}[], courses?: {my_course_role?: string}[], isSuperAdmin?: boolean }} input
  */
 export function computeAccountRoleBadges({ orgs = [], courses = [], isSuperAdmin = false } = {}) {

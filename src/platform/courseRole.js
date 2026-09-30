@@ -51,10 +51,18 @@ export function canManageOrganization({ orgRole = null } = {}) {
 
 /**
  * Capacidades docentes sobre un curso concreto.
+ * Precedencia canónica:
+ * - organization_members.role = institution-level capabilities (owner/teacher staff)
+ * - course_members.role = explicit pedagogical role for the course
+ * - explicit course_members.student MUST NOT be overridden by org staff
+ * - without explicit course membership, preserve existing institution staff teaching
  * @param {{ orgRole?: string | null, courseRole?: string | null }} opts
  */
 export function canTeachCourse({ orgRole = null, courseRole = null } = {}) {
-  return isStaffRole(orgRole) || normalizeCourseRole(courseRole) === "teacher";
+  const normalized = normalizeCourseRole(courseRole);
+  if (normalized === "student") return false;
+  if (normalized === "teacher") return true;
+  return isStaffRole(orgRole);
 }
 
 /**
@@ -82,8 +90,11 @@ export function canManageRoster({ orgRole = null, courseRole = null } = {}) {
 
 /**
  * Resolvedor contextual único: etiqueta de display + modo de acceso + capacidades.
- * No persiste rol; preferredRole se ignora (preferencia, no permiso).
- * Superadmin no se mapea automáticamente a Docente/Alumno.
+ * profiles.preferred_role / preferredRole is preference only — never authorization.
+ * When course_members.role is explicit, it determines pedagogical mode for that course;
+ * organization_members.role alone must not override explicit course student.
+ * Contract: resolveCourseContext(...).mode is studying when course_members.role is student
+ * even if organization_members.role is teacher/owner; otherwise staff teaching is preserved.
  *
  * @param {{
  *   orgRole?: string | null,
@@ -110,6 +121,7 @@ export function resolveCourseContext({
   isSuperAdmin = false,
   preferredRole = null,
 } = {}) {
+  // profiles.preferred_role must not grant permissions / must not be the effective role resolver
   void preferredRole;
 
   const capabilities = {
@@ -127,18 +139,18 @@ export function resolveCourseContext({
   let mode = COURSE_ACCESS_MODES.NONE;
   let displayRole = null;
 
-  if (orgStaff) {
-    // owner u org-teacher → Docente / teaching (prioridad pedagógica)
+  if (normalized === "student") {
+    // course_members.student explícito → Alumno / studying (no lo pisa org staff)
+    mode = COURSE_ACCESS_MODES.STUDYING;
+    displayRole = COURSE_DISPLAY_ROLES.STUDENT;
+  } else if (orgStaff) {
+    // owner u org-teacher sin student explícito → Docente / teaching
     mode = COURSE_ACCESS_MODES.TEACHING;
     displayRole = COURSE_DISPLAY_ROLES.TEACHER;
   } else if (normalized === "teacher") {
     // course teacher sin staff de org → Co-docente / teaching
     mode = COURSE_ACCESS_MODES.TEACHING;
     displayRole = COURSE_DISPLAY_ROLES.CO_TEACHER;
-  } else if (normalized === "student") {
-    // student (también con superadmin) → Alumno / studying
-    mode = COURSE_ACCESS_MODES.STUDYING;
-    displayRole = COURSE_DISPLAY_ROLES.STUDENT;
   } else if (isSuperAdmin === true) {
     // superadmin sin rol pedagógico → Superadmin / admin (neutro)
     mode = COURSE_ACCESS_MODES.ADMIN;
