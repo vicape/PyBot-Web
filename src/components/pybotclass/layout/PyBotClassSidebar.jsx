@@ -12,6 +12,12 @@ const DAILY_NAV = [
   { id: "ide", labelKey: "pcOpenIde", to: "/", external: true },
 ];
 
+/**
+ * Sidebar presentation vs authorization:
+ * - showMyContent / teacherOnly nav = authorization (hasStaffAccess) only
+ * - showInstitutions = presentation onboarding (staff OR preferredRole teacher)
+ * - preferredRole never unlocks Content or other protected teacher tools
+ */
 export default function PyBotClassSidebar({
   id = "pbc-sidebar",
   open,
@@ -20,6 +26,7 @@ export default function PyBotClassSidebar({
   onNavigate,
   showMyContent = true,
   showInstitutions = true,
+  preferredRole = null,
 }) {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -27,11 +34,14 @@ export default function PyBotClassSidebar({
   const tab = params.get("tab");
   const view = params.get("view");
   const path = location.pathname;
+  // preferredRole is presentation-only (Institutions via showInstitutions); unused for auth gates
+  void preferredRole;
 
   const nav = useMemo(
     () =>
       DAILY_NAV.filter((item) => {
-        if (item.id === "content") return showMyContent;
+        // Authorization: Content stays gated by showMyContent, never by preferredRole
+        if (item.teacherOnly || item.id === "content") return showMyContent;
         return PRIMARY_NAV_IDS.includes(item.id);
       }),
     [showMyContent],

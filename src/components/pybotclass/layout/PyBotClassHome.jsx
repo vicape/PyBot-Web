@@ -2,6 +2,10 @@ import { t } from "../../../i18n.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { countryNameByCode } from "../../../data/countries.js";
+import {
+  canUseTeacherCapabilities,
+  wantsTeacherExperience,
+} from "../../../orgRole.js";
 import { computeAccountRoleBadges, computeQuickSummary } from "../../../platform/accountRoles.js";
 import { normalizeCourseRole } from "../../../platform/courseRole.js";
 import { connectGoogleClassroom } from "../../../platform/googleOAuth.js";
@@ -21,7 +25,7 @@ import {
   IconPeople,
 } from "../illustrations/ActionIcons.jsx";
 import EmptyCoursesIllustration from "../illustrations/EmptyCoursesIllustration.jsx";
-import { GoogleClassroomIcon } from "../illustrations/SidebarIcons.jsx";
+import { GoogleClassroomIcon, SidebarIcon } from "../illustrations/SidebarIcons.jsx";
 import { UxIcon } from "../illustrations/UxIcons.jsx";
 import RoleBadges from "./RoleBadges.jsx";
 
@@ -30,8 +34,24 @@ const ROLE_BADGE = {
   student: { label: t("pcStudent"), variant: "teal" },
 };
 
-function CourseCards({ filtered, hasStaffAccess, onCreateCourse, onJoinCourse }) {
+const INSTITUTIONS_HREF = "/dashboard?tab=schools";
+
+function emptyCoursesDesc({ canTeach, wantsTeacher }) {
+  if (canTeach) return t("pcNoCoursesStaffDesc");
+  if (wantsTeacher) return t("pcWorkAsTeacher");
+  return t("pcNoCoursesStudentDesc");
+}
+
+function CourseCards({
+  filtered,
+  canTeach,
+  wantsTeacher,
+  onCreateCourse,
+  onJoinCourse,
+}) {
   if (filtered.length === 0) {
+    const showCreate = canTeach;
+    const showInstitutionsCta = wantsTeacher && !canTeach;
     return (
       <div className="pbc-empty-state">
         <span className="pbc-empty-state__illus" aria-hidden>
@@ -39,10 +59,10 @@ function CourseCards({ filtered, hasStaffAccess, onCreateCourse, onJoinCourse })
         </span>
         <h3 className="pbc-empty-state__title">{t("pcNoCoursesYet")}</h3>
         <p className="pbc-empty-state__desc">
-          {hasStaffAccess ? t("pcNoCoursesStaffDesc") : t("pcNoCoursesStudentDesc")}
+          {emptyCoursesDesc({ canTeach, wantsTeacher })}
         </p>
         <div className="pbc-empty-state__actions">
-          {hasStaffAccess ? (
+          {showCreate ? (
             <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
               <span aria-hidden>
                 <CompactCreateIcon />
@@ -50,9 +70,17 @@ function CourseCards({ filtered, hasStaffAccess, onCreateCourse, onJoinCourse })
               {t("pcCreateCourse")}
             </button>
           ) : null}
+          {showInstitutionsCta ? (
+            <Link to={INSTITUTIONS_HREF} className="pbc-btn pbc-btn--primary">
+              <span aria-hidden>
+                <SidebarIcon id="institutions" />
+              </span>
+              {t("pcInstitutions")}
+            </Link>
+          ) : null}
           <button
             type="button"
-            className={`pbc-btn ${hasStaffAccess ? "pbc-btn--ghost" : "pbc-btn--primary"}`}
+            className={`pbc-btn ${showCreate || showInstitutionsCta ? "pbc-btn--ghost" : "pbc-btn--primary"}`}
             onClick={onJoinCourse}
           >
             <span aria-hidden>
@@ -175,6 +203,7 @@ export default function PyBotClassHome({
   courses = [],
   isSuperAdmin = false,
   hasStaffAccess = false,
+  preferredRole = null,
   onCreateCourse,
   onJoinCourse,
   classesView = "home",
@@ -184,6 +213,11 @@ export default function PyBotClassHome({
   const [classroomLinked, setClassroomLinked] = useState(null);
   const location = useLocation();
 
+  // Presentation vs authorization — never merge these concepts.
+  const wantsTeacher = wantsTeacherExperience(preferredRole);
+  const canTeach = canUseTeacherCapabilities(hasStaffAccess);
+  const needsTeacherOnboarding = wantsTeacher && !canTeach;
+
   const view = classesView || resolveClassesView({
     view: new URLSearchParams(location.search).get("view"),
     hash: location.hash,
@@ -192,6 +226,7 @@ export default function PyBotClassHome({
 
   useEffect(() => {
     let cancelled = false;
+    // Authorization: Classroom teacher link only when hasStaffAccess
     if (!user?.id || !hasStaffAccess) {
       setClassroomLinked(false);
       return undefined;
@@ -303,6 +338,8 @@ export default function PyBotClassHome({
   const classroomStatusLabel =
     classroomLinked == null ? "…" : classroomLinked ? t("pcLinked") : t("pcNotLinked");
 
+  const homeLead = needsTeacherOnboarding ? t("pcWorkAsTeacher") : t("pcHomeLead");
+
   if (isCoursesView) {
     return (
       <div className="pbc-home pbc-home--courses-view">
@@ -314,7 +351,9 @@ export default function PyBotClassHome({
               </span>
               <div className="pbc-hero-block__text">
                 <h1 className="pbc-hero-block__title">{t("pcCourses")}</h1>
-                <p className="pbc-hero-block__subtitle">{t("pcCoursesViewLead")}</p>
+                <p className="pbc-hero-block__subtitle">
+                  {needsTeacherOnboarding ? t("pcWorkAsTeacher") : t("pcCoursesViewLead")}
+                </p>
               </div>
             </div>
             <div className="pbc-hero-block__actions" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -326,9 +365,17 @@ export default function PyBotClassHome({
                   {t("pcCreateCourse")}
                 </button>
               ) : null}
+              {needsTeacherOnboarding ? (
+                <Link to={INSTITUTIONS_HREF} className="pbc-btn pbc-btn--primary">
+                  <span aria-hidden>
+                    <SidebarIcon id="institutions" />
+                  </span>
+                  {t("pcInstitutions")}
+                </Link>
+              ) : null}
               <button
                 type="button"
-                className={`pbc-btn ${hasStaffAccess ? "pbc-btn--ghost" : "pbc-btn--primary"}`}
+                className={`pbc-btn ${hasStaffAccess || needsTeacherOnboarding ? "pbc-btn--ghost" : "pbc-btn--primary"}`}
                 onClick={onJoinCourse}
               >
                 <span aria-hidden>
@@ -383,7 +430,8 @@ export default function PyBotClassHome({
 
             <CourseCards
               filtered={filtered}
-              hasStaffAccess={hasStaffAccess}
+              canTeach={hasStaffAccess}
+              wantsTeacher={wantsTeacher}
               onCreateCourse={onCreateCourse}
               onJoinCourse={onJoinCourse}
             />
@@ -406,7 +454,7 @@ export default function PyBotClassHome({
               <h1 className="pbc-hero-block__title">
                 {t("pcHello")}, {firstName}
               </h1>
-              <p className="pbc-hero-block__subtitle">{t("pcHomeLead")}</p>
+              <p className="pbc-hero-block__subtitle">{homeLead}</p>
             </div>
           </div>
           <div className="pbc-hero-block__actions">
@@ -417,6 +465,14 @@ export default function PyBotClassHome({
                 </span>
                 {t("pcCreateCourse")}
               </button>
+            ) : null}
+            {needsTeacherOnboarding ? (
+              <Link to={INSTITUTIONS_HREF} className="pbc-btn pbc-btn--primary">
+                <span aria-hidden>
+                  <SidebarIcon id="institutions" />
+                </span>
+                {t("pcInstitutions")}
+              </Link>
             ) : null}
             <a href="/" className="pbc-btn pbc-btn--ghost">
               <span aria-hidden>
@@ -484,6 +540,18 @@ export default function PyBotClassHome({
             </Link>
           ) : null}
 
+          {needsTeacherOnboarding ? (
+            <Link to={INSTITUTIONS_HREF} className="pbc-action-card pbc-action-card--create">
+              <span className="pbc-action-card__icon pbc-action-card__icon--blue" aria-hidden>
+                <SidebarIcon id="institutions" />
+              </span>
+              <span className="pbc-action-card__body">
+                <span className="pbc-action-card__title">{t("pcInstitutions")}</span>
+                <span className="pbc-action-card__desc">{t("pcWorkAsTeacher")}</span>
+              </span>
+            </Link>
+          ) : null}
+
           <button type="button" className="pbc-action-card pbc-action-card--join" onClick={onJoinCourse}>
             <span className="pbc-action-card__icon pbc-action-card__icon--violet" aria-hidden>
               <CompactJoinIcon />
@@ -542,7 +610,8 @@ export default function PyBotClassHome({
           </div>
           <CourseCards
             filtered={recentCourses}
-            hasStaffAccess={hasStaffAccess}
+            canTeach={hasStaffAccess}
+            wantsTeacher={wantsTeacher}
             onCreateCourse={onCreateCourse}
             onJoinCourse={onJoinCourse}
           />

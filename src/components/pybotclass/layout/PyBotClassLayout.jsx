@@ -6,7 +6,7 @@ import "../../../styles/pybotclass-dashboard.css";
 import { AppearanceContext } from "./appearanceContext.js";
 import PyBotClassSidebar from "./PyBotClassSidebar.jsx";
 import PyBotClassTopbar from "./PyBotClassTopbar.jsx";
-import { canShowInstitutionsEntry } from "../../../orgRole.js";
+import { canShowInstitutionsEntry, canUseTeacherCapabilities } from "../../../orgRole.js";
 import { useHasStaffAccess } from "./useHasStaffAccess.js";
 
 /* Desktop viewport: >= 961px — sidebar defaults open and hamburger is a real toggle. */
@@ -38,8 +38,8 @@ export default function PyBotClassLayout({
   const [sidebarOpen, setSidebarOpen] = useState(() => isDesktopViewport());
   const { appearance, updateAppearance } = useAppearance(user?.id, containerRef);
   const hasStaffAccess = useHasStaffAccess(user, hasStaffAccessProp);
-  // Fail closed while resolving: hide teacher tools until known
-  const showTeacherTools = hasStaffAccess === true;
+  // Authorization only — preferredRole must never unlock teacher tools
+  const showTeacherTools = canUseTeacherCapabilities(hasStaffAccess);
   // Presentation-only Institutions onboarding; does not unlock Create Course / Classroom / content
   const showInstitutions = canShowInstitutionsEntry({
     hasStaffAccess: showTeacherTools,
@@ -91,6 +91,7 @@ export default function PyBotClassLayout({
           showAdmin={showAdmin}
           showMyContent={showTeacherTools}
           showInstitutions={showInstitutions}
+          preferredRole={preferredRole}
         />
 
         <div className="pbc-dashboard__main">

@@ -226,6 +226,7 @@ export default function PyBotClassPage() {
         courses={filteredCourses}
         isSuperAdmin={superAdmin}
         hasStaffAccess={hasStaffAccess}
+        preferredRole={preferredRole}
         onCreateCourse={() => setShowCreate(true)}
         onJoinCourse={() => setShowJoin(true)}
         classesView={classesView}

@@ -58,6 +58,22 @@ export function hasTeacherPreference(preferredRole) {
 }
 
 /**
+ * Presentation: el usuario pidió experiencia orientada a docente.
+ * Equivale a preferred_role === 'teacher'. NUNCA es autorización.
+ */
+export function wantsTeacherExperience(preferredRole) {
+  return preferredRole === "teacher";
+}
+
+/**
+ * Authorization: capacidades docentes privilegiadas.
+ * Solo hasStaffAccess factual — NUNCA incluye preferredRole.
+ */
+export function canUseTeacherCapabilities(hasStaffAccess) {
+  return hasStaffAccess === true;
+}
+
+/**
  * Visibilidad presentation-only del entry Instituciones / onboarding.
  * hasStaffAccess OR preferred_role === 'teacher'.
  * NO concede roster, grading, Create Course ni otras capacidades teacher.
@@ -66,7 +82,10 @@ export function canShowInstitutionsEntry({
   hasStaffAccess = false,
   preferredRole = null,
 } = {}) {
-  return hasStaffAccess === true || preferredRole === "teacher";
+  return (
+    canUseTeacherCapabilities(hasStaffAccess) ||
+    wantsTeacherExperience(preferredRole)
+  );
 }
 
 /**
