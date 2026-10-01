@@ -3,6 +3,7 @@
  * Separate from Point 4 item progress/completion. Wall-clock active segments only.
  */
 
+/** Inactivity boundary: exactly 90,000 ms of eligible non-video wall-clock time. */
 export const ENGAGEMENT_INACTIVITY_MS = 90_000;
 export const ENGAGEMENT_SYNC_INTERVAL_MS = 15_000;
 
@@ -149,20 +150,26 @@ export function createEngagementManager(options = {}) {
 
   function tickInternal() {
     const t = nowFn();
-    const dt = Math.max(0, t - lastTickAt);
+    const prevTick = lastTickAt;
+    const dt = Math.max(0, t - prevTick);
     lastTickAt = t;
     if (!accumulating || !segment || !documentVisible) return;
 
     if (currentTarget?.targetType === "video") {
       if (!videoPlaying) return;
       segment.activeMs += dt;
-    } else {
-      if (lastInteractionAt != null && t - lastInteractionAt >= inactivityMs) {
+    } else if (lastInteractionAt != null) {
+      // Credit only until the exact 90,000 ms inactivity boundary, even if a delayed clock advance runs late.
+      const idleDeadline = lastInteractionAt + inactivityMs;
+      const credit = Math.min(dt, Math.max(0, idleDeadline - prevTick));
+      segment.activeMs += credit;
+      if (t >= idleDeadline) {
         idlePaused = true;
         accumulating = false;
         endSegment("idle");
         return;
       }
+    } else {
       segment.activeMs += dt;
     }
 
@@ -251,6 +258,21 @@ export function createEngagementManager(options = {}) {
     }
   }
 
+  /**
+   * Explicit lesson-document interaction: switch attribution back from an item
+   * unless a video is actively playing (highest priority).
+   */
+  function activateLessonDocument() {
+    if (destroyed || !lessonDocTarget) return;
+    tickInternal();
+    if (currentTarget?.targetType === "video" && videoPlaying) return;
+    if (sameTarget(currentTarget, lessonDocTarget)) {
+      noteInteraction();
+      return;
+    }
+    setTarget(lessonDocTarget, { startIfEligible: true });
+  }
+
   function noteInteraction() {
     if (destroyed) return;
     tickInternal();
@@ -332,7 +354,7 @@ export function createEngagementManager(options = {}) {
     }
   }
 
-  function tick() {
+  function advanceClock() {
     if (destroyed) return getSnapshot();
     tickInternal();
     return getSnapshot();
@@ -380,11 +402,14 @@ export function createEngagementManager(options = {}) {
     setDocumentVisible,
     setTarget,
     setLessonDocumentTarget,
+    activateLessonDocument,
     noteInteraction,
     setVideoPlaying,
     setVideoMediaState,
     leaveCurrentTarget,
-    tick,
+    // Public clock advance (tests may still call via .tick alias)
+    advanceClock,
+    tick: advanceClock,
     flush,
     destroy,
     getSnapshot,

@@ -1,9 +1,10 @@
 /**
  * React hook: wires Point 5 engagement manager to a student activity surface.
  * Presence-only listeners (no event payload capture/serialization).
+ * Returned API object is referentially stable across rerenders (same activity context).
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ENGAGEMENT_SYNC_INTERVAL_MS,
   createEngagementManager,
@@ -12,6 +13,7 @@ import {
   resolveSnapshotItemEngagementTarget,
 } from "./activityEngagement.js";
 import {
+  discardLegacyUnscopedPendingEngagement,
   flushPendingEngagementSegments,
   handleEngagementFlush,
 } from "./activityEngagementSync.js";
@@ -39,8 +41,26 @@ export function useActivityEngagement({
   const tickTimerRef = useRef(null);
   const activityRef = useRef(activity);
   const snapshotRef = useRef(snapshot);
+  /** Local pending-queue namespace only — never trusted write identity. */
+  const localUserIdRef = useRef(null);
   activityRef.current = activity;
   snapshotRef.current = snapshot;
+
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb?.auth) return undefined;
+    let cancelled = false;
+    void sb.auth.getSession().then(({ data }) => {
+      if (!cancelled) localUserIdRef.current = data?.session?.user?.id || null;
+    });
+    const { data: sub } = sb.auth.onAuthStateChange((_evt, session) => {
+      localUserIdRef.current = session?.user?.id || null;
+    });
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
 
   const ensureManager = useCallback(() => {
     if (!enabled || !activityId) return null;
@@ -54,7 +74,12 @@ export function useActivityEngagement({
     const mgr = createEngagementManager({
       activityId,
       onFlush: (payload) => {
-        void handleEngagementFlush(payload, getSupabase());
+        void handleEngagementFlush(
+          payload,
+          getSupabase(),
+          undefined,
+          localUserIdRef.current,
+        );
       },
     });
     managerRef.current = mgr;
@@ -73,7 +98,8 @@ export function useActivityEngagement({
     const mgr = ensureManager();
     if (!mgr) return undefined;
 
-    void flushPendingEngagementSegments(getSupabase());
+    discardLegacyUnscopedPendingEngagement();
+    void flushPendingEngagementSegments(getSupabase(), undefined, localUserIdRef.current);
 
     const onVisibility = () => {
       mgr.setDocumentVisible(
@@ -90,7 +116,7 @@ export function useActivityEngagement({
     window.addEventListener("pagehide", onPageHide);
 
     tickTimerRef.current = setInterval(() => {
-      mgr.tick();
+      mgr.advanceClock();
     }, Math.min(1000, ENGAGEMENT_SYNC_INTERVAL_MS));
 
     if (mode === "ide") {
@@ -181,10 +207,20 @@ export function useActivityEngagement({
     [ensureManager],
   );
 
+  const activateLessonDocument = useCallback(() => {
+    managerRef.current?.activateLessonDocument?.();
+  }, []);
+
   const setItemTarget = useCallback(
     (item) => {
       const mgr = ensureManager();
       if (!mgr) return;
+      const snap = mgr.getSnapshot();
+      // Playing video has highest priority and overrides item attribution.
+      if (snap.videoPlaying && snap.currentTarget?.targetType === "video") {
+        const target = resolveSnapshotItemEngagementTarget(item);
+        if (!target || snap.currentTarget.targetId !== target.targetId) return;
+      }
       const target = resolveSnapshotItemEngagementTarget(item);
       if (target) {
         mgr.setTarget(target, { startIfEligible: true });
@@ -217,13 +253,29 @@ export function useActivityEngagement({
     managerRef.current?.noteInteraction();
   }, []);
 
-  return {
-    setSurfaceRef,
-    setLessonDocument,
-    setItemTarget,
-    leaveTarget,
-    onVideoMediaState,
-    noteInteraction,
-    getSnapshot: () => managerRef.current?.getSnapshot() || null,
-  };
+  const getSnapshot = useCallback(() => managerRef.current?.getSnapshot() || null, []);
+
+  // Stable API: consumers may put this object in effect deps without fragmenting sessions.
+  return useMemo(
+    () => ({
+      setSurfaceRef,
+      setLessonDocument,
+      activateLessonDocument,
+      setItemTarget,
+      leaveTarget,
+      onVideoMediaState,
+      noteInteraction,
+      getSnapshot,
+    }),
+    [
+      setSurfaceRef,
+      setLessonDocument,
+      activateLessonDocument,
+      setItemTarget,
+      leaveTarget,
+      onVideoMediaState,
+      noteInteraction,
+      getSnapshot,
+    ],
+  );
 }

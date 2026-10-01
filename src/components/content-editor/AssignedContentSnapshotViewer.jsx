@@ -190,8 +190,9 @@ function SnapshotItemCard({
             src={videoUrl}
             style={{ maxWidth: "100%", maxHeight: 320 }}
             onPlay={() => {
+              // Select/prepare video target only — active time starts on onPlaying.
               if (!isDone && status === ITEM_PROGRESS_STATUS.NOT_STARTED) void onStart?.(item);
-              emitVideoState({ playing: true, waiting: false, seeking: false, ended: false, stalled: false });
+              engagement?.setItemTarget?.(item);
             }}
             onPlaying={() => {
               emitVideoState({ playing: true, waiting: false, seeking: false, ended: false, stalled: false });
@@ -613,7 +614,13 @@ function LessonMode({
         <article className="pbc-content-reader__article" aria-labelledby="pbc-reader-lesson-title">
           <LearningObjectives objectives={learningObjectives} />
 
-          <div className="pbc-lesson-workspace pbc-lesson-workspace--preview">
+          <div
+            className="pbc-lesson-workspace pbc-lesson-workspace--preview"
+            onPointerDown={() => {
+              if (!engagement) return;
+              engagement.activateLessonDocument?.();
+            }}
+          >
             <ReadOnlyDoc docKey={lesson.id} initialContent={lesson.document_json} />
           </div>
 
@@ -801,7 +808,14 @@ function LessonDocumentSurface({
   return (
     <div className="pbc-lesson-workspace pbc-lesson-workspace--preview pbc-assigned-lesson" {...surfaceProps}>
       <ProgressPercent aggregates={aggregates} />
-      <ReadOnlyDoc docKey={snapshot.sourceId} initialContent={snapshot.document_json} />
+      <div
+        onPointerDown={() => {
+          if (!engagement) return;
+          engagement.activateLessonDocument?.();
+        }}
+      >
+        <ReadOnlyDoc docKey={snapshot.sourceId} initialContent={snapshot.document_json} />
+      </div>
       <SnapshotItemsList
         items={items}
         progressByItemId={progressMap}

@@ -145,12 +145,25 @@ export default function ActivityPage() {
   const isCodingActivity = activityKind === "exercise" || activityKind === "task";
 
   const engagement = useActivityEngagement({
-    enabled: Boolean(isStudent && activityId && snapshot),
+    // Snapshot path or legacy content_lesson_id-only assignment (lesson-document level).
+    enabled: Boolean(
+      isStudent && activityId && (snapshot || activity?.content_lesson_id),
+    ),
     activityId,
     mode: "content",
     activity,
     snapshot,
   });
+
+  // Legacy assigned lessons: content_lesson_id without content_snapshot → lesson-doc only.
+  useEffect(() => {
+    if (!isStudent || snapshot || !activity?.content_lesson_id) return undefined;
+    engagement.setLessonDocument?.({
+      id: activity.content_lesson_id,
+      unitId: null,
+    });
+    return () => engagement.leaveTarget?.();
+  }, [isStudent, snapshot, activity?.content_lesson_id, engagement]);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -1053,7 +1066,18 @@ export default function ActivityPage() {
               />
             </section>
           ) : lessonDoc && activity?.content_lesson_id ? (
-            <section className="pbc-activity-lesson" aria-label="Contenido de la lección">
+            <section
+              className="pbc-activity-lesson"
+              aria-label="Contenido de la lección"
+              ref={isStudent ? engagement.setSurfaceRef : undefined}
+              onPointerDown={
+                isStudent
+                  ? () => {
+                      engagement.activateLessonDocument?.();
+                    }
+                  : undefined
+              }
+            >
               <h2 className="pbc-activity-lesson__title">Lección</h2>
               <AssignedLessonViewer
                 key={activity.content_lesson_id}

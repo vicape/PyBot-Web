@@ -2,11 +2,14 @@
  * Point 5 — engagement segment sync + offline pending queue.
  * Absolute totals only; retries must not double-count.
  * Privacy: stores only segment ids/timestamps/totals — never raw interaction payloads.
+ * Local userId namespaces the pending cache only — never sent as trusted write identity.
  */
 
 import { getSupabase } from "../supabaseClient.js";
 
+/** Legacy unscoped queue — never reassigned; discard/ignore only. */
 export const ENGAGEMENT_PENDING_STORAGE_KEY = "pybot.engagement.pending.v1";
+export const ENGAGEMENT_PENDING_STORAGE_KEY_PREFIX_V2 = "pybot.engagement.pending.v2.";
 export const ENGAGEMENT_PENDING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 export const ENGAGEMENT_PENDING_MAX_ROWS = 200;
 
@@ -25,6 +28,27 @@ function getStorage() {
     return localStorage;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Local-cache namespace only. Never trust this id for server writes (auth.uid() is authoritative).
+ */
+export function pendingEngagementStorageKeyForUser(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return null;
+  return `${ENGAGEMENT_PENDING_STORAGE_KEY_PREFIX_V2}${id}`;
+}
+
+/**
+ * Legacy v1 unscoped queue must not be claimed by whichever user logs in next.
+ */
+export function discardLegacyUnscopedPendingEngagement(storage = getStorage()) {
+  if (!storage) return;
+  try {
+    storage.removeItem(ENGAGEMENT_PENDING_STORAGE_KEY);
+  } catch {
+    // ignore
   }
 }
 
@@ -52,9 +76,12 @@ export function normalizePendingSegment(row) {
   };
 }
 
-export function readPendingEngagementSegments(storage = getStorage()) {
+export function readPendingEngagementSegments(storage = getStorage(), localUserId = null) {
   if (!storage) return [];
-  const rows = safeParse(storage.getItem(ENGAGEMENT_PENDING_STORAGE_KEY) || "[]")
+  discardLegacyUnscopedPendingEngagement(storage);
+  const key = pendingEngagementStorageKeyForUser(localUserId);
+  if (!key) return [];
+  const rows = safeParse(storage.getItem(key) || "[]")
     .map(normalizePendingSegment)
     .filter(Boolean);
   return prunePendingEngagementSegments(rows, Date.now());
@@ -71,11 +98,14 @@ export function prunePendingEngagementSegments(rows, now = Date.now()) {
   return kept.slice(kept.length - ENGAGEMENT_PENDING_MAX_ROWS);
 }
 
-export function writePendingEngagementSegments(rows, storage = getStorage()) {
+export function writePendingEngagementSegments(rows, storage = getStorage(), localUserId = null) {
   if (!storage) return;
+  discardLegacyUnscopedPendingEngagement(storage);
+  const key = pendingEngagementStorageKeyForUser(localUserId);
+  if (!key) return;
   const next = prunePendingEngagementSegments(rows, Date.now());
   try {
-    storage.setItem(ENGAGEMENT_PENDING_STORAGE_KEY, JSON.stringify(next));
+    storage.setItem(key, JSON.stringify(next));
   } catch {
     // Quota / private mode — drop silently; never fabricate time.
   }
@@ -83,11 +113,15 @@ export function writePendingEngagementSegments(rows, storage = getStorage()) {
 
 /**
  * Upsert pending absolute total for a segment (monotonic locally too).
+ * localUserId is cache namespace only — never a write identity.
  */
-export function queuePendingEngagementSegment(payload, storage = getStorage()) {
+export function queuePendingEngagementSegment(payload, storage = getStorage(), localUserId = null) {
   const row = normalizePendingSegment({ ...payload, updatedAt: Date.now() });
-  if (!row) return readPendingEngagementSegments(storage);
-  const existing = readPendingEngagementSegments(storage);
+  if (!row) return readPendingEngagementSegments(storage, localUserId);
+  if (!pendingEngagementStorageKeyForUser(localUserId)) {
+    return [];
+  }
+  const existing = readPendingEngagementSegments(storage, localUserId);
   const idx = existing.findIndex((r) => r.clientSegmentId === row.clientSegmentId);
   if (idx >= 0) {
     const prev = existing[idx];
@@ -101,30 +135,53 @@ export function queuePendingEngagementSegment(payload, storage = getStorage()) {
   } else {
     existing.push(row);
   }
-  writePendingEngagementSegments(existing, storage);
+  writePendingEngagementSegments(existing, storage, localUserId);
   return existing;
 }
 
-export function removePendingEngagementSegment(clientSegmentId, storage = getStorage()) {
+export function removePendingEngagementSegment(
+  clientSegmentId,
+  storage = getStorage(),
+  localUserId = null,
+  { onlyIfAckMsAtLeast = null } = {},
+) {
   const id = String(clientSegmentId || "").trim();
-  if (!id) return readPendingEngagementSegments(storage);
-  const next = readPendingEngagementSegments(storage).filter((r) => r.clientSegmentId !== id);
-  writePendingEngagementSegments(next, storage);
+  if (!id) return readPendingEngagementSegments(storage, localUserId);
+  const pending = readPendingEngagementSegments(storage, localUserId);
+  const idx = pending.findIndex((r) => r.clientSegmentId === id);
+  if (idx < 0) return pending;
+
+  if (onlyIfAckMsAtLeast != null) {
+    const ackMs = Math.max(0, Math.floor(Number(onlyIfAckMsAtLeast) || 0));
+    const current = pending[idx];
+    // Stale/out-of-order ACK must not erase a newer pending absolute total.
+    if (ackMs < current.activeMs) {
+      return pending;
+    }
+  }
+
+  const next = pending.filter((r) => r.clientSegmentId !== id);
+  writePendingEngagementSegments(next, storage, localUserId);
   return next;
 }
 
 /**
  * RPC write: absolute active_ms. Server derives user_id and enforces sanity.
+ * Write-ahead: LOCAL ABSOLUTE TOTAL → persist pending → RPC → ACK ≥ pending to clear.
  */
 export async function upsertActivityEngagementSegment(
   payload,
   supabase = getSupabase(),
   storage = getStorage(),
+  localUserId = null,
 ) {
   const row = normalizePendingSegment(payload);
   if (!row) return { ok: false, error: "missing_args" };
+
+  // WRITE-AHEAD: persist absolute total locally BEFORE attempting RPC.
+  queuePendingEngagementSegment(row, storage, localUserId);
+
   if (!supabase) {
-    queuePendingEngagementSegment(row, storage);
     return { ok: false, error: "no_supabase", queued: true };
   }
 
@@ -141,30 +198,40 @@ export async function upsertActivityEngagementSegment(
   });
 
   if (error) {
-    queuePendingEngagementSegment(row, storage);
     return { ok: false, error: error.message || "rpc_error", queued: true };
   }
 
   const result = data && typeof data === "object" ? data : { ok: false, error: "bad_response" };
   if (!result.ok) {
-    // Authorization / validation failures: do not keep forbidden writes forever if permanent
-    if (result.error === "forbidden" || result.error === "no_session") {
-      removePendingEngagementSegment(row.clientSegmentId, storage);
+    // Authorization / permanent validation failures: do not keep forbidden writes forever
+    if (
+      result.error === "forbidden" ||
+      result.error === "no_session" ||
+      result.error === "identity_mismatch"
+    ) {
+      removePendingEngagementSegment(row.clientSegmentId, storage, localUserId);
       return { ok: false, error: result.error, queued: false };
     }
-    queuePendingEngagementSegment(row, storage);
     return { ok: false, error: result.error || "rejected", queued: true };
   }
 
-  removePendingEngagementSegment(row.clientSegmentId, storage);
+  const ackMs = Number(result.row?.active_ms ?? result.active_ms);
+  removePendingEngagementSegment(row.clientSegmentId, storage, localUserId, {
+    onlyIfAckMsAtLeast: Number.isFinite(ackMs) ? ackMs : row.activeMs,
+  });
   return { ok: true, row: result.row || null };
 }
 
-export async function flushPendingEngagementSegments(supabase = getSupabase(), storage = getStorage()) {
-  const pending = readPendingEngagementSegments(storage);
+export async function flushPendingEngagementSegments(
+  supabase = getSupabase(),
+  storage = getStorage(),
+  localUserId = null,
+) {
+  discardLegacyUnscopedPendingEngagement(storage);
+  const pending = readPendingEngagementSegments(storage, localUserId);
   const results = [];
   for (const row of pending) {
-    const r = await upsertActivityEngagementSegment(row, supabase);
+    const r = await upsertActivityEngagementSegment(row, supabase, storage, localUserId);
     results.push({ clientSegmentId: row.clientSegmentId, ...r });
   }
   return results;
@@ -182,8 +249,14 @@ export async function fetchActivityEngagementSegments(activityId, userId = null,
 }
 
 /**
- * Apply a manager flush payload: attempt sync, queue on failure.
+ * Apply a manager flush payload: write-ahead then attempt sync.
+ * localUserId is cache namespace only.
  */
-export async function handleEngagementFlush(payload, supabase = getSupabase()) {
-  return upsertActivityEngagementSegment(payload, supabase);
+export async function handleEngagementFlush(
+  payload,
+  supabase = getSupabase(),
+  storage = getStorage(),
+  localUserId = null,
+) {
+  return upsertActivityEngagementSegment(payload, supabase, storage, localUserId);
 }

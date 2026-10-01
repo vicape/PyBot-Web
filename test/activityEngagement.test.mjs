@@ -328,7 +328,9 @@ test("AC15: progress module remains separate from engagement storage", () => {
 });
 
 test("constants: 90s idle and ~15s sync", () => {
+  // Exact inactivity boundary is 90,000 ms
   assert.equal(ENGAGEMENT_INACTIVITY_MS, 90_000);
+  assert.equal(ENGAGEMENT_INACTIVITY_MS, 90000);
   assert.equal(ENGAGEMENT_SYNC_INTERVAL_MS, 15_000);
 });
 
@@ -366,10 +368,157 @@ test("viewer wires optional engagement without SharedContent tracking", () => {
   const activity = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
   const shared = readFileSync(resolve(root, "src/pages/SharedContentPage.jsx"), "utf8");
   const ide = readFileSync(resolve(root, "src/PyBotIDE.jsx"), "utf8");
+  const hook = readFileSync(resolve(root, "src/platform/useActivityEngagement.js"), "utf8");
   assert.match(viewer, /engagement/);
+  assert.match(viewer, /activateLessonDocument/);
+  assert.match(viewer, /onPlay=\{[\s\S]*?setItemTarget/);
+  assert.match(viewer, /onPlaying=\{[\s\S]*?playing: true/);
   assert.match(activity, /useActivityEngagement/);
   assert.match(activity, /engagement=\{isStudent \? engagement : null\}/);
+  assert.match(activity, /content_lesson_id/);
+  assert.match(activity, /activateLessonDocument/);
   assert.doesNotMatch(shared, /useActivityEngagement/);
   assert.match(ide, /useActivityEngagement/);
   assert.match(ide, /mode: "ide"/);
+  // F1: stable API across rerenders
+  assert.match(hook, /useMemo/);
+  assert.match(hook, /activateLessonDocument/);
+});
+
+test("F1: same-target continuity — rerender-equivalent setTarget keeps segment", () => {
+  const clock = fakeClock(0);
+  let seg = 0;
+  const mgr = createEngagementManager({
+    activityId: "act-1",
+    now: clock.now,
+    wallNow: () => 1_700_000_000_000,
+    createSegmentId: () => `seg-${++seg}`,
+  });
+  mgr.setDocumentVisible(true);
+  mgr.setTarget(materialTarget("m1"));
+  clock.advance(2_000);
+  mgr.tick();
+  const id1 = mgr.getSnapshot().clientSegmentId;
+  const ms1 = mgr.getSnapshot().activeMs;
+  // Equivalent to React rerender re-applying the same target (not a leave/restart)
+  mgr.setTarget(materialTarget("m1"));
+  clock.advance(1_000);
+  mgr.tick();
+  assert.equal(mgr.getSnapshot().clientSegmentId, id1);
+  assert.equal(mgr.getSnapshot().activeMs, ms1 + 1_000);
+  assert.equal(seg, 1);
+  mgr.destroy();
+});
+
+test("F2: item → lesson → item attribution; video priority overrides", () => {
+  const clock = fakeClock(0);
+  let seg = 0;
+  const flushes = [];
+  const mgr = createEngagementManager({
+    activityId: "act-1",
+    now: clock.now,
+    wallNow: () => Date.now(),
+    createSegmentId: () => `seg-${++seg}`,
+    onFlush: (p) => flushes.push({ ...p }),
+  });
+  const lesson = resolveLessonDocumentEngagementTarget({ id: "l1", unitId: "u1" });
+  mgr.setDocumentVisible(true);
+  mgr.setLessonDocumentTarget(lesson);
+  clock.advance(1_000);
+  mgr.tick();
+
+  mgr.setTarget(materialTarget("item-1"));
+  clock.advance(2_000);
+  mgr.tick();
+  assert.equal(mgr.getSnapshot().currentTarget.targetId, "item-1");
+
+  mgr.activateLessonDocument();
+  clock.advance(3_000);
+  mgr.tick();
+  assert.equal(mgr.getSnapshot().currentTarget.targetId, lessonDocumentTargetId("l1"));
+  assert.equal(mgr.getSnapshot().activeMs, 3_000);
+
+  mgr.setTarget(materialTarget("item-2"));
+  clock.advance(500);
+  mgr.tick();
+  assert.equal(mgr.getSnapshot().currentTarget.targetId, "item-2");
+
+  // Playing video overrides lesson activation
+  mgr.setTarget(videoTarget("v1"));
+  mgr.setVideoMediaState({ playing: true });
+  clock.advance(1_000);
+  mgr.tick();
+  assert.equal(mgr.getSnapshot().currentTarget.targetId, "v1");
+  mgr.activateLessonDocument();
+  assert.equal(mgr.getSnapshot().currentTarget.targetId, "v1");
+  assert.equal(mgr.getSnapshot().videoPlaying, true);
+  mgr.destroy();
+});
+
+test("F7: delayed tick at exactly 90_000 ms boundary credits capped total", () => {
+  const clock = fakeClock(0);
+  const flushes = [];
+  const mgr = createEngagementManager({
+    activityId: "act-1",
+    now: clock.now,
+    wallNow: () => Date.now(),
+    createSegmentId: () => "seg-idle-cap",
+    inactivityMs: ENGAGEMENT_INACTIVITY_MS,
+    onFlush: (p) => flushes.push({ ...p }),
+  });
+  mgr.setDocumentVisible(true);
+  mgr.setTarget(materialTarget());
+  // Single late tick past the 90,000 ms boundary — must not discard the eligible interval
+  clock.advance(ENGAGEMENT_INACTIVITY_MS + 50_000);
+  mgr.tick();
+  assert.equal(mgr.getSnapshot().accumulating, false);
+  assert.equal(mgr.getSnapshot().idlePaused, true);
+  const idleFlush = flushes.find((f) => f.reason === "idle" && f.ended);
+  assert.ok(idleFlush);
+  assert.equal(idleFlush.activeMs, ENGAGEMENT_INACTIVITY_MS);
+  assert.equal(idleFlush.activeMs, 90_000);
+  mgr.destroy();
+});
+
+test("F8: onPlay-equivalent prepare yields 0 active; onPlaying starts wall-clock", () => {
+  const clock = fakeClock(0);
+  const mgr = createEngagementManager({
+    activityId: "act-1",
+    now: clock.now,
+    wallNow: () => Date.now(),
+    createSegmentId: () => "vseg-play",
+  });
+  mgr.setDocumentVisible(true);
+  // onPlay may select/prepare video target without starting accumulation
+  mgr.setTarget(videoTarget(), { startIfEligible: false });
+  clock.advance(5_000);
+  mgr.tick();
+  assert.equal(mgr.getSnapshot().accumulating, false);
+  assert.equal(mgr.getSnapshot().activeMs, 0);
+
+  // onPlaying starts
+  mgr.setVideoMediaState({ playing: true });
+  clock.advance(2_000);
+  mgr.tick();
+  assert.equal(mgr.getSnapshot().activeMs, 2_000);
+
+  mgr.setVideoMediaState({ playing: false, waiting: true });
+  clock.advance(3_000);
+  mgr.tick();
+  assert.equal(mgr.getSnapshot().accumulating, false);
+  mgr.destroy();
+});
+
+test("F9: legacy content_lesson_id lesson-document target helper is deterministic", () => {
+  const lessonId = "legacy-lesson-uuid";
+  const t = resolveLessonDocumentEngagementTarget({ id: lessonId, unitId: null });
+  assert.equal(t.targetId, lessonDocumentTargetId(lessonId));
+  assert.equal(t.kind, ENGAGEMENT_TARGET_KIND.LESSON_DOCUMENT);
+  assert.equal(t.lessonId, lessonId);
+  assert.equal(t.unitId, null);
+  const activity = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
+  assert.match(activity, /content_lesson_id/);
+  assert.match(activity, /setLessonDocument/);
+  // Must not invent unit/item hierarchy for legacy path
+  assert.doesNotMatch(activity, /fabricate|fakeUnit|syntheticUnit/);
 });
