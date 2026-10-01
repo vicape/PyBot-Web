@@ -126,6 +126,7 @@ function SnapshotItemCard({
   busyId,
   onStart,
   onComplete,
+  engagement = null,
 }) {
   const rule = resolveItemCompletionRule(item);
   const isDone = status === ITEM_PROGRESS_STATUS.COMPLETED;
@@ -158,8 +159,21 @@ function SnapshotItemCard({
         item.type === "assessment") &&
         rule !== "video_threshold"));
 
+  const emitVideoState = (partial) => {
+    engagement?.onVideoMediaState?.(item, partial);
+  };
+
   return (
-    <li className="pbc-content-reader__item-row" data-status={status}>
+    <li
+      className="pbc-content-reader__item-row"
+      data-status={status}
+      onPointerDown={() => {
+        if (!engagement || !interactive) return;
+        if (item.type !== "video") engagement.setItemTarget?.(item);
+        else engagement.setItemTarget?.(item);
+        engagement.noteInteraction?.();
+      }}
+    >
       <div className="pbc-content-reader__lesson-meta">
         <span className="pbc-content-reader__lesson-title">{item.title || t("pcUntitled")}</span>
         <LessonTypeBadge itemType={item.type} />
@@ -177,6 +191,30 @@ function SnapshotItemCard({
             style={{ maxWidth: "100%", maxHeight: 320 }}
             onPlay={() => {
               if (!isDone && status === ITEM_PROGRESS_STATUS.NOT_STARTED) void onStart?.(item);
+              emitVideoState({ playing: true, waiting: false, seeking: false, ended: false, stalled: false });
+            }}
+            onPlaying={() => {
+              emitVideoState({ playing: true, waiting: false, seeking: false, ended: false, stalled: false });
+            }}
+            onPause={() => {
+              emitVideoState({ playing: false });
+            }}
+            onWaiting={() => {
+              emitVideoState({ playing: false, waiting: true });
+            }}
+            onStalled={() => {
+              emitVideoState({ playing: false, stalled: true });
+            }}
+            onSeeking={() => {
+              emitVideoState({ playing: false, seeking: true });
+            }}
+            onSeeked={(e) => {
+              const el = e.currentTarget;
+              emitVideoState({
+                playing: !el.paused && !el.ended,
+                seeking: false,
+                ended: el.ended,
+              });
             }}
             onTimeUpdate={(e) => {
               if (isDone) return;
@@ -195,6 +233,7 @@ function SnapshotItemCard({
               }
             }}
             onEnded={() => {
+              emitVideoState({ playing: false, ended: true });
               if (!isDone) {
                 void onComplete?.(item, {
                   videoProgress: 1,
@@ -232,7 +271,15 @@ function SnapshotItemCard({
   );
 }
 
-function SnapshotItemsList({ items, progressByItemId, interactive, busyId, onStart, onComplete }) {
+function SnapshotItemsList({
+  items,
+  progressByItemId,
+  interactive,
+  busyId,
+  onStart,
+  onComplete,
+  engagement = null,
+}) {
   if (!items?.length) return null;
   return (
     <ul className="pbc-content-reader__lesson-list" aria-label="Ítems de la lección">
@@ -248,6 +295,7 @@ function SnapshotItemsList({ items, progressByItemId, interactive, busyId, onSta
             busyId={busyId}
             onStart={onStart}
             onComplete={onComplete}
+            engagement={engagement}
           />
         );
       })}
@@ -491,10 +539,23 @@ function LessonMode({
   busyId,
   onStart,
   onComplete,
+  engagement = null,
 }) {
   const [indexOpen, setIndexOpen] = useState(false);
   const index = findLessonIndex(model.orderedLessons, selectedLessonId);
   const lesson = index >= 0 ? model.orderedLessons[index] : null;
+
+  useEffect(() => {
+    if (!engagement || !lesson) return undefined;
+    engagement.setLessonDocument?.({
+      id: lesson.id,
+      unitId: lesson.unitId || null,
+    });
+    return () => {
+      engagement.leaveTarget?.();
+    };
+  }, [engagement, lesson?.id, lesson?.unitId]);
+
   if (!lesson) return null;
 
   const total = model.orderedLessons.length;
@@ -563,6 +624,7 @@ function LessonMode({
             busyId={busyId}
             onStart={onStart}
             onComplete={onComplete}
+            engagement={engagement}
           />
 
           <div className="pbc-content-reader__pager">
@@ -599,6 +661,7 @@ function ProgressiveMultiLessonReader({
   busyId,
   onStart,
   onComplete,
+  engagement = null,
 }) {
   const model = useMemo(() => buildSnapshotReaderModel(snapshot), [snapshot]);
   const learningObjectives = useMemo(() => resolveLearningObjectives(snapshot), [snapshot]);
@@ -633,6 +696,7 @@ function ProgressiveMultiLessonReader({
       busyId={busyId}
       onStart={onStart}
       onComplete={onComplete}
+      engagement={engagement}
     />
   );
 }
@@ -643,6 +707,7 @@ function ProgressiveMultiLessonReader({
  * (progressive overview + one lesson at a time).
  * Single lesson/exercise/task: direct render (no forced overview).
  * Optional progress props integrate Point 4 without a parallel app.
+ * Optional engagement prop integrates Point 5 active-time without mutating progress.
  */
 export default function AssignedContentSnapshotViewer({
   snapshot,
@@ -652,42 +717,49 @@ export default function AssignedContentSnapshotViewer({
   busyId = null,
   onStartItem = null,
   onCompleteItem = null,
+  engagement = null,
 }) {
   if (!snapshot) return null;
 
   const type = snapshot.sourceType;
   const progressMap = progressByItemId || {};
+  const surfaceProps = engagement?.setSurfaceRef
+    ? { ref: engagement.setSurfaceRef }
+    : {};
 
   if (type === "exercise" || type === "task") {
     return (
-      <div className="pbc-assigned-lesson">
-        <BlockCard kind={type} block={snapshot.block || snapshot} />
-      </div>
+      <ExerciseTaskSurface
+        type={type}
+        snapshot={snapshot}
+        engagement={engagement}
+        surfaceProps={surfaceProps}
+      />
     );
   }
 
   if (type === "lesson") {
     const items = Array.isArray(snapshot.items) ? snapshot.items : [];
     return (
-      <div className="pbc-lesson-workspace pbc-lesson-workspace--preview pbc-assigned-lesson">
-        <ProgressPercent aggregates={aggregates} />
-        <ReadOnlyDoc docKey={snapshot.sourceId} initialContent={snapshot.document_json} />
-        <SnapshotItemsList
-          items={items}
-          progressByItemId={progressMap}
-          interactive={interactive}
-          busyId={busyId}
-          onStart={onStartItem}
-          onComplete={onCompleteItem}
-        />
-      </div>
+      <LessonDocumentSurface
+        snapshot={snapshot}
+        items={items}
+        aggregates={aggregates}
+        progressMap={progressMap}
+        interactive={interactive}
+        busyId={busyId}
+        onStartItem={onStartItem}
+        onCompleteItem={onCompleteItem}
+        engagement={engagement}
+        surfaceProps={surfaceProps}
+      />
     );
   }
 
   // For sourceType="content" and sourceType="unit": progressive reader (no endless dump).
   if (type === "unit" || type === "content") {
     return (
-      <div className="pbc-assigned-lesson">
+      <div className="pbc-assigned-lesson" {...surfaceProps}>
         <ProgressiveMultiLessonReader
           snapshot={snapshot}
           aggregates={aggregates}
@@ -696,10 +768,69 @@ export default function AssignedContentSnapshotViewer({
           busyId={busyId}
           onStart={onStartItem}
           onComplete={onCompleteItem}
+          engagement={engagement}
         />
       </div>
     );
   }
 
   return <p className="auth-card__muted">{t("pcNoContentToShow")}</p>;
+}
+
+function LessonDocumentSurface({
+  snapshot,
+  items,
+  aggregates,
+  progressMap,
+  interactive,
+  busyId,
+  onStartItem,
+  onCompleteItem,
+  engagement,
+  surfaceProps,
+}) {
+  useEffect(() => {
+    if (!engagement) return undefined;
+    engagement.setLessonDocument?.({
+      id: snapshot.sourceId,
+      unitId: snapshot.unitId || null,
+    });
+    return () => engagement.leaveTarget?.();
+  }, [engagement, snapshot.sourceId, snapshot.unitId]);
+
+  return (
+    <div className="pbc-lesson-workspace pbc-lesson-workspace--preview pbc-assigned-lesson" {...surfaceProps}>
+      <ProgressPercent aggregates={aggregates} />
+      <ReadOnlyDoc docKey={snapshot.sourceId} initialContent={snapshot.document_json} />
+      <SnapshotItemsList
+        items={items}
+        progressByItemId={progressMap}
+        interactive={interactive}
+        busyId={busyId}
+        onStart={onStartItem}
+        onComplete={onCompleteItem}
+        engagement={engagement}
+      />
+    </div>
+  );
+}
+
+function ExerciseTaskSurface({ type, snapshot, engagement, surfaceProps }) {
+  useEffect(() => {
+    if (!engagement) return undefined;
+    // Standalone assigned exercise/task: treat card view as interacted element target
+    engagement.setItemTarget?.({
+      snapshotItemId: String(snapshot.sourceId || snapshot.contentId || "exercise"),
+      type,
+      lessonId: snapshot.lessonId || snapshot.sourceId || null,
+      unitId: null,
+    });
+    return () => engagement.leaveTarget?.();
+  }, [engagement, snapshot.sourceId, snapshot.contentId, snapshot.lessonId, type]);
+
+  return (
+    <div className="pbc-assigned-lesson" {...surfaceProps}>
+      <BlockCard kind={type} block={snapshot.block || snapshot} />
+    </div>
+  );
 }

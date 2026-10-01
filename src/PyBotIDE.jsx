@@ -80,6 +80,7 @@ import IdeUserChip from "./components/IdeUserChip.jsx";
 import { useOptionalSession } from "./platform/useOptionalSession.js";
 import { useActivityIde } from "./platform/useActivityIde.js";
 import { parseActivityId, readActivityLaunchCode, isGenericIdeTemplate } from "./platform/activityIdeSession.js";
+import { useActivityEngagement } from "./platform/useActivityEngagement.js";
 import { saveActivityProgress } from "./platform/activityProgress.js";
 import { submitActivity } from "./platform/activitySubmissions.js";
 import {
@@ -230,6 +231,14 @@ export default function PyBotIDE() {
       cancelled = true;
     };
   }, [activityId, activityContext?.course_id, sessionUser, sessionSupabase]);
+
+  const ideEngagement = useActivityEngagement({
+    enabled: Boolean(activityId && activityIsStudent && sessionUser && !sessionUser._legacy),
+    activityId,
+    mode: "ide",
+    activity: activityContext,
+    snapshot: activityContext?.content_snapshot || null,
+  });
 
   // onSubmitActivity se define más abajo junto al snapshot canónico del documento
   // para que Submit no lea un `code` distinto de lo que el alumno ve.
@@ -2260,6 +2269,7 @@ export default function PyBotIDE() {
 
   return (
     <div
+      ref={ideEngagement.setSurfaceRef}
       className="ide-root"
       data-theme={theme}
       data-contrast={contrast}

@@ -31,6 +31,7 @@ import {
   listSnapshotItems,
   startActivityItemProgress,
 } from "../platform/activityItemProgress.js";
+import { useActivityEngagement } from "../platform/useActivityEngagement.js";
 import {
   closeSubmission,
   fetchActiveReopen,
@@ -142,6 +143,14 @@ export default function ActivityPage() {
   const activityKind = activity?.activity_kind || (activity?.content_snapshot ? "material" : "exercise");
   const isMaterial = activityKind === "material";
   const isCodingActivity = activityKind === "exercise" || activityKind === "task";
+
+  const engagement = useActivityEngagement({
+    enabled: Boolean(isStudent && activityId && snapshot),
+    activityId,
+    mode: "content",
+    activity,
+    snapshot,
+  });
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -1040,6 +1049,7 @@ export default function ActivityPage() {
                 busyId={itemProgressBusy}
                 onStartItem={handleStartItem}
                 onCompleteItem={handleCompleteItem}
+                engagement={isStudent ? engagement : null}
               />
             </section>
           ) : lessonDoc && activity?.content_lesson_id ? (

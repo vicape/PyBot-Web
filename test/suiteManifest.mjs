@@ -1,5 +1,7 @@
 export const TEST_SUITES = Object.freeze({
   fast: Object.freeze([
+    "activityEngagement.test.mjs",
+    "activityEngagementPersistence.test.mjs",
     "activityIdeSession.test.mjs",
     "activityItemProgress.test.mjs",
     "arduinoCompiler.test.mjs",
