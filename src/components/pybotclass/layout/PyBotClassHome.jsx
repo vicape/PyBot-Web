@@ -68,7 +68,10 @@ function CourseCards({
   wantsTeacher,
   onCreateCourse,
   onJoinCourse,
+  variant = "default",
 }) {
+  const isCoursesVariant = variant === "courses";
+
   if (filtered.length === 0) {
     return (
       <div className="pbc-empty-state">
@@ -104,7 +107,9 @@ function CourseCards({
   }
 
   return (
-    <div className="pbc-course-grid">
+    <div
+      className={`pbc-course-grid${isCoursesVariant ? " pbc-course-grid--courses" : ""}`}
+    >
       {filtered.map((c) => {
         const role = normalizeCourseRole(c.my_course_role);
         const rb = role ? ROLE_BADGE[role] : null;
@@ -119,12 +124,18 @@ function CourseCards({
         const hasClassroom = Boolean(c.classroom_course_id);
         const showStudentActivity =
           !isTeacher && c.activity_count != null && c.activity_count !== "";
+        const roleAccentClass = isTeacher
+          ? "pbc-course-card--teacher"
+          : "pbc-course-card--student";
+        const cardClassName = isCoursesVariant
+          ? `pbc-course-card pbc-course-card--courses ${roleAccentClass}`
+          : "pbc-course-card";
 
         return (
           <Link
             key={c.course_id}
             to={`/dashboard/classes/${c.course_id}`}
-            className="pbc-course-card"
+            className={cardClassName}
           >
             <div className="pbc-course-card__body">
               <div className="pbc-course-card__top">
@@ -184,7 +195,12 @@ function CourseCards({
               ) : null}
 
               {isTeacher && studentCount === 0 ? (
-                <p className="pbc-course-card__hint">{t("pcCourseNoStudentsYet")}</p>
+                <p className="pbc-course-card__hint">
+                  <span className="pbc-course-card__hint-icon" aria-hidden>
+                    <PbcIcon name="attention" size={16} />
+                  </span>
+                  {t("pcCourseNoStudentsYet")}
+                </p>
               ) : null}
 
               {hasClassroom ? (
@@ -508,6 +524,7 @@ export default function PyBotClassHome({
               wantsTeacher={wantsTeacher}
               onCreateCourse={onCreateCourse}
               onJoinCourse={onJoinCourse}
+              variant="courses"
             />
           </section>
         </div>
