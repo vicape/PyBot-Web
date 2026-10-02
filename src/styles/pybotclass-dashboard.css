@@ -3111,6 +3111,146 @@
   }
 }
 
+/* P9 — generic multidimensional rubrics */
+.pbc-rubric-author__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.pbc-rubric-author__criterion {
+  border-top: 1px solid color-mix(in srgb, var(--pbc-border, #ccc) 70%, transparent);
+  padding-top: 0.65rem;
+  margin-top: 0.65rem;
+}
+
+.pbc-rubric-author__level {
+  display: grid;
+  grid-template-columns: 1fr 2fr minmax(4rem, 5rem) auto;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.35rem 0.5rem;
+}
+
+.pbc-rubric-matrix-wrap {
+  width: 100%;
+}
+
+.pbc-rubric-matrix__row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1.1fr) 2.2fr minmax(8rem, 1fr);
+  gap: 0.45rem;
+  align-items: start;
+  margin-bottom: 0.55rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--pbc-border, #ccc) 55%, transparent);
+}
+
+.pbc-rubric-matrix__levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.pbc-rubric-level-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 5.5rem;
+  max-width: 11rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--pbc-border, #ccc) 80%, transparent);
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--pbc-surface, #fff) 92%, transparent);
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.pbc-rubric-level-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pbc-rubric-level-chip.is-selected {
+  border-color: var(--pbc-accent, #2a6f97);
+  box-shadow: inset 0 0 0 1px var(--pbc-accent, #2a6f97);
+}
+
+.pbc-rubric-level-chip__name {
+  font-weight: 600;
+}
+
+.pbc-rubric-level-chip__pts {
+  font-variant-numeric: tabular-nums;
+}
+
+.pbc-rubric-level-chip__desc {
+  color: inherit;
+  opacity: 0.75;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.pbc-rubric-matrix__hint {
+  display: block;
+  font-size: 0.8rem;
+}
+
+.pbc-rubric-matrix__total {
+  margin: 0.35rem 0 0;
+}
+
+.pbc-rubric-grade-legacy-row {
+  display: grid;
+  grid-template-columns: 1fr 5rem 1fr;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.pbc-rubric-student-result {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+}
+
+.pbc-rubric-result-card {
+  padding: 0.55rem 0.65rem;
+  border-left: 3px solid var(--pbc-accent, #2a6f97);
+  background: color-mix(in srgb, var(--pbc-surface, #fff) 88%, transparent);
+}
+
+.pbc-rubric-result-card__title {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.pbc-rubric-result-card__level,
+.pbc-rubric-result-card__comment,
+.pbc-rubric-result-card__desc {
+  margin: 0.15rem 0;
+}
+
+@media (max-width: 720px) {
+  .pbc-rubric-author__level {
+    grid-template-columns: 1fr;
+  }
+
+  .pbc-rubric-matrix__row {
+    grid-template-columns: 1fr;
+  }
+
+  .pbc-rubric-grade-legacy-row {
+    grid-template-columns: 1fr;
+  }
+
+  .pbc-rubric-level-chip {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+}
+
 /* /join — formulario alineado al lenguaje visual PyBotClass */
 .pbc-join-page {
   width: 100%;

@@ -197,12 +197,16 @@ export function deriveInboxFilterId(row) {
   }
 }
 
-/** Suma de puntajes de rúbrica; null si vacío. */
+/**
+ * Suma de puntajes de rúbrica; null si vacío o si algún puntaje falta/no es numérico.
+ * No inventa 0 a partir de points=null (rúbricas cualitativas / pendientes).
+ */
 export function sumRubricPoints(scores) {
   if (!Array.isArray(scores) || scores.length === 0) return null;
   let total = 0;
   for (const s of scores) {
-    const n = Number(s?.points);
+    if (s?.points == null || s?.points === "") return null;
+    const n = Number(s.points);
     if (!Number.isFinite(n)) return null;
     total += n;
   }
@@ -213,6 +217,18 @@ export function rubricMaxSum(criteria) {
   if (!Array.isArray(criteria) || criteria.length === 0) return null;
   let total = 0;
   for (const c of criteria) {
+    const levels = c?.levels || c?.achievement_levels;
+    if (Array.isArray(levels) && levels.length > 0) {
+      let max = -Infinity;
+      for (const lv of levels) {
+        if (lv?.points == null || lv?.points === "") return null;
+        const p = Number(lv.points);
+        if (!Number.isFinite(p)) return null;
+        if (p > max) max = p;
+      }
+      total += max;
+      continue;
+    }
     const n = Number(c?.max_points ?? c?.maxPoints);
     if (!Number.isFinite(n)) return null;
     total += n;

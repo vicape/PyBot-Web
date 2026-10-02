@@ -258,11 +258,15 @@ export async function fetchActiveReopen(activityId, userId) {
 
 export async function fetchActivityRubric(activityId) {
   const sb = getSupabase();
-  if (!sb || !activityId) return { rubric: null, criteria: [], error: "missing_args" };
+  if (!sb || !activityId) {
+    return { rubric: null, criteria: [], error: "missing_args" };
+  }
 
   const { data: rubric, error } = await sb
     .from("activity_rubrics")
-    .select("id, activity_id, updated_at")
+    .select(
+      "id, activity_id, scoring_mode, schema_generation, source_template_id, frozen_at, updated_at",
+    )
     .eq("activity_id", activityId)
     .maybeSingle();
 
@@ -276,22 +280,63 @@ export async function fetchActivityRubric(activityId) {
     .order("sort_order", { ascending: true });
 
   if (cErr) return { rubric, criteria: [], error: cErr.message };
-  return { rubric, criteria: criteria ?? [], error: null };
+
+  const critRows = criteria ?? [];
+  const critIds = critRows.map((c) => c.id).filter(Boolean);
+  let levelsByCriterion = new Map();
+  if (critIds.length) {
+    const { data: levels, error: lErr } = await sb
+      .from("activity_rubric_levels")
+      .select("id, criterion_id, name, descriptor, sort_order, points")
+      .in("criterion_id", critIds)
+      .order("sort_order", { ascending: true });
+    if (lErr) return { rubric, criteria: critRows, error: lErr.message };
+    levelsByCriterion = new Map();
+    for (const lv of levels ?? []) {
+      const arr = levelsByCriterion.get(lv.criterion_id) || [];
+      arr.push(lv);
+      levelsByCriterion.set(lv.criterion_id, arr);
+    }
+  }
+
+  const withLevels = critRows.map((c) => ({
+    ...c,
+    levels: levelsByCriterion.get(c.id) || [],
+  }));
+
+  return { rubric, criteria: withLevels, error: null };
 }
 
-export async function upsertActivityRubric(activityId, criteria) {
+export async function upsertActivityRubric(activityId, criteria, scoringMode = "points") {
   const sb = getSupabase();
   if (!sb || !activityId) return { ok: false, error: "missing_args" };
 
-  const payload = (criteria || []).map((c) => ({
-    name: c.name,
-    description: c.description ?? null,
-    max_points: Number(c.max_points ?? c.maxPoints),
-  }));
+  const payload = (criteria || []).map((c) => {
+    const levels = c.levels || c.achievement_levels;
+    if (Array.isArray(levels) && levels.length > 0) {
+      return {
+        name: c.name,
+        description: c.description ?? null,
+        sort_order: c.sort_order ?? c.sortOrder ?? undefined,
+        levels: levels.map((lv, i) => ({
+          name: lv.name,
+          descriptor: lv.descriptor ?? lv.description ?? null,
+          sort_order: lv.sort_order ?? lv.sortOrder ?? i,
+          points: lv.points ?? null,
+        })),
+      };
+    }
+    return {
+      name: c.name,
+      description: c.description ?? null,
+      max_points: Number(c.max_points ?? c.maxPoints),
+    };
+  });
 
   const { data, error } = await sb.rpc("upsert_activity_rubric", {
     p_activity_id: activityId,
     p_criteria: payload,
+    p_scoring_mode: scoringMode,
   });
 
   if (error) return { ok: false, error: error.message };
@@ -312,13 +357,102 @@ export async function clearActivityRubric(activityId) {
   return { ok: true, error: null };
 }
 
+export async function listMyRubricTemplates() {
+  const sb = getSupabase();
+  if (!sb) return { templates: [], error: "missing_args" };
+  const { data, error } = await sb.rpc("list_my_rubric_templates");
+  if (error) return { templates: [], error: error.message };
+  if (!data?.ok) return { templates: [], error: data?.error || "list_failed" };
+  return { templates: data.templates ?? [], error: null };
+}
+
+export async function getRubricTemplate(templateId) {
+  const sb = getSupabase();
+  if (!sb || !templateId) return { template: null, error: "missing_args" };
+  const { data, error } = await sb.rpc("get_rubric_template", {
+    p_template_id: templateId,
+  });
+  if (error) return { template: null, error: error.message };
+  if (!data?.ok) return { template: null, error: data?.error || "get_failed" };
+  return { template: data.template, error: null };
+}
+
+export async function upsertRubricTemplate({
+  templateId = null,
+  name,
+  description = null,
+  scoringMode,
+  criteria,
+} = {}) {
+  const sb = getSupabase();
+  if (!sb) return { ok: false, error: "missing_args" };
+  const { data, error } = await sb.rpc("upsert_rubric_template", {
+    p_template_id: templateId,
+    p_name: name,
+    p_description: description,
+    p_scoring_mode: scoringMode,
+    p_criteria: criteria,
+  });
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "template_failed", detail: data };
+  return { ok: true, result: data, error: null };
+}
+
+export async function deleteRubricTemplate(templateId) {
+  const sb = getSupabase();
+  if (!sb || !templateId) return { ok: false, error: "missing_args" };
+  const { data, error } = await sb.rpc("delete_rubric_template", {
+    p_template_id: templateId,
+  });
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "delete_failed" };
+  return { ok: true, error: null };
+}
+
+export async function applyRubricTemplateToActivity(activityId, templateId) {
+  const sb = getSupabase();
+  if (!sb || !activityId || !templateId) return { ok: false, error: "missing_args" };
+  const { data, error } = await sb.rpc("apply_rubric_template_to_activity", {
+    p_activity_id: activityId,
+    p_template_id: templateId,
+  });
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "apply_failed", detail: data };
+  return { ok: true, result: data, error: null };
+}
+
+export async function saveSubmissionRubricDraft(submissionId, rubricScores) {
+  const sb = getSupabase();
+  if (!sb || !submissionId) return { ok: false, error: "missing_args" };
+  const { data, error } = await sb.rpc("save_activity_rubric_draft", {
+    p_submission_id: submissionId,
+    p_rubric_scores: rubricScores,
+  });
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error || "draft_failed", detail: data };
+  return { ok: true, result: data, error: null };
+}
+
+export async function fetchSubmissionRubricDraft(submissionId) {
+  const sb = getSupabase();
+  if (!sb || !submissionId) return { drafts: [], error: "missing_args" };
+  const { data, error } = await sb
+    .from("activity_submission_rubric_drafts")
+    .select("id, submission_id, criterion_id, level_id, points, comment, updated_at")
+    .eq("submission_id", submissionId);
+  if (error) return { drafts: [], error: error.message };
+  return { drafts: data ?? [], error: null };
+}
+
 export async function fetchSubmissionRubricScores(submissionId) {
   const sb = getSupabase();
   if (!sb || !submissionId) return { scores: [], error: "missing_args" };
 
   const { data, error } = await sb
     .from("activity_submission_rubric_scores")
-    .select("id, submission_id, criterion_id, points, comment")
+    .select(
+      "id, submission_id, criterion_id, points, comment, level_id, level_name, level_descriptor",
+    )
     .eq("submission_id", submissionId);
 
   if (error) return { scores: [], error: error.message };

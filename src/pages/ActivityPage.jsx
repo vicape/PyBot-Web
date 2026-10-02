@@ -38,20 +38,32 @@ import {
   resolveActivityPerformance,
 } from "../platform/learningStatus.js";
 import {
+  applyRubricTemplateToActivity,
+  clearActivityRubric,
   closeSubmission,
   fetchActiveReopen,
   fetchActivityRubric,
   fetchActivitySubmissions,
   fetchMySubmission,
+  fetchSubmissionRubricDraft,
   fetchSubmissionRubricScores,
   gradeSubmission,
+  listMyRubricTemplates,
   reopenSubmissionForStudent,
   requestSubmissionReview,
+  saveSubmissionRubricDraft,
   submissionStatusLabelEs,
   submissionVersionLabel,
   submitActivity,
   upsertActivityRubric,
+  upsertRubricTemplate,
 } from "../platform/activitySubmissions.js";
+import {
+  ActivityRubricAuthoringPanel,
+  ActivityRubricGradeMatrix,
+  ActivityRubricStudentResult,
+} from "../components/pybotclass/ActivityRubricPanels.jsx";
+import { isLegacyActivityRubric } from "../platform/rubrics.js";
 import {
   fetchActivityItemSubmissions,
   gradeActivityItemSubmission,
@@ -131,10 +143,15 @@ export default function ActivityPage() {
   const [viewHistoryId, setViewHistoryId] = useState(null);
   const [gradeDraft, setGradeDraft] = useState({});
   const [rubricCriteria, setRubricCriteria] = useState([]);
+  const [activityRubricMeta, setActivityRubricMeta] = useState(null);
   const [rubricDraftBySubmission, setRubricDraftBySubmission] = useState({});
   const [myRubricScores, setMyRubricScores] = useState([]);
   const [reopenActive, setReopenActive] = useState(false);
   const [rubricEditor, setRubricEditor] = useState([]);
+  const [rubricScoringMode, setRubricScoringMode] = useState("points");
+  const [rubricTemplates, setRubricTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateNameDraft, setTemplateNameDraft] = useState("");
   const [actionMsg, setActionMsg] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [needsClassroomConnect, setNeedsClassroomConnect] = useState(false);
@@ -416,18 +433,29 @@ export default function ActivityPage() {
       setNeedsClassroomConnect(false);
     }
 
-    const { criteria } = await fetchActivityRubric(activityId);
+    const { rubric: actRubric, criteria } = await fetchActivityRubric(activityId);
+    setActivityRubricMeta(actRubric || null);
     setRubricCriteria(criteria || []);
+    setRubricScoringMode(actRubric?.scoring_mode || "points");
     setRubricEditor(
       (criteria || []).map((c) => ({
         id: c.id,
         name: c.name,
         description: c.description || "",
-        max_points: String(c.max_points),
+        max_points: c.max_points != null ? String(c.max_points) : "",
+        levels: (c.levels || []).map((lv) => ({
+          id: lv.id,
+          name: lv.name,
+          descriptor: lv.descriptor || "",
+          points: lv.points != null ? String(lv.points) : "",
+        })),
       })),
     );
 
     if (teach) {
+      const tpl = await listMyRubricTemplates();
+      setRubricTemplates(tpl.templates || []);
+
       const list = await fetchActivitySubmissions(activityId);
       setTeacherRows(list.rows ?? []);
       const hist = new Map();
@@ -438,6 +466,39 @@ export default function ActivityPage() {
         hist.set(row.user_id, arr);
       }
       setTeacherHistoryByUser(hist);
+
+      const draftMap = {};
+      for (const row of list.rows ?? []) {
+        if (!row?.id) continue;
+        const { drafts } = await fetchSubmissionRubricDraft(row.id);
+        if (drafts?.length) {
+          const byCrit = {};
+          for (const d of drafts) {
+            byCrit[d.criterion_id] = {
+              level_id: d.level_id || "",
+              points: d.points != null ? String(d.points) : "",
+              comment: d.comment || "",
+            };
+          }
+          draftMap[row.id] = byCrit;
+        } else if (row.status === "graded" || row.status === "closed") {
+          const { scores } = await fetchSubmissionRubricScores(row.id);
+          if (scores?.length) {
+            const byCrit = {};
+            for (const s of scores) {
+              byCrit[s.criterion_id] = {
+                level_id: s.level_id || "",
+                points: s.points != null ? String(s.points) : "",
+                comment: s.comment || "",
+              };
+            }
+            draftMap[row.id] = byCrit;
+          }
+        }
+      }
+      if (Object.keys(draftMap).length) {
+        setRubricDraftBySubmission((prev) => ({ ...prev, ...draftMap }));
+      }
       // profilesById: unión única de teacherRows[].user_id y
       // fetchActivityItemSubmissions(...).rows[].user_id (itemSubmissionRowsForProfiles).
       // Nunca UUID truncado si existe perfil real; fallback sólo si no hay perfil.
@@ -907,14 +968,28 @@ export default function ActivityPage() {
     setActionMsg("");
 
     let rubricScores = null;
+    const scoringMode = activityRubricMeta?.scoring_mode || rubricScoringMode || "points";
+    const legacy = isLegacyActivityRubric(activityRubricMeta, rubricCriteria);
     if (rubricCriteria.length > 0) {
       const rd = rubricDraftBySubmission[submissionId] || {};
-      rubricScores = rubricCriteria.map((c) => ({
-        criterion_id: c.id,
-        points: Number(rd[c.id]?.points ?? 0),
-        comment: rd[c.id]?.comment || null,
-      }));
-      draft.grade = sumRubricPoints(rubricScores);
+      if (legacy) {
+        rubricScores = rubricCriteria.map((c) => ({
+          criterion_id: c.id,
+          points: Number(rd[c.id]?.points ?? 0),
+          comment: rd[c.id]?.comment || null,
+        }));
+        draft.grade = sumRubricPoints(rubricScores);
+      } else {
+        rubricScores = rubricCriteria.map((c) => ({
+          criterion_id: c.id,
+          level_id: rd[c.id]?.level_id || null,
+          comment: rd[c.id]?.comment || null,
+        }));
+        // Server derives points; client must not invent qualitative totals.
+        if (scoringMode === "qualitative") {
+          draft.grade = null;
+        }
+      }
     }
 
     const r = await gradeSubmission(
@@ -925,12 +1000,18 @@ export default function ActivityPage() {
     );
     if (!r.ok) {
       setBusy(false);
-      setActionErr(r.error || "No se pudo guardar la evaluación.");
+      setActionErr(
+        r.error === "rubric_max_mismatch"
+          ? `La suma de la rúbrica no coincide con el puntaje máximo (${activity?.max_points}).`
+          : r.error === "incomplete_rubric"
+            ? "Completá un nivel por cada criterio antes de evaluar."
+            : r.error || "No se pudo guardar la evaluación.",
+      );
       return;
     }
 
     let msg = "Evaluación guardada en PyBotClass.";
-    if (activity?.classroom_coursework_id && classroomCourseId && row) {
+    if (activity?.classroom_coursework_id && classroomCourseId && row && r.result?.grade != null) {
       const gradedRow = {
         ...row,
         grade: r.result?.grade ?? Number(draft.grade),
@@ -963,6 +1044,30 @@ export default function ActivityPage() {
     setBusy(false);
     setActionMsg(msg);
     await load({ preserveActionMsg: true });
+  };
+
+  const onSaveRubricDraft = async (submissionId) => {
+    if (busy) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const rd = rubricDraftBySubmission[submissionId] || {};
+    const legacy = isLegacyActivityRubric(activityRubricMeta, rubricCriteria);
+    const payload = rubricCriteria.map((c) => ({
+      criterion_id: c.id,
+      level_id: legacy ? null : rd[c.id]?.level_id || null,
+      points: legacy && rd[c.id]?.points !== "" && rd[c.id]?.points != null
+        ? Number(rd[c.id].points)
+        : null,
+      comment: rd[c.id]?.comment || null,
+    }));
+    const r = await saveSubmissionRubricDraft(submissionId, payload);
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo guardar el borrador.");
+      return;
+    }
+    setActionMsg("Borrador de rúbrica guardado (solo docentes; no evalúa).");
   };
 
   const onCloseSubmission = async (submissionId) => {
@@ -1000,24 +1105,122 @@ export default function ActivityPage() {
     setBusy(true);
     setActionErr("");
     setActionMsg("");
+    const legacy = isLegacyActivityRubric(activityRubricMeta, rubricCriteria);
     const criteria = rubricEditor
       .filter((c) => String(c.name || "").trim())
-      .map((c) => ({
-        name: String(c.name).trim(),
-        description: c.description || null,
-        max_points: Number(c.max_points),
-      }));
-    const r = await upsertActivityRubric(activityId, criteria);
+      .map((c) => {
+        if (legacy || !(c.levels || []).length) {
+          return {
+            name: String(c.name).trim(),
+            description: c.description || null,
+            max_points: Number(c.max_points),
+          };
+        }
+        return {
+          name: String(c.name).trim(),
+          description: c.description || null,
+          levels: (c.levels || [])
+            .filter((lv) => String(lv.name || "").trim())
+            .map((lv) => ({
+              name: String(lv.name).trim(),
+              descriptor: lv.descriptor || null,
+              points:
+                rubricScoringMode === "points" && lv.points !== "" && lv.points != null
+                  ? Number(lv.points)
+                  : null,
+            })),
+        };
+      });
+    const r = await upsertActivityRubric(activityId, criteria, rubricScoringMode);
     setBusy(false);
     if (!r.ok) {
       setActionErr(
         r.error === "rubric_max_mismatch"
           ? `La suma de la rúbrica debe ser igual al puntaje máximo (${activity?.max_points}).`
-          : r.error || "No se pudo guardar la rúbrica.",
+          : r.error === "rubric_has_evaluations"
+            ? "Hay evaluaciones publicadas: no se puede reemplazar la rúbrica congelada."
+            : r.error || "No se pudo guardar la rúbrica.",
       );
       return;
     }
-    setActionMsg("Rúbrica guardada.");
+    setActionMsg("Rúbrica congelada en la actividad.");
+    await load({ preserveActionMsg: true });
+  };
+
+  const onSaveAsTemplate = async () => {
+    if (busy) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const criteria = rubricEditor
+      .filter((c) => String(c.name || "").trim())
+      .map((c) => ({
+        name: String(c.name).trim(),
+        description: c.description || null,
+        levels: (c.levels || [])
+          .filter((lv) => String(lv.name || "").trim())
+          .map((lv) => ({
+            name: String(lv.name).trim(),
+            descriptor: lv.descriptor || null,
+            points:
+              rubricScoringMode === "points" && lv.points !== "" && lv.points != null
+                ? Number(lv.points)
+                : null,
+          })),
+      }));
+    const r = await upsertRubricTemplate({
+      name: templateNameDraft.trim(),
+      description: null,
+      scoringMode: rubricScoringMode,
+      criteria,
+    });
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo guardar la plantilla.");
+      return;
+    }
+    setActionMsg("Plantilla de rúbrica guardada para reutilizar.");
+    const tpl = await listMyRubricTemplates();
+    setRubricTemplates(tpl.templates || []);
+  };
+
+  const onApplyTemplate = async () => {
+    if (busy || !activityId || !selectedTemplateId) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await applyRubricTemplateToActivity(activityId, selectedTemplateId);
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(
+        r.error === "rubric_max_mismatch"
+          ? `La plantilla no coincide con el puntaje máximo (${activity?.max_points}).`
+          : r.error === "rubric_has_evaluations"
+            ? "Hay evaluaciones publicadas: no se puede reemplazar la rúbrica."
+            : r.error || "No se pudo aplicar la plantilla.",
+      );
+      return;
+    }
+    setActionMsg("Plantilla aplicada como rúbrica congelada de la actividad.");
+    await load({ preserveActionMsg: true });
+  };
+
+  const onClearRubric = async () => {
+    if (busy || !activityId) return;
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await clearActivityRubric(activityId);
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(
+        r.error === "rubric_has_evaluations"
+          ? "Hay evaluaciones publicadas: no se puede quitar la rúbrica."
+          : r.error || "No se pudo quitar la rúbrica.",
+      );
+      return;
+    }
+    setActionMsg("Actividad sin rúbrica.");
     await load({ preserveActionMsg: true });
   };
 
@@ -1302,6 +1505,13 @@ export default function ActivityPage() {
                   {activity?.max_points != null ? ` / ${activity.max_points}` : null}
                 </p>
               ) : null}
+              {(myProcess === "evaluado" || myProcess === "cerrado") &&
+              activityRubricMeta?.scoring_mode === "qualitative" &&
+              myRubricScores.length > 0 ? (
+                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                  Evaluación cualitativa (sin nota numérica).
+                </p>
+              ) : null}
               {(myProcess === "evaluado" || myProcess === "cerrado") && mySubmission?.feedback ? (
                 <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
                   Feedback: {mySubmission.feedback}
@@ -1310,17 +1520,14 @@ export default function ActivityPage() {
               {(myProcess === "evaluado" || myProcess === "cerrado") &&
               rubricCriteria.length > 0 &&
               myRubricScores.length > 0 ? (
-                <ul className="pbc-activity-rubric-student" style={{ marginTop: "0.5rem" }}>
-                  {rubricCriteria.map((c) => {
-                    const sc = myRubricScores.find((s) => s.criterion_id === c.id);
-                    return (
-                      <li key={c.id} className="auth-card__muted">
-                        <strong>{c.name}</strong>: {sc?.points ?? "—"} / {c.max_points}
-                        {sc?.comment ? ` — ${sc.comment}` : ""}
-                      </li>
-                    );
-                  })}
-                </ul>
+                <ActivityRubricStudentResult
+                  criteria={rubricCriteria}
+                  scores={myRubricScores}
+                  scoringMode={activityRubricMeta?.scoring_mode || "points"}
+                  grade={mySubmission?.grade}
+                  maxPoints={activity?.max_points}
+                  feedback={null}
+                />
               ) : null}
             </div>
           ) : null}
@@ -1393,80 +1600,27 @@ export default function ActivityPage() {
         {canTeach ? (
           <PbcSection
             title="Rúbrica (opcional)"
-            description="La suma de los máximos de cada criterio debe coincidir con el puntaje máximo de la actividad."
+            description="Plantillas reutilizables → copia congelada por actividad. No se fuerza rúbrica."
           >
-            {rubricEditor.length === 0 ? (
-              <p className="auth-card__muted">Sin rúbrica. Agregá criterios si querés evaluar por rúbrica.</p>
-            ) : null}
-            {rubricEditor.map((c, idx) => (
-              <div
-                key={c.id || idx}
-                style={{ display: "grid", gridTemplateColumns: "2fr 1fr 2fr auto", gap: "0.5rem", marginBottom: "0.5rem" }}
-              >
-                <input
-                  className="auth-org-input"
-                  placeholder="Criterio"
-                  value={c.name}
-                  onChange={(e) => {
-                    const next = [...rubricEditor];
-                    next[idx] = { ...c, name: e.target.value };
-                    setRubricEditor(next);
-                  }}
-                />
-                <input
-                  className="auth-org-input"
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  placeholder="Máx"
-                  value={c.max_points}
-                  onChange={(e) => {
-                    const next = [...rubricEditor];
-                    next[idx] = { ...c, max_points: e.target.value };
-                    setRubricEditor(next);
-                  }}
-                />
-                <input
-                  className="auth-org-input"
-                  placeholder="Descripción (opcional)"
-                  value={c.description}
-                  onChange={(e) => {
-                    const next = [...rubricEditor];
-                    next[idx] = { ...c, description: e.target.value };
-                    setRubricEditor(next);
-                  }}
-                />
-                <button
-                  type="button"
-                  className="auth-btn auth-btn--ghost auth-btn--sm"
-                  onClick={() => setRubricEditor(rubricEditor.filter((_, i) => i !== idx))}
-                >
-                  Quitar
-                </button>
-              </div>
-            ))}
-            <div className="pbc-activity-actions pbc-activity-actions--wrap">
-              <button
-                type="button"
-                className="auth-btn auth-btn--ghost auth-btn--sm"
-                onClick={() =>
-                  setRubricEditor([
-                    ...rubricEditor,
-                    { name: "", description: "", max_points: "" },
-                  ])
-                }
-              >
-                Agregar criterio
-              </button>
-              <button
-                type="button"
-                className="auth-btn auth-btn--primary auth-btn--sm"
-                disabled={busy || rubricEditor.length === 0}
-                onClick={() => void onSaveRubric()}
-              >
-                Guardar rúbrica
-              </button>
-            </div>
+            <ActivityRubricAuthoringPanel
+              scoringMode={rubricScoringMode}
+              onScoringModeChange={setRubricScoringMode}
+              criteria={rubricEditor}
+              onCriteriaChange={setRubricEditor}
+              templates={rubricTemplates}
+              selectedTemplateId={selectedTemplateId}
+              onSelectTemplate={setSelectedTemplateId}
+              onApplyTemplate={() => void onApplyTemplate()}
+              onClearRubric={() => void onClearRubric()}
+              onSaveActivityRubric={() => void onSaveRubric()}
+              onSaveAsTemplate={() => void onSaveAsTemplate()}
+              templateName={templateNameDraft}
+              onTemplateNameChange={setTemplateNameDraft}
+              busy={busy}
+              activityMaxPoints={activity?.max_points}
+              hasFrozenRubric={Boolean(activityRubricMeta)}
+              schemaGeneration={activityRubricMeta?.schema_generation ?? null}
+            />
           </PbcSection>
         ) : null}
 
@@ -1601,54 +1755,30 @@ export default function ActivityPage() {
                         </details>
                       ) : null}
                       {rubricCriteria.length > 0 ? (
-                        <div className="pbc-activity-rubric-grade" style={{ marginTop: "0.5rem" }}>
-                          {rubricCriteria.map((c) => (
-                            <div
-                              key={c.id}
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 5rem 1fr",
-                                gap: "0.35rem",
-                                marginBottom: "0.35rem",
-                              }}
+                        <div style={{ marginTop: "0.5rem" }}>
+                          <ActivityRubricGradeMatrix
+                            criteria={rubricCriteria}
+                            scoringMode={activityRubricMeta?.scoring_mode || "points"}
+                            schemaGeneration={activityRubricMeta?.schema_generation ?? 2}
+                            draft={rd}
+                            onChange={(next) =>
+                              setRubricDraftBySubmission((prev) => ({
+                                ...prev,
+                                [row.id]: next,
+                              }))
+                            }
+                            disabled={busy}
+                          />
+                          <div className="pbc-activity-actions pbc-activity-actions--wrap" style={{ marginTop: "0.35rem" }}>
+                            <button
+                              type="button"
+                              className="auth-btn auth-btn--ghost auth-btn--sm"
+                              disabled={busy}
+                              onClick={() => void onSaveRubricDraft(row.id)}
                             >
-                              <span className="auth-card__muted">
-                                {c.name} (máx {c.max_points})
-                              </span>
-                              <input
-                                className="auth-org-input"
-                                type="number"
-                                min="0"
-                                max={c.max_points}
-                                step="0.5"
-                                placeholder="Pts"
-                                value={rd[c.id]?.points ?? ""}
-                                onChange={(e) =>
-                                  setRubricDraftBySubmission((prev) => ({
-                                    ...prev,
-                                    [row.id]: {
-                                      ...rd,
-                                      [c.id]: { ...rd[c.id], points: e.target.value },
-                                    },
-                                  }))
-                                }
-                              />
-                              <input
-                                className="auth-org-input"
-                                placeholder="Comentario criterio"
-                                value={rd[c.id]?.comment ?? ""}
-                                onChange={(e) =>
-                                  setRubricDraftBySubmission((prev) => ({
-                                    ...prev,
-                                    [row.id]: {
-                                      ...rd,
-                                      [c.id]: { ...rd[c.id], comment: e.target.value },
-                                    },
-                                  }))
-                                }
-                              />
-                            </div>
-                          ))}
+                              Guardar borrador
+                            </button>
+                          </div>
                         </div>
                       ) : null}
                       <div className="pbc-activity-grade-row">
@@ -1668,9 +1798,13 @@ export default function ActivityPage() {
                               }))
                             }
                           />
+                        ) : activityRubricMeta?.scoring_mode === "qualitative" ? (
+                          <span className="auth-card__muted" style={{ fontSize: "0.9rem" }}>
+                            Cualitativa — sin nota numérica
+                          </span>
                         ) : (
                           <span className="auth-card__muted" style={{ fontSize: "0.9rem" }}>
-                            Nota = suma de rúbrica
+                            Nota = total servidor (niveles congelados)
                           </span>
                         )}
                         <input

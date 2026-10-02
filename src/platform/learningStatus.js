@@ -102,7 +102,10 @@ export function aggregatePerformance(results = []) {
 
 /**
  * Resolve activity-level performance from official grade + optional rubric detail.
- * Official grade/max_points wins; rubric scores are detail / fallback only (no double-count).
+ * Official activity_submissions.grade / activities.max_points wins;
+ * rubric scores are detail / fallback only (no double-count).
+ * Qualitative / pending must not invent grade=0 or 0%; P6 may stay null/—.
+ * CASE E: 4 + 3 + 5 -> 12; P6 consumes 12/max_points once.
  */
 export function resolveActivityPerformance({
   maxPoints = null,
@@ -139,7 +142,8 @@ export function resolveActivityPerformance({
     }
   }
 
-  // Rubric fallback only when no official grade and scores form a complete evaluation.
+  // Rubric fallback only when no official grade and scores form a complete *numeric* evaluation.
+  // Qualitative / null points must never become performance 0.
   const rubricEarned = sumRubricPoints(rubricScores);
   const rubricPossible =
     rubricMaxSum(rubricCriteria) ??
