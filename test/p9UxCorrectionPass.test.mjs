@@ -1,6 +1,10 @@
 /**
  * P9 UX correction pass — five verified gaps (issue instructions exact).
  * STARTING BASELINE HEAD: 0c91e35f5c087cada48fc6c60c62803664c7bac3
+ * EXPECTED BASELINE HEAD: 43fcf9c4f95a5289e69330f679e1e5cef7cf7df4
+ * FILE SCOPE: src/pages/ActivityPage.jsx — ActivityPage.persistEvaluation
+ * Gap: points-rubric path where activities.max_points was updated then rubric apply/upsert failed;
+ * restore supabase.from("activities").update({ max_points: originalMax }) must capture error.
  * PROFILE: INTEGRATION
  * No SQL / migration / MaxPlay / redesign.
  */
@@ -73,12 +77,48 @@ test("Gap3: persistEvaluation failure-safe max restore", () => {
   assert.match(activitySrc, /maxErr/);
   // Never leave max changed while rubric change failed.
   const fnStart = activitySrc.indexOf("const persistEvaluation = async");
-  const fnBody = activitySrc.slice(fnStart, fnStart + 2200);
+  const fnBody = activitySrc.slice(fnStart, fnStart + 2800);
   assert.match(fnBody, /originalMax/);
   assert.match(fnBody, /maxUpdatedTo/);
   assert.match(fnBody, /update\(\{ max_points: originalMax \}\)/);
   assert.ok(fnBody.indexOf("maxUpdatedTo") < fnBody.indexOf("clearActivityRubric") ||
     fnBody.indexOf("originalMax") < fnBody.indexOf("applyRubricTemplateToActivity"));
+});
+
+test("Gap3b: rollback update error is checked; partial-state path surfaced", () => {
+  // Scope: ActivityPage.persistEvaluation; activities.max_points rollback after rubric fail.
+  // EXPECTED BASELINE HEAD: 43fcf9c4f95a5289e69330f679e1e5cef7cf7df4
+  assert.match(activitySrc, /ActivityPage\.persistEvaluation|const persistEvaluation = async/);
+  assert.match(activitySrc, /activities\.max_points/);
+  assert.match(
+    activitySrc,
+    /supabase\.from\("activities"\)\.update\(\{ max_points: originalMax \}\)/,
+  );
+  const fnStart = activitySrc.indexOf("const persistEvaluation = async");
+  const fnBody = activitySrc.slice(fnStart, fnStart + 3200);
+  // Capture restore result — must not discard/ignore rollback update error.
+  assert.match(
+    fnBody,
+    /const\s*\{\s*error:\s*restoreErr\s*\}\s*=\s*await\s*supabase\.from\("activities"\)\.update\(\{ max_points: originalMax \}\)/,
+  );
+  assert.match(fnBody, /restoreFailed\s*=\s*Boolean\(\s*restoreErr\s*\)/);
+  // Partial-state surfaces both rubric failure and restore failure.
+  assert.match(
+    fnBody,
+    /El cambio de rúbrica falló y no se pudo restaurar el puntaje máximo anterior/,
+  );
+  assert.match(fnBody, /if\s*\(\s*restoreFailed\s*\)/);
+  // After failed rubric path: reload factual state; no automatic rubric retry.
+  const failIdx = fnBody.indexOf("if (!r.ok)");
+  const failBlock = fnBody.slice(failIdx, fnBody.indexOf("setActionMsg(t(\"pcRubricApplyOk\"))"));
+  assert.match(failBlock, /await load\(\{\s*preserveActionMsg:\s*true\s*\}\)/);
+  assert.doesNotMatch(
+    failBlock,
+    /applyRubricTemplateToActivity|upsertActivityRubric|clearActivityRubric/,
+  );
+  // On restore success, keep normal rubric-application failure (not success).
+  assert.match(failBlock, /pcRubricApplyFail|pcRubricHasEvaluationsLocked|rubric_max_mismatch/);
+  assert.doesNotMatch(failBlock, /pcRubricApplyOk|setActionMsg/);
 });
 
 test("Gap4: library Editar actividad opens ActivityForm edit query route", () => {

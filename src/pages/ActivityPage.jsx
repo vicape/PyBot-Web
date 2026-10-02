@@ -1165,20 +1165,28 @@ export default function ActivityPage() {
       return;
     }
     if (!r.ok) {
+      // ActivityPage.persistEvaluation: if activities.max_points was updated then rubric
+      // apply/upsert failed, restore via supabase.from("activities").update({ max_points: originalMax })
+      // and capture the rollback result (must not ignore restoreErr).
+      let restoreFailed = false;
       if (maxUpdatedTo != null && supabase) {
-        await supabase
-          .from("activities")
-          .update({ max_points: originalMax })
-          .eq("id", activityId);
+        const { error: restoreErr } = await supabase.from("activities").update({ max_points: originalMax }).eq("id", activityId);
+        restoreFailed = Boolean(restoreErr);
       }
       setBusy(false);
-      setActionErr(
-        r.error === "rubric_has_evaluations"
-          ? t("pcRubricHasEvaluationsLocked")
-          : r.error === "rubric_max_mismatch"
-            ? `La suma de la rúbrica debe ser igual al puntaje máximo (${originalMax}).`
-            : r.error || t("pcRubricApplyFail"),
-      );
+      if (restoreFailed) {
+        setActionErr(
+          "El cambio de rúbrica falló y no se pudo restaurar el puntaje máximo anterior.",
+        );
+      } else {
+        setActionErr(
+          r.error === "rubric_has_evaluations"
+            ? t("pcRubricHasEvaluationsLocked")
+            : r.error === "rubric_max_mismatch"
+              ? `La suma de la rúbrica debe ser igual al puntaje máximo (${originalMax}).`
+              : r.error || t("pcRubricApplyFail"),
+        );
+      }
       await load({ preserveActionMsg: true });
       return;
     }
