@@ -259,6 +259,11 @@ function RubricPickerOverlay({
  *   disabled?: boolean,
  *   hasEvaluations?: boolean,
  *   showManageLink?: boolean,
+ *   showMaxPointsField?: boolean,
+ *   maxPoints?: string,
+ *   onMaxPointsChange?: (next: string) => void,
+ *   maxLocked?: boolean,
+ *   maxHint?: string | null,
  * }} props
  */
 export default function ActivityEvaluationSection({
@@ -270,6 +275,11 @@ export default function ActivityEvaluationSection({
   showManageLink = true,
   onCommitOneOff = null,
   commitOneOffBusy = false,
+  showMaxPointsField = false,
+  maxPoints = "",
+  onMaxPointsChange = null,
+  maxLocked = false,
+  maxHint = null,
 }) {
   const selection = value || emptyEvaluationSelection();
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -397,7 +407,8 @@ export default function ActivityEvaluationSection({
       description: "",
       scoringMode: "points",
       criteria: seed.criteria,
-      ownCopy: true,
+      // Staged one-off — do not claim a persisted activity copy yet.
+      ownCopy: false,
     });
     setOneOffOpen(true);
     setPreviewOpen(false);
@@ -432,6 +443,30 @@ export default function ActivityEvaluationSection({
           </Link>
         ) : null}
       </header>
+
+      {showMaxPointsField ? (
+        <div className="pbc-eval-max-points">
+          <label className="auth-org-label" htmlFor="act-points">
+            {t("pcMaxPoints")}
+          </label>
+          <input
+            id="act-points"
+            type="number"
+            min="0"
+            step="0.5"
+            className="auth-org-input auth-org-input--block"
+            value={maxPoints}
+            onChange={(e) => onMaxPointsChange?.(e.target.value)}
+            disabled={disabled || maxLocked}
+            placeholder="100"
+          />
+          {maxHint ? (
+            <p className="pbc-eval-max-hint">{maxHint}</p>
+          ) : (
+            <p className="pbc-field-hint">{t("pcMaxPointsHint")}</p>
+          )}
+        </div>
+      ) : null}
 
       {err ? (
         <p className="pbc-alert pbc-alert--error" role="alert">
@@ -499,7 +534,7 @@ export default function ActivityEvaluationSection({
             {selection.description ? (
               <p className="pbc-eval-summary__desc">{selection.description}</p>
             ) : null}
-            {selection.ownCopy || selection.mode === "oneoff" ? (
+            {selection.ownCopy ? (
               <p className="pbc-eval-summary__copy">{t("pcRubricOwnCopy")}</p>
             ) : null}
             {selection.scoringMode === "qualitative" ? (
@@ -548,7 +583,9 @@ export default function ActivityEvaluationSection({
 
       {selection.mode === "oneoff" && oneOffOpen ? (
         <div className="pbc-eval-oneoff">
-          <p className="pbc-eval-summary__copy">{t("pcRubricOwnCopy")}</p>
+          {selection.ownCopy ? (
+            <p className="pbc-eval-summary__copy">{t("pcRubricOwnCopy")}</p>
+          ) : null}
           <div className="pbc-rubric-author__row">
             <label className="auth-card__muted">
               {t("pcRubricMode")}{" "}

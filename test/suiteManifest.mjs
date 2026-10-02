@@ -36,6 +36,7 @@ export const TEST_SUITES = Object.freeze({
     "uxPolishDiscoverability.test.mjs",
     "rubricLibraryUx.test.mjs",
     "activityEvaluationUx.test.mjs",
+    "p9UxCorrectionPass.test.mjs",
     "progressiveContentReader.test.mjs",
     "normalizeReadOnlyFencedCode.test.mjs",
     "replProtocol.test.mjs",

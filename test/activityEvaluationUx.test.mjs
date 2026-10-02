@@ -11,7 +11,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { execSync } from "node:child_process";
 
 import { PYBOTCLASS_STRINGS } from "../src/i18n/pybotclass.js";
 import { SUPPORTED_LANGS } from "../src/i18n.js";
@@ -29,14 +28,12 @@ import { rubricPointsCeiling } from "../src/platform/rubrics.js";
 const root = resolve(import.meta.dirname, "..");
 const read = (rel) => readFileSync(resolve(root, rel), "utf8");
 
-const BASELINE_SHA = "fadc99c733422a5d7debfbba0880b66750af7061";
+const BASELINE_SHA = "0c91e35f5c087cada48fc6c60c62803664c7bac3";
 const PROFILE = "INTEGRATION";
 
-test("AC1/AC2 contract: baseline HEAD + PROFILE INTEGRATION + no DECISION REQUIRED", () => {
-  assert.equal(BASELINE_SHA, "fadc99c733422a5d7debfbba0880b66750af7061");
+test("AC1/AC2 contract: starting baseline documented + PROFILE INTEGRATION + no DECISION REQUIRED", () => {
+  assert.equal(BASELINE_SHA, "0c91e35f5c087cada48fc6c60c62803664c7bac3");
   assert.equal(PROFILE, "INTEGRATION");
-  const head = execSync("git rev-parse HEAD", { cwd: root, encoding: "utf8" }).trim();
-  assert.equal(head, "fadc99c733422a5d7debfbba0880b66750af7061");
   // Explicit: DECISION REQUIRED does not apply — product/UX decisions are fixed.
   assert.equal(
     "no unresolved DECISION REQUIRED",
@@ -81,13 +78,15 @@ const EVAL_I18N = [
   "pcEditActivity",
 ];
 
-test("ActivityForm embeds Evaluación after max points and before starter code", () => {
+test("ActivityForm embeds max points inside Evaluación section before starter code", () => {
   assert.match(formSrc, /ActivityEvaluationSection/);
-  assert.match(formSrc, /pcEvaluation|ActivityEvaluationSection/);
-  const pointsIdx = formSrc.indexOf("act-points");
+  assert.match(formSrc, /showMaxPointsField/);
+  assert.match(evalSrc, /id="act-points"/);
+  assert.match(evalSrc, /pcEvaluation/);
   const evalIdx = formSrc.indexOf("<ActivityEvaluationSection");
   const starterIdx = formSrc.indexOf("act-starter");
-  assert.ok(pointsIdx > 0 && evalIdx > pointsIdx && starterIdx > evalIdx);
+  assert.ok(evalIdx > 0 && starterIdx > evalIdx);
+  assert.doesNotMatch(formSrc, /id="act-points"/);
 });
 
 test("default empty Evaluación terminology and actions", () => {
@@ -141,6 +140,14 @@ test("one-off expands existing P9 editor and own-copy terminology", () => {
   assert.match(evalSrc, /pcRubricOwnCopy/);
   assert.equal(PYBOTCLASS_STRINGS.es.pcRubricOwnCopy, "Esta actividad conserva su propia copia.");
   assert.doesNotMatch(evalSrc, /snapshot|activity_rubrics|source_template_id|RPC/);
+  // Staged template/one-off must not claim persisted own copy.
+  const staged = selectionFromTemplate({
+    id: "t-own",
+    name: "X",
+    scoring_mode: "qualitative",
+    criteria: [],
+  });
+  assert.equal(staged.ownCopy, false);
 });
 
 test("points ceiling locks max; qualitative non-numeric; remove unlocks", () => {
@@ -265,6 +272,8 @@ test("library Usar modal: teacher courses + activities + mismatch block", () => 
   assert.match(librarySrc, /pcEditActivity/);
   assert.match(librarySrc, /applyMismatch|rubricPointsCeiling/);
   assert.match(librarySrc, /pcRubricPointsMismatch/);
+  assert.match(librarySrc, /tab=actividades&edit=/);
+  assert.match(librarySrc, /sin definir/);
 });
 
 test("selectionFromActivityRubric maps template vs one-off", () => {

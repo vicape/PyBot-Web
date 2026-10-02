@@ -107,7 +107,8 @@ export function selectionFromTemplate(template) {
         points: scoringMode === "points" && lv.points != null ? String(lv.points) : "",
       })),
     })),
-    ownCopy: true,
+    // Staged selection only — activity does not yet have its own persisted copy.
+    ownCopy: false,
   };
 }
 

@@ -222,13 +222,18 @@ test("UX única: ruta clásica de curso redirige a PyBotClass", () => {
   assert.doesNotMatch(coursePage, /Vista clásica/);
 });
 
-test("puntaje máximo se edita en Actividades, no duplicado en ActivityPage", () => {
+test("puntaje máximo se edita en Actividades (Evaluación), no duplicado en ActivityPage", () => {
   const tab = readFileSync(
     resolve(root, "src/components/pybotclass/CourseActivitiesTab.jsx"),
     "utf8",
   );
-  assert.match(tab, /id="act-points"/);
-  assert.match(tab, /t\("pcMaxPointsHint"\)/);
+  const evalSection = readFileSync(
+    resolve(root, "src/components/pybotclass/ActivityEvaluationSection.jsx"),
+    "utf8",
+  );
+  assert.match(tab, /showMaxPointsField/);
+  assert.match(evalSection, /id="act-points"/);
+  assert.match(evalSection, /t\("pcMaxPointsHint"\)/);
   const activity = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
   assert.doesNotMatch(activity, /id="activity-max-points"/);
   assert.doesNotMatch(activity, /onSaveMaxPoints/);

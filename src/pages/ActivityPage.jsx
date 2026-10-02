@@ -1133,11 +1133,23 @@ export default function ActivityPage() {
     setActionMsg("");
     // Points rubrics: align activity max_points to factual ceiling before apply/upsert
     // (same lock semantics as ActivityForm). Qualitative never invents/erases max.
+    // Failure-safe: keep original max; verify max update; restore on rubric failure.
+    const originalMax = activity?.max_points ?? null;
+    let maxUpdatedTo = null;
     if (next?.mode && next.mode !== "none" && next.scoringMode === "points" && supabase) {
       const ceilingPayload = criteriaPayloadFromEditor(next.criteria, "points");
       const ceiling = rubricPointsCeiling(ceilingPayload);
       if (ceiling != null && Number.isFinite(ceiling)) {
-        await supabase.from("activities").update({ max_points: ceiling }).eq("id", activityId);
+        const { error: maxErr } = await supabase
+          .from("activities")
+          .update({ max_points: ceiling })
+          .eq("id", activityId);
+        if (maxErr) {
+          setBusy(false);
+          setActionErr(maxErr.message || t("pcRubricApplyFail"));
+          return;
+        }
+        maxUpdatedTo = ceiling;
       }
     }
     let r;
@@ -1152,18 +1164,25 @@ export default function ActivityPage() {
       setBusy(false);
       return;
     }
-    setBusy(false);
     if (!r.ok) {
+      if (maxUpdatedTo != null && supabase) {
+        await supabase
+          .from("activities")
+          .update({ max_points: originalMax })
+          .eq("id", activityId);
+      }
+      setBusy(false);
       setActionErr(
         r.error === "rubric_has_evaluations"
           ? t("pcRubricHasEvaluationsLocked")
           : r.error === "rubric_max_mismatch"
-            ? `La suma de la rúbrica debe ser igual al puntaje máximo (${activity?.max_points}).`
+            ? `La suma de la rúbrica debe ser igual al puntaje máximo (${originalMax}).`
             : r.error || t("pcRubricApplyFail"),
       );
       await load({ preserveActionMsg: true });
       return;
     }
+    setBusy(false);
     setActionMsg(t("pcRubricApplyOk"));
     await load({ preserveActionMsg: true });
   };

@@ -3362,6 +3362,10 @@
   min-width: 0;
 }
 
+.pbc-eval-max-points {
+  margin: 0 0 0.85rem;
+}
+
 .pbc-eval-section__head {
   display: flex;
   flex-wrap: wrap;

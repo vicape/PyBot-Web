@@ -238,25 +238,6 @@ function ActivityForm({
           <p className="pbc-field-hint">{t("pcSubmissionCloseHint")}</p>
         </div>
       </div>
-      <div>
-        <label className="auth-org-label" htmlFor="act-points">
-          {t("pcMaxPoints")}
-        </label>
-        <input
-          id="act-points"
-          type="number"
-          min="0"
-          step="0.5"
-          className="auth-org-input auth-org-input--block"
-          value={maxPoints}
-          onChange={(e) => setMaxPoints(e.target.value)}
-          disabled={saving || maxLocked}
-          placeholder="100"
-        />
-        {maxHint ? <p className="pbc-eval-max-hint">{maxHint}</p> : (
-          <p className="pbc-field-hint">{t("pcMaxPointsHint")}</p>
-        )}
-      </div>
 
       <ActivityEvaluationSection
         value={evaluation}
@@ -264,6 +245,11 @@ function ActivityForm({
         onMaxPointsEffect={handleMaxEffect}
         disabled={saving}
         hasEvaluations={hasEvaluations}
+        showMaxPointsField
+        maxPoints={maxPoints}
+        onMaxPointsChange={setMaxPoints}
+        maxLocked={maxLocked}
+        maxHint={maxHint}
       />
 
       <label className="auth-org-label" htmlFor="act-starter">
@@ -409,6 +395,8 @@ export default function CourseActivitiesTab({
   openCreate = false,
   onCreateOpened,
   onAssignContent,
+  editActivityId = null,
+  onEditOpened,
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -435,22 +423,7 @@ export default function CourseActivitiesTab({
     onCreateOpened?.();
   }, [openCreate, onCreateOpened]);
 
-  const handleMaxPointsEffect = useCallback((effect) => {
-    if (effect?.kind === "points" && effect.lockMax) {
-      setMaxLocked(true);
-      setMaxHint(t("pcMaxDefinedByRubric"));
-      return;
-    }
-    if (effect?.kind === "qualitative") {
-      setMaxLocked(false);
-      setMaxHint(t("pcRubricNoNumericGrade"));
-      return;
-    }
-    setMaxLocked(false);
-    setMaxHint(null);
-  }, []);
-
-  const openEdit = async (activity) => {
+  const openEdit = useCallback(async (activity) => {
     setShowCreate(false);
     setPartialCreate(null);
     setLocalErr("");
@@ -469,7 +442,30 @@ export default function CourseActivitiesTab({
       setMaxLocked(false);
       setMaxHint(null);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!editActivityId || mode !== COURSE_ACCESS_MODES.TEACHING) return;
+    const target = (activities || []).find((a) => a.id === editActivityId);
+    if (!target) return;
+    void openEdit(target);
+    onEditOpened?.();
+  }, [editActivityId, activities, mode, openEdit, onEditOpened]);
+
+  const handleMaxPointsEffect = useCallback((effect) => {
+    if (effect?.kind === "points" && effect.lockMax) {
+      setMaxLocked(true);
+      setMaxHint(t("pcMaxDefinedByRubric"));
+      return;
+    }
+    if (effect?.kind === "qualitative") {
+      setMaxLocked(false);
+      setMaxHint(t("pcRubricNoNumericGrade"));
+      return;
+    }
+    setMaxLocked(false);
+    setMaxHint(null);
+  }, []);
 
   const resetFormState = () => {
     setEvaluation(emptyEvaluationSelection());

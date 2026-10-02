@@ -277,6 +277,12 @@ export default function PyBotClassCoursePage() {
                     setTab("actividades");
                   }
                 }}
+                editActivityId={canTeach ? searchParams.get("edit") : null}
+                onEditOpened={() => {
+                  if (searchParams.get("edit")) {
+                    setTab("actividades");
+                  }
+                }}
                 onAssignContent={canTeach ? goAssignContent : undefined}
               />
             ) : null}

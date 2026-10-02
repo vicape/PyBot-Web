@@ -333,14 +333,45 @@ export default function MyRubricsPage() {
     if (!activity) return;
     if (applyTemplate.scoring_mode === "qualitative") return;
     const ceiling = rubricPointsCeiling(applyTemplate.criteria || []);
-    const max = activity.max_points != null ? Number(activity.max_points) : null;
-    if (ceiling != null && max != null && Math.abs(ceiling - max) > 0.0001) {
-      setApplyMismatch({ ceiling, max, activityId, courseId: applyCourseId });
+    if (ceiling == null || !Number.isFinite(ceiling)) return;
+    const max =
+      activity.max_points != null && activity.max_points !== ""
+        ? Number(activity.max_points)
+        : null;
+    // Points: incompatible if activity max is null/non-finite OR differs from ceiling.
+    // Never change existing activity max from library — block before apply.
+    if (max == null || !Number.isFinite(max) || Math.abs(ceiling - max) > 0.0001) {
+      setApplyMismatch({
+        ceiling,
+        max: max != null && Number.isFinite(max) ? max : null,
+        activityId,
+        courseId: applyCourseId,
+      });
     }
   };
 
   const handleApplyRubric = async () => {
     if (!applyTemplate?.id || !applyActivityId || applyBusy || applyMismatch) return;
+    // Re-check points compatibility before apply; never mutate activity max from library.
+    if (applyTemplate.scoring_mode !== "qualitative") {
+      const activity = applyActivities.find((a) => a.id === applyActivityId);
+      const ceiling = rubricPointsCeiling(applyTemplate.criteria || []);
+      if (ceiling != null && Number.isFinite(ceiling)) {
+        const max =
+          activity?.max_points != null && activity.max_points !== ""
+            ? Number(activity.max_points)
+            : null;
+        if (max == null || !Number.isFinite(max) || Math.abs(ceiling - max) > 0.0001) {
+          setApplyMismatch({
+            ceiling,
+            max: max != null && Number.isFinite(max) ? max : null,
+            activityId: applyActivityId,
+            courseId: applyCourseId,
+          });
+          return;
+        }
+      }
+    }
     setApplyBusy(true);
     setApplyErr("");
     const r = await applyRubricTemplateToActivity(applyActivityId, applyTemplate.id);
@@ -621,12 +652,15 @@ export default function MyRubricsPage() {
               <div className="pbc-rubric-apply-modal__mismatch" role="alert">
                 <p>
                   {t("pcRubricPointsMismatch")
-                    .replace("{activity}", String(applyMismatch.max))
+                    .replace(
+                      "{activity}",
+                      applyMismatch.max == null ? "sin definir" : String(applyMismatch.max),
+                    )
                     .replace("{rubric}", String(applyMismatch.ceiling))}
                 </p>
                 <Link
                   className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                  to={`/actividad/${applyMismatch.activityId}`}
+                  to={`/dashboard/classes/${applyMismatch.courseId}?tab=actividades&edit=${applyMismatch.activityId}`}
                 >
                   {t("pcEditActivity")}
                 </Link>
