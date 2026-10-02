@@ -91,23 +91,58 @@ export function itemScoresByIdFromSubmissions(rows = []) {
   return out;
 }
 
+/**
+ * Resolve frozen item fields for completion/progress.
+ * Prefer full frozen item; fall back to explicit snapshotItemId/type/sourceItemId/config.
+ */
+export function resolveFrozenItemForSubmit(opts = {}) {
+  const {
+    item = null,
+    snapshotItemId = null,
+    itemType = null,
+    type = null,
+    sourceItemId = null,
+    config = null,
+  } = opts;
+  if (item && typeof item === "object") {
+    return {
+      snapshotItemId: String(item.snapshotItemId || item.id || snapshotItemId || ""),
+      type: item.type || itemType || type || "exercise",
+      sourceItemId: item.sourceItemId ?? sourceItemId ?? null,
+      config: item.config && typeof item.config === "object" ? item.config : {},
+    };
+  }
+  return {
+    snapshotItemId: String(snapshotItemId || ""),
+    type: itemType || type || "exercise",
+    sourceItemId: sourceItemId ?? null,
+    config: config && typeof config === "object" ? config : {},
+  };
+}
+
 export async function submitActivityItem(opts) {
   const sb = getSupabase();
   const {
     activityId,
-    snapshotItemId,
-    itemType = "exercise",
     responseText = "",
     responsePayload = {},
   } = opts || {};
-  if (!sb || !activityId || !snapshotItemId) {
-    return { ok: false, submission: null, error: "missing_args" };
+  const frozen = resolveFrozenItemForSubmit(opts);
+  if (!sb || !activityId || !frozen.snapshotItemId) {
+    return {
+      ok: false,
+      submission: null,
+      progressUpdated: false,
+      progressRow: null,
+      progressError: null,
+      error: "missing_args",
+    };
   }
 
   const { data, error } = await sb.rpc("submit_activity_item", {
     p_activity_id: activityId,
-    p_snapshot_item_id: String(snapshotItemId),
-    p_item_type: String(itemType || "exercise"),
+    p_snapshot_item_id: String(frozen.snapshotItemId),
+    p_item_type: String(frozen.type || "exercise"),
     p_response_text: responseText ?? "",
     p_response_payload: responsePayload && typeof responsePayload === "object" ? responsePayload : {},
   });
@@ -117,31 +152,58 @@ export async function submitActivityItem(opts) {
       return {
         ok: false,
         submission: null,
+        progressUpdated: false,
+        progressRow: null,
+        progressError: null,
         error: "Falta aplicar la migración 20261002014500_p7_embedded_item_evidence_and_media.sql",
       };
     }
-    return { ok: false, submission: null, error: error.message };
+    return {
+      ok: false,
+      submission: null,
+      progressUpdated: false,
+      progressRow: null,
+      progressError: null,
+      error: error.message,
+    };
   }
   if (!data?.ok) {
-    return { ok: false, submission: null, error: data?.error || "submit_failed" };
+    return {
+      ok: false,
+      submission: null,
+      progressUpdated: false,
+      progressRow: null,
+      progressError: null,
+      error: data?.error || "submit_failed",
+    };
   }
 
-  // P4: submission marks completion only for submitted / quiz_finished rules.
-  try {
-    const rule = resolveItemCompletionRule({ type: itemType, config: {} });
-    if (rule === "submitted" || rule === "quiz_finished") {
-      await completeActivityItemProgress({
-        activityId,
-        snapshotItemId: String(snapshotItemId),
-        itemType: String(itemType || "exercise"),
-        metadata: { bridge: "activity_item_submission", version: data.version },
-      });
-    }
-  } catch {
-    /* non-fatal */
+  // P4: use frozen config/type for completion rule — never empty config.
+  let progressUpdated = false;
+  let progressRow = null;
+  let progressError = null;
+  const rule = resolveItemCompletionRule(frozen);
+  if (rule === "submitted" || rule === "quiz_finished") {
+    const prog = await completeActivityItemProgress({
+      activityId,
+      snapshotItemId: String(frozen.snapshotItemId),
+      itemType: String(frozen.type || "exercise"),
+      sourceItemId: frozen.sourceItemId || null,
+      metadata: { bridge: "activity_item_submission", version: data.version },
+    });
+    progressUpdated = Boolean(prog?.ok);
+    progressRow = prog?.row || null;
+    progressError = prog?.ok ? null : prog?.error || "progress_sync_failed";
   }
 
-  return { ok: true, submission: data, error: null };
+  return {
+    ok: true,
+    submission: data,
+    progressUpdated,
+    progressRow,
+    progressError,
+    error: null,
+  };
 }
 
 export async function gradeActivityItemSubmission(opts) {

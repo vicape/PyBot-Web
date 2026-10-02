@@ -341,12 +341,14 @@ export default function ActivityPage() {
       isCourseStudent({ courseRole: nextCourseRole })
         ? user.id
         : focusStudentId || user.id;
+    let itemSubmissionRowsForProfiles = [];
     if (snap && listSnapshotItems(snap).length > 0) {
       const { map } = await fetchActivityItemProgress(activityId, progressUserId);
       setItemProgressMap(map || {});
       const itemSubs = await fetchActivityItemSubmissions(activityId, {
         userId: student ? user.id : null,
       });
+      itemSubmissionRowsForProfiles = itemSubs.rows || [];
       if (student) {
         const byId = {};
         for (const row of itemSubs.rows || []) {
@@ -436,7 +438,15 @@ export default function ActivityPage() {
         hist.set(row.user_id, arr);
       }
       setTeacherHistoryByUser(hist);
-      const ids = [...new Set((list.rows ?? []).map((r) => r.user_id))];
+      // profilesById: unión única de teacherRows[].user_id y
+      // fetchActivityItemSubmissions(...).rows[].user_id (itemSubmissionRowsForProfiles).
+      // Nunca UUID truncado si existe perfil real; fallback sólo si no hay perfil.
+      const ids = [
+        ...new Set([
+          ...(list.rows ?? []).map((r) => r.user_id), // teacherRows[].user_id
+          ...itemSubmissionRowsForProfiles.map((r) => r.user_id), // fetchActivityItemSubmissions(...).rows[].user_id
+        ].filter(Boolean)),
+      ];
       if (ids.length) {
         const { data: profiles } = await supabase
           .from("profiles")
@@ -566,10 +576,16 @@ export default function ActivityPage() {
       if (!activityId || !item?.snapshotItemId || !isStudent) return false;
       setItemProgressBusy(item.snapshotItemId);
       setActionErr("");
-      const { ok, submission, error } = await submitActivityItem({
+      const {
+        ok,
+        submission,
+        error,
+        progressUpdated,
+        progressRow,
+        progressError,
+      } = await submitActivityItem({
         activityId,
-        snapshotItemId: item.snapshotItemId,
-        itemType: item.type,
+        item,
         responseText: responseText || "",
       });
       if (!ok) {
@@ -581,14 +597,21 @@ export default function ActivityPage() {
         ...prev,
         [item.snapshotItemId]: submission,
       }));
-      setItemProgressMap((prev) => ({
-        ...prev,
-        [item.snapshotItemId]: {
-          ...(prev[item.snapshotItemId] || {}),
-          snapshot_item_id: item.snapshotItemId,
-          status: "completed",
-        },
-      }));
+      if (progressUpdated) {
+        setItemProgressMap((prev) => ({
+          ...prev,
+          [item.snapshotItemId]:
+            progressRow || {
+              ...(prev[item.snapshotItemId] || {}),
+              snapshot_item_id: item.snapshotItemId,
+              status: "completed",
+            },
+        }));
+      } else if (progressError) {
+        setActionErr(
+          "La entrega se guardó, pero no se pudo sincronizar el progreso. Intentá de nuevo más tarde.",
+        );
+      }
       setItemProgressBusy(null);
       return true;
     },
@@ -598,13 +621,35 @@ export default function ActivityPage() {
   const onGradeItemSubmission = async (submissionId) => {
     if (busy) return;
     const draft = itemGradeDraft[submissionId] || {};
+    const earnedRaw = draft.earned;
+    const possibleRaw = draft.possible;
+    const earned =
+      earnedRaw === "" || earnedRaw == null ? null : Number(earnedRaw);
+    const possible =
+      possibleRaw === "" || possibleRaw == null ? null : Number(possibleRaw);
+    if (earned != null && (Number.isNaN(earned) || earned < 0)) {
+      setActionErr("Los puntos obtenidos deben ser ≥ 0.");
+      return;
+    }
+    if (possible != null && (Number.isNaN(possible) || possible <= 0)) {
+      setActionErr("Los puntos posibles deben ser mayores que 0.");
+      return;
+    }
+    if (earned != null && possible == null) {
+      setActionErr("Indicá los puntos posibles.");
+      return;
+    }
+    if (earned != null && possible != null && earned > possible) {
+      setActionErr("Los puntos obtenidos no pueden superar los posibles.");
+      return;
+    }
     setBusy(true);
     setActionErr("");
     setActionMsg("");
     const r = await gradeActivityItemSubmission({
       submissionId,
-      earnedPoints: draft.earned,
-      possiblePoints: draft.possible,
+      earnedPoints: earned,
+      possiblePoints: possible,
       feedback: draft.feedback || null,
     });
     setBusy(false);
@@ -1739,6 +1784,9 @@ export default function ActivityPage() {
                     </div>
                     <div className="pbc-activity-grade-row" style={{ marginTop: "0.5rem" }}>
                       <input
+                        type="number"
+                        min="0"
+                        step="0.01"
                         className="auth-org-input pbc-activity-grade-input"
                         placeholder="Obtenidos"
                         value={draft.earned}
@@ -1750,15 +1798,21 @@ export default function ActivityPage() {
                         }
                       />
                       <input
+                        type="number"
+                        min="0"
+                        step="0.01"
                         className="auth-org-input pbc-activity-grade-input"
                         placeholder="Posibles"
                         value={draft.possible}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          // UI: do not accept 0 for Posibles (backend remains definitive).
+                          if (v !== "" && Number(v) === 0) return;
                           setItemGradeDraft((prev) => ({
                             ...prev,
-                            [row.id]: { ...draft, possible: e.target.value },
-                          }))
-                        }
+                            [row.id]: { ...draft, possible: v },
+                          }));
+                        }}
                       />
                       <input
                         className="auth-org-input"

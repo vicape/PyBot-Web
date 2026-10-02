@@ -18,7 +18,7 @@ import {
   resolveVideoCompletionThreshold,
 } from "../../platform/activityItemProgress.js";
 import {
-  formatActiveTime,
+  formatEngagementDisplay,
   formatPerformanceDisplay,
   formatProgressDisplay,
 } from "../../platform/learningStatus.js";
@@ -130,7 +130,7 @@ function ProgressPercent({ aggregates, learningStatus = null }) {
         </span>
         {" · "}
         <span>
-          Tiempo activo: <strong>{formatActiveTime(engagement?.active_ms)}</strong>
+          Tiempo activo: <strong>{formatEngagementDisplay(engagement)}</strong>
         </span>
         {" · "}
         <span>
@@ -167,7 +167,6 @@ function SnapshotItemCard({
   const isDone = status === ITEM_PROGRESS_STATUS.COMPLETED;
   const isBusy = busyId === item.snapshotItemId;
   const isEvidenceType = isEmbeddedEvidenceItemType(item.type);
-  const [responseDraft, setResponseDraft] = useState("");
   const videoUrl =
     item.type === "video"
       ? item.content?.url || item.content?.src || item.content?.videoUrl || null
@@ -191,8 +190,10 @@ function SnapshotItemCard({
     !isEvidenceType &&
     (rule === "marked_complete" || rule === "viewed");
 
-  const showEvidenceSubmit =
-    interactive && isEvidenceType && typeof onSubmitItem === "function";
+  // Do NOT invent a response UI solely from item.type. Only show delivery UI when an
+  // explicit response mechanism already supported by the architecture is present.
+  // Currently none for embedded items — preserve visualization/progress/time; P7 backend remains available.
+  const showEvidenceSubmit = false;
 
   const emitVideoState = (partial) => {
     engagement?.onVideoMediaState?.(item, partial);
@@ -312,44 +313,10 @@ function SnapshotItemCard({
         </div>
       ) : null}
 
-      {showEvidenceSubmit ? (
-        <div style={{ marginTop: "0.5rem" }}>
-          {itemSubmission?.response_text ? (
-            <p className="auth-card__muted" style={{ margin: "0 0 0.35rem", whiteSpace: "pre-wrap" }}>
-              Última entrega: {itemSubmission.response_text}
-            </p>
-          ) : null}
-          <label className="pbc-label" htmlFor={`item-resp-${item.snapshotItemId}`}>
-            Respuesta
-          </label>
-          <textarea
-            id={`item-resp-${item.snapshotItemId}`}
-            className="pbc-input"
-            rows={3}
-            value={responseDraft}
-            disabled={isBusy}
-            onChange={(e) => setResponseDraft(e.target.value)}
-            placeholder="Escribí tu respuesta o evidencia…"
-            style={{ width: "100%", marginTop: "0.25rem" }}
-          />
-          <div style={{ marginTop: "0.35rem" }}>
-            <button
-              type="button"
-              className="pbc-btn pbc-btn--primary pbc-btn--sm"
-              disabled={isBusy || !String(responseDraft || "").trim()}
-              onClick={() => {
-                const text = String(responseDraft || "").trim();
-                if (!text) return;
-                void (async () => {
-                  const ok = await onSubmitItem?.(item, { responseText: text });
-                  if (ok) setResponseDraft("");
-                })();
-              }}
-            >
-              {isBusy ? "…" : itemSubmission ? "Reentregar" : "Entregar"}
-            </button>
-          </div>
-        </div>
+      {itemSubmission?.response_text ? (
+        <p className="auth-card__muted" style={{ margin: "0.5rem 0 0", whiteSpace: "pre-wrap" }}>
+          Última entrega: {itemSubmission.response_text}
+        </p>
       ) : null}
 
       {interactive &&

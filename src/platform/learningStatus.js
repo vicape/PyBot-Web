@@ -224,7 +224,10 @@ export function resolveItemPerformance(item, itemScore = null) {
  * Shape: progress: { status, required, completed }, engagement: { active_ms },
  * performance: { assessable, assessed, earned_points, possible_points, percent } (or null).
  */
-export function buildItemLearningStatus(item, { progressRow = null, activeMs = 0, itemScore = null } = {}) {
+export function buildItemLearningStatus(
+  item,
+  { progressRow = null, activeMs = 0, itemScore = null, engagementAvailable = true } = {},
+) {
   const status = normalizeItemStatus(progressRow?.status);
   const required = isSnapshotItemRequired(item);
   return {
@@ -239,10 +242,8 @@ export function buildItemLearningStatus(item, { progressRow = null, activeMs = 0
       required,
       completed: status === ITEM_PROGRESS_STATUS.COMPLETED,
     },
-    // engagement: { active_ms }
-    engagement: {
-      active_ms: Math.max(0, Math.floor(Number(activeMs) || 0)),
-    },
+    // engagement: { active_ms } (+ available:false when RPC/overview missing)
+    engagement: buildEngagementPayload(activeMs, { available: engagementAvailable }),
     // performance: { assessable, assessed, earned_points, possible_points, percent }
     performance: resolveItemPerformance(item, itemScore),
   };
@@ -259,6 +260,7 @@ export function deriveLearningStatusAggregates({
   engagementSegments = [],
   itemScoresById = {},
   activityPerformance = null,
+  engagementAvailable = true,
 } = {}) {
   const items = snapshotItems || listSnapshotItems(snapshot);
   const progressAgg = deriveProgressAggregates(items, progressByItemId);
@@ -275,6 +277,7 @@ export function deriveLearningStatusAggregates({
       progressRow: progressByItemId[id],
       activeMs,
       itemScore: itemScoresById[id] || null,
+      engagementAvailable,
     });
     itemStatuses[id] = status;
     if (status.performance?.assessed) {
@@ -339,7 +342,7 @@ export function deriveLearningStatusAggregates({
         percent: lessonProg.emptyRequired ? null : lessonProg.percent,
         emptyRequired: lessonProg.emptyRequired,
       },
-      engagement: { active_ms: eng?.activeMs ?? 0 },
+      engagement: buildEngagementPayload(eng?.activeMs ?? 0, { available: engagementAvailable }),
       performance: aggregatePerformance(lessonPerf),
     };
   }
@@ -363,7 +366,7 @@ export function deriveLearningStatusAggregates({
         percent: unitProg.emptyRequired ? null : unitProg.percent,
         emptyRequired: unitProg.emptyRequired,
       },
-      engagement: { active_ms: eng?.activeMs ?? 0 },
+      engagement: buildEngagementPayload(eng?.activeMs ?? 0, { available: engagementAvailable }),
       performance: aggregatePerformance(unitPerf),
     };
   }
@@ -379,7 +382,9 @@ export function deriveLearningStatusAggregates({
         percent: progressAgg.content.emptyRequired ? null : progressAgg.content.percent,
         emptyRequired: progressAgg.content.emptyRequired,
       },
-      engagement: { active_ms: engagementAgg.content?.activeMs ?? 0 },
+      engagement: buildEngagementPayload(engagementAgg.content?.activeMs ?? 0, {
+        available: engagementAvailable,
+      }),
       performance: contentPerformance,
       /** Activity-scoped performance (grade/max_points), independent of nested items. */
       activityPerformance: activityPerformance || null,
@@ -403,6 +408,25 @@ export function formatActiveTime(ms) {
     return `${hours}h ${String(minutes).padStart(2, "0")}m`;
   }
   return `${minutes}m`;
+}
+
+/**
+ * Engagement display: unavailable → "—"; available factual zero → "0m".
+ * Treat missing/undefined available as available (normal RPC-present path).
+ */
+export function formatEngagementDisplay(engagement) {
+  if (!engagement || engagement.available === false || engagement.unavailable === true) {
+    return "—";
+  }
+  return formatActiveTime(engagement.active_ms);
+}
+
+/** Build engagement payload; unavailable must not be coerced to 0m. */
+export function buildEngagementPayload(activeMs, { available = true } = {}) {
+  if (available === false) {
+    return { active_ms: null, available: false };
+  }
+  return { active_ms: Math.max(0, Math.floor(Number(activeMs) || 0)) };
 }
 
 /**
@@ -474,6 +498,8 @@ export async function fetchCourseLearningStatusOverview(courseId) {
       students: base.students || gb?.students || [],
       progress: base.progress || [],
       engagement: [],
+      engagementUnavailable: true,
+      missingLearningStatusRpc: true,
       submissions: (gb?.grades || []).map((g) => ({
         user_id: g.user_id,
         activity_id: g.activity_id,
@@ -481,7 +507,6 @@ export async function fetchCourseLearningStatusOverview(courseId) {
         status: g.status,
         max_points: gb?.activities?.find((x) => x.id === g.activity_id)?.max_points ?? null,
       })),
-      missingLearningStatusRpc: true,
     },
     error: null,
     missingMigration: Boolean(progressRes.missingMigration),
@@ -498,6 +523,7 @@ export function buildStudentActivityLearningSummaries({
   engagementRows = [],
   submissionRows = [],
   itemSubmissionRows = [],
+  engagementAvailable = true,
 } = {}) {
   if (!activity) return [];
   const items = listSnapshotItems(activity.content_snapshot);
@@ -539,6 +565,7 @@ export function buildStudentActivityLearningSummaries({
       engagementSegments: segments,
       itemScoresById,
       activityPerformance: activityPerformance.assessable ? activityPerformance : null,
+      engagementAvailable,
     });
 
     return { student, learning, activityPerformance, itemScoresById };

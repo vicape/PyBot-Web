@@ -332,10 +332,12 @@ test("activity-level grade remains for standalone (no nested assessable)", () =>
   assert.equal(learning.content.performance.percent, 90);
 });
 
-test("student runtime replaces fake mark-complete for evaluable embedded items", () => {
+test("student runtime does not invent response UI from item.type; P7 backend remains", () => {
   assert.match(viewerSrc, /isEmbeddedEvidenceItemType/);
   assert.match(viewerSrc, /onSubmitItem/);
-  assert.match(viewerSrc, /Entregar|Reentregar/);
+  assert.doesNotMatch(viewerSrc, /<textarea/);
+  assert.doesNotMatch(viewerSrc, /Escribí tu respuesta/);
+  assert.match(viewerSrc, /showEvidenceSubmit = false/);
   // Fake mark-complete must not include exercise/quiz/assignment/assessment
   assert.doesNotMatch(
     viewerSrc,

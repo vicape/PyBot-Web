@@ -4,7 +4,7 @@ import { listSnapshotItems } from "../../platform/activityItemProgress.js";
 import {
   buildStudentActivityLearningSummaries,
   fetchCourseLearningStatusOverview,
-  formatActiveTime,
+  formatEngagementDisplay,
   formatPerformanceDisplay,
   formatProgressDisplay,
 } from "../../platform/learningStatus.js";
@@ -67,6 +67,8 @@ export default function CourseContentProgressPanel({ courseId }) {
 
   const studentSummaries = useMemo(() => {
     if (!selectedActivity) return [];
+    const engagementAvailable =
+      overview?.missingLearningStatusRpc !== true && overview?.engagementUnavailable !== true;
     return buildStudentActivityLearningSummaries({
       activity: selectedActivity,
       students,
@@ -74,6 +76,7 @@ export default function CourseContentProgressPanel({ courseId }) {
       engagementRows: overview?.engagement || [],
       submissionRows: overview?.submissions || [],
       itemSubmissionRows: overview?.item_submissions || [],
+      engagementAvailable,
     });
   }, [selectedActivity, students, overview]);
 
@@ -165,7 +168,7 @@ export default function CourseContentProgressPanel({ courseId }) {
                     ? "—"
                     : `${formatProgressDisplay(learning.content.progress)} (${learning.content.progress.completed}/${learning.content.progress.total})`}
                 </td>
-                <td>{formatActiveTime(learning.content.engagement.active_ms)}</td>
+                <td>{formatEngagementDisplay(learning.content.engagement)}</td>
                 <td>{formatPerformanceDisplay(learning.content.performance)}</td>
                 <td>
                   <button
@@ -198,7 +201,7 @@ export default function CourseContentProgressPanel({ courseId }) {
           <p className="auth-card__muted" style={{ marginTop: 0 }}>
             Progreso {formatProgressDisplay(drillStudent.learning.content.progress)}
             {" · "}
-            Tiempo activo {formatActiveTime(drillStudent.learning.content.engagement.active_ms)}
+            Tiempo activo {formatEngagementDisplay(drillStudent.learning.content.engagement)}
             {" · "}
             Rendimiento {formatPerformanceDisplay(drillStudent.learning.content.performance)}
           </p>
@@ -209,7 +212,7 @@ export default function CourseContentProgressPanel({ courseId }) {
                 {" — "}
                 Progreso {formatProgressDisplay(u.progress)}
                 {" · "}
-                {formatActiveTime(u.engagement.active_ms)}
+                {formatEngagementDisplay(u.engagement)}
                 {" · "}
                 Rendimiento {formatPerformanceDisplay(u.performance)}
               </strong>
@@ -223,7 +226,7 @@ export default function CourseContentProgressPanel({ courseId }) {
                         {" — "}
                         Progreso {formatProgressDisplay(l.progress)}
                         {" · "}
-                        {formatActiveTime(l.engagement.active_ms)}
+                        {formatEngagementDisplay(l.engagement)}
                         {" · "}
                         Rendimiento {formatPerformanceDisplay(l.performance)}
                       </span>
@@ -237,7 +240,7 @@ export default function CourseContentProgressPanel({ courseId }) {
                               {it.progress.status}
                               {it.progress.required === false ? " (opcional)" : ""}
                               {" · "}
-                              {formatActiveTime(it.engagement.active_ms)}
+                              {formatEngagementDisplay(it.engagement)}
                               {" · "}
                               Rendimiento {formatPerformanceDisplay(it.performance)}
                             </li>
