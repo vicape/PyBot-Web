@@ -34,6 +34,7 @@ export const TEST_SUITES = Object.freeze({
     "pybotclassI18n.test.mjs",
     "uxIaRedesign.test.mjs",
     "uxPolishDiscoverability.test.mjs",
+    "rubricLibraryUx.test.mjs",
     "progressiveContentReader.test.mjs",
     "normalizeReadOnlyFencedCode.test.mjs",
     "replProtocol.test.mjs",

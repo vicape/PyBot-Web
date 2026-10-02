@@ -614,3 +614,12 @@ export function quantitativeTotalFromLevels(criteria, selectedLevelIdsByCriterio
   }
   return total;
 }
+
+/**
+ * Predictable Spanish copy name for duplicated reusable templates.
+ * Matches Content "(copia)" convention.
+ */
+export function rubricDuplicateName(originalName, untitledFallback = "Rúbrica") {
+  const base = String(originalName || "").trim() || untitledFallback;
+  return `${base} (copia)`;
+}

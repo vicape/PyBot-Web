@@ -5,6 +5,7 @@ export const PRIMARY_NAV_IDS = Object.freeze([
   "home",
   "courses",
   "content",
+  "rubrics",
   "community",
   "ide",
 ]);

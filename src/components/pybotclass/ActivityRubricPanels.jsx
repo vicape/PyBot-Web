@@ -1,8 +1,11 @@
 /**
  * P9 rubric authoring / grading / student result panels.
  * One responsive implementation (matrix on desktop, cards on narrow).
+ * Library authoring reuses the same criterion → levels editor (no second model).
  */
+import { Link } from "react-router-dom";
 import { quantitativeTotalFromLevels } from "../../platform/rubrics.js";
+import { t } from "../../i18n.js";
 
 function emptyLevel(scoringMode) {
   return {
@@ -29,6 +32,307 @@ export function defaultRubricEditorState(scoringMode = "points") {
   };
 }
 
+export { emptyLevel, emptyCriterion };
+
+function moveItem(list, index, delta) {
+  const next = [...list];
+  const target = index + delta;
+  if (target < 0 || target >= next.length) return list;
+  const tmp = next[index];
+  next[index] = next[target];
+  next[target] = tmp;
+  return next;
+}
+
+/** Shared P9 criterion → levels editor (library + activity one-off). */
+export function RubricCriteriaEditor({
+  scoringMode,
+  criteria,
+  onCriteriaChange,
+  busy = false,
+  isLegacy = false,
+}) {
+  const isPoints = scoringMode === "points";
+
+  const updateCriterion = (idx, patch) => {
+    const next = criteria.map((c, i) => (i === idx ? { ...c, ...patch } : c));
+    onCriteriaChange(next);
+  };
+
+  const updateLevel = (cIdx, lIdx, patch) => {
+    const next = criteria.map((c, i) => {
+      if (i !== cIdx) return c;
+      const levels = (c.levels || []).map((lv, j) => (j === lIdx ? { ...lv, ...patch } : lv));
+      return { ...c, levels };
+    });
+    onCriteriaChange(next);
+  };
+
+  return (
+    <div className="pbc-rubric-criteria-editor">
+      {criteria.map((c, cIdx) => (
+        <div key={c.id || `c-${cIdx}`} className="pbc-rubric-author__criterion">
+          <div className="pbc-rubric-author__row">
+            <input
+              className="auth-org-input"
+              placeholder={t("pcRubricCriterionPlaceholder")}
+              aria-label={t("pcRubricCriterionPlaceholder")}
+              value={c.name}
+              disabled={busy}
+              onChange={(e) => updateCriterion(cIdx, { name: e.target.value })}
+            />
+            {isLegacy ? (
+              <input
+                className="auth-org-input"
+                type="number"
+                min="0"
+                step="0.5"
+                placeholder={t("pcRubricMaxShort")}
+                aria-label={t("pcRubricMaxShort")}
+                value={c.max_points ?? ""}
+                disabled={busy}
+                onChange={(e) => updateCriterion(cIdx, { max_points: e.target.value })}
+              />
+            ) : null}
+            <input
+              className="auth-org-input"
+              placeholder={t("pcRubricCriterionDescPlaceholder")}
+              aria-label={t("pcRubricCriterionDescPlaceholder")}
+              value={c.description || ""}
+              disabled={busy}
+              onChange={(e) => updateCriterion(cIdx, { description: e.target.value })}
+            />
+            <button
+              type="button"
+              className="auth-btn auth-btn--ghost auth-btn--sm"
+              disabled={busy || cIdx === 0}
+              aria-label={t("pcRubricMoveUp")}
+              onClick={() => onCriteriaChange(moveItem(criteria, cIdx, -1))}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              className="auth-btn auth-btn--ghost auth-btn--sm"
+              disabled={busy || cIdx >= criteria.length - 1}
+              aria-label={t("pcRubricMoveDown")}
+              onClick={() => onCriteriaChange(moveItem(criteria, cIdx, 1))}
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              className="auth-btn auth-btn--ghost auth-btn--sm"
+              disabled={busy}
+              onClick={() => onCriteriaChange(criteria.filter((_, i) => i !== cIdx))}
+            >
+              {t("pcRubricRemove")}
+            </button>
+          </div>
+          {!isLegacy
+            ? (c.levels || []).map((lv, lIdx) => (
+                <div key={lv.id || `l-${cIdx}-${lIdx}`} className="pbc-rubric-author__level">
+                  <input
+                    className="auth-org-input"
+                    placeholder={t("pcRubricLevelPlaceholder")}
+                    aria-label={t("pcRubricLevelPlaceholder")}
+                    value={lv.name}
+                    disabled={busy}
+                    onChange={(e) => updateLevel(cIdx, lIdx, { name: e.target.value })}
+                  />
+                  <input
+                    className="auth-org-input"
+                    placeholder={t("pcRubricDescriptorPlaceholder")}
+                    aria-label={t("pcRubricDescriptorPlaceholder")}
+                    value={lv.descriptor || ""}
+                    disabled={busy}
+                    onChange={(e) => updateLevel(cIdx, lIdx, { descriptor: e.target.value })}
+                  />
+                  {isPoints ? (
+                    <input
+                      className="auth-org-input"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      placeholder={t("pcRubricPtsShort")}
+                      aria-label={t("pcRubricPtsShort")}
+                      value={lv.points ?? ""}
+                      disabled={busy}
+                      onChange={(e) => updateLevel(cIdx, lIdx, { points: e.target.value })}
+                    />
+                  ) : null}
+                  <div className="pbc-rubric-author__level-actions">
+                    <button
+                      type="button"
+                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      disabled={busy || lIdx === 0}
+                      aria-label={t("pcRubricMoveUp")}
+                      onClick={() =>
+                        updateCriterion(cIdx, {
+                          levels: moveItem(c.levels || [], lIdx, -1),
+                        })
+                      }
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      disabled={busy || lIdx >= (c.levels || []).length - 1}
+                      aria-label={t("pcRubricMoveDown")}
+                      onClick={() =>
+                        updateCriterion(cIdx, {
+                          levels: moveItem(c.levels || [], lIdx, 1),
+                        })
+                      }
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      disabled={busy}
+                      onClick={() =>
+                        updateCriterion(cIdx, {
+                          levels: (c.levels || []).filter((_, i) => i !== lIdx),
+                        })
+                      }
+                    >
+                      {t("pcRubricRemoveLevel")}
+                    </button>
+                  </div>
+                </div>
+              ))
+            : null}
+          {!isLegacy ? (
+            <button
+              type="button"
+              className="auth-btn auth-btn--ghost auth-btn--sm"
+              disabled={busy}
+              onClick={() =>
+                updateCriterion(cIdx, {
+                  levels: [...(c.levels || []), emptyLevel(scoringMode)],
+                })
+              }
+            >
+              {t("pcRubricAddLevel")}
+            </button>
+          ) : null}
+        </div>
+      ))}
+
+      <div className="pbc-activity-actions pbc-activity-actions--wrap">
+        {!isLegacy ? (
+          <button
+            type="button"
+            className="auth-btn auth-btn--ghost auth-btn--sm"
+            disabled={busy}
+            onClick={() => onCriteriaChange([...criteria, emptyCriterion(scoringMode)])}
+          >
+            {t("pcRubricAddCriterion")}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="auth-btn auth-btn--ghost auth-btn--sm"
+            disabled={busy}
+            onClick={() =>
+              onCriteriaChange([
+                ...criteria,
+                { name: "", description: "", max_points: "", levels: [] },
+              ])
+            }
+          >
+            {t("pcRubricAddCriterion")}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Library create/edit form for reusable P9 templates. */
+export function RubricTemplateAuthoringForm({
+  name,
+  onNameChange,
+  description = "",
+  onDescriptionChange,
+  scoringMode,
+  onScoringModeChange,
+  criteria,
+  onCriteriaChange,
+  busy = false,
+  onSave,
+  onCancel,
+  saveLabel,
+}) {
+  const isPoints = scoringMode === "points";
+  return (
+    <div className="pbc-rubric-author pbc-rubric-template-form">
+      <div className="pbc-rubric-author__row">
+        <label className="auth-card__muted pbc-rubric-template-form__field">
+          {t("pcRubricName")}
+          <input
+            className="auth-org-input"
+            value={name}
+            disabled={busy}
+            onChange={(e) => onNameChange?.(e.target.value)}
+            required
+          />
+        </label>
+        <label className="auth-card__muted pbc-rubric-template-form__field">
+          {t("pcRubricMode")}
+          <select
+            className="auth-org-input"
+            value={scoringMode}
+            disabled={busy}
+            onChange={(e) => onScoringModeChange?.(e.target.value)}
+          >
+            <option value="qualitative">{t("pcRubricModeQualitative")}</option>
+            <option value="points">{t("pcRubricModePoints")}</option>
+          </select>
+        </label>
+      </div>
+      <label className="auth-card__muted pbc-rubric-template-form__field pbc-rubric-template-form__field--full">
+        {t("pcDescription")}
+        <textarea
+          className="auth-org-input"
+          rows={2}
+          value={description || ""}
+          disabled={busy}
+          onChange={(e) => onDescriptionChange?.(e.target.value)}
+          placeholder={t("pcRubricDescOptional")}
+        />
+      </label>
+      <p className="auth-card__muted">
+        {t("pcRubricStructureHint")}
+        {!isPoints ? ` ${t("pcRubricQualitativeHint")}` : ""}
+      </p>
+      <RubricCriteriaEditor
+        scoringMode={scoringMode}
+        criteria={criteria}
+        onCriteriaChange={onCriteriaChange}
+        busy={busy}
+      />
+      <div className="pbc-modal__actions pbc-rubric-template-form__actions">
+        {onCancel ? (
+          <button type="button" className="pbc-btn pbc-btn--ghost" disabled={busy} onClick={onCancel}>
+            {t("pcCancel")}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="pbc-btn pbc-btn--primary"
+          disabled={busy || !String(name || "").trim() || criteria.length === 0}
+          onClick={() => onSave?.()}
+        >
+          {busy ? t("pcSaving") : saveLabel || t("pcSave")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ActivityRubricAuthoringPanel({
   scoringMode,
   onScoringModeChange,
@@ -47,244 +351,196 @@ export function ActivityRubricAuthoringPanel({
   activityMaxPoints = null,
   hasFrozenRubric = false,
   schemaGeneration = null,
+  activityChoice = "create",
+  onActivityChoiceChange,
 }) {
   const isLegacy = schemaGeneration === 1;
   const isPoints = scoringMode === "points";
-
-  const updateCriterion = (idx, patch) => {
-    const next = criteria.map((c, i) => (i === idx ? { ...c, ...patch } : c));
-    onCriteriaChange(next);
-  };
-
-  const updateLevel = (cIdx, lIdx, patch) => {
-    const next = criteria.map((c, i) => {
-      if (i !== cIdx) return c;
-      const levels = (c.levels || []).map((lv, j) => (j === lIdx ? { ...lv, ...patch } : lv));
-      return { ...c, levels };
-    });
-    onCriteriaChange(next);
-  };
+  const choice = activityChoice || (hasFrozenRubric ? "choose" : "none");
 
   return (
     <div className="pbc-rubric-author">
-      <div className="pbc-rubric-author__row">
-        <label className="auth-card__muted">
-          Modo{" "}
-          <select
-            className="auth-org-input"
-            value={scoringMode}
-            disabled={busy || isLegacy}
-            onChange={(e) => onScoringModeChange(e.target.value)}
-          >
-            <option value="points">Puntos</option>
-            <option value="qualitative">Cualitativo</option>
-          </select>
+      <fieldset className="pbc-rubric-choice" disabled={busy}>
+        <legend className="auth-card__muted">{t("pcRubricActivityChoiceLegend")}</legend>
+        <label className="pbc-rubric-choice__option">
+          <input
+            type="radio"
+            name="activity-rubric-choice"
+            value="none"
+            checked={choice === "none"}
+            onChange={() => onActivityChoiceChange?.("none")}
+          />
+          {t("pcRubricChoiceNone")}
         </label>
-        {templates.length > 0 ? (
-          <label className="auth-card__muted">
-            Plantilla{" "}
-            <select
-              className="auth-org-input"
-              value={selectedTemplateId}
-              disabled={busy}
-              onChange={(e) => onSelectTemplate?.(e.target.value)}
-            >
-              <option value="">— Elegir plantilla —</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <button
-          type="button"
-          className="auth-btn auth-btn--ghost auth-btn--sm"
-          disabled={busy || !selectedTemplateId}
-          onClick={() => onApplyTemplate?.()}
-        >
-          Usar en actividad
-        </button>
-        {hasFrozenRubric ? (
-          <button
-            type="button"
-            className="auth-btn auth-btn--ghost auth-btn--sm"
-            disabled={busy}
-            onClick={() => onClearRubric?.()}
-          >
-            Sin rúbrica
-          </button>
-        ) : null}
-      </div>
+        <label className="pbc-rubric-choice__option">
+          <input
+            type="radio"
+            name="activity-rubric-choice"
+            value="choose"
+            checked={choice === "choose"}
+            onChange={() => onActivityChoiceChange?.("choose")}
+          />
+          {t("pcRubricChoiceFromMine")}
+        </label>
+        <label className="pbc-rubric-choice__option">
+          <input
+            type="radio"
+            name="activity-rubric-choice"
+            value="create"
+            checked={choice === "create"}
+            onChange={() => onActivityChoiceChange?.("create")}
+          />
+          {t("pcRubricChoiceCreateForActivity")}
+        </label>
+      </fieldset>
 
-      {isLegacy ? (
-        <p className="auth-card__muted">
-          Rúbrica heredada (criterios + puntos numéricos, sin niveles). Se conserva tal cual.
-        </p>
-      ) : (
-        <p className="auth-card__muted">
-          Estructura: criterio → niveles de logro. La asociación congela una copia independiente en
-          la actividad.
-          {isPoints && activityMaxPoints != null
-            ? ` La suma de máximos por criterio debe coincidir con ${activityMaxPoints}.`
-            : null}
-          {!isPoints ? " En modo cualitativo no se requiere puntaje numérico." : null}
-        </p>
-      )}
+      <p className="pbc-rubric-manage-link">
+        <Link to="/dashboard/rubrics" className="auth-link">
+          {t("pcManageRubrics")}
+        </Link>
+      </p>
 
-      {criteria.map((c, cIdx) => (
-        <div key={c.id || `c-${cIdx}`} className="pbc-rubric-author__criterion">
-          <div className="pbc-rubric-author__row">
-            <input
-              className="auth-org-input"
-              placeholder="Criterio"
-              value={c.name}
-              disabled={busy}
-              onChange={(e) => updateCriterion(cIdx, { name: e.target.value })}
-            />
-            {isLegacy ? (
-              <input
-                className="auth-org-input"
-                type="number"
-                min="0"
-                step="0.5"
-                placeholder="Máx"
-                value={c.max_points ?? ""}
-                disabled={busy}
-                onChange={(e) => updateCriterion(cIdx, { max_points: e.target.value })}
-              />
-            ) : null}
-            <input
-              className="auth-org-input"
-              placeholder="Descripción (opcional)"
-              value={c.description || ""}
-              disabled={busy}
-              onChange={(e) => updateCriterion(cIdx, { description: e.target.value })}
-            />
+      {choice === "none" ? (
+        <div className="pbc-rubric-choice-panel">
+          <p className="auth-card__muted">{t("pcRubricNoneHint")}</p>
+          {hasFrozenRubric ? (
             <button
               type="button"
               className="auth-btn auth-btn--ghost auth-btn--sm"
               disabled={busy}
-              onClick={() => onCriteriaChange(criteria.filter((_, i) => i !== cIdx))}
+              onClick={() => onClearRubric?.()}
             >
-              Quitar
-            </button>
-          </div>
-          {!isLegacy
-            ? (c.levels || []).map((lv, lIdx) => (
-                <div key={lv.id || `l-${cIdx}-${lIdx}`} className="pbc-rubric-author__level">
-                  <input
-                    className="auth-org-input"
-                    placeholder="Nivel"
-                    value={lv.name}
-                    disabled={busy}
-                    onChange={(e) => updateLevel(cIdx, lIdx, { name: e.target.value })}
-                  />
-                  <input
-                    className="auth-org-input"
-                    placeholder="Descriptor del criterio"
-                    value={lv.descriptor || ""}
-                    disabled={busy}
-                    onChange={(e) => updateLevel(cIdx, lIdx, { descriptor: e.target.value })}
-                  />
-                  {isPoints ? (
-                    <input
-                      className="auth-org-input"
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      placeholder="Pts"
-                      value={lv.points ?? ""}
-                      disabled={busy}
-                      onChange={(e) => updateLevel(cIdx, lIdx, { points: e.target.value })}
-                    />
-                  ) : null}
-                  <button
-                    type="button"
-                    className="auth-btn auth-btn--ghost auth-btn--sm"
-                    disabled={busy}
-                    onClick={() =>
-                      updateCriterion(cIdx, {
-                        levels: (c.levels || []).filter((_, i) => i !== lIdx),
-                      })
-                    }
-                  >
-                    Quitar nivel
-                  </button>
-                </div>
-              ))
-            : null}
-          {!isLegacy ? (
-            <button
-              type="button"
-              className="auth-btn auth-btn--ghost auth-btn--sm"
-              disabled={busy}
-              onClick={() =>
-                updateCriterion(cIdx, {
-                  levels: [...(c.levels || []), emptyLevel(scoringMode)],
-                })
-              }
-            >
-              Agregar nivel
+              {t("pcRubricChoiceNone")}
             </button>
           ) : null}
         </div>
-      ))}
+      ) : null}
 
-      <div className="pbc-activity-actions pbc-activity-actions--wrap">
-        {!isLegacy ? (
-          <button
-            type="button"
-            className="auth-btn auth-btn--ghost auth-btn--sm"
-            disabled={busy}
-            onClick={() => onCriteriaChange([...criteria, emptyCriterion(scoringMode)])}
-          >
-            Agregar criterio
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="auth-btn auth-btn--ghost auth-btn--sm"
-            disabled={busy}
-            onClick={() =>
-              onCriteriaChange([
-                ...criteria,
-                { name: "", description: "", max_points: "", levels: [] },
-              ])
-            }
-          >
-            Agregar criterio
-          </button>
-        )}
-        <button
-          type="button"
-          className="auth-btn auth-btn--primary auth-btn--sm"
-          disabled={busy || criteria.length === 0}
-          onClick={() => onSaveActivityRubric?.()}
-        >
-          Guardar rúbrica en actividad
-        </button>
-        {!isLegacy ? (
-          <>
-            <input
-              className="auth-org-input"
-              placeholder="Nombre plantilla reutilizable"
-              value={templateName}
-              disabled={busy}
-              onChange={(e) => onTemplateNameChange?.(e.target.value)}
-            />
+      {choice === "choose" ? (
+        <div className="pbc-rubric-choice-panel">
+          <div className="pbc-rubric-author__row">
+            <label className="auth-card__muted">
+              {t("pcRubricTemplate")}{" "}
+              <select
+                className="auth-org-input"
+                value={selectedTemplateId}
+                disabled={busy}
+                onChange={(e) => onSelectTemplate?.(e.target.value)}
+              >
+                <option value="">{t("pcRubricPickTemplate")}</option>
+                {templates.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
-              className="auth-btn auth-btn--ghost auth-btn--sm"
-              disabled={busy || !templateName.trim() || criteria.length === 0}
-              onClick={() => onSaveAsTemplate?.()}
+              className="auth-btn auth-btn--primary auth-btn--sm"
+              disabled={busy || !selectedTemplateId}
+              onClick={() => onApplyTemplate?.()}
             >
-              Guardar como plantilla
+              {t("pcRubricApplyToActivity")}
             </button>
-          </>
-        ) : null}
-      </div>
+          </div>
+          {templates.length === 0 ? (
+            <p className="auth-card__muted">
+              {t("pcRubricNoTemplatesYet")}{" "}
+              <Link to="/dashboard/rubrics" className="auth-link">
+                {t("pcManageRubrics")}
+              </Link>
+            </p>
+          ) : (
+            <p className="auth-card__muted">{t("pcRubricApplySnapshotHint")}</p>
+          )}
+          {hasFrozenRubric ? (
+            <p className="auth-card__muted" role="status">
+              {t("pcRubricHasFrozen")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {choice === "create" ? (
+        <div className="pbc-rubric-choice-panel">
+          <div className="pbc-rubric-author__row">
+            <label className="auth-card__muted">
+              {t("pcRubricMode")}{" "}
+              <select
+                className="auth-org-input"
+                value={scoringMode}
+                disabled={busy || isLegacy}
+                onChange={(e) => onScoringModeChange(e.target.value)}
+              >
+                <option value="points">{t("pcRubricModePoints")}</option>
+                <option value="qualitative">{t("pcRubricModeQualitativeShort")}</option>
+              </select>
+            </label>
+            {hasFrozenRubric ? (
+              <button
+                type="button"
+                className="auth-btn auth-btn--ghost auth-btn--sm"
+                disabled={busy}
+                onClick={() => onClearRubric?.()}
+              >
+                {t("pcRubricChoiceNone")}
+              </button>
+            ) : null}
+          </div>
+
+          {isLegacy ? (
+            <p className="auth-card__muted">{t("pcRubricLegacyHint")}</p>
+          ) : (
+            <p className="auth-card__muted">
+              {t("pcRubricStructureHint")}
+              {isPoints && activityMaxPoints != null
+                ? ` ${t("pcRubricMaxMustMatch").replace("{n}", String(activityMaxPoints))}`
+                : null}
+              {!isPoints ? ` ${t("pcRubricQualitativeHint")}` : null}
+            </p>
+          )}
+
+          <RubricCriteriaEditor
+            scoringMode={scoringMode}
+            criteria={criteria}
+            onCriteriaChange={onCriteriaChange}
+            busy={busy}
+            isLegacy={isLegacy}
+          />
+
+          <div className="pbc-activity-actions pbc-activity-actions--wrap">
+            <button
+              type="button"
+              className="auth-btn auth-btn--primary auth-btn--sm"
+              disabled={busy || criteria.length === 0}
+              onClick={() => onSaveActivityRubric?.()}
+            >
+              {t("pcRubricSaveOnActivity")}
+            </button>
+            {!isLegacy ? (
+              <>
+                <input
+                  className="auth-org-input"
+                  placeholder={t("pcRubricTemplateNamePlaceholder")}
+                  aria-label={t("pcRubricTemplateNamePlaceholder")}
+                  value={templateName}
+                  disabled={busy}
+                  onChange={(e) => onTemplateNameChange?.(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="auth-btn auth-btn--ghost auth-btn--sm"
+                  disabled={busy || !templateName.trim() || criteria.length === 0}
+                  onClick={() => onSaveAsTemplate?.()}
+                >
+                  {t("pcRubricSaveAsTemplate")}
+                </button>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

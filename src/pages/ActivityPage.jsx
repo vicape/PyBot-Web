@@ -62,6 +62,7 @@ import {
   ActivityRubricAuthoringPanel,
   ActivityRubricGradeMatrix,
   ActivityRubricStudentResult,
+  defaultRubricEditorState,
 } from "../components/pybotclass/ActivityRubricPanels.jsx";
 import { isLegacyActivityRubric } from "../platform/rubrics.js";
 import {
@@ -152,6 +153,7 @@ export default function ActivityPage() {
   const [rubricTemplates, setRubricTemplates] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [templateNameDraft, setTemplateNameDraft] = useState("");
+  const [activityRubricChoice, setActivityRubricChoice] = useState("none");
   const [actionMsg, setActionMsg] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [needsClassroomConnect, setNeedsClassroomConnect] = useState(false);
@@ -451,6 +453,11 @@ export default function ActivityPage() {
         })),
       })),
     );
+    if (actRubric) {
+      setActivityRubricChoice(actRubric.source_template_id ? "choose" : "create");
+    } else {
+      setActivityRubricChoice("none");
+    }
 
     if (teach) {
       const tpl = await listMyRubricTemplates();
@@ -1620,6 +1627,14 @@ export default function ActivityPage() {
               activityMaxPoints={activity?.max_points}
               hasFrozenRubric={Boolean(activityRubricMeta)}
               schemaGeneration={activityRubricMeta?.schema_generation ?? null}
+              activityChoice={activityRubricChoice}
+              onActivityChoiceChange={(next) => {
+                setActivityRubricChoice(next);
+                if (next === "create" && rubricEditor.length === 0) {
+                  const seed = defaultRubricEditorState(rubricScoringMode);
+                  setRubricEditor(seed.criteria);
+                }
+              }}
             />
           </PbcSection>
         ) : null}

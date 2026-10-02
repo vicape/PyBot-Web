@@ -115,10 +115,21 @@ export function IconCommunity() {
   );
 }
 
+export function IconRubrics() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="2" stroke="currentColor" strokeWidth={S} />
+      <path d="M8 9h8M8 12.5h8M8 16h5" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+      <path d="M8 9v0.01M8 12.5v0.01M8 16v0.01" stroke="currentColor" strokeWidth={S * 1.4} strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const SIDEBAR_ICONS = {
   home: IconHome,
   courses: IconCourses,
   content: IconMyContent,
+  rubrics: IconRubrics,
   community: IconCommunity,
   ide: IconCode,
   classroom: IconClassroom,

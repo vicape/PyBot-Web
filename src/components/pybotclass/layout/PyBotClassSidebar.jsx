@@ -8,6 +8,7 @@ const DAILY_NAV = [
   { id: "home", labelKey: "pcHome", to: "/dashboard/classes" },
   { id: "courses", labelKey: "pcCourses", to: "/dashboard/classes?view=courses" },
   { id: "content", labelKey: "pcNavContent", to: "/dashboard/content" },
+  { id: "rubrics", labelKey: "pcNavRubrics", to: "/dashboard/rubrics" },
   { id: "community", labelKey: "pcCommunity", to: "/dashboard/community" },
   { id: "ide", labelKey: "pcOpenIde", to: "/", external: true },
 ];
@@ -66,6 +67,9 @@ export default function PyBotClassSidebar({
     }
     if (item.id === "content") {
       return path.startsWith("/dashboard/content");
+    }
+    if (item.id === "rubrics") {
+      return path.startsWith("/dashboard/rubrics");
     }
     if (item.id === "community") {
       return path.startsWith("/dashboard/community");

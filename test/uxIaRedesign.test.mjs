@@ -54,6 +54,7 @@ const cssSrc = readFileSync(resolve(root, "src/styles/pybotclass-dashboard.css")
 
 const NEW_I18N = [
   "pcNavContent",
+  "pcNavRubrics",
   "pcDailyNav",
   "pcHomeLead",
   "pcCoursesViewLead",
@@ -80,12 +81,14 @@ const NEW_I18N = [
   "pcStudentsEmptyTitle",
 ];
 
-test("AC1: primary daily sidebar ids are exactly Inicio/Cursos/Contenido/Comunidad/IDE", () => {
-  assert.deepEqual([...PRIMARY_NAV_IDS], ["home", "courses", "content", "community", "ide"]);
+test("AC1: primary daily sidebar ids are exactly Inicio/Cursos/Contenido/Rúbricas/Comunidad/IDE", () => {
+  assert.deepEqual([...PRIMARY_NAV_IDS], ["home", "courses", "content", "rubrics", "community", "ide"]);
   assert.match(sidebarSrc, /DAILY_NAV/);
   assert.match(sidebarSrc, /pcHome/);
   assert.match(sidebarSrc, /pcCourses/);
   assert.match(sidebarSrc, /pcNavContent/);
+  assert.match(sidebarSrc, /pcNavRubrics/);
+  assert.match(sidebarSrc, /\/dashboard\/rubrics/);
   assert.match(sidebarSrc, /pcCommunity/);
   assert.match(sidebarSrc, /pcOpenIde/);
   assert.doesNotMatch(sidebarSrc, /id: "classroom"/);
@@ -277,6 +280,7 @@ test("AC31: new UX strings present in all supported languages", () => {
     }
   }
   assert.equal(PYBOTCLASS_STRINGS.es.pcNavContent, "Contenido");
+  assert.equal(PYBOTCLASS_STRINGS.es.pcNavRubrics, "Rúbricas");
   assert.equal(PYBOTCLASS_STRINGS.es.pcCourses, "Cursos");
 });
 

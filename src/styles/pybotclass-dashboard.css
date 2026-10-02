@@ -3251,6 +3251,107 @@
   }
 }
 
+/* P9 rubric library + activity choice UX */
+.pbc-rubric-choice {
+  border: none;
+  margin: 0 0 0.65rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.1rem;
+}
+
+.pbc-rubric-choice__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.pbc-rubric-manage-link {
+  margin: 0 0 0.75rem;
+}
+
+.pbc-rubric-choice-panel {
+  margin-top: 0.35rem;
+}
+
+.pbc-rubric-author__level-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.pbc-rubric-template-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: min(100%, 14rem);
+  flex: 1 1 12rem;
+}
+
+.pbc-rubric-template-form__field--full {
+  width: 100%;
+  margin-bottom: 0.65rem;
+}
+
+.pbc-rubric-template-form__actions {
+  margin-top: 0.85rem;
+}
+
+.pbc-rubric-library-editor {
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--pbc-border, #ccc) 75%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--pbc-surface, #fff) 94%, transparent);
+}
+
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-rubric-library-editor {
+  background: color-mix(in srgb, var(--pbc-surface, #1a1a1a) 92%, transparent);
+}
+
+.pbc-rubric-library-editor__title {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.pbc-rubrics-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pbc-rubric-card {
+  min-width: 0;
+}
+
+.pbc-rubric-card .pbc-content-card__direct-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .pbc-rubric-choice {
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .pbc-rubrics-page .pbc-hero-block__actions .pbc-btn {
+    width: 100%;
+  }
+
+  .pbc-rubric-card .pbc-content-card__direct-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pbc-rubric-card .pbc-content-card__direct-actions .pbc-btn {
+    width: 100%;
+  }
+}
+
 /* /join — formulario alineado al lenguaje visual PyBotClass */
 .pbc-join-page {
   width: 100%;
