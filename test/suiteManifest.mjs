@@ -5,6 +5,7 @@ export const TEST_SUITES = Object.freeze({
     "activityIdeSession.test.mjs",
     "activityItemProgress.test.mjs",
     "learningStatus.test.mjs",
+    "point7Gaps.test.mjs",
     "arduinoCompiler.test.mjs",
     "bleProtocol.test.mjs",
     "bleProtocolV3.test.mjs",

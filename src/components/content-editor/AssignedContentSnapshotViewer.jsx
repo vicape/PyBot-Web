@@ -22,6 +22,10 @@ import {
   formatPerformanceDisplay,
   formatProgressDisplay,
 } from "../../platform/learningStatus.js";
+import {
+  isEmbeddedEvidenceItemType,
+  itemSubmissionVersionLabel,
+} from "../../platform/activityItemSubmissions.js";
 import { normalizeReadOnlyFencedCode } from "./normalizeReadOnlyFencedCode.js";
 
 function ReadOnlyDoc({ docKey, initialContent }) {
@@ -155,11 +159,15 @@ function SnapshotItemCard({
   busyId,
   onStart,
   onComplete,
+  onSubmitItem = null,
+  itemSubmission = null,
   engagement = null,
 }) {
   const rule = resolveItemCompletionRule(item);
   const isDone = status === ITEM_PROGRESS_STATUS.COMPLETED;
   const isBusy = busyId === item.snapshotItemId;
+  const isEvidenceType = isEmbeddedEvidenceItemType(item.type);
+  const [responseDraft, setResponseDraft] = useState("");
   const videoUrl =
     item.type === "video"
       ? item.content?.url || item.content?.src || item.content?.videoUrl || null
@@ -176,17 +184,15 @@ function SnapshotItemCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only on mount/open of item
   }, [item.snapshotItemId]);
 
+  // Mark-complete only for non-evaluable items. Evaluable embedded items use factual submit.
   const showMarkComplete =
     interactive &&
     !isDone &&
-    (rule === "marked_complete" ||
-      rule === "viewed" ||
-      // Embedded exercise/quiz/assignment without activity-level submit runtime
-      ((item.type === "exercise" ||
-        item.type === "quiz" ||
-        item.type === "assignment" ||
-        item.type === "assessment") &&
-        rule !== "video_threshold"));
+    !isEvidenceType &&
+    (rule === "marked_complete" || rule === "viewed");
+
+  const showEvidenceSubmit =
+    interactive && isEvidenceType && typeof onSubmitItem === "function";
 
   const emitVideoState = (partial) => {
     engagement?.onVideoMediaState?.(item, partial);
@@ -196,6 +202,7 @@ function SnapshotItemCard({
     <li
       className="pbc-content-reader__item-row"
       data-status={status}
+      data-snapshot-item-id={item.snapshotItemId}
       onPointerDown={() => {
         if (!engagement || !interactive) return;
         if (item.type !== "video") engagement.setItemTarget?.(item);
@@ -210,7 +217,23 @@ function SnapshotItemCard({
           <span className="pbc-content-toc__badge">Opcional</span>
         ) : null}
         <span className="pbc-pill pbc-pill--muted">{statusLabel(status)}</span>
+        {itemSubmission?.version ? (
+          <span className="pbc-pill pbc-pill--muted">
+            {itemSubmissionVersionLabel(itemSubmission.version)}
+            {itemSubmission.status === "graded"
+              ? " · calificado"
+              : itemSubmission.status
+                ? ` · ${itemSubmission.status}`
+                : ""}
+          </span>
+        ) : null}
       </div>
+
+      {item.content?.body || item.content?.instructions || item.content?.prompt ? (
+        <p className="auth-card__muted" style={{ margin: "0.35rem 0 0", whiteSpace: "pre-wrap" }}>
+          {item.content.body || item.content.instructions || item.content.prompt}
+        </p>
+      ) : null}
 
       {videoUrl && interactive ? (
         <div className="pbc-content-reader__item-media" style={{ marginTop: "0.5rem" }}>
@@ -289,10 +312,51 @@ function SnapshotItemCard({
         </div>
       ) : null}
 
+      {showEvidenceSubmit ? (
+        <div style={{ marginTop: "0.5rem" }}>
+          {itemSubmission?.response_text ? (
+            <p className="auth-card__muted" style={{ margin: "0 0 0.35rem", whiteSpace: "pre-wrap" }}>
+              Última entrega: {itemSubmission.response_text}
+            </p>
+          ) : null}
+          <label className="pbc-label" htmlFor={`item-resp-${item.snapshotItemId}`}>
+            Respuesta
+          </label>
+          <textarea
+            id={`item-resp-${item.snapshotItemId}`}
+            className="pbc-input"
+            rows={3}
+            value={responseDraft}
+            disabled={isBusy}
+            onChange={(e) => setResponseDraft(e.target.value)}
+            placeholder="Escribí tu respuesta o evidencia…"
+            style={{ width: "100%", marginTop: "0.25rem" }}
+          />
+          <div style={{ marginTop: "0.35rem" }}>
+            <button
+              type="button"
+              className="pbc-btn pbc-btn--primary pbc-btn--sm"
+              disabled={isBusy || !String(responseDraft || "").trim()}
+              onClick={() => {
+                const text = String(responseDraft || "").trim();
+                if (!text) return;
+                void (async () => {
+                  const ok = await onSubmitItem?.(item, { responseText: text });
+                  if (ok) setResponseDraft("");
+                })();
+              }}
+            >
+              {isBusy ? "…" : itemSubmission ? "Reentregar" : "Entregar"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {interactive &&
       !isDone &&
       (rule === "submitted" || rule === "quiz_finished") &&
-      !showMarkComplete ? (
+      !showMarkComplete &&
+      !showEvidenceSubmit ? (
         <p className="auth-card__muted" style={{ margin: "0.35rem 0 0", fontSize: "0.9em" }}>
           Se completa al entregar la actividad.
         </p>
@@ -308,6 +372,8 @@ function SnapshotItemsList({
   busyId,
   onStart,
   onComplete,
+  onSubmitItem = null,
+  itemSubmissionsById = null,
   engagement = null,
 }) {
   if (!items?.length) return null;
@@ -325,6 +391,8 @@ function SnapshotItemsList({
             busyId={busyId}
             onStart={onStart}
             onComplete={onComplete}
+            onSubmitItem={onSubmitItem}
+            itemSubmission={itemSubmissionsById?.[item.snapshotItemId] || null}
             engagement={engagement}
           />
         );
@@ -569,6 +637,8 @@ function LessonMode({
   busyId,
   onStart,
   onComplete,
+  onSubmitItem = null,
+  itemSubmissionsById = null,
   engagement = null,
 }) {
   const [indexOpen, setIndexOpen] = useState(false);
@@ -660,6 +730,8 @@ function LessonMode({
             busyId={busyId}
             onStart={onStart}
             onComplete={onComplete}
+            onSubmitItem={onSubmitItem}
+            itemSubmissionsById={itemSubmissionsById}
             engagement={engagement}
           />
 
@@ -698,6 +770,8 @@ function ProgressiveMultiLessonReader({
   busyId,
   onStart,
   onComplete,
+  onSubmitItem = null,
+  itemSubmissionsById = null,
   engagement = null,
 }) {
   const model = useMemo(() => buildSnapshotReaderModel(snapshot), [snapshot]);
@@ -738,6 +812,8 @@ function ProgressiveMultiLessonReader({
       busyId={busyId}
       onStart={onStart}
       onComplete={onComplete}
+      onSubmitItem={onSubmitItem}
+      itemSubmissionsById={itemSubmissionsById}
       engagement={engagement}
     />
   );
@@ -760,12 +836,15 @@ export default function AssignedContentSnapshotViewer({
   busyId = null,
   onStartItem = null,
   onCompleteItem = null,
+  onSubmitItem = null,
+  itemSubmissionsById = null,
   engagement = null,
 }) {
   if (!snapshot) return null;
 
   const type = snapshot.sourceType;
   const progressMap = progressByItemId || {};
+  const itemSubMap = itemSubmissionsById || {};
   const surfaceProps = engagement?.setSurfaceRef
     ? { ref: engagement.setSurfaceRef }
     : {};
@@ -799,6 +878,8 @@ export default function AssignedContentSnapshotViewer({
         busyId={busyId}
         onStartItem={onStartItem}
         onCompleteItem={onCompleteItem}
+        onSubmitItem={onSubmitItem}
+        itemSubmissionsById={itemSubMap}
         engagement={engagement}
         surfaceProps={surfaceProps}
       />
@@ -818,6 +899,8 @@ export default function AssignedContentSnapshotViewer({
           busyId={busyId}
           onStart={onStartItem}
           onComplete={onCompleteItem}
+          onSubmitItem={onSubmitItem}
+          itemSubmissionsById={itemSubMap}
           engagement={engagement}
         />
       </div>
@@ -837,6 +920,8 @@ function LessonDocumentSurface({
   busyId,
   onStartItem,
   onCompleteItem,
+  onSubmitItem = null,
+  itemSubmissionsById = null,
   engagement,
   surfaceProps,
 }) {
@@ -867,6 +952,8 @@ function LessonDocumentSurface({
         busyId={busyId}
         onStart={onStartItem}
         onComplete={onCompleteItem}
+        onSubmitItem={onSubmitItem}
+        itemSubmissionsById={itemSubmissionsById}
         engagement={engagement}
       />
     </div>

@@ -263,6 +263,7 @@ export default function SharedContentPage() {
         defaultTitle={content?.title}
         contentTitle={content?.title}
         contextLabel="contenido"
+        copyBeforeAssign
       />
     </PyBotClassLayout>
   );

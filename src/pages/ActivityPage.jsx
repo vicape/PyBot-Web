@@ -53,6 +53,13 @@ import {
   upsertActivityRubric,
 } from "../platform/activitySubmissions.js";
 import {
+  fetchActivityItemSubmissions,
+  gradeActivityItemSubmission,
+  itemScoresByIdFromSubmissions,
+  itemSubmissionVersionLabel,
+  submitActivityItem,
+} from "../platform/activityItemSubmissions.js";
+import {
   canStudentSubmit,
   deriveProcessStatus,
   deriveSubmissionWindow,
@@ -139,6 +146,9 @@ export default function ActivityPage() {
   const [snapshot, setSnapshot] = useState(null);
   const [itemProgressMap, setItemProgressMap] = useState({});
   const [itemProgressBusy, setItemProgressBusy] = useState(null);
+  const [itemSubmissionsById, setItemSubmissionsById] = useState({});
+  const [itemTeacherRows, setItemTeacherRows] = useState([]);
+  const [itemGradeDraft, setItemGradeDraft] = useState({});
   const [engagementSegments, setEngagementSegments] = useState([]);
   const [superAdmin, setSuperAdmin] = useState(false);
   const focusRowRef = useRef(null);
@@ -334,8 +344,36 @@ export default function ActivityPage() {
     if (snap && listSnapshotItems(snap).length > 0) {
       const { map } = await fetchActivityItemProgress(activityId, progressUserId);
       setItemProgressMap(map || {});
+      const itemSubs = await fetchActivityItemSubmissions(activityId, {
+        userId: student ? user.id : null,
+      });
+      if (student) {
+        const byId = {};
+        for (const row of itemSubs.rows || []) {
+          if (row.snapshot_item_id) byId[row.snapshot_item_id] = row;
+        }
+        setItemSubmissionsById(byId);
+        setItemTeacherRows([]);
+      } else if (teach) {
+        setItemTeacherRows(itemSubs.rows || []);
+        setItemSubmissionsById({});
+        const drafts = {};
+        for (const row of itemSubs.rows || []) {
+          drafts[row.id] = {
+            earned: row.earned_points ?? "",
+            possible: row.possible_points ?? "",
+            feedback: row.feedback ?? "",
+          };
+        }
+        setItemGradeDraft(drafts);
+      } else {
+        setItemSubmissionsById({});
+        setItemTeacherRows([]);
+      }
     } else {
       setItemProgressMap({});
+      setItemSubmissionsById({});
+      setItemTeacherRows([]);
     }
     {
       const eng = await fetchActivityEngagementSegments(activityId, progressUserId);
@@ -451,6 +489,10 @@ export default function ActivityPage() {
       }),
     [activity?.max_points, mySubmission?.grade, mySubmission?.status, myRubricScores, rubricCriteria],
   );
+  const itemScoresById = useMemo(
+    () => itemScoresByIdFromSubmissions(Object.values(itemSubmissionsById)),
+    [itemSubmissionsById],
+  );
   const learningStatus = useMemo(() => {
     if (!snapshotItems.length && !activityPerformance?.assessable) return null;
     return deriveLearningStatusAggregates({
@@ -458,6 +500,7 @@ export default function ActivityPage() {
       snapshotItems,
       progressByItemId: itemProgressMap,
       engagementSegments,
+      itemScoresById,
       activityPerformance: activityPerformance?.assessable ? activityPerformance : null,
     });
   }, [
@@ -465,6 +508,7 @@ export default function ActivityPage() {
     snapshotItems,
     itemProgressMap,
     engagementSegments,
+    itemScoresById,
     activityPerformance,
   ]);
 
@@ -516,6 +560,61 @@ export default function ActivityPage() {
     },
     [activityId, isStudent],
   );
+
+  const handleSubmitItem = useCallback(
+    async (item, { responseText } = {}) => {
+      if (!activityId || !item?.snapshotItemId || !isStudent) return false;
+      setItemProgressBusy(item.snapshotItemId);
+      setActionErr("");
+      const { ok, submission, error } = await submitActivityItem({
+        activityId,
+        snapshotItemId: item.snapshotItemId,
+        itemType: item.type,
+        responseText: responseText || "",
+      });
+      if (!ok) {
+        setActionErr(error || "No se pudo entregar el ítem.");
+        setItemProgressBusy(null);
+        return false;
+      }
+      setItemSubmissionsById((prev) => ({
+        ...prev,
+        [item.snapshotItemId]: submission,
+      }));
+      setItemProgressMap((prev) => ({
+        ...prev,
+        [item.snapshotItemId]: {
+          ...(prev[item.snapshotItemId] || {}),
+          snapshot_item_id: item.snapshotItemId,
+          status: "completed",
+        },
+      }));
+      setItemProgressBusy(null);
+      return true;
+    },
+    [activityId, isStudent],
+  );
+
+  const onGradeItemSubmission = async (submissionId) => {
+    if (busy) return;
+    const draft = itemGradeDraft[submissionId] || {};
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await gradeActivityItemSubmission({
+      submissionId,
+      earnedPoints: draft.earned,
+      possiblePoints: draft.possible,
+      feedback: draft.feedback || null,
+    });
+    setBusy(false);
+    if (!r.ok) {
+      setActionErr(r.error || "No se pudo calificar el ítem.");
+      return;
+    }
+    setActionMsg("Calificación de ítem guardada.");
+    await load({ preserveActionMsg: true });
+  };
 
   // Deep-link desde tab Entregas: ?alumno= → abrir código de esa entrega
   useEffect(() => {
@@ -1101,6 +1200,8 @@ export default function ActivityPage() {
                 busyId={itemProgressBusy}
                 onStartItem={handleStartItem}
                 onCompleteItem={handleCompleteItem}
+                onSubmitItem={handleSubmitItem}
+                itemSubmissionsById={itemSubmissionsById}
                 engagement={isStudent ? engagement : null}
               />
             </section>
@@ -1596,6 +1697,93 @@ export default function ActivityPage() {
                 })}
               </ul>
             )}
+          </PbcSection>
+        ) : null}
+
+        {canTeach && itemTeacherRows.length > 0 ? (
+          <PbcSection
+            title="Entregas de ítems embebidos"
+            description="Evidencia por Activity + snapshot item + alumno. Independiente de las entregas activity-level."
+          >
+            <ul className="pbc-list pbc-activity-submissions">
+              {itemTeacherRows.map((row) => {
+                const profile = profilesById.get(row.user_id);
+                const itemMeta = snapshotItems.find((i) => i.snapshotItemId === row.snapshot_item_id);
+                const draft = itemGradeDraft[row.id] || {
+                  earned: row.earned_points ?? "",
+                  possible: row.possible_points ?? "",
+                  feedback: row.feedback ?? "",
+                };
+                const verLabel = itemSubmissionVersionLabel(row.version);
+                return (
+                  <li key={row.id} className="pbc-list-item pbc-activity-submission">
+                    <div className="pbc-list-item__text">
+                      <span className="pbc-list-item__title">
+                        {profile?.display_name || profile?.email || row.user_id.slice(0, 8)}
+                        {" · "}
+                        {itemMeta?.title || row.snapshot_item_id}
+                      </span>
+                      <span className="pbc-list-item__meta">
+                        {itemMeta?.type || row.item_type}
+                        {verLabel ? ` · ${verLabel}` : ""}
+                        {row.submitted_at ? ` · ${fmtTs(row.submitted_at)}` : ""}
+                        {row.status === "graded" && row.earned_points != null
+                          ? ` · ${row.earned_points}/${row.possible_points}`
+                          : ` · ${row.status}`}
+                      </span>
+                      {row.response_text ? (
+                        <p className="auth-card__muted" style={{ margin: "0.35rem 0 0", whiteSpace: "pre-wrap" }}>
+                          {row.response_text}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="pbc-activity-grade-row" style={{ marginTop: "0.5rem" }}>
+                      <input
+                        className="auth-org-input pbc-activity-grade-input"
+                        placeholder="Obtenidos"
+                        value={draft.earned}
+                        onChange={(e) =>
+                          setItemGradeDraft((prev) => ({
+                            ...prev,
+                            [row.id]: { ...draft, earned: e.target.value },
+                          }))
+                        }
+                      />
+                      <input
+                        className="auth-org-input pbc-activity-grade-input"
+                        placeholder="Posibles"
+                        value={draft.possible}
+                        onChange={(e) =>
+                          setItemGradeDraft((prev) => ({
+                            ...prev,
+                            [row.id]: { ...draft, possible: e.target.value },
+                          }))
+                        }
+                      />
+                      <input
+                        className="auth-org-input"
+                        placeholder="Feedback (opcional)"
+                        value={draft.feedback}
+                        onChange={(e) =>
+                          setItemGradeDraft((prev) => ({
+                            ...prev,
+                            [row.id]: { ...draft, feedback: e.target.value },
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="auth-btn auth-btn--primary auth-btn--sm"
+                        disabled={busy}
+                        onClick={() => void onGradeItemSubmission(row.id)}
+                      >
+                        Calificar ítem
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           </PbcSection>
         ) : null}
 

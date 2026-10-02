@@ -229,6 +229,7 @@ export default function CommunityPage() {
         defaultTitle={assigning?.title}
         contentTitle={assigning?.title}
         contextLabel="contenido"
+        copyBeforeAssign
       />
       </div>
     </PyBotClassLayout>

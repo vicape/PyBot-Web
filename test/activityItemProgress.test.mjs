@@ -316,10 +316,11 @@ test("UI wires student viewer and teacher panel without parallel assignment enti
   assert.match(panel, /Detalle/);
   assert.match(activities, /CourseContentProgressPanel/);
   assert.doesNotMatch(page + panel + activities, /course_content_assignments/);
-  // Point 6 may display active_ms via learningStatus formatters; progress completion must stay grade/engagement-free.
+  // Point 6 may display active_ms via learningStatus formatters.
+  // Point 7 may show embedded submission status labels; progress UI must not embed grade fields.
   assert.match(viewer, /formatActiveTime|learningStatus/);
   assert.doesNotMatch(viewer, /activity_engagement_segments/);
-  assert.doesNotMatch(viewer, /grade|max_points|earned_points/);
+  assert.doesNotMatch(viewer, /max_points|earned_points|gradeDraft/);
 });
 
 test("activity_progress IDE autosave module remains separate from item progress", () => {

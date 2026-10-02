@@ -32,6 +32,8 @@ export default function AssignLessonModal({
   blockId,
   blockProps,
   defaultCourseId = null,
+  /** Community / Shared: copy-then-assign (never community author live source). */
+  copyBeforeAssign = false,
 }) {
   const sourceType = sourceTypeProp || "lesson";
   const sourceId = sourceIdProp || lessonId;
@@ -144,6 +146,7 @@ export default function AssignLessonModal({
       studentIds: mode === "selected" ? [...selected] : [],
       blockId,
       blockProps,
+      copyBeforeAssign,
     });
 
     setBusy(false);

@@ -73,6 +73,7 @@ export default function CourseContentProgressPanel({ courseId }) {
       progressRows: overview?.progress || [],
       engagementRows: overview?.engagement || [],
       submissionRows: overview?.submissions || [],
+      itemSubmissionRows: overview?.item_submissions || [],
     });
   }, [selectedActivity, students, overview]);
 

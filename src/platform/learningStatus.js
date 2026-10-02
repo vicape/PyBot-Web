@@ -37,6 +37,7 @@ import {
 import { sumRubricPoints, rubricMaxSum } from "./submissionWorkflow.js";
 import { getSupabase } from "../supabaseClient.js";
 import { fetchPybotclassGradebook } from "./pybotClassApi.js";
+import { itemScoresByIdFromSubmissions } from "./activityItemSubmissions.js";
 
 /** Item types that can carry a factual assessed result when a score source exists. */
 export const ASSESSABLE_ITEM_TYPES = Object.freeze([
@@ -281,25 +282,37 @@ export function deriveLearningStatusAggregates({
     }
   }
 
-  // Activity-level factual grade counts once at content scope — not per nested item.
-  if (activityPerformance?.assessed) {
+  // Activity-level factual grade counts once at content scope for standalone
+  // Activities only — never copied onto nested items, never double-counted with
+  // factual embedded-item scores.
+  const hasAssessableNested = items.some((it) => isItemAssessable(it));
+  if (activityPerformance?.assessed && !hasAssessableNested) {
     performanceLeaves.push(activityPerformance);
   }
 
   let contentPerformance = aggregatePerformance(performanceLeaves);
   // Assessable activity without assessed results → Pendiente (never 0).
-  if (
-    !contentPerformance.assessed &&
-    activityPerformance?.assessable &&
-    !activityPerformance.assessed
-  ) {
-    contentPerformance = {
-      assessable: true,
-      assessed: false,
-      earned_points: null,
-      possible_points: activityPerformance.possible_points ?? null,
-      percent: null,
-    };
+  if (!contentPerformance.assessed) {
+    if (hasAssessableNested) {
+      const anyAssessablePending = items.some((it) => isItemAssessable(it));
+      if (anyAssessablePending) {
+        contentPerformance = {
+          assessable: true,
+          assessed: false,
+          earned_points: null,
+          possible_points: null,
+          percent: null,
+        };
+      }
+    } else if (activityPerformance?.assessable && !activityPerformance.assessed) {
+      contentPerformance = {
+        assessable: true,
+        assessed: false,
+        earned_points: null,
+        possible_points: activityPerformance.possible_points ?? null,
+        percent: null,
+      };
+    }
   }
 
   const lessons = {};
@@ -484,6 +497,7 @@ export function buildStudentActivityLearningSummaries({
   progressRows = [],
   engagementRows = [],
   submissionRows = [],
+  itemSubmissionRows = [],
 } = {}) {
   if (!activity) return [];
   const items = listSnapshotItems(activity.content_snapshot);
@@ -513,14 +527,20 @@ export function buildStudentActivityLearningSummaries({
       rubricCriteria: sub?.rubric_criteria || sub?.rubricCriteria || null,
     });
 
+    const studentItemSubs = (itemSubmissionRows || []).filter(
+      (s) => s.activity_id === actId && s.user_id === uid,
+    );
+    const itemScoresById = itemScoresByIdFromSubmissions(studentItemSubs);
+
     const learning = deriveLearningStatusAggregates({
       snapshot: activity.content_snapshot,
       snapshotItems: items,
       progressByItemId,
       engagementSegments: segments,
+      itemScoresById,
       activityPerformance: activityPerformance.assessable ? activityPerformance : null,
     });
 
-    return { student, learning, activityPerformance };
+    return { student, learning, activityPerformance, itemScoresById };
   });
 }

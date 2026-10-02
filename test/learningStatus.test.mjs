@@ -105,7 +105,9 @@ test("AC: progress 100 / performance 65 independent", () => {
     snapshotItems: items,
     progressByItemId,
     engagementSegments: [],
-    activityPerformance: resolveActivityPerformance({ maxPoints: 100, grade: 65 }),
+    itemScoresById: {
+      quiz1: { assessed: true, earned_points: 65, possible_points: 100 },
+    },
   });
   assert.equal(learning.content.progress.percent, 100);
   assert.equal(learning.content.performance.percent, 65);
@@ -259,7 +261,9 @@ test("no assessed results -> performance null", () => {
 });
 
 test("independent mutation: progress change does not alter performance", () => {
-  const activityPerformance = resolveActivityPerformance({ maxPoints: 100, grade: 65 });
+  const itemScoresById = {
+    quiz1: { assessed: true, earned_points: 65, possible_points: 100 },
+  };
   const segments = [
     { target_id: "mat1", active_ms: 1000, unit_id: "u1", lesson_id: "l1" },
   ];
@@ -268,7 +272,7 @@ test("independent mutation: progress change does not alter performance", () => {
     snapshotItems: items,
     progressByItemId: { mat1: { status: ITEM_PROGRESS_STATUS.COMPLETED } },
     engagementSegments: segments,
-    activityPerformance,
+    itemScoresById,
   });
   const afterProgress = deriveLearningStatusAggregates({
     snapshot,
@@ -279,7 +283,7 @@ test("independent mutation: progress change does not alter performance", () => {
       ex1: { status: ITEM_PROGRESS_STATUS.COMPLETED },
     },
     engagementSegments: segments,
-    activityPerformance,
+    itemScoresById,
   });
   assert.notEqual(before.content.progress.percent, afterProgress.content.progress.percent);
   assert.equal(before.content.performance.percent, afterProgress.content.performance.percent);
@@ -287,7 +291,9 @@ test("independent mutation: progress change does not alter performance", () => {
 });
 
 test("independent mutation: engagement change does not alter progress or performance", () => {
-  const activityPerformance = resolveActivityPerformance({ maxPoints: 100, grade: 65 });
+  const itemScoresById = {
+    quiz1: { assessed: true, earned_points: 65, possible_points: 100 },
+  };
   const progressByItemId = {
     mat1: { status: ITEM_PROGRESS_STATUS.COMPLETED },
     quiz1: { status: ITEM_PROGRESS_STATUS.COMPLETED },
@@ -298,7 +304,7 @@ test("independent mutation: engagement change does not alter progress or perform
     snapshotItems: items,
     progressByItemId,
     engagementSegments: [{ target_id: "mat1", active_ms: 1000, unit_id: "u1", lesson_id: "l1" }],
-    activityPerformance,
+    itemScoresById,
   });
   const after = deriveLearningStatusAggregates({
     snapshot,
@@ -308,7 +314,7 @@ test("independent mutation: engagement change does not alter progress or perform
       { target_id: "mat1", active_ms: 1000, unit_id: "u1", lesson_id: "l1" },
       { target_id: "quiz1", active_ms: 5000, unit_id: "u1", lesson_id: "l1" },
     ],
-    activityPerformance,
+    itemScoresById,
   });
   assert.equal(before.content.progress.percent, after.content.progress.percent);
   assert.equal(before.content.performance.percent, after.content.performance.percent);
@@ -327,14 +333,18 @@ test("independent mutation: grade change does not alter progress", () => {
     snapshotItems: items,
     progressByItemId,
     engagementSegments: segments,
-    activityPerformance: resolveActivityPerformance({ maxPoints: 100, grade: 65 }),
+    itemScoresById: {
+      quiz1: { assessed: true, earned_points: 65, possible_points: 100 },
+    },
   });
   const after = deriveLearningStatusAggregates({
     snapshot,
     snapshotItems: items,
     progressByItemId,
     engagementSegments: segments,
-    activityPerformance: resolveActivityPerformance({ maxPoints: 100, grade: 90 }),
+    itemScoresById: {
+      quiz1: { assessed: true, earned_points: 90, possible_points: 100 },
+    },
   });
   assert.equal(before.content.progress.percent, after.content.progress.percent);
   assert.equal(before.content.engagement.active_ms, after.content.engagement.active_ms);
@@ -369,9 +379,12 @@ test("activity grade is not copied onto nested items", () => {
       quiz1: { status: ITEM_PROGRESS_STATUS.COMPLETED },
     },
     engagementSegments: [{ target_id: "quiz1", active_ms: 7 * 60_000, unit_id: "u1", lesson_id: "l1" }],
+    // Standalone activity grade must not apply when nested assessable items exist.
     activityPerformance: resolveActivityPerformance({ maxPoints: 100, grade: 80 }),
   });
-  assert.equal(learning.content.performance.percent, 80);
+  // Nested assessable without itemScores → Pendiente (not activity 80)
+  assert.equal(learning.content.performance.percent, null);
+  assert.equal(formatPerformanceDisplay(learning.content.performance), "Pendiente");
   assert.equal(learning.items.quiz1.progress.completed, true);
   assert.equal(learning.items.quiz1.engagement.active_ms, 7 * 60_000);
   // No per-item score source → unassessed / Pendiente, not 80

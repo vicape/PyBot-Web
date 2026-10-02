@@ -1,5 +1,6 @@
 import { getSupabase } from "../supabaseClient.js";
 import {
+  copyLearningContent,
   getContent,
   getLesson,
   listContentUnits,
@@ -291,19 +292,88 @@ export async function buildContentSnapshot(opts) {
 }
 
 /**
+ * Find or create a teacher-owned copy of community/shared content.
+ * Reuses an existing copy where owner_id = me AND copied_from_content_id = source.
+ * Never mutates the community original.
+ */
+export async function ensureTeacherOwnedContentCopy(sourceContentId) {
+  const sb = getSupabase();
+  if (!sb || !sourceContentId) return { content: null, reused: false, error: "missing_args" };
+
+  const { data: sessionData } = await sb.auth.getUser();
+  const userId = sessionData?.user?.id;
+  if (!userId) return { content: null, reused: false, error: "no_session" };
+
+  const { content: source, error: srcErr } = await getContent(sourceContentId);
+  if (srcErr || !source) return { content: null, reused: false, error: srcErr || "not_found" };
+
+  if (source.owner_id === userId) {
+    return { content: source, reused: true, error: null, alreadyOwned: true };
+  }
+
+  const { data: existing, error: findErr } = await sb
+    .from("learning_contents")
+    .select("id, owner_id, title, copied_from_content_id, original_content_id, original_owner_id, original_creator_id")
+    .eq("owner_id", userId)
+    .eq("copied_from_content_id", sourceContentId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!findErr && existing?.id) {
+    const { content, error } = await getContent(existing.id);
+    if (!error && content) return { content, reused: true, error: null };
+  }
+
+  const { content: copy, error: copyErr } = await copyLearningContent(sourceContentId);
+  if (copyErr || !copy) return { content: null, reused: false, error: copyErr || "copy_failed" };
+  return { content: copy, reused: false, error: null };
+}
+
+/**
  * Asigna contenido/unidad/lección/ejercicio/tarea creando actividad con snapshot.
+ * When copyBeforeAssign is true (Community / SharedContentPage), first create/reuse a
+ * teacher-owned copy, then snapshot from that copy — never the community author's live content.
  */
 export async function assignContentSourceToCourse(opts) {
   const sb = getSupabase();
   if (!sb) return { activity: null, error: "no_supabase" };
 
-  const { sourceType, sourceId, courseId, title, description, dueAt, maxPoints, studentIds, blockId, blockProps } =
-    opts || {};
+  let {
+    sourceType,
+    sourceId,
+    courseId,
+    title,
+    description,
+    dueAt,
+    maxPoints,
+    studentIds,
+    blockId,
+    blockProps,
+    copyBeforeAssign = false,
+  } = opts || {};
   if (!sourceType || !sourceId || !courseId) return { activity: null, error: "missing_args" };
 
   const { data: sessionData } = await sb.auth.getUser();
   const userId = sessionData?.user?.id;
   if (!userId) return { activity: null, error: "no_session" };
+
+  let teacherCopyMeta = null;
+  if (copyBeforeAssign && sourceType === "content") {
+    const { content: owned, error: copyErr, reused, alreadyOwned } =
+      await ensureTeacherOwnedContentCopy(sourceId);
+    if (copyErr || !owned) return { activity: null, error: copyErr || "copy_before_assign_failed" };
+    sourceId = owned.id;
+    teacherCopyMeta = {
+      teacherOwnedCopyId: owned.id,
+      reused: Boolean(reused),
+      alreadyOwned: Boolean(alreadyOwned),
+      copiedFromContentId: owned.copied_from_content_id ?? null,
+      originalContentId: owned.original_content_id ?? null,
+      originalOwnerId: owned.original_owner_id ?? null,
+      originalCreatorId: owned.original_creator_id ?? null,
+    };
+  }
 
   const { snapshot, error: snapErr } = await buildContentSnapshot({
     sourceType,
@@ -374,7 +444,7 @@ export async function assignContentSourceToCourse(opts) {
     }
   }
 
-  return { activity, error: null };
+  return { activity, error: null, teacherCopy: teacherCopyMeta };
 }
 
 /** @deprecated usar assignContentSourceToCourse */
