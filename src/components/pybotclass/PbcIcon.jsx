@@ -59,6 +59,8 @@ import {
 const ICON_MAP = Object.freeze({
   home: House,
   courses: Layers3,
+  /** Singular alias for course cards / course entry points (same glyph as courses). */
+  course: Layers3,
   content: FileText,
   rubrics: ListChecks,
   community: UsersRound,

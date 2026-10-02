@@ -41,7 +41,7 @@ function IconGrade() {
 }
 
 function IconCourseCompact() {
-  return <PbcIcon name="courses" size={20} />;
+  return <PbcIcon name="course" size={20} />;
 }
 
 function CompactCreateIcon() {
@@ -110,34 +110,98 @@ function CourseCards({
         const rb = role ? ROLE_BADGE[role] : null;
         const iconTone =
           role === "teacher" ? "teacher" : role === "student" ? "student" : "neutral";
+        const isTeacher = role === "teacher";
+        const orgLabel =
+          c.org_name || (c.org_id ? t("pcInstitution") : t("pcPersonalCourse"));
+        const studentCount = Number(c.student_count) || 0;
+        const activityCount = Number(c.activity_count) || 0;
+        const pendingGradeCount = Number(c.pending_grade_count) || 0;
+        const hasClassroom = Boolean(c.classroom_course_id);
+        const showStudentActivity =
+          !isTeacher && c.activity_count != null && c.activity_count !== "";
+
         return (
-          <Link key={c.course_id} to={`/dashboard/classes/${c.course_id}`} className="pbc-course-card">
+          <Link
+            key={c.course_id}
+            to={`/dashboard/classes/${c.course_id}`}
+            className="pbc-course-card"
+          >
             <div className="pbc-course-card__body">
-              <div className="pbc-course-card__lead">
-                <span className={`pbc-course-card__icon pbc-course-card__icon--${iconTone}`} aria-hidden>
-                  <IconCourseCompact />
-                </span>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <p className="pbc-course-card__title">{c.course_title}</p>
-                  <p className="pbc-course-card__meta">
-                    {c.org_name || (c.org_id ? t("pcInstitution") : t("pcPersonalCourse"))}
-                  </p>
+              <div className="pbc-course-card__top">
+                <div className="pbc-course-card__lead">
+                  <span
+                    className={`pbc-course-card__icon pbc-course-card__icon--${iconTone}`}
+                    aria-hidden
+                  >
+                    <IconCourseCompact />
+                  </span>
+                  <div className="pbc-course-card__identity">
+                    <p className="pbc-course-card__title">{c.course_title}</p>
+                    <p className="pbc-course-card__meta">{orgLabel}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="pbc-course-card__footer">
-                {rb ? <span className={`pbc-badge pbc-badge--${rb.variant}`}>{rb.label}</span> : null}
-                {role === "teacher" && c.student_count > 0 ? (
-                  <span className="pbc-course-card__stat">
-                    {c.student_count} {t("pcTabStudents")}
-                  </span>
-                ) : null}
-                {c.pending_grade_count > 0 ? (
-                  <span className="pbc-course-card__stat">
-                    {c.pending_grade_count} {t("pcFilterToGrade")}
+                {rb ? (
+                  <span className={`pbc-badge pbc-badge--${rb.variant} pbc-course-card__role`}>
+                    {rb.label}
                   </span>
                 ) : null}
               </div>
+
+              {isTeacher ? (
+                <div className="pbc-course-card__metrics" aria-label={t("pcQuickSummary")}>
+                  <span className="pbc-course-card__metric">
+                    <span className="pbc-course-card__metric-icon" aria-hidden>
+                      <PbcIcon name="management" size={14} />
+                    </span>
+                    <span className="pbc-course-card__metric-value">{studentCount}</span>
+                    <span className="pbc-course-card__metric-label">{t("pcTabStudents")}</span>
+                  </span>
+                  <span className="pbc-course-card__metric">
+                    <span className="pbc-course-card__metric-icon" aria-hidden>
+                      <PbcIcon name="assignment" size={14} />
+                    </span>
+                    <span className="pbc-course-card__metric-value">{activityCount}</span>
+                    <span className="pbc-course-card__metric-label">{t("pcActivities")}</span>
+                  </span>
+                  <span className="pbc-course-card__metric">
+                    <span className="pbc-course-card__metric-icon" aria-hidden>
+                      <PbcIcon name="toGrade" size={14} />
+                    </span>
+                    <span className="pbc-course-card__metric-value">{pendingGradeCount}</span>
+                    <span className="pbc-course-card__metric-label">{t("pcFilterToGrade")}</span>
+                  </span>
+                </div>
+              ) : showStudentActivity ? (
+                <div className="pbc-course-card__metrics">
+                  <span className="pbc-course-card__metric">
+                    <span className="pbc-course-card__metric-icon" aria-hidden>
+                      <PbcIcon name="assignment" size={14} />
+                    </span>
+                    <span className="pbc-course-card__metric-value">{activityCount}</span>
+                    <span className="pbc-course-card__metric-label">{t("pcActivities")}</span>
+                  </span>
+                </div>
+              ) : null}
+
+              {isTeacher && studentCount === 0 ? (
+                <p className="pbc-course-card__hint">{t("pcCourseNoStudentsYet")}</p>
+              ) : null}
+
+              {hasClassroom ? (
+                <span className="pbc-course-card__classroom">
+                  <span aria-hidden>
+                    <PbcIcon name="connected" size={12} />
+                  </span>
+                  {t("pcClassroomLinked")}
+                </span>
+              ) : null}
             </div>
+            <span className="pbc-course-card__cta">
+              {t("pcOpenCourse")}
+              <span aria-hidden>
+                <PbcIcon name="next" size={14} />
+              </span>
+            </span>
           </Link>
         );
       })}
@@ -363,8 +427,8 @@ export default function PyBotClassHome({
   if (isCoursesView) {
     return (
       <div className="pbc-home pbc-home--courses-view">
-        <div className="pbc-home__main" style={{ gridColumn: "1 / -1" }}>
-          <header className="pbc-hero-block">
+        <div className="pbc-home__main pbc-home__main--courses">
+          <header className="pbc-hero-block pbc-courses-header">
             <div className="pbc-hero-block__identity">
               <span aria-hidden>
                 <UxIcon name="courses" size={48} />
@@ -374,7 +438,7 @@ export default function PyBotClassHome({
                 <p className="pbc-hero-block__subtitle">{t("pcCoursesViewLead")}</p>
               </div>
             </div>
-            <div className="pbc-hero-block__actions" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <div className="pbc-hero-block__actions">
               <button type="button" className="pbc-btn pbc-btn--primary" onClick={onCreateCourse}>
                 <span aria-hidden>
                   <CompactCreateIcon />
@@ -396,46 +460,46 @@ export default function PyBotClassHome({
             </div>
           </header>
 
-          <section id="mis-cursos" aria-labelledby="courses-heading">
-            <div className="pbc-section-head">
+          <section id="mis-cursos" className="pbc-courses-section" aria-labelledby="courses-heading">
+            <div className="pbc-courses-toolbar">
               <h2 id="courses-heading" className="pbc-section-head__title">
                 {t("pcMyCourses")}
               </h2>
-              {orgMemberships.length > 1 ? (
-                <select
-                  className="pbc-select"
-                  style={{ width: "auto", minWidth: "160px" }}
-                  value={orgFilter}
-                  onChange={(e) => setOrgFilter(e.target.value)}
-                  aria-label={t("pcFilterInstitution")}
-                >
-                  <option value="">{t("pcAllInstitutions")}</option>
-                  {orgMemberships.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
+              <div className="pbc-courses-toolbar__controls">
+                <div className="pbc-filter-tabs" role="tablist" aria-label={t("pcFilterByRole")}>
+                  {[
+                    { id: "all", label: t("pcAll") },
+                    { id: "teacher", label: t("pcTeacher") },
+                    { id: "student", label: t("pcStudent") },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={roleFilter === tab.id}
+                      className={`pbc-filter-tab${roleFilter === tab.id ? " pbc-filter-tab--active" : ""}`}
+                      onClick={() => setRoleFilter(tab.id)}
+                    >
+                      {tab.label}
+                    </button>
                   ))}
-                </select>
-              ) : null}
-            </div>
-
-            <div className="pbc-filter-tabs" role="tablist" aria-label={t("pcFilterByRole")}>
-              {[
-                { id: "all", label: t("pcAll") },
-                { id: "teacher", label: t("pcTeacher") },
-                { id: "student", label: t("pcStudent") },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={roleFilter === tab.id}
-                  className={`pbc-filter-tab${roleFilter === tab.id ? " pbc-filter-tab--active" : ""}`}
-                  onClick={() => setRoleFilter(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
+                </div>
+                {orgMemberships.length > 1 ? (
+                  <select
+                    className="pbc-select pbc-courses-toolbar__org"
+                    value={orgFilter}
+                    onChange={(e) => setOrgFilter(e.target.value)}
+                    aria-label={t("pcFilterInstitution")}
+                  >
+                    <option value="">{t("pcAllInstitutions")}</option>
+                    {orgMemberships.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
             </div>
 
             <CourseCards

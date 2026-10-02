@@ -611,6 +611,10 @@ Creado por VIC.`,
     provErr_VERIFY_FILES_FAIL: "Faltan archivos de PyBot en la placa. Reintentá la instalación.",
     provErr_CANCELLED: "Preparación cancelada.",
     provErr_UNKNOWN: "No se pudo preparar la ESP32. Revisá el cable y reintentá.",
+    // Courses view card labels (PyBotClassHome courses redesign)
+    pcOpenCourse: "Abrir curso",
+    pcCourseNoStudentsYet: "Todavía no hay alumnos",
+    pcClassroomLinked: "Classroom vinculado",
   },
   en: {
     appTitle: "PyBot Web",
@@ -1219,6 +1223,10 @@ Built by VIC.`,
     provErr_VERIFY_FILES_FAIL: "PyBot files are missing on the board. Retry the install.",
     provErr_CANCELLED: "Preparation cancelled.",
     provErr_UNKNOWN: "Could not prepare the ESP32. Check the cable and retry.",
+    // Courses view card labels (PyBotClassHome courses redesign)
+    pcOpenCourse: "Open course",
+    pcCourseNoStudentsYet: "No students yet",
+    pcClassroomLinked: "Classroom linked",
   },
 };
 
