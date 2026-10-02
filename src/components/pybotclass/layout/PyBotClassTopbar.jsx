@@ -2,8 +2,11 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { UI_THEMES } from "../../../platform/appearanceApi.js";
 import { getLang, setLang, SUPPORTED_LANGS, LANG_LABELS, t } from "../../../i18n.js";
+import PbcIcon from "../PbcIcon.jsx";
 
-const THEME_ICONS = { system: "◐", light: "☀", dark: "☾" };
+function ThemeToggleIcon({ theme }) {
+  return <PbcIcon name={theme} size={18} />;
+}
 
 export default function PyBotClassTopbar({
   userName,
@@ -39,13 +42,13 @@ export default function PyBotClassTopbar({
         aria-controls={sidebarId}
         aria-label={sidebarOpen ? t("pcCloseMenu") : t("pcOpenMenu")}
       >
-        ☰
+        <PbcIcon name="menu" size={18} />
       </button>
 
       {!hideSearch ? (
         <div className="pbc-topbar__search">
           <span className="pbc-topbar__search-icon" aria-hidden>
-            ⌕
+            <PbcIcon name="search" size={18} />
           </span>
           <input
             type="search"
@@ -82,7 +85,7 @@ export default function PyBotClassTopbar({
               title={theme === "system" ? t("pcThemeSystem") : theme === "light" ? t("pcThemeLight") : t("pcThemeDark")}
               aria-label={theme === "system" ? t("pcThemeSystemLabel") : theme === "light" ? t("pcThemeLightLabel") : t("pcThemeDarkLabel")}
             >
-              {THEME_ICONS[theme]}
+              <ThemeToggleIcon theme={theme} />
             </button>
           ))}
         </div>

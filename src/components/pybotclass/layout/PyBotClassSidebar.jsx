@@ -2,7 +2,11 @@ import { t } from "../../../i18n.js";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { PRIMARY_NAV_IDS } from "../../../platform/uxIaHelpers.js";
-import { IconSuperAdmin, SidebarIcon } from "../illustrations/SidebarIcons.jsx";
+import PbcIcon from "../PbcIcon.jsx";
+
+function navIconName(id) {
+  return id === "institutions" ? "institution" : id;
+}
 
 const DAILY_NAV = [
   { id: "home", labelKey: "pcHome", to: "/dashboard/classes" },
@@ -90,7 +94,7 @@ export default function PyBotClassSidebar({
       return (
         <a key={item.id} href={item.to} className={cls} onClick={onClose}>
           <span className="pbc-sidebar__icon" aria-hidden>
-            <SidebarIcon id={item.id} />
+            <PbcIcon name={navIconName(item.id)} size={20} />
           </span>
           {label}
         </a>
@@ -111,7 +115,7 @@ export default function PyBotClassSidebar({
         }}
       >
         <span className="pbc-sidebar__icon" aria-hidden>
-          <SidebarIcon id={item.id} />
+          <PbcIcon name={navIconName(item.id)} size={20} />
         </span>
         {label}
       </Link>
@@ -148,7 +152,7 @@ export default function PyBotClassSidebar({
               onClick={onClose}
             >
               <span className="pbc-sidebar__icon" aria-hidden>
-                <SidebarIcon id="institutions" />
+                <PbcIcon name="institution" size={20} />
               </span>
               {t("pcInstitutions")}
             </Link>
@@ -160,7 +164,7 @@ export default function PyBotClassSidebar({
               onClick={onClose}
             >
               <span className="pbc-sidebar__icon" aria-hidden>
-                <IconSuperAdmin />
+                <PbcIcon name="admin" size={20} />
               </span>
               {t("pcSuperAdminPanel")}
             </Link>

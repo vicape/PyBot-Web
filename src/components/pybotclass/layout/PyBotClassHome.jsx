@@ -14,18 +14,10 @@ import {
   buildTeacherAttentionItems,
   resolveClassesView,
 } from "../../../platform/uxIaHelpers.js";
-import {
-  CompactContentIcon,
-  CompactCreateIcon,
-  CompactIdeIcon,
-  CompactJoinIcon,
-  IconClipboard,
-  IconCourseCompact,
-  IconGrade,
-  IconPeople,
-} from "../illustrations/ActionIcons.jsx";
+import { CompactJoinIcon } from "../illustrations/ActionIcons.jsx";
 import EmptyCoursesIllustration from "../illustrations/EmptyCoursesIllustration.jsx";
-import { GoogleClassroomIcon, SidebarIcon } from "../illustrations/SidebarIcons.jsx";
+import { GoogleClassroomIcon } from "../illustrations/SidebarIcons.jsx";
+import PbcIcon from "../PbcIcon.jsx";
 import { UxIcon } from "../illustrations/UxIcons.jsx";
 import RoleBadges from "./RoleBadges.jsx";
 
@@ -35,6 +27,34 @@ const ROLE_BADGE = {
 };
 
 const INSTITUTIONS_HREF = "/dashboard?tab=schools";
+
+function IconPeople() {
+  return <PbcIcon name="management" size={18} />;
+}
+
+function IconClipboard() {
+  return <PbcIcon name="assignment" size={18} />;
+}
+
+function IconGrade() {
+  return <PbcIcon name="toGrade" size={18} />;
+}
+
+function IconCourseCompact() {
+  return <PbcIcon name="courses" size={20} />;
+}
+
+function CompactCreateIcon() {
+  return <PbcIcon name="create" size={18} />;
+}
+
+function CompactContentIcon() {
+  return <PbcIcon name="content" size={20} />;
+}
+
+function CompactIdeIcon() {
+  return <PbcIcon name="ide" size={18} />;
+}
 
 function emptyCoursesDesc({ canTeach, wantsTeacher }) {
   if (canTeach) return t("pcNoCoursesStaffDesc");
@@ -95,7 +115,7 @@ function CourseCards({
             <div className="pbc-course-card__body">
               <div className="pbc-course-card__lead">
                 <span className={`pbc-course-card__icon pbc-course-card__icon--${iconTone}`} aria-hidden>
-                  <IconCourseCompact size={20} />
+                  <IconCourseCompact />
                 </span>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p className="pbc-course-card__title">{c.course_title}</p>
@@ -148,17 +168,17 @@ function attentionCta(kind) {
 }
 
 function AttentionIcon({ kind }) {
-  if (kind === "no_students") return <IconPeople size={18} />;
-  if (kind === "no_activities") return <IconClipboard size={18} />;
-  if (kind === "pending_grades") return <IconGrade size={18} />;
-  return <IconCourseCompact size={18} />;
+  if (kind === "no_students") return <IconPeople />;
+  if (kind === "no_activities") return <IconClipboard />;
+  if (kind === "pending_grades") return <IconGrade />;
+  return <IconCourseCompact />;
 }
 
 function MetricIcon({ id }) {
-  if (id === "students" || id === "student") return <IconPeople size={18} />;
-  if (id === "activities") return <IconClipboard size={18} />;
-  if (id === "pending") return <IconGrade size={18} />;
-  return <IconCourseCompact size={18} />;
+  if (id === "students" || id === "student") return <PbcIcon name="management" size={18} />;
+  if (id === "activities") return <PbcIcon name="assignment" size={18} />;
+  if (id === "pending") return <PbcIcon name="toGrade" size={18} />;
+  return <PbcIcon name="courses" size={18} />;
 }
 
 function MetricsRow({ summary }) {
@@ -369,7 +389,7 @@ export default function PyBotClassHome({
               </button>
               <Link to={INSTITUTIONS_HREF} className="pbc-btn pbc-btn--ghost">
                 <span aria-hidden>
-                  <SidebarIcon id="institutions" />
+                  <PbcIcon name="institution" size={18} />
                 </span>
                 {t("pcInstitutions")}
               </Link>
@@ -528,7 +548,7 @@ export default function PyBotClassHome({
 
           <a href="/" className="pbc-action-card pbc-action-card--ide">
             <span className="pbc-action-card__icon pbc-action-card__icon--indigo" aria-hidden>
-              <UxIcon name="ide" size={36} />
+              <CompactIdeIcon />
             </span>
             <span className="pbc-action-card__body">
               <span className="pbc-action-card__title">{t("pcOpenIde")}</span>
