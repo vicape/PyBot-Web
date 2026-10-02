@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import {
   RubricTemplateAuthoringForm,
@@ -7,12 +7,25 @@ import {
 } from "../components/pybotclass/ActivityRubricPanels.jsx";
 import { UxIcon } from "../components/pybotclass/illustrations/UxIcons.jsx";
 import {
+  IconAssign,
+  IconCopy,
+  IconEdit,
+  IconMore,
+  IconTrash,
+} from "../components/pybotclass/illustrations/ActionIcons.jsx";
+import {
+  applyRubricTemplateToActivity,
   deleteRubricTemplate,
   getRubricTemplate,
   listMyRubricTemplates,
   upsertRubricTemplate,
 } from "../platform/activitySubmissions.js";
-import { rubricDuplicateName } from "../platform/rubrics.js";
+import { rubricDuplicateName, rubricPointsCeiling } from "../platform/rubrics.js";
+import { normalizeCourseRole } from "../platform/courseRole.js";
+import {
+  fetchCourseActivities,
+  listPybotclassMyCourses,
+} from "../platform/pybotClassApi.js";
 import { fetchProfile } from "../platform/profileApi.js";
 import { useRequireSession } from "../platform/useRequireSession.js";
 import { isSupabaseConfigured } from "../supabaseClient.js";
@@ -77,6 +90,10 @@ function editorFromTemplate(template) {
   };
 }
 
+function canTeachCourseRow(row) {
+  return normalizeCourseRole(row?.my_course_role) === "teacher";
+}
+
 /**
  * PyBotClass reusable P9 rubric templates library.
  * Authoring/reuse only — grading stays on ActivityPage.
@@ -101,6 +118,17 @@ export default function MyRubricsPage() {
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteErr, setDeleteErr] = useState("");
+  const [menuOpenId, setMenuOpenId] = useState(null);
+
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [applyTemplate, setApplyTemplate] = useState(null);
+  const [applyCourses, setApplyCourses] = useState([]);
+  const [applyCourseId, setApplyCourseId] = useState("");
+  const [applyActivities, setApplyActivities] = useState([]);
+  const [applyActivityId, setApplyActivityId] = useState("");
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [applyErr, setApplyErr] = useState("");
+  const [applyMismatch, setApplyMismatch] = useState(null);
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
@@ -133,6 +161,13 @@ export default function MyRubricsPage() {
     }
     if (!authLoading && user) void load();
   }, [authLoading, user, load, navigate]);
+
+  useEffect(() => {
+    if (!menuOpenId) return undefined;
+    const onDoc = () => setMenuOpenId(null);
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
+  }, [menuOpenId]);
 
   const openCreate = () => {
     const seed = defaultRubricEditorState("qualitative");
@@ -196,6 +231,7 @@ export default function MyRubricsPage() {
     setBusy(true);
     setErr("");
     setFeedback("");
+    setMenuOpenId(null);
     const { template, error } = await getRubricTemplate(row.id);
     if (error || !template) {
       setBusy(false);
@@ -240,6 +276,96 @@ export default function MyRubricsPage() {
     setDeleting(null);
     setFeedback(t("pcRubricDeleted"));
     await load();
+  };
+
+  const openUseModal = async (row) => {
+    if (busy || applyBusy) return;
+    setApplyErr("");
+    setApplyMismatch(null);
+    setApplyActivityId("");
+    setApplyCourseId("");
+    setApplyActivities([]);
+    setApplyBusy(true);
+    const { template, error } = await getRubricTemplate(row.id);
+    if (error || !template) {
+      setApplyBusy(false);
+      setErr(error || t("pcRubricLoadFail"));
+      return;
+    }
+    const { rows, error: courseErr } = await listPybotclassMyCourses(null);
+    setApplyBusy(false);
+    if (courseErr) {
+      setErr(courseErr);
+      return;
+    }
+    const teacherCourses = (rows || []).filter(canTeachCourseRow);
+    setApplyTemplate(template);
+    setApplyCourses(teacherCourses);
+    setApplyOpen(true);
+  };
+
+  const onSelectApplyCourse = async (courseId) => {
+    setApplyCourseId(courseId);
+    setApplyActivityId("");
+    setApplyMismatch(null);
+    setApplyErr("");
+    if (!courseId) {
+      setApplyActivities([]);
+      return;
+    }
+    setApplyBusy(true);
+    const { rows, error } = await fetchCourseActivities(courseId);
+    setApplyBusy(false);
+    if (error) {
+      setApplyErr(error);
+      setApplyActivities([]);
+      return;
+    }
+    setApplyActivities(rows || []);
+  };
+
+  const onSelectApplyActivity = (activityId) => {
+    setApplyActivityId(activityId);
+    setApplyMismatch(null);
+    setApplyErr("");
+    if (!activityId || !applyTemplate) return;
+    const activity = applyActivities.find((a) => a.id === activityId);
+    if (!activity) return;
+    if (applyTemplate.scoring_mode === "qualitative") return;
+    const ceiling = rubricPointsCeiling(applyTemplate.criteria || []);
+    const max = activity.max_points != null ? Number(activity.max_points) : null;
+    if (ceiling != null && max != null && Math.abs(ceiling - max) > 0.0001) {
+      setApplyMismatch({ ceiling, max, activityId, courseId: applyCourseId });
+    }
+  };
+
+  const handleApplyRubric = async () => {
+    if (!applyTemplate?.id || !applyActivityId || applyBusy || applyMismatch) return;
+    setApplyBusy(true);
+    setApplyErr("");
+    const r = await applyRubricTemplateToActivity(applyActivityId, applyTemplate.id);
+    setApplyBusy(false);
+    if (!r.ok) {
+      if (r.error === "rubric_max_mismatch") {
+        const detail = r.detail || {};
+        setApplyMismatch({
+          ceiling: detail.rubric_sum,
+          max: detail.max_points,
+          activityId: applyActivityId,
+          courseId: applyCourseId,
+        });
+        return;
+      }
+      setApplyErr(
+        r.error === "rubric_has_evaluations"
+          ? t("pcRubricHasEvaluationsLocked")
+          : r.error || t("pcRubricApplyFail"),
+      );
+      return;
+    }
+    setApplyOpen(false);
+    setApplyTemplate(null);
+    setFeedback(t("pcRubricApplyOk"));
   };
 
   if (authLoading || loading) {
@@ -334,7 +460,6 @@ export default function MyRubricsPage() {
           <ul className="pbc-content-grid pbc-rubrics-grid">
             {templates.map((row) => {
               const modified = formatModified(row.updated_at);
-              // list_my_rubric_templates has no criteria count — do not invent it.
               const count =
                 typeof row.criteria_count === "number"
                   ? row.criteria_count
@@ -364,34 +489,69 @@ export default function MyRubricsPage() {
                   {row.description ? (
                     <p className="pbc-content-card__desc">{row.description}</p>
                   ) : null}
-                  <div className="pbc-content-card__direct-actions">
+                  <div className="pbc-rubric-card__actions">
                     <button
                       type="button"
-                      className="pbc-btn pbc-btn--ghost"
+                      className="pbc-btn pbc-btn--primary pbc-btn--sm pbc-eval-btn-with-icon"
+                      disabled={busy || applyBusy}
+                      onClick={() => void openUseModal(row)}
+                    >
+                      <IconAssign size={18} />
+                      <span>{t("pcUse")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
                       disabled={busy}
                       onClick={() => void openEdit(row)}
                     >
-                      {t("pcEdit")}
+                      <IconEdit size={18} />
+                      <span>{t("pcEdit")}</span>
                     </button>
-                    <button
-                      type="button"
-                      className="pbc-btn pbc-btn--ghost"
-                      disabled={busy}
-                      onClick={() => void handleDuplicate(row)}
-                    >
-                      {t("pcDuplicate")}
-                    </button>
-                    <button
-                      type="button"
-                      className="pbc-btn pbc-btn--ghost"
-                      disabled={busy}
-                      onClick={() => {
-                        setDeleteErr("");
-                        setDeleting(row);
-                      }}
-                    >
-                      {t("pcDelete")}
-                    </button>
+                    <div className="pbc-rubric-card__more">
+                      <button
+                        type="button"
+                        className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
+                        disabled={busy}
+                        aria-haspopup="menu"
+                        aria-expanded={menuOpenId === row.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpenId((id) => (id === row.id ? null : row.id));
+                        }}
+                      >
+                        <IconMore size={18} />
+                        <span>{t("pcMore")}</span>
+                      </button>
+                      {menuOpenId === row.id ? (
+                        <div className="pbc-rubric-card__menu" role="menu">
+                          <button
+                            type="button"
+                            className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
+                            role="menuitem"
+                            disabled={busy}
+                            onClick={() => void handleDuplicate(row)}
+                          >
+                            <IconCopy size={18} />
+                            <span>{t("pcDuplicate")}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
+                            role="menuitem"
+                            disabled={busy}
+                            onClick={() => {
+                              setMenuOpenId(null);
+                              setDeleteErr("");
+                              setDeleting(row);
+                            }}
+                          >
+                            <IconTrash size={18} />
+                            <span>{t("pcDelete")}</span>
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </li>
               );
@@ -399,6 +559,110 @@ export default function MyRubricsPage() {
           </ul>
         )}
       </div>
+
+      {applyOpen && applyTemplate ? (
+        <div
+          className="pbc-modal-backdrop pbc-modal-backdrop--create-content"
+          role="presentation"
+          onClick={() => !applyBusy && setApplyOpen(false)}
+        >
+          <div
+            className="pbc-modal pbc-modal--create-content"
+            role="dialog"
+            aria-labelledby="apply-rubric-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="apply-rubric-title" className="pbc-modal__title">
+              {t("pcUse")} · {applyTemplate.name}
+            </h2>
+            {applyCourses.length === 0 ? (
+              <p className="pbc-modal--create-content__subtitle">{t("pcNoTeacherCourses")}</p>
+            ) : (
+              <>
+                <label className="pbc-rubric-apply-modal__field">
+                  <span className="auth-org-label">{t("pcSelectCourse")}</span>
+                  <select
+                    className="auth-org-input auth-org-input--block"
+                    value={applyCourseId}
+                    disabled={applyBusy}
+                    onChange={(e) => void onSelectApplyCourse(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {applyCourses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title || c.name || c.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="pbc-rubric-apply-modal__field">
+                  <span className="auth-org-label">{t("pcSelectActivity")}</span>
+                  <select
+                    className="auth-org-input auth-org-input--block"
+                    value={applyActivityId}
+                    disabled={applyBusy || !applyCourseId}
+                    onChange={(e) => onSelectApplyActivity(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {applyActivities.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.title}
+                        {a.max_points != null ? ` (${a.max_points})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {applyCourseId && applyActivities.length === 0 && !applyBusy ? (
+                  <p className="auth-card__muted">{t("pcNoCourseActivities")}</p>
+                ) : null}
+              </>
+            )}
+            {applyMismatch ? (
+              <div className="pbc-rubric-apply-modal__mismatch" role="alert">
+                <p>
+                  {t("pcRubricPointsMismatch")
+                    .replace("{activity}", String(applyMismatch.max))
+                    .replace("{rubric}", String(applyMismatch.ceiling))}
+                </p>
+                <Link
+                  className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                  to={`/actividad/${applyMismatch.activityId}`}
+                >
+                  {t("pcEditActivity")}
+                </Link>
+              </div>
+            ) : null}
+            {applyErr ? (
+              <p className="pbc-alert pbc-alert--error" role="alert">
+                {applyErr}
+              </p>
+            ) : null}
+            <div className="pbc-modal__actions">
+              <button
+                type="button"
+                className="pbc-btn pbc-btn--ghost"
+                disabled={applyBusy}
+                onClick={() => setApplyOpen(false)}
+              >
+                {t("pcCancel")}
+              </button>
+              <button
+                type="button"
+                className="pbc-btn pbc-btn--primary"
+                disabled={
+                  applyBusy ||
+                  !applyActivityId ||
+                  Boolean(applyMismatch) ||
+                  applyCourses.length === 0
+                }
+                onClick={() => void handleApplyRubric()}
+              >
+                {applyBusy ? t("pcSaving") : t("pcApplyRubric")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {deleting ? (
         <div

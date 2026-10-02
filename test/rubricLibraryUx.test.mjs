@@ -220,6 +220,7 @@ test("activity applies template through existing P9 snapshot API", () => {
   assert.match(panelsSrc, /onApplyTemplate/);
   assert.match(panelsSrc, /pcRubricChoiceFromMine/);
   assert.match(panelsSrc, /pcRubricApplyToActivity/);
+  assert.match(activitySrc, /ActivityEvaluationSection/);
 });
 
 test("activity preserves no-rubric and one-off authoring paths", () => {
@@ -227,15 +228,18 @@ test("activity preserves no-rubric and one-off authoring paths", () => {
   assert.match(panelsSrc, /pcRubricChoiceCreateForActivity/);
   assert.match(panelsSrc, /onClearRubric/);
   assert.match(panelsSrc, /onSaveActivityRubric/);
-  assert.match(activitySrc, /clearActivityRubric|onClearRubric/);
-  assert.match(activitySrc, /upsertActivityRubric|onSaveRubric/);
-  assert.match(activitySrc, /activityRubricChoice/);
+  assert.match(activitySrc, /clearActivityRubric/);
+  assert.match(activitySrc, /upsertActivityRubric/);
+  assert.match(activitySrc, /ActivityEvaluationSection/);
 });
 
 test("activity has discoverable path to manage reusable rubrics", () => {
   assert.match(panelsSrc, /pcManageRubrics/);
   assert.match(panelsSrc, /to="\/dashboard\/rubrics"/);
   assert.match(panelsSrc, /Link/);
+  const evalSrc = read("src/components/pybotclass/ActivityEvaluationSection.jsx");
+  assert.match(evalSrc, /pcManageRubrics/);
+  assert.match(evalSrc, /\/dashboard\/rubrics/);
 });
 
 test("grading remains on ActivityPage (not moved to library)", () => {

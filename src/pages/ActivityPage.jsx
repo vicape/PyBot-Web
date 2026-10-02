@@ -47,8 +47,8 @@ import {
   fetchMySubmission,
   fetchSubmissionRubricDraft,
   fetchSubmissionRubricScores,
+  getRubricTemplate,
   gradeSubmission,
-  listMyRubricTemplates,
   reopenSubmissionForStudent,
   requestSubmissionReview,
   saveSubmissionRubricDraft,
@@ -56,15 +56,22 @@ import {
   submissionVersionLabel,
   submitActivity,
   upsertActivityRubric,
-  upsertRubricTemplate,
 } from "../platform/activitySubmissions.js";
 import {
-  ActivityRubricAuthoringPanel,
   ActivityRubricGradeMatrix,
   ActivityRubricStudentResult,
-  defaultRubricEditorState,
 } from "../components/pybotclass/ActivityRubricPanels.jsx";
-import { isLegacyActivityRubric } from "../platform/rubrics.js";
+import ActivityEvaluationSection from "../components/pybotclass/ActivityEvaluationSection.jsx";
+import {
+  criteriaPayloadFromEditor,
+  emptyEvaluationSelection,
+  evaluationBaselineKey,
+  evaluationChanged,
+  selectionFromActivityRubric,
+} from "../platform/activityEvaluation.js";
+import { isLegacyActivityRubric, rubricPointsCeiling } from "../platform/rubrics.js";
+import { getSupabase } from "../supabaseClient.js";
+import { t } from "../i18n.js";
 import {
   fetchActivityItemSubmissions,
   gradeActivityItemSubmission,
@@ -148,12 +155,10 @@ export default function ActivityPage() {
   const [rubricDraftBySubmission, setRubricDraftBySubmission] = useState({});
   const [myRubricScores, setMyRubricScores] = useState([]);
   const [reopenActive, setReopenActive] = useState(false);
-  const [rubricEditor, setRubricEditor] = useState([]);
   const [rubricScoringMode, setRubricScoringMode] = useState("points");
-  const [rubricTemplates, setRubricTemplates] = useState([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [templateNameDraft, setTemplateNameDraft] = useState("");
-  const [activityRubricChoice, setActivityRubricChoice] = useState("none");
+  const [evaluationSelection, setEvaluationSelection] = useState(() => emptyEvaluationSelection());
+  const [evaluationBaseline, setEvaluationBaseline] = useState("none");
+  const [rubricHasEvaluations, setRubricHasEvaluations] = useState(false);
   const [actionMsg, setActionMsg] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [needsClassroomConnect, setNeedsClassroomConnect] = useState(false);
@@ -439,30 +444,40 @@ export default function ActivityPage() {
     setActivityRubricMeta(actRubric || null);
     setRubricCriteria(criteria || []);
     setRubricScoringMode(actRubric?.scoring_mode || "points");
-    setRubricEditor(
-      (criteria || []).map((c) => ({
-        id: c.id,
-        name: c.name,
-        description: c.description || "",
-        max_points: c.max_points != null ? String(c.max_points) : "",
-        levels: (c.levels || []).map((lv) => ({
-          id: lv.id,
-          name: lv.name,
-          descriptor: lv.descriptor || "",
-          points: lv.points != null ? String(lv.points) : "",
-        })),
-      })),
-    );
-    if (actRubric) {
-      setActivityRubricChoice(actRubric.source_template_id ? "choose" : "create");
-    } else {
-      setActivityRubricChoice("none");
+    let templateName = null;
+    if (actRubric?.source_template_id) {
+      const { template } = await getRubricTemplate(actRubric.source_template_id);
+      templateName = template?.name || null;
     }
+    const selection = selectionFromActivityRubric({
+      rubric: actRubric,
+      criteria,
+      templateName,
+    });
+    setEvaluationSelection(selection);
+    setEvaluationBaseline(evaluationBaselineKey(selection));
+    let hasEvals = false;
+    if (actRubric?.id) {
+      const sb = getSupabase();
+      if (sb) {
+        const { data: critRows } = await sb
+          .from("activity_rubric_criteria")
+          .select("id")
+          .eq("rubric_id", actRubric.id);
+        const ids = (critRows || []).map((c) => c.id);
+        if (ids.length) {
+          const { data: scores } = await sb
+            .from("activity_submission_rubric_scores")
+            .select("id")
+            .in("criterion_id", ids)
+            .limit(1);
+          hasEvals = Boolean(scores?.length);
+        }
+      }
+    }
+    setRubricHasEvaluations(hasEvals);
 
     if (teach) {
-      const tpl = await listMyRubricTemplates();
-      setRubricTemplates(tpl.templates || []);
-
       const list = await fetchActivitySubmissions(activityId);
       setTeacherRows(list.rows ?? []);
       const hist = new Map();
@@ -1107,128 +1122,68 @@ export default function ActivityPage() {
     await load({ preserveActionMsg: true });
   };
 
-  const onSaveRubric = async () => {
-    if (busy || !activityId) return;
-    setBusy(true);
-    setActionErr("");
-    setActionMsg("");
-    const legacy = isLegacyActivityRubric(activityRubricMeta, rubricCriteria);
-    const criteria = rubricEditor
-      .filter((c) => String(c.name || "").trim())
-      .map((c) => {
-        if (legacy || !(c.levels || []).length) {
-          return {
-            name: String(c.name).trim(),
-            description: c.description || null,
-            max_points: Number(c.max_points),
-          };
-        }
-        return {
-          name: String(c.name).trim(),
-          description: c.description || null,
-          levels: (c.levels || [])
-            .filter((lv) => String(lv.name || "").trim())
-            .map((lv) => ({
-              name: String(lv.name).trim(),
-              descriptor: lv.descriptor || null,
-              points:
-                rubricScoringMode === "points" && lv.points !== "" && lv.points != null
-                  ? Number(lv.points)
-                  : null,
-            })),
-        };
-      });
-    const r = await upsertActivityRubric(activityId, criteria, rubricScoringMode);
-    setBusy(false);
-    if (!r.ok) {
-      setActionErr(
-        r.error === "rubric_max_mismatch"
-          ? `La suma de la rúbrica debe ser igual al puntaje máximo (${activity?.max_points}).`
-          : r.error === "rubric_has_evaluations"
-            ? "Hay evaluaciones publicadas: no se puede reemplazar la rúbrica congelada."
-            : r.error || "No se pudo guardar la rúbrica.",
-      );
+  const persistEvaluation = async (next) => {
+    if (busy || !activityId || rubricHasEvaluations) return;
+    if (!evaluationChanged(evaluationBaseline, next)) {
+      setEvaluationSelection(next);
       return;
     }
-    setActionMsg("Rúbrica congelada en la actividad.");
-    await load({ preserveActionMsg: true });
-  };
-
-  const onSaveAsTemplate = async () => {
-    if (busy) return;
     setBusy(true);
     setActionErr("");
     setActionMsg("");
-    const criteria = rubricEditor
-      .filter((c) => String(c.name || "").trim())
-      .map((c) => ({
-        name: String(c.name).trim(),
-        description: c.description || null,
-        levels: (c.levels || [])
-          .filter((lv) => String(lv.name || "").trim())
-          .map((lv) => ({
-            name: String(lv.name).trim(),
-            descriptor: lv.descriptor || null,
-            points:
-              rubricScoringMode === "points" && lv.points !== "" && lv.points != null
-                ? Number(lv.points)
-                : null,
-          })),
-      }));
-    const r = await upsertRubricTemplate({
-      name: templateNameDraft.trim(),
-      description: null,
-      scoringMode: rubricScoringMode,
-      criteria,
-    });
-    setBusy(false);
-    if (!r.ok) {
-      setActionErr(r.error || "No se pudo guardar la plantilla.");
+    // Points rubrics: align activity max_points to factual ceiling before apply/upsert
+    // (same lock semantics as ActivityForm). Qualitative never invents/erases max.
+    if (next?.mode && next.mode !== "none" && next.scoringMode === "points" && supabase) {
+      const ceilingPayload = criteriaPayloadFromEditor(next.criteria, "points");
+      const ceiling = rubricPointsCeiling(ceilingPayload);
+      if (ceiling != null && Number.isFinite(ceiling)) {
+        await supabase.from("activities").update({ max_points: ceiling }).eq("id", activityId);
+      }
+    }
+    let r;
+    if (!next || next.mode === "none") {
+      r = await clearActivityRubric(activityId);
+    } else if (next.mode === "template" && next.templateId) {
+      r = await applyRubricTemplateToActivity(activityId, next.templateId);
+    } else if (next.mode === "oneoff") {
+      const criteria = criteriaPayloadFromEditor(next.criteria, next.scoringMode);
+      r = await upsertActivityRubric(activityId, criteria, next.scoringMode);
+    } else {
+      setBusy(false);
       return;
     }
-    setActionMsg("Plantilla de rúbrica guardada para reutilizar.");
-    const tpl = await listMyRubricTemplates();
-    setRubricTemplates(tpl.templates || []);
-  };
-
-  const onApplyTemplate = async () => {
-    if (busy || !activityId || !selectedTemplateId) return;
-    setBusy(true);
-    setActionErr("");
-    setActionMsg("");
-    const r = await applyRubricTemplateToActivity(activityId, selectedTemplateId);
-    setBusy(false);
-    if (!r.ok) {
-      setActionErr(
-        r.error === "rubric_max_mismatch"
-          ? `La plantilla no coincide con el puntaje máximo (${activity?.max_points}).`
-          : r.error === "rubric_has_evaluations"
-            ? "Hay evaluaciones publicadas: no se puede reemplazar la rúbrica."
-            : r.error || "No se pudo aplicar la plantilla.",
-      );
-      return;
-    }
-    setActionMsg("Plantilla aplicada como rúbrica congelada de la actividad.");
-    await load({ preserveActionMsg: true });
-  };
-
-  const onClearRubric = async () => {
-    if (busy || !activityId) return;
-    setBusy(true);
-    setActionErr("");
-    setActionMsg("");
-    const r = await clearActivityRubric(activityId);
     setBusy(false);
     if (!r.ok) {
       setActionErr(
         r.error === "rubric_has_evaluations"
-          ? "Hay evaluaciones publicadas: no se puede quitar la rúbrica."
-          : r.error || "No se pudo quitar la rúbrica.",
+          ? t("pcRubricHasEvaluationsLocked")
+          : r.error === "rubric_max_mismatch"
+            ? `La suma de la rúbrica debe ser igual al puntaje máximo (${activity?.max_points}).`
+            : r.error || t("pcRubricApplyFail"),
       );
+      await load({ preserveActionMsg: true });
       return;
     }
-    setActionMsg("Actividad sin rúbrica.");
+    setActionMsg(t("pcRubricApplyOk"));
     await load({ preserveActionMsg: true });
+  };
+
+  const onEvaluationChange = (next) => {
+    // Stage one-off edits locally; persist templates/clear immediately.
+    if (next?.mode === "oneoff") {
+      const prev = evaluationSelection;
+      const onlyLocalEdit =
+        prev?.mode === "oneoff" || evaluationBaseline.startsWith("oneoff:");
+      setEvaluationSelection(next);
+      if (onlyLocalEdit && prev?.mode === "oneoff") return;
+      // Switching into one-off from none/template: wait for explicit save.
+      return;
+    }
+    void persistEvaluation(next);
+  };
+
+  const onCommitOneOff = (selection) => {
+    void persistEvaluation(selection);
   };
 
   if (authLoading) {
@@ -1606,35 +1561,16 @@ export default function ActivityPage() {
 
         {canTeach ? (
           <PbcSection
-            title="Rúbrica (opcional)"
-            description="Plantillas reutilizables → copia congelada por actividad. No se fuerza rúbrica."
+            title={t("pcEvaluation")}
+            description={t("pcRubricsPageLead")}
           >
-            <ActivityRubricAuthoringPanel
-              scoringMode={rubricScoringMode}
-              onScoringModeChange={setRubricScoringMode}
-              criteria={rubricEditor}
-              onCriteriaChange={setRubricEditor}
-              templates={rubricTemplates}
-              selectedTemplateId={selectedTemplateId}
-              onSelectTemplate={setSelectedTemplateId}
-              onApplyTemplate={() => void onApplyTemplate()}
-              onClearRubric={() => void onClearRubric()}
-              onSaveActivityRubric={() => void onSaveRubric()}
-              onSaveAsTemplate={() => void onSaveAsTemplate()}
-              templateName={templateNameDraft}
-              onTemplateNameChange={setTemplateNameDraft}
-              busy={busy}
-              activityMaxPoints={activity?.max_points}
-              hasFrozenRubric={Boolean(activityRubricMeta)}
-              schemaGeneration={activityRubricMeta?.schema_generation ?? null}
-              activityChoice={activityRubricChoice}
-              onActivityChoiceChange={(next) => {
-                setActivityRubricChoice(next);
-                if (next === "create" && rubricEditor.length === 0) {
-                  const seed = defaultRubricEditorState(rubricScoringMode);
-                  setRubricEditor(seed.criteria);
-                }
-              }}
+            <ActivityEvaluationSection
+              value={evaluationSelection}
+              onChange={onEvaluationChange}
+              onCommitOneOff={onCommitOneOff}
+              commitOneOffBusy={busy}
+              disabled={busy}
+              hasEvaluations={rubricHasEvaluations}
             />
           </PbcSection>
         ) : null}

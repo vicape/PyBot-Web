@@ -259,3 +259,98 @@ export function CompactIdeIcon() {
     </Svg>
   );
 }
+
+/** Rubric checklist / matrix (outline, 18–20px). */
+export function IconRubricMatrix({ size = 18 } = {}) {
+  return (
+    <Svg size={size}>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="2" stroke="currentColor" strokeWidth={S} />
+      <path d="M8 9h8M8 12.5h8M8 16h5" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function IconEye({ size = 18 } = {}) {
+  return (
+    <Svg size={size}>
+      <path
+        d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"
+        stroke="currentColor"
+        strokeWidth={S}
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="2.5" stroke="currentColor" strokeWidth={S} />
+    </Svg>
+  );
+}
+
+export function IconSearch({ size = 18 } = {}) {
+  return (
+    <Svg size={size}>
+      <circle cx="11" cy="11" r="5.5" stroke="currentColor" strokeWidth={S} />
+      <path d="M15.5 15.5 20 20" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function IconTrash({ size = 18 } = {}) {
+  return (
+    <Svg size={size}>
+      <path d="M5.5 8h13" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+      <path d="M9.5 8V6.5A1.5 1.5 0 0 1 11 5h2a1.5 1.5 0 0 1 1.5 1.5V8" stroke="currentColor" strokeWidth={S} />
+      <path
+        d="M7.5 8v10.5A1.5 1.5 0 0 0 9 20h6a1.5 1.5 0 0 0 1.5-1.5V8"
+        stroke="currentColor"
+        strokeWidth={S}
+        strokeLinejoin="round"
+      />
+      <path d="M10.5 11.5v5M13.5 11.5v5" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function IconSwap({ size = 18 } = {}) {
+  return (
+    <Svg size={size}>
+      <path d="M7 8h11.5" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+      <path d="M15.5 5.5 18.5 8l-3 2.5" stroke="currentColor" strokeWidth={S} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M17 16H5.5" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+      <path d="M8.5 18.5 5.5 16l3-2.5" stroke="currentColor" strokeWidth={S} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function IconPlus({ size = 18 } = {}) {
+  return (
+    <Svg size={size}>
+      <path d="M12 6.5v11M6.5 12h11" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function IconHash({ size = 18 } = {}) {
+  return (
+    <Svg size={size}>
+      <path d="M9 5.5 7.5 18.5M16.5 5.5 15 18.5M5.5 9.5h14M4.5 14.5h14" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function IconLevels({ size = 18 } = {}) {
+  return (
+    <Svg size={size}>
+      <path d="M5.5 17.5h13" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+      <path d="M7.5 17.5V12M12 17.5V8.5M16.5 17.5V5.5" stroke="currentColor" strokeWidth={S} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function IconMore({ size = 18 } = {}) {
+  return (
+    <Svg size={size}>
+      <circle cx="6.5" cy="12" r="1.35" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.35" fill="currentColor" />
+      <circle cx="17.5" cy="12" r="1.35" fill="currentColor" />
+    </Svg>
+  );
+}
