@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { listSnapshotItems } from "../../platform/activityItemProgress.js";
 import {
-  deriveProgressAggregates,
-  fetchCourseContentProgressOverview,
-  listSnapshotItems,
-  progressRowsToMap,
-} from "../../platform/activityItemProgress.js";
+  buildStudentActivityLearningSummaries,
+  fetchCourseLearningStatusOverview,
+  formatActiveTime,
+  formatPerformanceDisplay,
+  formatProgressDisplay,
+} from "../../platform/learningStatus.js";
 import {
   PbcEmpty,
   PbcLoading,
@@ -13,7 +15,7 @@ import {
 } from "./PyBotClassUi.jsx";
 
 /**
- * Teacher overview of Content assignment completion (progress ≠ Entregas/Notas).
+ * Teacher overview: Progress · Active time · Performance (Point 6).
  * Drill-down: activity → student → unit/lesson/item.
  */
 export default function CourseContentProgressPanel({ courseId }) {
@@ -29,7 +31,7 @@ export default function CourseContentProgressPanel({ courseId }) {
       if (!courseId) return;
       setLoading(true);
       setErr("");
-      const { overview: data, error, missingMigration } = await fetchCourseContentProgressOverview(
+      const { overview: data, error, missingMigration } = await fetchCourseLearningStatusOverview(
         courseId,
       );
       if (cancelled) return;
@@ -54,7 +56,6 @@ export default function CourseContentProgressPanel({ courseId }) {
   }, [overview]);
 
   const students = overview?.students || [];
-  const allProgress = overview?.progress || [];
 
   const selectedActivity = activities.find((a) => a.id === selectedActivityId) || activities[0];
 
@@ -66,15 +67,14 @@ export default function CourseContentProgressPanel({ courseId }) {
 
   const studentSummaries = useMemo(() => {
     if (!selectedActivity) return [];
-    const items = listSnapshotItems(selectedActivity.content_snapshot);
-    const actProgress = allProgress.filter((p) => p.activity_id === selectedActivity.id);
-    return students.map((s) => {
-      const rows = actProgress.filter((p) => p.user_id === s.user_id);
-      const map = progressRowsToMap(rows);
-      const agg = deriveProgressAggregates(items, map);
-      return { student: s, aggregates: agg, map, rows };
+    return buildStudentActivityLearningSummaries({
+      activity: selectedActivity,
+      students,
+      progressRows: overview?.progress || [],
+      engagementRows: overview?.engagement || [],
+      submissionRows: overview?.submissions || [],
     });
-  }, [selectedActivity, students, allProgress]);
+  }, [selectedActivity, students, overview]);
 
   const drillStudent = studentSummaries.find((s) => s.student.user_id === selectedStudentId);
 
@@ -84,7 +84,7 @@ export default function CourseContentProgressPanel({ courseId }) {
     return (
       <PbcSection
         title="Progreso de contenido"
-        description="Completitud pedagógica (separado de Entregas y Notas)."
+        description="Progreso, tiempo activo y rendimiento (dimensiones independientes)."
       >
         <PbcEmpty
           title="Sin asignaciones con ítems"
@@ -97,7 +97,7 @@ export default function CourseContentProgressPanel({ courseId }) {
   return (
     <PbcSection
       title="Progreso de contenido"
-      description="Completitud por actividad asignada (no es Entregas ni Notas)."
+      description="Progreso · Tiempo activo · Rendimiento (no se infieren entre sí)."
     >
       <div className="pbc-form-grid" style={{ marginBottom: "0.75rem" }}>
         <div>
@@ -124,13 +124,16 @@ export default function CourseContentProgressPanel({ courseId }) {
 
       {selectedActivity ? (
         <p className="auth-card__muted" style={{ marginTop: 0 }}>
-          Promedio alumnos:{" "}
+          Promedio progreso:{" "}
           <strong>
             {(() => {
-              const withReq = studentSummaries.filter((s) => !s.aggregates.content.emptyRequired);
+              const withReq = studentSummaries.filter(
+                (s) => !s.learning.content.progress.emptyRequired,
+              );
               if (!withReq.length) return "—";
               const avg =
-                withReq.reduce((sum, s) => sum + s.aggregates.content.percent, 0) / withReq.length;
+                withReq.reduce((sum, s) => sum + (s.learning.content.progress.percent || 0), 0) /
+                withReq.length;
               return `${Math.round(avg * 10) / 10}%`;
             })()}
           </strong>
@@ -146,19 +149,23 @@ export default function CourseContentProgressPanel({ courseId }) {
           <thead>
             <tr>
               <th>Alumno</th>
-              <th>Completitud</th>
+              <th>Progreso</th>
+              <th>Tiempo activo</th>
+              <th>Rendimiento</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {studentSummaries.map(({ student, aggregates }) => (
+            {studentSummaries.map(({ student, learning }) => (
               <tr key={student.user_id}>
                 <td>{student.name}</td>
                 <td>
-                  {aggregates.content.emptyRequired
+                  {learning.content.progress.emptyRequired
                     ? "—"
-                    : `${aggregates.content.percent}% (${aggregates.content.completed}/${aggregates.content.total})`}
+                    : `${formatProgressDisplay(learning.content.progress)} (${learning.content.progress.completed}/${learning.content.progress.total})`}
                 </td>
+                <td>{formatActiveTime(learning.content.engagement.active_ms)}</td>
+                <td>{formatPerformanceDisplay(learning.content.performance)}</td>
                 <td>
                   <button
                     type="button"
@@ -187,28 +194,51 @@ export default function CourseContentProgressPanel({ courseId }) {
               Cerrar
             </button>
           </h3>
-          {Object.values(drillStudent.aggregates.units).map((u) => (
+          <p className="auth-card__muted" style={{ marginTop: 0 }}>
+            Progreso {formatProgressDisplay(drillStudent.learning.content.progress)}
+            {" · "}
+            Tiempo activo {formatActiveTime(drillStudent.learning.content.engagement.active_ms)}
+            {" · "}
+            Rendimiento {formatPerformanceDisplay(drillStudent.learning.content.performance)}
+          </p>
+          {Object.values(drillStudent.learning.units).map((u) => (
             <div key={u.unitId || "u"} className="pbc-content-reader__unit">
               <strong>
                 {u.unitTitle || "Unidad"}
-                {!u.emptyRequired ? ` — ${u.percent}%` : ""}
+                {" — "}
+                Progreso {formatProgressDisplay(u.progress)}
+                {" · "}
+                {formatActiveTime(u.engagement.active_ms)}
+                {" · "}
+                Rendimiento {formatPerformanceDisplay(u.performance)}
               </strong>
               <ul className="pbc-content-reader__lesson-list">
-                {Object.values(drillStudent.aggregates.lessons)
+                {Object.values(drillStudent.learning.lessons)
                   .filter((l) => (l.unitId || null) === (u.unitId || null))
                   .map((l) => (
                     <li key={l.lessonId || l.lessonTitle}>
                       <span>
                         {l.lessonTitle || "Lección"}
-                        {!l.emptyRequired ? ` — ${l.percent}%` : ""}
+                        {" — "}
+                        Progreso {formatProgressDisplay(l.progress)}
+                        {" · "}
+                        {formatActiveTime(l.engagement.active_ms)}
+                        {" · "}
+                        Rendimiento {formatPerformanceDisplay(l.performance)}
                       </span>
                       <ul>
-                        {Object.values(drillStudent.aggregates.items)
+                        {Object.values(drillStudent.learning.items)
                           .filter((it) => it.lessonId === l.lessonId)
                           .map((it) => (
                             <li key={it.snapshotItemId}>
-                              {it.title || it.snapshotItemId} · {it.type} · {it.status}
-                              {it.required === false ? " (opcional)" : ""}
+                              {it.title || it.snapshotItemId} · {it.type}
+                              {" · "}
+                              {it.progress.status}
+                              {it.progress.required === false ? " (opcional)" : ""}
+                              {" · "}
+                              {formatActiveTime(it.engagement.active_ms)}
+                              {" · "}
+                              Rendimiento {formatPerformanceDisplay(it.performance)}
                             </li>
                           ))}
                       </ul>

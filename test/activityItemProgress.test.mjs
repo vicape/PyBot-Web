@@ -316,7 +316,10 @@ test("UI wires student viewer and teacher panel without parallel assignment enti
   assert.match(panel, /Detalle/);
   assert.match(activities, /CourseContentProgressPanel/);
   assert.doesNotMatch(page + panel + activities, /course_content_assignments/);
-  assert.doesNotMatch(viewer, /active_ms/);
+  // Point 6 may display active_ms via learningStatus formatters; progress completion must stay grade/engagement-free.
+  assert.match(viewer, /formatActiveTime|learningStatus/);
+  assert.doesNotMatch(viewer, /activity_engagement_segments/);
+  assert.doesNotMatch(viewer, /grade|max_points|earned_points/);
 });
 
 test("activity_progress IDE autosave module remains separate from item progress", () => {

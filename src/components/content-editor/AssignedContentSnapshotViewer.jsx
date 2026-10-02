@@ -17,6 +17,11 @@ import {
   resolveItemCompletionRule,
   resolveVideoCompletionThreshold,
 } from "../../platform/activityItemProgress.js";
+import {
+  formatActiveTime,
+  formatPerformanceDisplay,
+  formatProgressDisplay,
+} from "../../platform/learningStatus.js";
 import { normalizeReadOnlyFencedCode } from "./normalizeReadOnlyFencedCode.js";
 
 function ReadOnlyDoc({ docKey, initialContent }) {
@@ -105,7 +110,31 @@ function statusLabel(status) {
   }
 }
 
-function ProgressPercent({ aggregates }) {
+function ProgressPercent({ aggregates, learningStatus = null }) {
+  if (learningStatus?.content) {
+    const { progress, engagement, performance } = learningStatus.content;
+    return (
+      <p className="auth-card__muted" style={{ margin: "0.25rem 0 0" }} aria-live="polite">
+        <span>
+          Progreso:{" "}
+          <strong>
+            {formatProgressDisplay(progress)}
+            {progress && !progress.emptyRequired
+              ? ` (${progress.completed}/${progress.total})`
+              : ""}
+          </strong>
+        </span>
+        {" · "}
+        <span>
+          Tiempo activo: <strong>{formatActiveTime(engagement?.active_ms)}</strong>
+        </span>
+        {" · "}
+        <span>
+          Rendimiento: <strong>{formatPerformanceDisplay(performance)}</strong>
+        </span>
+      </p>
+    );
+  }
   if (!aggregates?.trackable) return null;
   const { percent, completed, total, emptyRequired } = aggregates.content;
   return (
@@ -454,7 +483,7 @@ function ReaderOutline({
   );
 }
 
-function OverviewMode({ model, onOpenLesson, aggregates }) {
+function OverviewMode({ model, onOpenLesson, aggregates, learningStatus = null }) {
   const firstLessonId = model.orderedLessons[0]?.id;
 
   return (
@@ -464,7 +493,7 @@ function OverviewMode({ model, onOpenLesson, aggregates }) {
         {model.description ? (
           <p className="pbc-content-reader__description">{model.description}</p>
         ) : null}
-        <ProgressPercent aggregates={aggregates} />
+        <ProgressPercent aggregates={aggregates} learningStatus={learningStatus} />
         {firstLessonId ? (
           <button
             type="button"
@@ -663,6 +692,7 @@ function LessonMode({
 function ProgressiveMultiLessonReader({
   snapshot,
   aggregates,
+  learningStatus = null,
   progressByItemId,
   interactive,
   busyId,
@@ -686,7 +716,12 @@ function ProgressiveMultiLessonReader({
 
   if (!selectedLessonId) {
     return (
-      <OverviewMode model={model} onOpenLesson={setSelectedLessonId} aggregates={aggregates} />
+      <OverviewMode
+        model={model}
+        onOpenLesson={setSelectedLessonId}
+        aggregates={aggregates}
+        learningStatus={learningStatus}
+      />
     );
   }
 
@@ -719,6 +754,7 @@ function ProgressiveMultiLessonReader({
 export default function AssignedContentSnapshotViewer({
   snapshot,
   aggregates = null,
+  learningStatus = null,
   progressByItemId = null,
   interactive = false,
   busyId = null,
@@ -736,12 +772,17 @@ export default function AssignedContentSnapshotViewer({
 
   if (type === "exercise" || type === "task") {
     return (
-      <ExerciseTaskSurface
-        type={type}
-        snapshot={snapshot}
-        engagement={engagement}
-        surfaceProps={surfaceProps}
-      />
+      <>
+        {learningStatus ? (
+          <ProgressPercent aggregates={aggregates} learningStatus={learningStatus} />
+        ) : null}
+        <ExerciseTaskSurface
+          type={type}
+          snapshot={snapshot}
+          engagement={engagement}
+          surfaceProps={surfaceProps}
+        />
+      </>
     );
   }
 
@@ -752,6 +793,7 @@ export default function AssignedContentSnapshotViewer({
         snapshot={snapshot}
         items={items}
         aggregates={aggregates}
+        learningStatus={learningStatus}
         progressMap={progressMap}
         interactive={interactive}
         busyId={busyId}
@@ -770,6 +812,7 @@ export default function AssignedContentSnapshotViewer({
         <ProgressiveMultiLessonReader
           snapshot={snapshot}
           aggregates={aggregates}
+          learningStatus={learningStatus}
           progressByItemId={progressMap}
           interactive={interactive}
           busyId={busyId}
@@ -788,6 +831,7 @@ function LessonDocumentSurface({
   snapshot,
   items,
   aggregates,
+  learningStatus = null,
   progressMap,
   interactive,
   busyId,
@@ -807,7 +851,7 @@ function LessonDocumentSurface({
 
   return (
     <div className="pbc-lesson-workspace pbc-lesson-workspace--preview pbc-assigned-lesson" {...surfaceProps}>
-      <ProgressPercent aggregates={aggregates} />
+      <ProgressPercent aggregates={aggregates} learningStatus={learningStatus} />
       <div
         onPointerDown={() => {
           if (!engagement) return;

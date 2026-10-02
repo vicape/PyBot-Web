@@ -32,6 +32,11 @@ import {
   startActivityItemProgress,
 } from "../platform/activityItemProgress.js";
 import { useActivityEngagement } from "../platform/useActivityEngagement.js";
+import { fetchActivityEngagementSegments } from "../platform/activityEngagementSync.js";
+import {
+  deriveLearningStatusAggregates,
+  resolveActivityPerformance,
+} from "../platform/learningStatus.js";
 import {
   closeSubmission,
   fetchActiveReopen,
@@ -134,6 +139,7 @@ export default function ActivityPage() {
   const [snapshot, setSnapshot] = useState(null);
   const [itemProgressMap, setItemProgressMap] = useState({});
   const [itemProgressBusy, setItemProgressBusy] = useState(null);
+  const [engagementSegments, setEngagementSegments] = useState([]);
   const [superAdmin, setSuperAdmin] = useState(false);
   const focusRowRef = useRef(null);
   const didFocusStudent = useRef(false);
@@ -319,16 +325,21 @@ export default function ActivityPage() {
     const student = isCourseStudent({ courseRole: nextCourseRole });
 
     // Point 4: pedagogical item progress (distinct from IDE activity_progress)
+    // Point 5/6: engagement segments for active-time dimension
     const snap = act.content_snapshot || null;
+    const progressUserId =
+      isCourseStudent({ courseRole: nextCourseRole })
+        ? user.id
+        : focusStudentId || user.id;
     if (snap && listSnapshotItems(snap).length > 0) {
-      const progressUserId =
-        isCourseStudent({ courseRole: nextCourseRole })
-          ? user.id
-          : focusStudentId || user.id;
       const { map } = await fetchActivityItemProgress(activityId, progressUserId);
       setItemProgressMap(map || {});
     } else {
       setItemProgressMap({});
+    }
+    {
+      const eng = await fetchActivityEngagementSegments(activityId, progressUserId);
+      setEngagementSegments(eng.rows || []);
     }
 
     if (student) {
@@ -429,6 +440,33 @@ export default function ActivityPage() {
     () => deriveProgressAggregates(snapshotItems, itemProgressMap),
     [snapshotItems, itemProgressMap],
   );
+  const activityPerformance = useMemo(
+    () =>
+      resolveActivityPerformance({
+        maxPoints: activity?.max_points,
+        grade: mySubmission?.grade,
+        status: mySubmission?.status,
+        rubricScores: myRubricScores,
+        rubricCriteria,
+      }),
+    [activity?.max_points, mySubmission?.grade, mySubmission?.status, myRubricScores, rubricCriteria],
+  );
+  const learningStatus = useMemo(() => {
+    if (!snapshotItems.length && !activityPerformance?.assessable) return null;
+    return deriveLearningStatusAggregates({
+      snapshot,
+      snapshotItems,
+      progressByItemId: itemProgressMap,
+      engagementSegments,
+      activityPerformance: activityPerformance?.assessable ? activityPerformance : null,
+    });
+  }, [
+    snapshot,
+    snapshotItems,
+    itemProgressMap,
+    engagementSegments,
+    activityPerformance,
+  ]);
 
   const handleStartItem = useCallback(
     async (item) => {
@@ -1057,6 +1095,7 @@ export default function ActivityPage() {
               <AssignedContentSnapshotViewer
                 snapshot={snapshot}
                 aggregates={snapshotItems.length ? itemAggregates : null}
+                learningStatus={isStudent ? learningStatus : null}
                 progressByItemId={itemProgressMap}
                 interactive={Boolean(isStudent && snapshotItems.length)}
                 busyId={itemProgressBusy}
