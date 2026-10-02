@@ -70,14 +70,18 @@ export default function PyBotClassCoursePage() {
   const [importBusy, setImportBusy] = useState(false);
   const [importPicker, setImportPicker] = useState(null);
 
+  const isPersonalCourseCreator =
+    course?.org_id == null && course?.created_by != null && course?.created_by === user?.id;
+
   const context = useMemo(
     () =>
       resolveCourseContext({
         orgRole: myRole,
         courseRole,
         isSuperAdmin: superAdmin,
+        isPersonalCourseCreator,
       }),
-    [myRole, courseRole, superAdmin],
+    [myRole, courseRole, superAdmin, isPersonalCourseCreator],
   );
 
   const { mode, displayRole, capabilities } = context;

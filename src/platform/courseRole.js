@@ -101,6 +101,7 @@ export function canManageRoster({ orgRole = null, courseRole = null } = {}) {
  *   courseRole?: string | null,
  *   isSuperAdmin?: boolean,
  *   preferredRole?: string | null,
+ *   isPersonalCourseCreator?: boolean,
  * }} opts
  * @returns {{
  *   mode: "teaching"|"studying"|"admin"|"none",
@@ -120,6 +121,7 @@ export function resolveCourseContext({
   courseRole = null,
   isSuperAdmin = false,
   preferredRole = null,
+  isPersonalCourseCreator = false,
 } = {}) {
   // profiles.preferred_role must not grant permissions / must not be the effective role resolver
   void preferredRole;
@@ -148,9 +150,11 @@ export function resolveCourseContext({
     mode = COURSE_ACCESS_MODES.TEACHING;
     displayRole = COURSE_DISPLAY_ROLES.TEACHER;
   } else if (normalized === "teacher") {
-    // course teacher sin staff de org → Co-docente / teaching
+    // Personal course creator → Docente; other explicit teacher → Co-docente
     mode = COURSE_ACCESS_MODES.TEACHING;
-    displayRole = COURSE_DISPLAY_ROLES.CO_TEACHER;
+    displayRole = isPersonalCourseCreator
+      ? COURSE_DISPLAY_ROLES.TEACHER
+      : COURSE_DISPLAY_ROLES.CO_TEACHER;
   } else if (isSuperAdmin === true) {
     // superadmin sin rol pedagógico → Superadmin / admin (neutro)
     mode = COURSE_ACCESS_MODES.ADMIN;

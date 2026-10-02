@@ -95,6 +95,102 @@ test("ROLE-03 course-specific teacher -> Co-docente, teaching", () => {
   assert.equal(ctx.capabilities.canTeachCourse, true);
 });
 
+test("personal course creator + explicit teacher => displayRole teacher", () => {
+  const ctx = resolveCourseContext({
+    orgRole: null,
+    courseRole: "teacher",
+    isPersonalCourseCreator: true,
+  });
+  assert.equal(ctx.mode, COURSE_ACCESS_MODES.TEACHING);
+  assert.equal(ctx.displayRole, "teacher");
+  assert.equal(formatCurrentRoleLabel(ctx.displayRole, tEs), "Rol actual: Docente");
+  assert.equal(ctx.capabilities.canTeachCourse, true);
+  assert.equal(ctx.capabilities.canGradeCourse, true);
+  assert.equal(ctx.capabilities.canManageRoster, true);
+});
+
+test("personal non-creator explicit teacher => co_teacher", () => {
+  const ctx = resolveCourseContext({
+    orgRole: null,
+    courseRole: "teacher",
+    isPersonalCourseCreator: false,
+  });
+  assert.equal(ctx.mode, COURSE_ACCESS_MODES.TEACHING);
+  assert.equal(ctx.displayRole, "co_teacher");
+  assert.equal(ctx.capabilities.canTeachCourse, true);
+  assert.equal(ctx.capabilities.canGradeCourse, true);
+  assert.equal(ctx.capabilities.canManageRoster, true);
+});
+
+test("personal course: explicit student still wins over isPersonalCourseCreator", () => {
+  const ctx = resolveCourseContext({
+    orgRole: null,
+    courseRole: "student",
+    isPersonalCourseCreator: true,
+  });
+  assert.equal(ctx.mode, COURSE_ACCESS_MODES.STUDYING);
+  assert.equal(ctx.displayRole, "student");
+  assert.equal(ctx.capabilities.canTeachCourse, false);
+  assert.equal(ctx.capabilities.canStudyCourse, true);
+});
+
+test("personal course flag does not change org staff display or capabilities", () => {
+  const withFlag = resolveCourseContext({
+    orgRole: "teacher",
+    courseRole: null,
+    isPersonalCourseCreator: true,
+  });
+  const withoutFlag = resolveCourseContext({
+    orgRole: "teacher",
+    courseRole: null,
+    isPersonalCourseCreator: false,
+  });
+  assert.equal(withFlag.mode, COURSE_ACCESS_MODES.TEACHING);
+  assert.equal(withFlag.displayRole, "teacher");
+  assert.equal(withoutFlag.displayRole, "teacher");
+  assert.equal(withFlag.capabilities.canTeachCourse, true);
+  assert.equal(withFlag.capabilities.canGradeCourse, true);
+  assert.equal(withFlag.capabilities.canManageRoster, true);
+  assert.equal(canTeachCourse({ orgRole: "teacher", courseRole: null }), true);
+  assert.equal(canGradeCourse({ orgRole: "teacher", courseRole: null }), true);
+  assert.equal(canManageRoster({ orgRole: "teacher", courseRole: null }), true);
+});
+
+test("isPersonalCourseCreator is presentation-only: capabilities match without flag", () => {
+  const creator = resolveCourseContext({
+    orgRole: null,
+    courseRole: "teacher",
+    isPersonalCourseCreator: true,
+  });
+  const coTeacher = resolveCourseContext({
+    orgRole: null,
+    courseRole: "teacher",
+    isPersonalCourseCreator: false,
+  });
+  assert.equal(creator.capabilities.canTeachCourse, coTeacher.capabilities.canTeachCourse);
+  assert.equal(creator.capabilities.canGradeCourse, coTeacher.capabilities.canGradeCourse);
+  assert.equal(creator.capabilities.canManageRoster, coTeacher.capabilities.canManageRoster);
+  assert.equal(canTeachCourse({ orgRole: null, courseRole: "teacher" }), true);
+  assert.equal(canGradeCourse({ orgRole: null, courseRole: "teacher" }), true);
+  assert.equal(canManageRoster({ orgRole: null, courseRole: "teacher" }), true);
+});
+
+test("fetchCourseBasics includes created_by; page wires isPersonalCourseCreator", () => {
+  const api = readSrc("src/platform/pybotClassApi.js");
+  assert.match(api, /export async function fetchCourseBasics/);
+  assert.match(
+    api,
+    /select\("id, title, org_id, created_by, classroom_course_id, organizations\(name\)"\)/,
+  );
+
+  const page = readSrc("src/pages/PyBotClassCoursePage.jsx");
+  assert.match(page, /isPersonalCourseCreator/);
+  assert.match(page, /course\?\.org_id == null/);
+  assert.match(page, /course\?\.created_by === user\?\.id/);
+  assert.match(page, /isPersonalCourseCreator/);
+  assert.doesNotMatch(page, /preferred_role|preferredRole/);
+});
+
 test("ROLE-04 student -> Alumno, studying", () => {
   const ctx = resolveCourseContext({ orgRole: "student", courseRole: "student" });
   assert.equal(ctx.mode, COURSE_ACCESS_MODES.STUDYING);

@@ -210,7 +210,7 @@ export async function fetchCourseBasics(courseId) {
   if (!sb || !courseId) return { course: null, error: "missing_args" };
   const { data, error } = await sb
     .from("courses")
-    .select("id, title, org_id, classroom_course_id, organizations(name)")
+    .select("id, title, org_id, created_by, classroom_course_id, organizations(name)")
     .eq("id", courseId)
     .maybeSingle();
   if (error) return { course: null, error: error.message };
