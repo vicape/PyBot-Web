@@ -1423,7 +1423,7 @@
 }
 
 .pbc-course-grid--courses .pbc-course-card--courses:only-child {
-  max-width: 560px;
+  max-width: 350px;
 }
 
 .pbc-course-card--courses {
