@@ -1,7 +1,9 @@
 import { t } from "../../../i18n.js";
 import { UI_BACKGROUNDS, UI_THEMES, isValidHexColor } from "../../../platform/appearanceApi.js";
+import PbcIcon from "../PbcIcon.jsx";
 
 const THEME_KEYS = { system: "pcThemeSystem", light: "pcThemeLight", dark: "pcThemeDark" };
+const THEME_ICONS = { light: "light", dark: "dark" };
 const BG_KEYS = {
   default: "pcBackgroundDefault",
   clean: "pcBackgroundClean",
@@ -29,6 +31,9 @@ export default function AppearanceSettings({ appearance, onChange, disabled = fa
               onClick={() => set({ theme })}
               disabled={disabled}
             >
+              {THEME_ICONS[theme] ? (
+                <PbcIcon name={THEME_ICONS[theme]} size={14} aria-hidden />
+              ) : null}
               {t(THEME_KEYS[theme])}
             </button>
           ))}

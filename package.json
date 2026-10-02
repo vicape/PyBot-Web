@@ -25,6 +25,7 @@
     "@supabase/supabase-js": "^2.105.4",
     "blockly": "^13.0.0",
     "esptool-js": "^0.6.1",
+    "lucide-react": "^1.50.0",
     "monaco-editor": "^0.55.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
