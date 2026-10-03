@@ -316,7 +316,7 @@ export default function ContentCard({
 
   if (isLibrary) {
     return (
-      <article className="pbc-content-card pbc-content-card--library" style={{ minWidth: 0, maxWidth: "100%" }}>
+      <article className="pbc-content-card pbc-content-card--library" style={{ minWidth: 0 }}>
         <div className="pbc-content-card__body">
           <div className="pbc-content-card__top">
             <div className="pbc-content-card__lead">
