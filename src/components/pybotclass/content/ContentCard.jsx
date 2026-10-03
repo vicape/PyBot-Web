@@ -15,6 +15,7 @@ import {
   IconSharedCommunity,
   IconSharedCourses,
 } from "../illustrations/ActionIcons.jsx";
+import PbcIcon from "../PbcIcon.jsx";
 import ContentMetaChips from "./ContentMetaChips.jsx";
 
 function formatDate(iso) {
@@ -81,6 +82,34 @@ function UsageBlock({ metrics, unavailable }) {
   );
 }
 
+function StatusBadges({ content, isOwner }) {
+  return (
+    <>
+      <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon">
+        <span aria-hidden>
+          {content.status === "published" ? <IconPublished size={12} /> : <IconDraft size={12} />}
+        </span>
+        {content.status === "published" ? t("pcPublished") : t("pcDraft")}
+      </span>
+      {isOwner ? (
+        <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon" title={t("pcVisibility")}>
+          <span aria-hidden>
+            <ShareBadgeIcon visibility={content.visibility} />
+          </span>
+          {shareBadgeLabel(content.visibility)}
+        </span>
+      ) : content.visibility && content.visibility !== "private" ? (
+        <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon">
+          <span aria-hidden>
+            {content.visibility === "community" ? <IconSharedCommunity /> : <IconSharedCourses />}
+          </span>
+          {content.visibility === "community" ? t("pcCommunity") : t("pcCourses")}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * @param {{
  *   content: object,
@@ -94,7 +123,10 @@ function UsageBlock({ metrics, unavailable }) {
  *   usageMetrics?: object | null,
  *   usageUnavailable?: boolean,
  *   emphasizeAssign?: boolean,
+ *   variant?: "default" | "library",
  * }} props
+ *
+ * Personal library view `/dashboard/content`; MyContentPage must invoke ContentCard with the library variant; ContentCard default must preserve non-library uses; the library variant must add the class `pbc-content-card--library`.
  */
 export default function ContentCard({
   content,
@@ -108,9 +140,11 @@ export default function ContentCard({
   usageMetrics = null,
   usageUnavailable = false,
   emphasizeAssign = false,
+  variant = "default",
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const isLibrary = variant === "library";
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -135,6 +169,192 @@ export default function ContentCard({
   // Menu keeps secondary actions; Assign stays in menu only when not shown directly.
   const showMenu = isOwner || showCopy || (canAssign && !showDirectAssign);
 
+  const menu = showMenu ? (
+    <div className="pbc-content-card__menu" ref={menuRef}>
+      <button
+        type="button"
+        className="pbc-content-card__menu-btn"
+        aria-label={t("pcMoreOptions")}
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setMenuOpen((v) => !v);
+        }}
+      >
+        {isLibrary ? (
+          <span aria-hidden>
+            <PbcIcon name="more" size={18} />
+          </span>
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="5" cy="12" r="1.75" fill="currentColor" />
+            <circle cx="12" cy="12" r="1.75" fill="currentColor" />
+            <circle cx="19" cy="12" r="1.75" fill="currentColor" />
+          </svg>
+        )}
+      </button>
+
+      {menuOpen ? (
+        <div className="pbc-content-card__menu-panel" role="menu">
+          {isOwner ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="pbc-content-card__menu-item"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setMenuOpen(false);
+                onShare?.(content);
+              }}
+            >
+              <span aria-hidden>
+                <IconShare size={16} />
+              </span>
+              {t("pcManageSharing")}
+            </button>
+          ) : null}
+          {canAssign && !showDirectAssign ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="pbc-content-card__menu-item"
+              title={`${t("pcAssign")} — no ownership`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setMenuOpen(false);
+                onAssign?.(content);
+              }}
+            >
+              <span aria-hidden>
+                <IconAssign size={16} />
+              </span>
+              {t("pcAssign")}
+            </button>
+          ) : null}
+          {showCopy ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="pbc-content-card__menu-item"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setMenuOpen(false);
+                onCopy?.(content);
+              }}
+            >
+              <span aria-hidden>
+                <IconCopy size={16} />
+              </span>
+              {t("pcCreateCopy")}
+            </button>
+          ) : null}
+          {isOwner ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="pbc-content-card__menu-item"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onEdit?.(content);
+                }}
+              >
+                <span aria-hidden>
+                  <IconEdit size={16} />
+                </span>
+                {t("pcEdit")}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="pbc-content-card__menu-item pbc-content-card__menu-item--danger"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onDelete?.(content);
+                }}
+              >
+                {t("pcDelete")}
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  ) : null;
+
+  const directActions = (
+    <div className="pbc-content-card__actions-row pbc-content-card__direct-actions">
+      <Link to={`/dashboard/content/${content.id}`} className="pbc-content-card__link">
+        <span aria-hidden>
+          {isLibrary ? <PbcIcon name="view" size={16} /> : <IconOpen size={16} />}
+        </span>
+        {t("pcOpen")}
+      </Link>
+      {showDirectAssign ? (
+        <button
+          type="button"
+          className={`pbc-btn pbc-btn--sm ${emphasizeAssign ? "pbc-btn--primary" : "pbc-btn--ghost"}`}
+          onClick={() => onAssign?.(content)}
+        >
+          <span aria-hidden>
+            {isLibrary ? <PbcIcon name="assignment" size={16} /> : <IconAssign size={16} />}
+          </span>
+          {t("pcAssign")}
+        </button>
+      ) : null}
+    </div>
+  );
+
+  if (isLibrary) {
+    return (
+      <article className="pbc-content-card pbc-content-card--library" style={{ minWidth: 0, maxWidth: "100%" }}>
+        <div className="pbc-content-card__body">
+          <div className="pbc-content-card__top">
+            <div className="pbc-content-card__lead">
+              <span className="pbc-content-card__icon" aria-hidden>
+                <PbcIcon name="content" size={20} />
+              </span>
+              <div className="pbc-content-card__identity">
+                <h2 className="pbc-content-card__title">{content.title}</h2>
+                {content.description ? <p className="pbc-content-card__desc">{content.description}</p> : null}
+              </div>
+            </div>
+            <div className="pbc-content-card__header-right">
+              <StatusBadges content={content} isOwner={isOwner} />
+              {menu}
+            </div>
+          </div>
+
+          <div className="pbc-content-card__summary">
+            <span className="pbc-content-card__metric">
+              <span className="pbc-content-card__metric-icon" aria-hidden>
+                <PbcIcon name="content" size={14} />
+              </span>
+              <span className="pbc-content-card__metric-value">{content.unit_count ?? 0}</span>
+              <span className="pbc-content-card__metric-label">{t("pcUnits")}</span>
+            </span>
+            <span className="pbc-content-card__meta-secondary">
+              {t("pcModified")} {formatDate(content.updated_at)}
+            </span>
+          </div>
+
+          <ContentMetaChips content={content} showAuthor={Boolean(content.owner_name) && !isOwner} />
+          {isOwner ? <UsageBlock metrics={usageMetrics} unavailable={usageUnavailable} /> : null}
+        </div>
+        {directActions}
+      </article>
+    );
+  }
+
   return (
     <article className="pbc-content-card" style={{ minWidth: 0, maxWidth: "100%" }}>
       <div className="pbc-content-card__header">
@@ -143,147 +363,8 @@ export default function ContentCard({
         </span>
 
         <div className="pbc-content-card__header-right">
-          <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon">
-            <span aria-hidden>
-              {content.status === "published" ? <IconPublished size={12} /> : <IconDraft size={12} />}
-            </span>
-            {content.status === "published" ? t("pcPublished") : t("pcDraft")}
-          </span>
-          {isOwner ? (
-            <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon" title={t("pcVisibility")}>
-              <span aria-hidden>
-                <ShareBadgeIcon visibility={content.visibility} />
-              </span>
-              {shareBadgeLabel(content.visibility)}
-            </span>
-          ) : content.visibility && content.visibility !== "private" ? (
-            <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon">
-              <span aria-hidden>
-                {content.visibility === "community" ? (
-                  <IconSharedCommunity />
-                ) : (
-                  <IconSharedCourses />
-                )}
-              </span>
-              {content.visibility === "community" ? t("pcCommunity") : t("pcCourses")}
-            </span>
-          ) : null}
-
-          {showMenu ? (
-            <div className="pbc-content-card__menu" ref={menuRef}>
-              <button
-                type="button"
-                className="pbc-content-card__menu-btn"
-                aria-label={t("pcMoreOptions")}
-                aria-expanded={menuOpen}
-                aria-haspopup="menu"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setMenuOpen((v) => !v);
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <circle cx="5" cy="12" r="1.75" fill="currentColor" />
-                  <circle cx="12" cy="12" r="1.75" fill="currentColor" />
-                  <circle cx="19" cy="12" r="1.75" fill="currentColor" />
-                </svg>
-              </button>
-
-              {menuOpen ? (
-                <div className="pbc-content-card__menu-panel" role="menu">
-                  {isOwner ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="pbc-content-card__menu-item"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setMenuOpen(false);
-                        onShare?.(content);
-                      }}
-                    >
-                      <span aria-hidden>
-                        <IconShare size={16} />
-                      </span>
-                      {t("pcManageSharing")}
-                    </button>
-                  ) : null}
-                  {canAssign && !showDirectAssign ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="pbc-content-card__menu-item"
-                      title={`${t("pcAssign")} — no ownership`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setMenuOpen(false);
-                        onAssign?.(content);
-                      }}
-                    >
-                      <span aria-hidden>
-                        <IconAssign size={16} />
-                      </span>
-                      {t("pcAssign")}
-                    </button>
-                  ) : null}
-                  {showCopy ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="pbc-content-card__menu-item"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setMenuOpen(false);
-                        onCopy?.(content);
-                      }}
-                    >
-                      <span aria-hidden>
-                        <IconCopy size={16} />
-                      </span>
-                      {t("pcCreateCopy")}
-                    </button>
-                  ) : null}
-                  {isOwner ? (
-                    <>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="pbc-content-card__menu-item"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setMenuOpen(false);
-                          onEdit?.(content);
-                        }}
-                      >
-                        <span aria-hidden>
-                          <IconEdit size={16} />
-                        </span>
-                        {t("pcEdit")}
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="pbc-content-card__menu-item pbc-content-card__menu-item--danger"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setMenuOpen(false);
-                          onDelete?.(content);
-                        }}
-                      >
-                        {t("pcDelete")}
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          <StatusBadges content={content} isOwner={isOwner} />
+          {menu}
         </div>
       </div>
 
@@ -299,26 +380,7 @@ export default function ContentCard({
       </div>
       <ContentMetaChips content={content} showAuthor={Boolean(content.owner_name) && !isOwner} />
       {isOwner ? <UsageBlock metrics={usageMetrics} unavailable={usageUnavailable} /> : null}
-      <div className="pbc-content-card__actions-row pbc-content-card__direct-actions">
-        <Link to={`/dashboard/content/${content.id}`} className="pbc-content-card__link">
-          <span aria-hidden>
-            <IconOpen size={16} />
-          </span>
-          {t("pcOpen")}
-        </Link>
-        {showDirectAssign ? (
-          <button
-            type="button"
-            className={`pbc-btn pbc-btn--sm ${emphasizeAssign ? "pbc-btn--primary" : "pbc-btn--ghost"}`}
-            onClick={() => onAssign?.(content)}
-          >
-            <span aria-hidden>
-              <IconAssign size={16} />
-            </span>
-            {t("pcAssign")}
-          </button>
-        ) : null}
-      </div>
+      {directActions}
     </article>
   );
 }

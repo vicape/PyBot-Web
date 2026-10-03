@@ -146,7 +146,7 @@ export default function MyContentPage() {
         </p>
       ) : null}
 
-      <div className="pbc-content-page">
+      <div className="pbc-content-page pbc-content-page--library">
         <header className="pbc-hero-block pbc-content-page__head">
           <div className="pbc-hero-block__identity">
             <span aria-hidden>
@@ -198,11 +198,12 @@ export default function MyContentPage() {
             </div>
           </div>
         ) : (
-          <div className="pbc-content-grid">
+          <div className="pbc-content-grid pbc-content-grid--library">
             {contents.map((c) => (
               <ContentCard
                 key={c.id}
                 content={c}
+                variant="library"
                 isOwner
                 canAssign={canAssign}
                 onEdit={setEditing}
