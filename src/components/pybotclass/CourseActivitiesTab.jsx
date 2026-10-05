@@ -34,6 +34,7 @@ import {
   PbcListItem,
   PbcSection,
 } from "./PyBotClassUi.jsx";
+import PbcOverflowMenu from "./PbcOverflowMenu.jsx";
 import { UxIcon } from "./illustrations/UxIcons.jsx";
 
 function activitiesSectionTitle() {
@@ -638,24 +639,30 @@ export default function CourseActivitiesTab({
             >
               + {t("pcCreateActivity")}
             </button>
-            {onAssignContent ? (
-              <button
-                type="button"
-                className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                onClick={onAssignContent}
-              >
-                {t("pcAssignContent")}
-              </button>
-            ) : null}
-            {onImportClassroom ? (
-              <button
-                type="button"
-                className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                disabled={importBusy}
-                onClick={() => void onImportClassroom()}
-              >
-                {importBusy ? t("pcImporting") : t("pcImportClassroom")}
-              </button>
+            {onAssignContent || onImportClassroom ? (
+              <PbcOverflowMenu>
+                {onAssignContent ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="pbc-overflow-menu__item"
+                    onClick={onAssignContent}
+                  >
+                    {t("pcAssignContent")}
+                  </button>
+                ) : null}
+                {onImportClassroom ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="pbc-overflow-menu__item"
+                    disabled={importBusy}
+                    onClick={() => void onImportClassroom()}
+                  >
+                    {importBusy ? t("pcImporting") : t("pcImportClassroom")}
+                  </button>
+                ) : null}
+              </PbcOverflowMenu>
             ) : null}
           </>
         }
@@ -678,15 +685,6 @@ export default function CourseActivitiesTab({
                 >
                   {t("pcCreateActivity")}
                 </button>
-                {onAssignContent ? (
-                  <button
-                    type="button"
-                    className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                    onClick={onAssignContent}
-                  >
-                    {t("pcAssignContent")}
-                  </button>
-                ) : null}
               </div>
             }
           />
@@ -700,16 +698,19 @@ export default function CourseActivitiesTab({
                 badges={activityListBadges(a)}
                 actions={
                   <>
-                    <button
-                      type="button"
-                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                      onClick={() => void openEdit(a)}
-                    >
-                      {t("pcEdit")}
-                    </button>
                     <Link className="pbc-btn pbc-btn--primary pbc-btn--sm" to={`/actividad/${a.id}`}>
                       {t("pcReview")}
                     </Link>
+                    <PbcOverflowMenu>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="pbc-overflow-menu__item"
+                        onClick={() => void openEdit(a)}
+                      >
+                        {t("pcEdit")}
+                      </button>
+                    </PbcOverflowMenu>
                   </>
                 }
               />

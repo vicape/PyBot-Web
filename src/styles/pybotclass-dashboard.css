@@ -5484,6 +5484,89 @@
   gap: 0.5rem;
   max-width: 100%;
 }
+
+/* Reusable PyBotClass overflow menu (progressive disclosure) */
+.pbc-overflow-menu {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+.pbc-overflow-menu__trigger {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--pbc-text-muted, #64748b);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pbc-overflow-menu__trigger:hover {
+  background: var(--pbc-panel, #ffffff);
+  border-color: var(--pbc-border, #e5eaf2);
+  color: var(--pbc-text, #0f172a);
+}
+.pbc-overflow-menu__trigger:focus-visible {
+  outline: 2px solid var(--pbc-focus, #3b82f6);
+  outline-offset: 2px;
+}
+.pbc-overflow-menu__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  min-width: 160px;
+  max-width: min(240px, 90vw);
+  padding: 0.35rem;
+  border-radius: 10px;
+  border: 1px solid var(--pbc-border, #e5eaf2);
+  background: var(--pbc-panel-solid, #ffffff);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+  display: flex;
+  flex-direction: column;
+}
+.pbc-overflow-menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+  padding: 0.55rem 0.7rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pbc-text, #334155);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.pbc-overflow-menu__item:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.pbc-overflow-menu__item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-overflow-menu__panel {
+  background: var(--pbc-panel-solid);
+  border-color: var(--pbc-border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-overflow-menu__trigger {
+  color: var(--pbc-text-muted);
+}
+.pbc-dashboard[data-pbc-theme="dark"] .pbc-overflow-menu__trigger:hover {
+  background: var(--pbc-panel);
+  border-color: var(--pbc-border);
+  color: var(--pbc-text);
+}
 .pbc-dashboard .pbc-course-header__back {
   color: var(--pbc-primary, #2F86F6);
 }

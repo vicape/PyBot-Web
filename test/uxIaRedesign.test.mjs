@@ -181,7 +181,7 @@ test("AC8–AC10: course contextual shortcuts reuse canonical flows", () => {
   assert.match(coursePageSrc, /focus: "invite"/);
   assert.match(coursePageSrc, /assignToCourse=/);
   assert.match(coursePageSrc, /goSubmissions/);
-  assert.match(coursePageSrc, /pbc-course-quick-actions/);
+  assert.doesNotMatch(coursePageSrc, /pbc-course-quick-actions/);
   assert.match(coursePageSrc, /canTeach \?/);
 });
 

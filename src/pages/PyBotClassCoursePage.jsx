@@ -218,27 +218,6 @@ export default function PyBotClassCoursePage() {
           classroomLinked={!!course?.classroom_course_id}
           backTo="/dashboard/classes"
           backLabel={t("pcMyClassesBack")}
-          actions={
-            canTeach ? (
-              <div className="pbc-course-quick-actions">
-                <button type="button" className="pbc-btn pbc-btn--primary pbc-btn--sm" onClick={goCreateActivity}>
-                  + {t("pcCreateActivity")}
-                </button>
-                <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={goAddStudents}>
-                  + {t("pcAddStudents")}
-                </button>
-                <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={goAssignContent}>
-                  {t("pcAssignContent")}
-                </button>
-                <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={goSubmissions}>
-                  {t("pcViewSubmissions")}
-                </button>
-                <button type="button" className="pbc-btn pbc-btn--ghost pbc-btn--sm" onClick={goIntegrations}>
-                  {t("pcTabIntegrations")}
-                </button>
-              </div>
-            ) : null
-          }
         />
 
         {profileError ? <PbcAlert variant="error">{profileError}</PbcAlert> : null}
