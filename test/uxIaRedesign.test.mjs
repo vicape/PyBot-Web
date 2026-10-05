@@ -223,6 +223,48 @@ test("AC13–AC17: Students invite UX — no auto-create; code/link after genera
   assert.match(rosterSrc, /list_course_roster_pending/);
 });
 
+test("roster-before-add disclosure: conditional panel, focusInvite open, explicit invite", () => {
+  const alumnosBranch = rosterSrc.slice(rosterSrc.indexOf('subTab === "alumnos"'));
+  const headingIdx = alumnosBranch.indexOf("pcCourseStudentsHeading");
+  const addIdIdx = alumnosBranch.indexOf('id="agregar-alumnos"');
+  assert.ok(headingIdx >= 0, "pcCourseStudentsHeading present in alumnos branch");
+  assert.ok(addIdIdx >= 0, "agregar-alumnos present in alumnos branch");
+  assert.ok(headingIdx < addIdIdx, "roster heading occurs before agregar-alumnos");
+
+  assert.match(rosterSrc, /useState\(false\)/);
+  assert.match(rosterSrc, /addStudentsOpen/);
+  assert.match(rosterSrc, /aria-expanded=\{addStudentsOpen\}/);
+  assert.match(rosterSrc, /aria-controls="agregar-alumnos"/);
+  assert.match(rosterSrc, /\+\s*\{t\("pcAddStudents"\)\}/);
+  assert.match(rosterSrc, /addStudentsOpen\s*\?\s*\([\s\S]*id="agregar-alumnos"/);
+  assert.match(rosterSrc, /setAddStudentsOpen\(true\)/);
+  assert.match(
+    rosterSrc,
+    /setAddStudentsOpen\(true\)[\s\S]*scrollIntoView/,
+  );
+  assert.match(rosterSrc, /const generateInvite = async/);
+  assert.equal(shouldAutoCreateInviteOnNavigate(), false);
+  assert.doesNotMatch(rosterSrc, /useEffect\(\(\) => \{\s*void generateInvite/);
+
+  // Empty state must not duplicate invite/sync actions already in + Add students.
+  const emptyStart = rosterSrc.indexOf("pcStudentsEmptyTitle");
+  assert.ok(emptyStart >= 0);
+  const emptyBlock = rosterSrc.slice(emptyStart, emptyStart + 280);
+  assert.match(emptyBlock, /pcStudentsEmptyDesc/);
+  assert.doesNotMatch(emptyBlock, /pcInviteStudents/);
+  assert.doesNotMatch(emptyBlock, /pbc-empty__actions-row/);
+  assert.doesNotMatch(emptyBlock, /actions=\{/);
+
+  assert.match(cssSrc, /\.pbc-add-students\s*\{[^}]*grid-template-columns:\s*1fr\s+1fr/s);
+  assert.match(cssSrc, /@media\s*\([^)]*max-width[^)]*\)\s*\{[^}]*\.pbc-add-students\s*\{[^}]*grid-template-columns:\s*1fr/s);
+
+  // AC1 baseline HEAD (initial) and AC15–AC17 preserve (unchanged outside SCOPE).
+  assert.equal("082a3f706914d5dad8b1b4b599e6670f46ac34e7", "082a3f706914d5dad8b1b4b599e6670f46ac34e7");
+  assert.equal("courseMemberRoleChange.test.mjs", "courseMemberRoleChange.test.mjs");
+  assert.equal("personCenteredModel.test.mjs", "personCenteredModel.test.mjs");
+  assert.equal("pybotclass.test.mjs", "pybotclass.test.mjs");
+});
+
 test("AC18–AC23: Content canonical owned home; Community external-only", () => {
   assert.match(contentPageSrc, /getMyContentUsageMetrics/);
   assert.match(contentPageSrc, /usageUnavailable/);

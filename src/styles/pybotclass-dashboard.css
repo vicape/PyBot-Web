@@ -5735,11 +5735,18 @@
 .pbc-dashboard[data-pbc-theme="dark"] .pbc-attention__cta {
   color: #FBBF24;
 }
+.pbc-add-students-trigger {
+  margin-top: 0.75rem;
+}
 .pbc-add-students {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 1rem;
+  margin-top: 0.75rem;
   margin-bottom: 0.5rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 .pbc-add-students__block {
   padding: 0.85rem 1rem;
@@ -5747,10 +5754,16 @@
   border-radius: 10px;
   background: var(--pbc-panel-solid, var(--pbc-panel));
   max-width: 100%;
+  min-width: 0;
 }
 .pbc-add-students__subtitle {
   margin: 0 0 0.35rem;
   font-size: 0.95rem;
+}
+@media (max-width: 720px) {
+  .pbc-add-students {
+    grid-template-columns: 1fr;
+  }
 }
 .pbc-invite-result {
   margin-top: 0.75rem;

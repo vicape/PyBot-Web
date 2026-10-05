@@ -212,6 +212,7 @@ export default function CourseRosterTab({
   const [roleErr, setRoleErr] = useState("");
   const [roleChangingId, setRoleChangingId] = useState(null);
   const [roleConfirm, setRoleConfirm] = useState(null);
+  const [addStudentsOpen, setAddStudentsOpen] = useState(false);
 
   // Personas is only mounted in teaching mode; keep explicit gate for the control.
   const canManageRoster = true;
@@ -223,10 +224,15 @@ export default function CourseRosterTab({
 
   useEffect(() => {
     if (!focusInvite) return;
+    setAddStudentsOpen(true);
+  }, [focusInvite]);
+
+  useEffect(() => {
+    if (!focusInvite || !addStudentsOpen) return;
     requestAnimationFrame(() => {
       inviteSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }, [focusInvite]);
+  }, [focusInvite, addStudentsOpen]);
 
   const load = useCallback(async () => {
     if (!sb || !courseId) return;
@@ -459,91 +465,6 @@ export default function CourseRosterTab({
 
       {subTab === "alumnos" ? (
         <>
-          <section
-            ref={inviteSectionRef}
-            id="agregar-alumnos"
-            className="pbc-add-students"
-            aria-labelledby="add-students-heading"
-          >
-            <h3 id="add-students-heading" className="pbc-section__title">
-              {t("pcAddStudents")}
-            </h3>
-
-            <div className="pbc-add-students__block">
-              <h4 className="pbc-add-students__subtitle">{t("pcInviteWithPyBot")}</h4>
-              <p className="auth-card__muted">{t("pcInviteWithPyBotDesc")}</p>
-              <button
-                type="button"
-                className="pbc-btn pbc-btn--primary pbc-btn--sm"
-                disabled={generatingInvite}
-                onClick={() => void generateInvite()}
-              >
-                {generatingInvite ? "…" : t("pcGenerateInvite")}
-              </button>
-              {inviteCode ? (
-                <div className="pbc-invite-result" role="status">
-                  <p>
-                    <strong>{t("pcInvitationCode")}:</strong> <code>{inviteCode}</code>
-                  </p>
-                  <p>
-                    <strong>{t("pcInvitationLinkLabel")}:</strong> <code>{inviteLink}</code>
-                  </p>
-                  <div className="pbc-invite-result__actions">
-                    <button
-                      type="button"
-                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                      onClick={async () => {
-                        const ok = await copyText(inviteCode);
-                        if (ok) setFeedback(t("pcCodeCopied"));
-                      }}
-                    >
-                      {t("pcCopyCode")}
-                    </button>
-                    <button
-                      type="button"
-                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                      onClick={async () => {
-                        const ok = await copyText(inviteLink);
-                        if (ok) setFeedback(t("pcLinkCopied"));
-                      }}
-                    >
-                      {t("pcCopyLink")}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="pbc-add-students__block">
-              <h4 className="pbc-add-students__subtitle">{t("pcInviteWithClassroom")}</h4>
-              <p className="auth-card__muted">{t("pcInviteWithClassroomDesc")}</p>
-              <p className="auth-card__muted">{t("pcClassroomOptionalHint")}</p>
-              {classroomCourseId ? (
-                <button
-                  type="button"
-                  className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                  disabled={syncBusy}
-                  onClick={() => void syncStudents()}
-                >
-                  {syncBusy ? t("pcSyncing") : t("pcSyncClassroom")}
-                </button>
-              ) : (
-                <div className="pbc-add-students__classroom-off">
-                  <p className="auth-card__muted">{t("pcClassroomNotLinkedCourse")}</p>
-                  {onGoIntegrations ? (
-                    <button
-                      type="button"
-                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                      onClick={onGoIntegrations}
-                    >
-                      {t("pcGoIntegrations")}
-                    </button>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          </section>
-
           <h3 className="pbc-section__title pbc-stack">
             {t("pcCourseStudentsHeading").replace("{n}", String(studentCount))}
           </h3>
@@ -554,29 +475,6 @@ export default function CourseRosterTab({
             <PbcEmpty
               title={t("pcStudentsEmptyTitle")}
               description={t("pcStudentsEmptyDesc")}
-              actions={
-                <div className="pbc-empty__actions-row">
-                  <button
-                    type="button"
-                    className="pbc-btn pbc-btn--primary pbc-btn--sm"
-                    onClick={() => {
-                      inviteSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }}
-                  >
-                    {t("pcInviteStudents")}
-                  </button>
-                  {classroomCourseId ? (
-                    <button
-                      type="button"
-                      className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                      disabled={syncBusy}
-                      onClick={() => void syncStudents()}
-                    >
-                      {t("pcSyncClassroom")}
-                    </button>
-                  ) : null}
-                </div>
-              }
             />
           ) : (
             <MemberList
@@ -590,6 +488,101 @@ export default function CourseRosterTab({
               roleChangingId={roleChangingId}
             />
           )}
+
+          <div className="pbc-add-students-trigger pbc-stack">
+            <button
+              type="button"
+              className="pbc-btn pbc-btn--primary pbc-btn--sm"
+              aria-expanded={addStudentsOpen}
+              aria-controls="agregar-alumnos"
+              onClick={() => setAddStudentsOpen((open) => !open)}
+            >
+              + {t("pcAddStudents")}
+            </button>
+          </div>
+
+          {addStudentsOpen ? (
+            <section
+              ref={inviteSectionRef}
+              id="agregar-alumnos"
+              className="pbc-add-students"
+              aria-label={t("pcAddStudents")}
+            >
+              <div className="pbc-add-students__block">
+                <h4 className="pbc-add-students__subtitle">{t("pcInviteWithPyBot")}</h4>
+                <p className="auth-card__muted">{t("pcInviteWithPyBotDesc")}</p>
+                <button
+                  type="button"
+                  className="pbc-btn pbc-btn--primary pbc-btn--sm"
+                  disabled={generatingInvite}
+                  onClick={() => void generateInvite()}
+                >
+                  {generatingInvite ? "…" : t("pcGenerateInvite")}
+                </button>
+                {inviteCode ? (
+                  <div className="pbc-invite-result" role="status">
+                    <p>
+                      <strong>{t("pcInvitationCode")}:</strong> <code>{inviteCode}</code>
+                    </p>
+                    <p>
+                      <strong>{t("pcInvitationLinkLabel")}:</strong> <code>{inviteLink}</code>
+                    </p>
+                    <div className="pbc-invite-result__actions">
+                      <button
+                        type="button"
+                        className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                        onClick={async () => {
+                          const ok = await copyText(inviteCode);
+                          if (ok) setFeedback(t("pcCodeCopied"));
+                        }}
+                      >
+                        {t("pcCopyCode")}
+                      </button>
+                      <button
+                        type="button"
+                        className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                        onClick={async () => {
+                          const ok = await copyText(inviteLink);
+                          if (ok) setFeedback(t("pcLinkCopied"));
+                        }}
+                      >
+                        {t("pcCopyLink")}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="pbc-add-students__block">
+                <h4 className="pbc-add-students__subtitle">{t("pcInviteWithClassroom")}</h4>
+                <p className="auth-card__muted">{t("pcInviteWithClassroomDesc")}</p>
+                <p className="auth-card__muted">{t("pcClassroomOptionalHint")}</p>
+                {classroomCourseId ? (
+                  <button
+                    type="button"
+                    className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                    disabled={syncBusy}
+                    onClick={() => void syncStudents()}
+                  >
+                    {syncBusy ? t("pcSyncing") : t("pcSyncClassroom")}
+                  </button>
+                ) : (
+                  <div className="pbc-add-students__classroom-off">
+                    <p className="auth-card__muted">{t("pcClassroomNotLinkedCourse")}</p>
+                    {onGoIntegrations ? (
+                      <button
+                        type="button"
+                        className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                        onClick={onGoIntegrations}
+                      >
+                        {t("pcGoIntegrations")}
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </section>
+          ) : null}
         </>
       ) : (
         <>
