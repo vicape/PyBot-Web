@@ -68,7 +68,7 @@ function CourseCards({
   wantsTeacher,
   onCreateCourse,
   onJoinCourse,
-  variant = "default",
+  variant = "courses",
 }) {
   const isCoursesVariant = variant === "courses";
 
@@ -773,6 +773,7 @@ export default function PyBotClassHome({
             wantsTeacher={wantsTeacher}
             onCreateCourse={onCreateCourse}
             onJoinCourse={onJoinCourse}
+            variant="courses"
           />
         </section>
       </div>

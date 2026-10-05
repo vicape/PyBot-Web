@@ -1415,9 +1415,10 @@
   }
 }
 
-/* Courses view — presentational variant (Home Recent courses unchanged) */
+/* Courses grid variant — same desktop track cap as canonical library grid */
 .pbc-course-grid--courses {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 350px));
+  justify-content: start;
   gap: 1.1rem;
   align-items: start;
 }
@@ -2545,7 +2546,8 @@
 }
 
 .pbc-content-grid--library {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 350px));
+  justify-content: start;
   gap: 1.1rem;
   align-items: start;
 }
