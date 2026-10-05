@@ -13,6 +13,7 @@ import {
   IconMore,
   IconTrash,
 } from "../components/pybotclass/illustrations/ActionIcons.jsx";
+import PbcIcon from "../components/pybotclass/PbcIcon.jsx";
 import {
   applyRubricTemplateToActivity,
   deleteRubricTemplate,
@@ -488,7 +489,7 @@ export default function MyRubricsPage() {
             </div>
           </div>
         ) : (
-          <ul className="pbc-content-grid pbc-rubrics-grid">
+          <ul className="pbc-content-grid pbc-content-grid--library pbc-rubrics-grid">
             {templates.map((row) => {
               const modified = formatModified(row.updated_at);
               const count =
@@ -498,29 +499,84 @@ export default function MyRubricsPage() {
                     ? row.criteria.length
                     : null;
               return (
-                <li key={row.id} className="pbc-content-card pbc-rubric-card">
-                  <div className="pbc-content-card__header">
-                    <h3 className="pbc-content-card__title">{row.name}</h3>
+                <li key={row.id} className="pbc-content-card pbc-content-card--library pbc-rubric-card">
+                  <div className="pbc-content-card__body">
+                    <div className="pbc-content-card__top">
+                      <div className="pbc-content-card__lead">
+                        <span className="pbc-content-card__icon" aria-hidden>
+                          <PbcIcon name="rubrics" size={20} />
+                        </span>
+                        <div className="pbc-content-card__identity">
+                          <h3 className="pbc-content-card__title">{row.name}</h3>
+                          {row.description ? (
+                            <p className="pbc-content-card__desc">{row.description}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="pbc-content-card__header-right">
+                        <div className="pbc-rubric-card__more">
+                          <button
+                            type="button"
+                            className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
+                            disabled={busy}
+                            aria-haspopup="menu"
+                            aria-expanded={menuOpenId === row.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMenuOpenId((id) => (id === row.id ? null : row.id));
+                            }}
+                          >
+                            <IconMore size={18} />
+                            <span>{t("pcMore")}</span>
+                          </button>
+                          {menuOpenId === row.id ? (
+                            <div className="pbc-rubric-card__menu" role="menu">
+                              <button
+                                type="button"
+                                className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
+                                role="menuitem"
+                                disabled={busy}
+                                onClick={() => void handleDuplicate(row)}
+                              >
+                                <IconCopy size={18} />
+                                <span>{t("pcDuplicate")}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
+                                role="menuitem"
+                                disabled={busy}
+                                onClick={() => {
+                                  setMenuOpenId(null);
+                                  setDeleteErr("");
+                                  setDeleting(row);
+                                }}
+                              >
+                                <IconTrash size={18} />
+                                <span>{t("pcDelete")}</span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pbc-content-card__summary">
+                      <span className="pbc-content-card__meta-secondary">
+                        {scoringModeLabel(row.scoring_mode)}
+                      </span>
+                      {typeof count === "number" ? (
+                        <span className="pbc-content-card__meta-secondary">
+                          {t("pcRubricCriteriaCount").replace("{n}", String(count))}
+                        </span>
+                      ) : null}
+                      {modified ? (
+                        <span className="pbc-content-card__meta-secondary">
+                          {t("pcModified")}: {modified}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                  <p className="pbc-content-card__meta">
-                    <span>{scoringModeLabel(row.scoring_mode)}</span>
-                    {typeof count === "number" ? (
-                      <span>
-                        {" · "}
-                        {t("pcRubricCriteriaCount").replace("{n}", String(count))}
-                      </span>
-                    ) : null}
-                    {modified ? (
-                      <span>
-                        {" · "}
-                        {t("pcModified")}: {modified}
-                      </span>
-                    ) : null}
-                  </p>
-                  {row.description ? (
-                    <p className="pbc-content-card__desc">{row.description}</p>
-                  ) : null}
-                  <div className="pbc-rubric-card__actions">
+                  <div className="pbc-content-card__actions-row pbc-content-card__direct-actions">
                     <button
                       type="button"
                       className="pbc-btn pbc-btn--primary pbc-btn--sm pbc-eval-btn-with-icon"
@@ -539,50 +595,6 @@ export default function MyRubricsPage() {
                       <IconEdit size={18} />
                       <span>{t("pcEdit")}</span>
                     </button>
-                    <div className="pbc-rubric-card__more">
-                      <button
-                        type="button"
-                        className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
-                        disabled={busy}
-                        aria-haspopup="menu"
-                        aria-expanded={menuOpenId === row.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMenuOpenId((id) => (id === row.id ? null : row.id));
-                        }}
-                      >
-                        <IconMore size={18} />
-                        <span>{t("pcMore")}</span>
-                      </button>
-                      {menuOpenId === row.id ? (
-                        <div className="pbc-rubric-card__menu" role="menu">
-                          <button
-                            type="button"
-                            className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
-                            role="menuitem"
-                            disabled={busy}
-                            onClick={() => void handleDuplicate(row)}
-                          >
-                            <IconCopy size={18} />
-                            <span>{t("pcDuplicate")}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
-                            role="menuitem"
-                            disabled={busy}
-                            onClick={() => {
-                              setMenuOpenId(null);
-                              setDeleteErr("");
-                              setDeleting(row);
-                            }}
-                          >
-                            <IconTrash size={18} />
-                            <span>{t("pcDelete")}</span>
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
                   </div>
                 </li>
               );

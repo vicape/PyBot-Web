@@ -108,7 +108,11 @@ function CourseCards({
 
   return (
     <div
-      className={`pbc-course-grid${isCoursesVariant ? " pbc-course-grid--courses" : ""}`}
+      className={
+        isCoursesVariant
+          ? "pbc-content-grid pbc-content-grid--library"
+          : "pbc-course-grid"
+      }
     >
       {filtered.map((c) => {
         const role = normalizeCourseRole(c.my_course_role);
@@ -124,18 +128,108 @@ function CourseCards({
         const hasClassroom = Boolean(c.classroom_course_id);
         const showStudentActivity =
           !isTeacher && c.activity_count != null && c.activity_count !== "";
-        const roleAccentClass = isTeacher
-          ? "pbc-course-card--teacher"
-          : "pbc-course-card--student";
-        const cardClassName = isCoursesVariant
-          ? `pbc-course-card pbc-course-card--courses ${roleAccentClass}`
-          : "pbc-course-card";
+
+        if (isCoursesVariant) {
+          return (
+            <article
+              key={c.course_id}
+              className="pbc-content-card pbc-content-card--library"
+              style={{ minWidth: 0 }}
+            >
+              <div className="pbc-content-card__body">
+                <div className="pbc-content-card__top">
+                  <div className="pbc-content-card__lead">
+                    <span className="pbc-content-card__icon" aria-hidden>
+                      <IconCourseCompact />
+                    </span>
+                    <div className="pbc-content-card__identity">
+                      <p className="pbc-content-card__title">{c.course_title}</p>
+                      <p className="pbc-content-card__desc">{orgLabel}</p>
+                    </div>
+                  </div>
+                  {rb ? (
+                    <div className="pbc-content-card__header-right">
+                      <span className={`pbc-badge pbc-badge--${rb.variant}`}>
+                        {rb.label}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+
+                {isTeacher ? (
+                  <div className="pbc-content-card__summary" aria-label={t("pcQuickSummary")}>
+                    <span className="pbc-content-card__metric">
+                      <span className="pbc-content-card__metric-icon" aria-hidden>
+                        <PbcIcon name="management" size={14} />
+                      </span>
+                      <span className="pbc-content-card__metric-value">{studentCount}</span>
+                      <span className="pbc-content-card__metric-label">{t("pcTabStudents")}</span>
+                    </span>
+                    <span className="pbc-content-card__metric">
+                      <span className="pbc-content-card__metric-icon" aria-hidden>
+                        <PbcIcon name="assignment" size={14} />
+                      </span>
+                      <span className="pbc-content-card__metric-value">{activityCount}</span>
+                      <span className="pbc-content-card__metric-label">{t("pcActivities")}</span>
+                    </span>
+                    <span className="pbc-content-card__metric">
+                      <span className="pbc-content-card__metric-icon" aria-hidden>
+                        <PbcIcon name="toGrade" size={14} />
+                      </span>
+                      <span className="pbc-content-card__metric-value">{pendingGradeCount}</span>
+                      <span className="pbc-content-card__metric-label">{t("pcFilterToGrade")}</span>
+                    </span>
+                  </div>
+                ) : showStudentActivity ? (
+                  <div className="pbc-content-card__summary">
+                    <span className="pbc-content-card__metric">
+                      <span className="pbc-content-card__metric-icon" aria-hidden>
+                        <PbcIcon name="assignment" size={14} />
+                      </span>
+                      <span className="pbc-content-card__metric-value">{activityCount}</span>
+                      <span className="pbc-content-card__metric-label">{t("pcActivities")}</span>
+                    </span>
+                  </div>
+                ) : null}
+
+                {isTeacher && studentCount === 0 ? (
+                  <p className="pbc-content-card__usage">
+                    <span aria-hidden>
+                      <PbcIcon name="attention" size={16} />
+                    </span>{" "}
+                    {t("pcCourseNoStudentsYet")}
+                  </p>
+                ) : null}
+
+                {hasClassroom ? (
+                  <span className="pbc-course-card__classroom">
+                    <span aria-hidden>
+                      <PbcIcon name="connected" size={12} />
+                    </span>
+                    {t("pcClassroomLinked")}
+                  </span>
+                ) : null}
+              </div>
+              <div className="pbc-content-card__actions-row pbc-content-card__direct-actions">
+                <Link
+                  to={`/dashboard/classes/${c.course_id}`}
+                  className="pbc-content-card__link"
+                >
+                  {t("pcOpenCourse")}
+                  <span aria-hidden>
+                    <PbcIcon name="next" size={14} />
+                  </span>
+                </Link>
+              </div>
+            </article>
+          );
+        }
 
         return (
           <Link
             key={c.course_id}
             to={`/dashboard/classes/${c.course_id}`}
-            className={cardClassName}
+            className="pbc-course-card"
           >
             <div className="pbc-course-card__body">
               <div className="pbc-course-card__top">
