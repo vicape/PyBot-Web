@@ -6321,3 +6321,30 @@
 .pbc-dashboard[data-pbc-theme="dark"] .pbc-compact-menu__panel {
   background: #1a1d24;
 }
+
+@media (min-width: 641px) {
+  .pbc-content-card--library .pbc-content-card__top {
+    flex-wrap: wrap;
+  }
+
+  .pbc-content-card--library .pbc-content-card__lead {
+    flex: 0 0 100%;
+    width: 100%;
+  }
+
+  .pbc-content-card--library .pbc-content-card__header-right {
+    width: 100%;
+    flex: 0 0 100%;
+    justify-content: flex-start;
+    align-items: center;
+  }
+
+  .pbc-content-card--library .pbc-content-card__menu {
+    margin-left: auto;
+  }
+
+  .pbc-content-card--library .pbc-content-card__title {
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+}
