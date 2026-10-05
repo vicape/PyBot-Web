@@ -9,7 +9,6 @@ import {
   formatProgressDisplay,
 } from "../../platform/learningStatus.js";
 import {
-  PbcEmpty,
   PbcLoading,
   PbcSection,
 } from "./PyBotClassUi.jsx";
@@ -90,10 +89,12 @@ export default function CourseContentProgressPanel({ courseId }) {
         title="Progreso de contenido"
         description="Progreso, tiempo activo y rendimiento (dimensiones independientes)."
       >
-        <PbcEmpty
-          title="Sin asignaciones con ítems"
-          description="Las asignaciones nuevas de Contenido con ítems mostrarán el progreso aquí."
-        />
+        <div className="pbc-content-progress-empty">
+          <p className="pbc-content-progress-empty__title">{"Sin asignaciones con ítems"}</p>
+          <p className="pbc-content-progress-empty__desc">
+            {"Las asignaciones nuevas de Contenido con ítems mostrarán el progreso aquí."}
+          </p>
+        </div>
       </PbcSection>
     );
   }
@@ -152,10 +153,10 @@ export default function CourseContentProgressPanel({ courseId }) {
         <table className="pbc-table">
           <thead>
             <tr>
-              <th>Alumno</th>
-              <th>Progreso</th>
-              <th>Tiempo activo</th>
-              <th>Rendimiento</th>
+              <th>{"Alumno"}</th>
+              <th>{"Progreso"}</th>
+              <th>{"Tiempo activo"}</th>
+              <th>{"Rendimiento"}</th>
               <th />
             </tr>
           </thead>
@@ -176,7 +177,7 @@ export default function CourseContentProgressPanel({ courseId }) {
                     className="pbc-btn pbc-btn--ghost pbc-btn--sm"
                     onClick={() => setSelectedStudentId(student.user_id)}
                   >
-                    Detalle
+                    {"Detalle"}
                   </button>
                 </td>
               </tr>

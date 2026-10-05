@@ -323,6 +323,70 @@ test("UI wires student viewer and teacher panel without parallel assignment enti
   assert.doesNotMatch(viewer, /max_points|earned_points|gradeDraft/);
 });
 
+test("teaching Activities section precedes CourseContentProgressPanel after create/edit", () => {
+  const activities = readFileSync(
+    resolve(root, "src/components/pybotclass/CourseActivitiesTab.jsx"),
+    "utf8",
+  );
+  const teachingMarker = "// teaching — controles docentes existentes";
+  const teachingIdx = activities.indexOf(teachingMarker);
+  assert.ok(teachingIdx >= 0, "teaching branch marker present");
+  const teaching = activities.slice(teachingIdx);
+
+  const activitiesSectionIdx = teaching.indexOf("activitiesSectionTitle()");
+  const showCreateIdx = teaching.indexOf("{showCreate ?");
+  const editingIdx = teaching.indexOf("{editing ?");
+  const progressIdx = teaching.indexOf("<CourseContentProgressPanel");
+
+  assert.ok(activitiesSectionIdx >= 0, "Activities section present in teaching");
+  assert.ok(showCreateIdx >= 0, "showCreate block present");
+  assert.ok(editingIdx >= 0, "editing block present");
+  assert.ok(progressIdx >= 0, "CourseContentProgressPanel present");
+
+  assert.equal(
+    (teaching.match(/<CourseContentProgressPanel\b/g) || []).length,
+    1,
+    "CourseContentProgressPanel renders exactly once",
+  );
+  assert.ok(
+    activitiesSectionIdx < progressIdx,
+    "Activities section appears before CourseContentProgressPanel",
+  );
+  assert.ok(showCreateIdx < progressIdx, "showCreate appears before progress panel");
+  assert.ok(editingIdx < progressIdx, "editing appears before progress panel");
+});
+
+test("CourseContentProgressPanel empty branch is compact without PbcEmpty", () => {
+  const panel = readFileSync(
+    resolve(root, "src/components/pybotclass/CourseContentProgressPanel.jsx"),
+    "utf8",
+  );
+  const css = readFileSync(resolve(root, "src/styles/pybotclass-dashboard.css"), "utf8");
+
+  const emptyIdx = panel.indexOf("if (!activities.length)");
+  assert.ok(emptyIdx >= 0, "empty activities branch present");
+  const dataBranchIdx = panel.indexOf(
+    'description="Progreso · Tiempo activo · Rendimiento',
+  );
+  assert.ok(dataBranchIdx > emptyIdx, "data branch follows empty branch");
+  const emptyBranch = panel.slice(emptyIdx, dataBranchIdx);
+
+  assert.doesNotMatch(emptyBranch, /PbcEmpty/);
+  assert.match(emptyBranch, /pbc-content-progress-empty/);
+  assert.match(emptyBranch, /Progreso de contenido/);
+  assert.match(emptyBranch, /Sin asignaciones con ítems/);
+  assert.match(
+    emptyBranch,
+    /Las asignaciones nuevas de Contenido con ítems mostrarán el progreso aquí/,
+  );
+  assert.doesNotMatch(panel, /PbcEmpty/);
+
+  const cssMatch = css.match(/\.pbc-content-progress-empty\s*\{[^}]*\}/s);
+  assert.ok(cssMatch, "dedicated compact empty CSS selector present");
+  assert.doesNotMatch(cssMatch[0], /min-height\s*:\s*\d{3,}px/);
+  assert.match(cssMatch[0], /var\(--pbc-/);
+});
+
 test("activity_progress IDE autosave module remains separate from item progress", () => {
   const ide = readFileSync(resolve(root, "src/platform/activityProgress.js"), "utf8");
   assert.match(ide, /save_activity_progress/);

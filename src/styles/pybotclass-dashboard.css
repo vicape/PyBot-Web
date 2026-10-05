@@ -5931,6 +5931,29 @@
   border-style: dashed;
 }
 
+/* Compact empty state for CourseContentProgressPanel (no tall PbcEmpty) */
+.pbc-content-progress-empty {
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--pbc-radius-sm, 8px);
+  border: 1px dashed var(--pbc-border);
+  background: var(--pbc-panel-hover, var(--pbc-panel));
+  color: var(--pbc-text);
+}
+
+.pbc-content-progress-empty__title {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--pbc-text);
+}
+
+.pbc-content-progress-empty__desc {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--pbc-text-muted);
+}
+
 .pbc-dashboard .pbc-stat {
   background: var(--pbc-panel-hover, var(--pbc-panel));
 }

@@ -621,8 +621,6 @@ export default function CourseActivitiesTab({
   // teaching — controles docentes existentes
   return (
     <>
-      <CourseContentProgressPanel courseId={courseId} />
-
       <PbcSection
         title={activitiesSectionTitle()}
         description={`${activities.length} ${t("pcActivities")}`}
@@ -796,6 +794,8 @@ export default function CourseActivitiesTab({
           />
         </PbcFormPanel>
       ) : null}
+
+      <CourseContentProgressPanel courseId={courseId} />
     </>
   );
 }
