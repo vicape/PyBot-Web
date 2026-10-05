@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import ContentMetaChips from "../components/pybotclass/content/ContentMetaChips.jsx";
 import { IconAssign, IconCommunityEmpty, IconCopy, IconOpen, CompactContentIcon } from "../components/pybotclass/illustrations/ActionIcons.jsx";
 import { UxIcon } from "../components/pybotclass/illustrations/UxIcons.jsx";
+import PbcIcon from "../components/pybotclass/PbcIcon.jsx";
 import PyBotClassLayout from "../components/pybotclass/layout/PyBotClassLayout.jsx";
 import { t } from "../i18n.js";
 import { copyLearningContent } from "../platform/contentApi.js";
@@ -164,31 +165,42 @@ export default function CommunityPage() {
           </div>
         </div>
       ) : (
-        <div className="pbc-content-grid">
-          {rows.map((c) => (
-            <article key={c.id} className="pbc-content-card" style={{ minWidth: 0, maxWidth: "100%" }}>
-              <div className="pbc-content-card__header">
-                <span className="pbc-content-card__icon" aria-hidden>
-                  <CompactContentIcon />
-                </span>
-                <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon">{t("pcCommunity")}</span>
+        <div className="pbc-content-grid pbc-content-grid--library pbc-content-grid--community">
+          {rows.map((c) => {
+            const isLibrary = true;
+            return (
+            <article
+              key={c.id}
+              className="pbc-content-card pbc-content-card--library pbc-content-card--community"
+              style={{ minWidth: 0 }}
+            >
+              <div className="pbc-content-card__body">
+                <div className="pbc-content-card__top">
+                  <div className="pbc-content-card__lead">
+                    <span className="pbc-content-card__icon" aria-hidden>
+                      <PbcIcon name="content" size={20} />
+                    </span>
+                    <div className="pbc-content-card__identity">
+                      <h2 className="pbc-content-card__title">{c.title}</h2>
+                      {c.description ? <p className="pbc-content-card__desc">{c.description}</p> : null}
+                    </div>
+                  </div>
+                  <div className="pbc-content-card__header-right">
+                    <span className="pbc-badge pbc-badge--blue pbc-badge--with-icon">{t("pcCommunity")}</span>
+                  </div>
+                </div>
+                <ContentMetaChips
+                  content={{
+                    ...c,
+                    based_on_name: c.original_owner_name,
+                  }}
+                  showAuthor
+                />
               </div>
-              <h2 className="pbc-content-card__title">{c.title}</h2>
-              {c.description ? <p className="pbc-content-card__desc">{c.description}</p> : null}
-              <ContentMetaChips
-                content={{
-                  ...c,
-                  based_on_name: c.original_owner_name,
-                }}
-                showAuthor
-              />
-              <div
-                className="pbc-content-card__actions-row pbc-content-card__direct-actions"
-                style={{ display: "flex", flexWrap: "wrap", gap: 8, maxWidth: "100%" }}
-              >
+              <div className="pbc-content-card__actions-row pbc-content-card__direct-actions">
                 <Link to={`/dashboard/community/${c.id}`} className="pbc-content-card__link">
                   <span aria-hidden>
-                    <IconOpen size={16} />
+                    {isLibrary ? <PbcIcon name="view" size={16} /> : <IconOpen size={16} />}
                   </span>
                   {t("pcRead")}
                 </Link>
@@ -199,7 +211,7 @@ export default function CommunityPage() {
                   onClick={() => void handleCopy(c)}
                 >
                   <span aria-hidden>
-                    <IconCopy size={16} />
+                    {isLibrary ? <PbcIcon name="duplicate" size={16} /> : <IconCopy size={16} />}
                   </span>
                   {copyBusyId === c.id ? t("pcCopying") : t("pcCreateCopy")}
                 </button>
@@ -210,14 +222,15 @@ export default function CommunityPage() {
                     onClick={() => setAssigning(c)}
                   >
                     <span aria-hidden>
-                      <IconAssign size={16} />
+                      {isLibrary ? <PbcIcon name="assignment" size={16} /> : <IconAssign size={16} />}
                     </span>
                     {t("pcAssignAsIs")}
                   </button>
                 ) : null}
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       )}
 
