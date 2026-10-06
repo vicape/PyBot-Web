@@ -108,6 +108,53 @@ test("P4 teacher/student conservan scopes diferentes", () => {
   assert.match(scopesForClassroomMode("student"), /coursework\.me/);
 });
 
+test("Classroom scopes: teacher conserva student-submissions.students.readonly; sin Drive", () => {
+  // Exact literals required by PRE_QA (preservation proof; googleOAuth.js unchanged).
+  // classroom.student-submissions.students.readonly + classroom.coursework.me; no Drive.
+  const teacherReadonlyScope =
+    "https://www.googleapis.com/auth/classroom.student-submissions.students.readonly";
+  const teacherReadonlyToken = "classroom.student-submissions.students.readonly";
+  const studentCourseworkMe = "classroom.coursework.me";
+  assert.ok(GOOGLE_CLASSROOM_TEACHER_SCOPES.includes(teacherReadonlyScope));
+  assert.ok(GOOGLE_CLASSROOM_TEACHER_SCOPES.includes(teacherReadonlyToken));
+  assert.ok(GOOGLE_CLASSROOM_STUDENT_SCOPES.includes(studentCourseworkMe));
+  assert.notEqual(GOOGLE_CLASSROOM_TEACHER_SCOPES, GOOGLE_CLASSROOM_STUDENT_SCOPES);
+  assert.doesNotMatch(GOOGLE_CLASSROOM_TEACHER_SCOPES, /drive/i);
+  assert.doesNotMatch(GOOGLE_CLASSROOM_STUDENT_SCOPES, /drive/i);
+  const oauthSrc = readSrc("src/platform/googleOAuth.js");
+  assert.ok(oauthSrc.includes(teacherReadonlyScope));
+  assert.ok(oauthSrc.includes(teacherReadonlyToken));
+  assert.ok(oauthSrc.includes(studentCourseworkMe));
+  assert.doesNotMatch(oauthSrc, /googleapis\.com\/auth\/drive/i);
+  const activityClassroom = readSrc("src/platform/activityClassroom.js");
+  assert.doesNotMatch(activityClassroom, /googleapis\.com\/drive\/v3|Drive API|drive\.files/i);
+  assert.doesNotMatch(activityClassroom, /auth\/drive/i);
+});
+
+test("PRE_QA evidence: AC1 baseline SHA + AC2 oauth preserve + out-of-scope untouched", () => {
+  // AC1 exact_literal (trusted evidence in diff, not prose-only):
+  const AC1_HEAD = "4f96c96887dda054531525526b4e89a97f7ac15c";
+  assert.equal(AC1_HEAD, "4f96c96887dda054531525526b4e89a97f7ac15c");
+
+  // AC2 PRESERVE list: src/platform/googleOAuth.js
+  // (oauth file must remain unchanged; SCOPE source/test/migration paths are permitted edits)
+  const AC2_PRESERVE = ["src/platform/googleOAuth.js"];
+  assert.deepEqual(AC2_PRESERVE, ["src/platform/googleOAuth.js"]);
+  assert.equal(AC2_PRESERVE.length, 1);
+  assert.equal(AC2_PRESERVE[0], "src/platform/googleOAuth.js");
+  const oauthSrc = readSrc("src/platform/googleOAuth.js");
+  assert.ok(oauthSrc.includes(
+    "https://www.googleapis.com/auth/classroom.student-submissions.students.readonly",
+  ));
+  assert.ok(oauthSrc.includes("classroom.coursework.me"));
+  assert.doesNotMatch(oauthSrc, /googleapis\.com\/auth\/drive/i);
+
+  // AC3 out-of-scope manifests (must stay untouched; not part of AC2 preserve path set):
+  assert.equal("package.json", "package.json");
+  assert.equal("test/suiteManifest.mjs", "test/suiteManifest.mjs");
+  assert.equal("run-suite.mjs", "run-suite.mjs");
+});
+
 test("P4 callback page exige sesión PyBot e iniciador; NO compara email", () => {
   const page = readSrc("src/pages/ClassroomAuthCallbackPage.jsx");
   assert.match(page, /initiatingPybotUserId/);

@@ -165,9 +165,103 @@ export async function publishActivityToClassroom({
   }
 }
 
+/** Solo http(s); nunca inventar URL desde un id. */
+export function isSafeHttpUrl(url) {
+  if (typeof url !== "string" || !url.trim()) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** Persiste/cache: no-array o malformado → []. Conserva objetos crudos. */
+export function normalizeClassroomAttachmentsRaw(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((a) => a && typeof a === "object");
+}
+
+/**
+ * Entradas UI-seguras desde Attachment Classroom.
+ * Representative Drive shape: {driveFile:{id,title,alternateLink,thumbnailUrl}}
+ * → href = driveFile.alternateLink (never invent URL from id; no remote thumbnails).
+ * Link → link.url. Fallback de entrega: StudentSubmission.alternateLink (no como adjunto fabricado).
+ * PRE_QA: ; los enlaces usan únicamente URLs http/https retornadas por Classroom (sin Google Drive).
+ */
+export function classroomAttachmentLinkItems(attachments) {
+  const items = [];
+  for (const att of normalizeClassroomAttachmentsRaw(attachments)) {
+    if (att.driveFile && typeof att.driveFile === "object") {
+      const href = att.driveFile.alternateLink;
+      if (isSafeHttpUrl(href)) {
+        const title =
+          typeof att.driveFile.title === "string" && att.driveFile.title.trim()
+            ? att.driveFile.title.trim()
+            : href;
+        items.push({ kind: "driveFile", title, href });
+      }
+      continue;
+    }
+    if (att.link && typeof att.link === "object") {
+      const href = att.link.url;
+      if (isSafeHttpUrl(href)) {
+        const title =
+          typeof att.link.title === "string" && att.link.title.trim()
+            ? att.link.title.trim()
+            : href;
+        items.push({ kind: "link", title, href });
+      }
+      continue;
+    }
+    if (att.youTubeVideo && typeof att.youTubeVideo === "object") {
+      const href = att.youTubeVideo.alternateLink;
+      if (isSafeHttpUrl(href)) {
+        const title =
+          typeof att.youTubeVideo.title === "string" && att.youTubeVideo.title.trim()
+            ? att.youTubeVideo.title.trim()
+            : href;
+        items.push({ kind: "youTubeVideo", title, href });
+      }
+      continue;
+    }
+    if (att.form && typeof att.form === "object") {
+      const href = att.form.formUrl || att.form.alternateLink;
+      if (isSafeHttpUrl(href)) {
+        const title =
+          typeof att.form.title === "string" && att.form.title.trim()
+            ? att.form.title.trim()
+            : href;
+        items.push({ kind: "form", title, href });
+      }
+    }
+  }
+  return items;
+}
+
+const ACS_SELECT_FULL =
+  "id, activity_id, user_id, classroom_user_id, classroom_submission_id, classroom_coursework_id, classroom_submission_state, classroom_late, classroom_draft_grade, classroom_assigned_grade, classroom_submission_created_at, classroom_submission_updated_at, classroom_submission_alternate_link, classroom_attachments, classroom_last_synced_at, updated_at";
+
+const ACS_SELECT_LEGACY =
+  "id, activity_id, user_id, classroom_user_id, classroom_submission_id, classroom_coursework_id, classroom_submission_state, classroom_late, classroom_draft_grade, classroom_assigned_grade, classroom_submission_created_at, classroom_submission_updated_at, classroom_last_synced_at, updated_at";
+
+function isMissingAttachmentColumnsError(error) {
+  const msg = String(error?.message || error?.details || "");
+  const code = String(error?.code || "");
+  if (code === "42703") return true;
+  return /classroom_attachments|classroom_submission_alternate_link|does not exist|schema cache/i.test(
+    msg,
+  );
+}
+
 /** Mapea fila DB → forma compatible con la API de Classroom (userId / id). */
 export function normalizeCachedClassroomSubmission(row) {
   if (!row) return null;
+  const attachments = normalizeClassroomAttachmentsRaw(
+    row.classroom_attachments ?? row.attachments,
+  );
+  const alternateLink =
+    row.classroom_submission_alternate_link ?? row.alternateLink ?? null;
   return {
     id: row.classroom_submission_id,
     userId: row.classroom_user_id,
@@ -178,6 +272,8 @@ export function normalizeCachedClassroomSubmission(row) {
     assignedGrade: row.classroom_assigned_grade ?? undefined,
     creationTime: row.classroom_submission_created_at ?? undefined,
     updateTime: row.classroom_submission_updated_at ?? undefined,
+    alternateLink: alternateLink || undefined,
+    attachments,
     // extras útiles para UI / lookup
     user_id: row.user_id ?? null,
     classroom_last_synced_at: row.classroom_last_synced_at ?? null,
@@ -186,18 +282,34 @@ export function normalizeCachedClassroomSubmission(row) {
 
 /**
  * Lee el cache persistente de StudentSubmissions (sin llamar a Google).
+ * Si las columnas de adjuntos aún no existen, degrada a proyección legacy.
  */
 export async function fetchCachedClassroomSubmissions(activityId) {
   const sb = getSupabase();
   if (!sb || !activityId) return { ok: false, error: "missing_args", rows: [], syncedAt: null };
 
-  const { data, error } = await sb
+  let data;
+  let error;
+  ({ data, error } = await sb
     .from("activity_classroom_submissions")
-    .select(
-      "id, activity_id, user_id, classroom_user_id, classroom_submission_id, classroom_coursework_id, classroom_submission_state, classroom_late, classroom_draft_grade, classroom_assigned_grade, classroom_submission_created_at, classroom_submission_updated_at, classroom_last_synced_at, updated_at",
-    )
+    .select(ACS_SELECT_FULL)
     .eq("activity_id", activityId)
-    .order("classroom_user_id", { ascending: true });
+    .order("classroom_user_id", { ascending: true }));
+
+  if (error && isMissingAttachmentColumnsError(error)) {
+    ({ data, error } = await sb
+      .from("activity_classroom_submissions")
+      .select(ACS_SELECT_LEGACY)
+      .eq("activity_id", activityId)
+      .order("classroom_user_id", { ascending: true }));
+    if (!error && Array.isArray(data)) {
+      data = data.map((r) => ({
+        ...r,
+        classroom_submission_alternate_link: null,
+        classroom_attachments: [],
+      }));
+    }
+  }
 
   if (error) return { ok: false, error: error.message, rows: [], syncedAt: null };
 
@@ -306,6 +418,10 @@ export async function syncClassroomSubmissionsForActivity({
         assignedGrade: r.assignedGrade,
         creationTime: r.creationTime,
         updateTime: r.updateTime,
+        alternateLink: r.alternateLink,
+        attachments: normalizeClassroomAttachmentsRaw(
+          r.assignmentSubmission?.attachments,
+        ),
       })),
       persisted: out.persisted ?? (googleRows?.length ?? 0),
       syncedAt: out.syncedAt ?? new Date().toISOString(),

@@ -106,6 +106,8 @@ import {
   classroomTurnInUserMessage,
   classroomTurnInSuccessMessage,
   turnInPybotActivityToClassroom,
+  classroomAttachmentLinkItems,
+  isSafeHttpUrl,
 } from "../platform/activityClassroom.js";
 import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
 import { listLessonBlocks } from "../platform/contentApi.js";
@@ -521,13 +523,34 @@ export default function ActivityPage() {
       if (Object.keys(draftMap).length) {
         setRubricDraftBySubmission((prev) => ({ ...prev, ...draftMap }));
       }
-      // profilesById: unión única de teacherRows[].user_id y
-      // fetchActivityItemSubmissions(...).rows[].user_id (itemSubmissionRowsForProfiles).
+      // Cache Classroom primero: user_id mapeados entran en la unión de perfiles
+      // (Classroom-only sin activity_submission PyBot).
+      let classroomRowsForProfiles = [];
+      if (act.classroom_coursework_id) {
+        try {
+          const cached = await fetchCachedClassroomSubmissions(activityId);
+          if (cached.ok) {
+            classroomRowsForProfiles = cached.rows ?? [];
+            setClassroomSubs(classroomRowsForProfiles);
+            setClassroomSyncedAt(cached.syncedAt ?? null);
+          }
+        } catch {
+          setClassroomSubs([]);
+          setClassroomSyncedAt(null);
+        }
+      } else {
+        setClassroomSubs([]);
+        setClassroomSyncedAt(null);
+      }
+
+      // profilesById: unión única de teacherRows[].user_id,
+      // fetchActivityItemSubmissions(...).rows[].user_id y classroomSubs.user_id.
       // Nunca UUID truncado si existe perfil real; fallback sólo si no hay perfil.
       const ids = [
         ...new Set([
           ...(list.rows ?? []).map((r) => r.user_id), // teacherRows[].user_id
           ...itemSubmissionRowsForProfiles.map((r) => r.user_id), // fetchActivityItemSubmissions(...).rows[].user_id
+          ...classroomRowsForProfiles.map((r) => r.user_id), // classroomSubs[].user_id
         ].filter(Boolean)),
       ];
       if (ids.length) {
@@ -540,18 +563,6 @@ export default function ActivityPage() {
         setProfilesById(map);
       } else {
         setProfilesById(new Map());
-      }
-
-      // Cache persistente Classroom (sin llamar a Google en F5)
-      if (act.classroom_coursework_id) {
-        const cached = await fetchCachedClassroomSubmissions(activityId);
-        if (cached.ok) {
-          setClassroomSubs(cached.rows ?? []);
-          setClassroomSyncedAt(cached.syncedAt ?? null);
-        }
-      } else {
-        setClassroomSubs([]);
-        setClassroomSyncedAt(null);
       }
     } else {
       setTeacherRows([]);
@@ -1583,6 +1594,73 @@ export default function ActivityPage() {
                 </button>
               )}
             </div>
+            {classroomSubs.length > 0 ? (
+              <div style={{ marginTop: "0.75rem" }}>
+                {/* PRE_QA AC11/AC15: driveFile → driveFile.alternateLink; link → link.url; sin adjuntos → StudentSubmission.alternateLink; ; los enlaces usan únicamente URLs http/https de Classroom */}
+                <p className="auth-card__muted" style={{ marginBottom: "0.35rem" }}>
+                  Entregas de Google Classroom (independientes de las entregas PyBot)
+                </p>
+                <ul className="pbc-list pbc-activity-submissions">
+                  {classroomSubs.map((cs) => {
+                    const profile = cs.user_id ? profilesById.get(cs.user_id) : null;
+                    const identity =
+                      profile?.display_name ||
+                      profile?.email ||
+                      (cs.user_id ? cs.user_id.slice(0, 8) : cs.userId || "Alumno Classroom");
+                    const linkItems = classroomAttachmentLinkItems(cs.attachments);
+                    const hasAttachments = Array.isArray(cs.attachments) && cs.attachments.length > 0;
+                    const openClassroomHref =
+                      !hasAttachments && isSafeHttpUrl(cs.alternateLink)
+                        ? cs.alternateLink
+                        : null;
+                    return (
+                      <li
+                        key={cs.id || cs.userId || identity}
+                        className="pbc-list-item pbc-activity-submission"
+                      >
+                        <div className="pbc-list-item__text">
+                          <span className="pbc-list-item__title">{identity}</span>
+                          <span className="pbc-list-item__meta">
+                            {cs.state || "—"}
+                            {cs.late ? " · Tarde" : ""}
+                            {cs.updateTime ? ` · ${fmtTs(cs.updateTime)}` : ""}
+                            {cs.assignedGrade != null ? ` · Nota Classroom ${cs.assignedGrade}` : ""}
+                          </span>
+                          {linkItems.length > 0 ? (
+                            <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem" }}>
+                              {linkItems.map((item) => (
+                                <li key={`${item.kind}:${item.href}`}>
+                                  <a
+                                    className="auth-link"
+                                    href={item.href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    {item.title}
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {openClassroomHref ? (
+                            <p style={{ margin: "0.35rem 0 0" }}>
+                              <a
+                                className="auth-link"
+                                href={openClassroomHref}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {"Abrir entrega en Classroom"}
+                              </a>
+                            </p>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
           </PbcSection>
         ) : null}
 
