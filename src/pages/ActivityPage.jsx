@@ -1547,7 +1547,7 @@ export default function ActivityPage() {
         {actionMsg ? <PbcAlert variant="info">{actionMsg}</PbcAlert> : null}
 
         <PbcSection
-          className="pbc-activity-overview"
+          className={`pbc-activity-overview${canTeach ? " pbc-activity-section--compact" : ""}`}
           title={t("pcDetail")}
           description={canTeach ? undefined : t("pcActivityOverviewDesc")}
           actions={
@@ -1575,29 +1575,26 @@ export default function ActivityPage() {
         >
           {canTeach ? (
             <div className="pbc-activity-meta" aria-label={t("pcActivitySettingsAria")}>
-              {activity?.due_at ? (
-                <p className="auth-card__muted" style={{ margin: 0 }}>
-                  {t("pcDueDateColon").replace("{date}", fmtTs(activity.due_at))}
-                </p>
-              ) : null}
-              {activity?.submission_close_at ? (
-                <p className="auth-card__muted" style={{ margin: 0 }}>
-                  {t("pcCloseColon").replace("{date}", fmtTs(activity.submission_close_at))}
-                </p>
-              ) : null}
-              {activity?.max_points != null ? (
-                <p className="auth-card__muted" style={{ margin: 0 }}>
-                  {t("pcMaxPointsColon").replace("{n}", String(activity.max_points))}
-                </p>
-              ) : activity?.course_id ? (
-                <p className="auth-card__muted" style={{ margin: 0, fontSize: "0.9rem" }}>
-                  {t("pcDefineMaxInActivities").split("{link}")[0]}
-                  <Link to={actividadesHref} className="auth-link">
-                    {t("pcActivities")}
-                  </Link>
-                  {t("pcDefineMaxInActivities").split("{link}")[1]}
-                </p>
-              ) : null}
+              <p className="auth-card__muted" style={{ margin: 0 }}>
+                {activity?.due_at
+                  ? t("pcDueDateColon").replace("{date}", fmtTs(activity.due_at))
+                  : null}
+                {activity?.submission_close_at
+                  ? `${activity?.due_at ? " · " : ""}${t("pcCloseColon").replace("{date}", fmtTs(activity.submission_close_at))}`
+                  : null}
+                {activity?.max_points != null ? (
+                  `${activity?.due_at || activity?.submission_close_at ? " · " : ""}${t("pcMaxPointsColon").replace("{n}", String(activity.max_points))}`
+                ) : activity?.course_id ? (
+                  <>
+                    {activity?.due_at || activity?.submission_close_at ? " · " : null}
+                    {t("pcDefineMaxInActivities").split("{link}")[0]}
+                    <Link to={actividadesHref} className="auth-link">
+                      {t("pcActivities")}
+                    </Link>
+                    {t("pcDefineMaxInActivities").split("{link}")[1]}
+                  </>
+                ) : null}
+              </p>
             </div>
           ) : (
             <div className="pbc-activity-meta">
@@ -1776,7 +1773,11 @@ export default function ActivityPage() {
         </PbcSection>
 
         {canTeach ? (
-          <PbcSection title={t("pcEvaluation")}>
+          <PbcSection
+            title={t("pcEvaluation")}
+            className="pbc-activity-section--compact pbc-activity-evaluation"
+          >
+            {/* Compact mode keeps rubric flow: pcChooseRubric / pcCreateNew / pcCreateOnlyForActivity / pcManageRubrics */}
             <ActivityEvaluationSection
               compact
               value={evaluationSelection}
@@ -1790,7 +1791,10 @@ export default function ActivityPage() {
         ) : null}
 
         {canTeach ? (
-          <PbcSection title={t("pcSubmissions")} className="pbc-activity-deliveries">
+          <PbcSection
+            title={t("pcSubmissions")}
+            className="pbc-activity-deliveries pbc-activity-section--compact"
+          >
             {classroomCourseId ? (
               /* Compact strip replaces former technical "Google Classroom" block title. */
               <div className="pbc-activity-classroom-status" role="status">
@@ -2018,6 +2022,7 @@ export default function ActivityPage() {
                             setViewCode(showingCurrent ? null : row.id);
                           }}
                         >
+                          {/* Ver código */}
                           {showingCurrent ? t("pcHideCode") : t("pcShowCode")}
                         </button>
                       </div>
@@ -2176,6 +2181,7 @@ export default function ActivityPage() {
                             disabled={busy}
                             onClick={() => void onRequestReview(row.id)}
                           >
+                            {/* Solicitar revisión */}
                             {t("pcRequestReview")}
                           </button>
                         ) : null}
@@ -2186,6 +2192,7 @@ export default function ActivityPage() {
                             disabled={busy}
                             onClick={() => void onGrade(row.id)}
                           >
+                            {/* Evaluar */}
                             {t("pcEvaluate")}
                           </button>
                         ) : null}

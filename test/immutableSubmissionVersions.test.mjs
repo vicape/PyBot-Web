@@ -462,4 +462,60 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
   assert.ok(src.includes('"Google Classroom"'));
   assert.ok(src.includes('"PyBot"'));
   assert.ok(src.includes('"Classroom"'));
+
+  // Compact ActivityPage density: page-scoped class, not global PbcSection API change.
+  assert.match(src, /pbc-activity-section--compact/);
+  assert.match(src, /pbc-activity-evaluation/);
+  assert.match(src, /pbc-activity-deliveries pbc-activity-section--compact|pbc-activity-section--compact[\s\S]*pbc-activity-deliveries/);
+  assert.match(css, /\.pbc-activity-section--compact\.pbc-section/);
+  assert.match(css, /\.pbc-activity-section--compact\.pbc-activity-evaluation/);
+  assert.match(css, /\.pbc-activity-section--compact\.pbc-activity-deliveries \.pbc-activity-submission/);
+  assert.match(css, /padding:\s*0\.65rem\s+0\.7rem/);
+  assert.match(css, /gap:\s*0\.35rem/);
+  assert.match(css, /@media \(max-width: 640px\)/);
+});
+
+function loadResolveSubmissionCodeHeight() {
+  const viewerSrc = readFileSync(
+    resolve(root, "src/components/pybotclass/SubmissionCodeViewer.jsx"),
+    "utf8",
+  );
+  const start = viewerSrc.indexOf("export function resolveSubmissionCodeHeight");
+  assert.ok(start >= 0, "resolveSubmissionCodeHeight export missing");
+  const end = viewerSrc.indexOf("\nfunction readUiTheme", start);
+  assert.ok(end > start, "helper boundary not found");
+  const fnSrc = viewerSrc.slice(start, end).replace(/^export\s+/, "");
+  // eslint-disable-next-line no-new-func
+  return new Function(`${fnSrc}; return resolveSubmissionCodeHeight;`)();
+}
+
+test("resolveSubmissionCodeHeight: content-driven default + explicit height", () => {
+  const resolveHeight = loadResolveSubmissionCodeHeight();
+  const viewerSrc = readFileSync(
+    resolve(root, "src/components/pybotclass/SubmissionCodeViewer.jsx"),
+    "utf8",
+  );
+  assert.doesNotMatch(viewerSrc, /height\s*=\s*280/);
+  assert.match(viewerSrc, /resolveSubmissionCodeHeight\(code,\s*height\)/);
+
+  const oneLine = resolveHeight("print(1)");
+  const twoLines = resolveHeight("a = 1\nb = 2");
+  const threeLines = resolveHeight("a = 1\nb = 2\nc = 3");
+  assert.ok(oneLine >= 88 && oneLine <= 120, `1-line height ${oneLine}`);
+  assert.ok(twoLines >= 88 && twoLines <= 120, `2-line height ${twoLines}`);
+  assert.ok(threeLines >= 88 && threeLines <= 120, `3-line height ${threeLines}`);
+  assert.ok(oneLine <= 120);
+  assert.ok(threeLines >= oneLine);
+
+  const medium = resolveHeight(Array.from({ length: 12 }, (_, i) => `x${i}`).join("\n"));
+  assert.ok(medium > threeLines);
+  assert.ok(medium <= 320);
+
+  const tall = resolveHeight(Array.from({ length: 40 }, (_, i) => `x${i}`).join("\n"));
+  assert.equal(tall, 320);
+  assert.ok(tall <= 320);
+
+  assert.equal(resolveHeight("print(1)", 220), 220);
+  assert.equal(resolveHeight("a\nb\nc", 280), 280);
+  assert.ok(resolveHeight("") <= 120);
 });

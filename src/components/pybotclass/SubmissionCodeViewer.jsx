@@ -2,6 +2,24 @@ import { t } from "../../i18n.js";
 import { useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
 
+/**
+ * Adaptive Monaco height (px). Explicit height wins; default is content-driven.
+ * Default bounds: min <=120px, max <=320px (1–3 lines ≈ 88–120px).
+ */
+export function resolveSubmissionCodeHeight(code, explicitHeight) {
+  if (explicitHeight != null && explicitHeight !== "") {
+    const n = Number(explicitHeight);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const text = code == null ? "" : String(code);
+  const lineCount = text.length === 0 ? 1 : text.split("\n").length;
+  const MIN = 88; // <=120px floor band for short code
+  const MAX = 320; // <=320px ceiling; taller code scrolls internally
+  // 1→88, 2→104, 3→120; grows by content then clamps (internal scroll at MAX).
+  const computed = 72 + lineCount * 16;
+  return Math.min(MAX, Math.max(MIN, computed));
+}
+
 function readUiTheme() {
   try {
     const stored = localStorage.getItem("pybot_theme");
@@ -30,7 +48,7 @@ function readUiTheme() {
  */
 export default function SubmissionCodeViewer({
   code,
-  height = 280,
+  height,
   language = "python",
   ariaLabel = t("pcDeliveredCode"),
 }) {
@@ -60,6 +78,7 @@ export default function SubmissionCodeViewer({
 
   const value = code && String(code).length > 0 ? String(code) : t("pcEmptyCode");
   const monacoTheme = theme === "dark" ? "vs-dark" : "light";
+  const resolvedHeight = resolveSubmissionCodeHeight(code, height);
 
   return (
     <div
@@ -71,11 +90,11 @@ export default function SubmissionCodeViewer({
         borderRadius: "8px",
         overflow: "hidden",
         border: "1px solid var(--pbc-border, rgba(127,127,127,0.35))",
-        minHeight: height,
+        minHeight: resolvedHeight,
       }}
     >
       <Editor
-        height={height}
+        height={resolvedHeight}
         language={language}
         theme={monacoTheme}
         value={value}
