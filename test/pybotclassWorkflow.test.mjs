@@ -53,7 +53,7 @@ test("A/B: V1 inmutable — migración 045 INSERT + protect_immutable", () => {
 test("C/D: solicitar revisión → returned + feedback sin nota obligatoria", () => {
   assert.match(mig046, /request_activity_review/);
   assert.match(mig046, /status = 'returned'/);
-  assert.match(activityPage, /Solicitar revisión/);
+  assert.match(activityPage, /t\("pcRequestReview"\)/);
   assert.match(activityPage, /onRequestReview/);
   assert.equal(
     processStatusLabelEs(deriveProcessStatus({ status: "returned", hasSubmission: true })),
@@ -79,7 +79,7 @@ test("E/F/G: reentrega V2+ = Reentregado; V1 intacta por unique version", () => 
 });
 
 test("H: ActivityPage historial + ver código de versiones", () => {
-  assert.match(activityPage, /Historial/);
+  assert.match(activityPage, /t\("pcHistorySummary"\)/);
   assert.match(activityPage, /teacherHistoryByUser/);
   assert.match(activityPage, /SubmissionCodeViewer/);
 });
@@ -88,7 +88,7 @@ test("I/J/K/L/M: Evaluar guarda nota/feedback/rúbrica; total = suma", () => {
   assert.match(mig046, /grade_activity_submission/);
   assert.match(mig046, /activity_submission_rubric_scores/);
   assert.match(mig046, /v_final_grade := v_total/);
-  assert.match(activityPage, />\s*Evaluar\s*</);
+  assert.match(activityPage, /t\("pcEvaluate"\)/);
   assert.equal(sumRubricPoints([{ points: 3 }, { points: 4 }]), 7);
   assert.ok(rubricMatchesActivityMax([{ max_points: 4 }, { max_points: 6 }], 10));
   assert.ok(!rubricMatchesActivityMax([{ max_points: 4 }, { max_points: 6 }], 9));
@@ -119,7 +119,7 @@ test("P/Q/R: reopen individual + submit_activity consume reopen; otro alumno no"
   assert.match(mig046, /reopen_activity_submission/);
   assert.match(mig046, /activity_submission_reopens/);
   assert.match(mig046, /activity_submission_window_open/);
-  assert.match(activityPage, /Reabrir para este alumno/);
+  assert.match(activityPage, /t\("pcReopenForStudent"\)/);
   // ventana cerrada sin reopen → bloqueado
   assert.equal(
     canStudentSubmit({
@@ -171,8 +171,8 @@ test("S/T/U: a tiempo / tarde / bloqueada por close", () => {
 
 test("V/W/X: Classroom note auto + retry; feedback never synced", () => {
   assert.match(activityPage, /sendGradeToClassroom/);
-  assert.match(activityPage, /Evaluación guardada en PyBotClass/);
-  assert.match(activityPage, /Reintentar sync Classroom/);
+  assert.match(activityPage, /t\("pcEvaluationSaved"\)/);
+  assert.match(activityPage, /t\("pcRetryClassroomSync"\)/);
   assert.equal(CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED, false);
   const msg = classroomGradeSyncUserMessage({ hasFeedback: true });
   assert.match(msg, /Nota sincronizada/);
@@ -184,12 +184,12 @@ test("V/W/X: Classroom note auto + retry; feedback never synced", () => {
 // full grading workflow (review / evaluate / history / Classroom grade retry).
 test("ActivityPage docente: unión PyBot+Classroom conserva Solicitar revisión, Evaluar, Historial y retry Classroom", () => {
   assert.match(activityPage, /buildTeacherDeliveryCards/);
-  assert.match(activityPage, /Solicitar revisión/);
-  assert.match(activityPage, />\s*Evaluar\s*</);
-  assert.match(activityPage, /Historial/);
-  assert.match(activityPage, /Reintentar sync Classroom/);
-  assert.match(activityPage, /Ver código/);
-  assert.match(activityPage, /Actualizar/);
+  assert.match(activityPage, /t\("pcRequestReview"\)/);
+  assert.match(activityPage, /t\("pcEvaluate"\)/);
+  assert.match(activityPage, /t\("pcHistorySummary"\)/);
+  assert.match(activityPage, /t\("pcRetryClassroomSync"\)/);
+  assert.match(activityPage, /t\("pcShowCode"\)/);
+  assert.match(activityPage, /t\("pcRefresh"\)/);
 });
 
 test("Y: RPCs docentes security definer + teacher check (alumno forbidden)", () => {

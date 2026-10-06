@@ -121,3 +121,73 @@ test("PyClass i18n: every language exposes the same PyClass keys", () => {
     }
   }
 });
+
+test("ActivityPage: no hardcoded Spanish UI deny-list outside PYBOTCLASS_STRINGS", () => {
+  const src = readFileSync(
+    new URL("../src/pages/ActivityPage.jsx", import.meta.url),
+    "utf8",
+  );
+  const denyList = [
+    "Detalle",
+    "Abrir PyBot",
+    "Volver al curso",
+    "Actividades",
+    "Ventana",
+    "Cuenta Google Classroom vinculada",
+    "Sin descripción",
+    "Las entregas están cerradas",
+    "Evaluación cualitativa (sin nota numérica)",
+    "Sincronizando…",
+    "Sincronizado",
+    "No se pudo sincronizar",
+    "Publicar en Classroom",
+    "Abrir actividad en Classroom",
+    "Alumno Classroom",
+    "Archivo entregado",
+    "Abrir entrega en Classroom",
+    "Ver código",
+    "Ocultar código",
+    "Historial",
+    "Guardar borrador",
+    "Cualitativa — sin nota numérica",
+    "Nota = total servidor (niveles congelados)",
+    "Solicitar revisión",
+    "Reabrir para este alumno",
+    "Reintentar sync Classroom",
+    "Calificar ítem",
+    "Ver entregas del curso",
+    "Configurar",
+    "← Mis clases",
+    "Mis clases",
+  ];
+  for (const lit of denyList) {
+    // Allow only inside t("…") key names? Deny if the Spanish phrase appears as a
+    // JSX/string literal (quoted) or as raw JSX text — not merely as a substring
+    // of an i18n key identifier.
+    const quoted = new RegExp(`["'\`]${lit.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}["'\`]`);
+    const jsxText = new RegExp(`>\\s*${lit.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\s*<`);
+    assert.equal(quoted.test(src), false, `deny-list quoted literal present: ${lit}`);
+    assert.equal(jsxText.test(src), false, `deny-list JSX text present: ${lit}`);
+  }
+  // Core teacher/student actions must go through i18n keys.
+  for (const key of [
+    "pcDetail",
+    "pcOpenPyBot",
+    "pcBackToCourse",
+    "pcMyClassesBack",
+    "pcSyncing",
+    "pcSynced",
+    "pcRequestReview",
+    "pcEvaluate",
+    "pcOpenSubmissionInClassroom",
+    "pcShowCode",
+  ]) {
+    assert.match(src, new RegExp(`t\\("${key}"\\)`), `missing i18n usage: ${key}`);
+  }
+  // pcConfigure lives in compact EvaluationSection (imported by ActivityPage).
+  const evalSrc = readFileSync(
+    new URL("../src/components/pybotclass/ActivityEvaluationSection.jsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(evalSrc, /t\("pcConfigure"\)/);
+});

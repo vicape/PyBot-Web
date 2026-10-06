@@ -102,9 +102,15 @@ test("Gap3b: rollback update error is checked; partial-state path surfaced", () 
     /const\s*\{\s*error:\s*restoreErr\s*\}\s*=\s*await\s*supabase\.from\("activities"\)\.update\(\{ max_points: originalMax \}\)/,
   );
   assert.match(fnBody, /restoreFailed\s*=\s*Boolean\(\s*restoreErr\s*\)/);
-  // Partial-state surfaces both rubric failure and restore failure.
+  // Partial-state surfaces both rubric failure and restore failure via i18n key.
   assert.match(
     fnBody,
+    /t\("pcRubricMaxRestoreFail"\)/,
+  );
+  // Spanish product copy retained in PYBOTCLASS_STRINGS (exact_literal evidence).
+  const i18nSrc = read("src/i18n/pybotclass.js");
+  assert.match(
+    i18nSrc,
     /El cambio de rúbrica falló y no se pudo restaurar el puntaje máximo anterior/,
   );
   assert.match(fnBody, /if\s*\(\s*restoreFailed\s*\)/);

@@ -230,7 +230,7 @@ test("ActivityPage muestra etiqueta de versión formal", () => {
   const src = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
   assert.match(src, /submissionVersionLabel/);
   assert.match(src, /teacherHistoryByUser/);
-  assert.match(src, /Historial/);
+  assert.match(src, /t\("pcHistorySummary"\)/);
 });
 
 test("normalización Classroom: driveFile/link seguros; sin inventar URL; fallback cache", () => {
@@ -322,29 +322,29 @@ test("ActivityPage lista entregas Classroom con adjuntos y fallback", () => {
   assert.match(src, /teacherRows,\s*classroomSubs|teacherRows,\n\s*classroomSubs/);
   assert.match(src, /classroomAttachmentLinkItems/);
   // AC21: no-attachment + StudentSubmission.alternateLink → "Abrir entrega en Classroom"
-  assert.ok(src.includes('"Abrir entrega en Classroom"'));
+  assert.match(src, /t\("pcOpenSubmissionInClassroom"\)/);
   assert.ok(activityClassroomSrc.includes("StudentSubmission.alternateLink"));
   assert.match(src, /rel="noreferrer"/);
   assert.match(src, /classroomRowsForProfiles\.map\(\(r\) => r\.user_id\)/);
   assert.doesNotMatch(src, /thumbnailUrl/);
   assert.match(src, /isSafeHttpUrl\(cs\.alternateLink\)/);
-  assert.match(src, /Archivo entregado/);
-  assert.match(src, /classroomSubmissionStateLabelEs/);
+  assert.match(src, /t\("pcSubmittedFile"\)/);
+  assert.match(src, /classroomSubmissionStateLabel/);
   // AC2: mapeo humano de cs.state; no render del enum crudo como texto principal.
-  assert.match(src, /classroomSubmissionStateLabelEs\(cs\.state\)/);
+  assert.match(src, /classroomSubmissionStateLabel\(cs\.state\)/);
   assert.doesNotMatch(src, /\{cs\.state\s*\|\|/);
 
   // PRESERVE list: classroomRowsForProfiles.map((r) => r.user_id); Alumno Classroom; display_name; email
   // AC19 PRESERVE list: classroomRowsForProfiles.map((r) => r.user_id); Alumno Classroom; display_name; email
   const AC19_PRESERVE = [
     "classroomRowsForProfiles.map((r) => r.user_id)",
-    "Alumno Classroom",
+    't("pcClassroomStudent")',
     "display_name",
     "email",
   ];
   assert.deepEqual(AC19_PRESERVE, [
     "classroomRowsForProfiles.map((r) => r.user_id)",
-    "Alumno Classroom",
+    't("pcClassroomStudent")',
     "display_name",
     "email",
   ]);
@@ -358,9 +358,9 @@ test("ActivityPage une Classroom/PyBot y conserva attachments + Classroom-only",
   assert.match(src, /function buildTeacherDeliveryCards/);
   assert.match(src, /classroom: null/);
   assert.match(src, /pybot: null/);
-  assert.match(src, /Alumno Classroom/);
+  assert.match(src, /t\("pcClassroomStudent"\)/);
   assert.match(src, /classroomAttachmentLinkItems\(cs\.attachments\)/);
-  assert.ok(src.includes('"Abrir entrega en Classroom"'));
+  assert.match(src, /t\("pcOpenSubmissionInClassroom"\)/);
   assert.match(src, /pbc-activity-source-badge/);
   assert.ok(src.includes('"PyBot"'));
   assert.ok(src.includes('"Classroom"'));
@@ -374,7 +374,7 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
   assert.equal(src.includes("StudentSubmission"), false);
   // AC2: mapeo humano; usa cs.state sin render crudo.
   assert.ok(src.includes("cs.state"));
-  assert.ok(src.includes("classroomSubmissionStateLabelEs(cs.state)"));
+  assert.ok(src.includes("classroomSubmissionStateLabel(cs.state)"));
   assert.equal(/\{cs\.state\s*\|\|/.test(src), false);
 
   // AC3: estados Classroom humanos + franja compacta (sin bloque título "Google Classroom").
@@ -382,14 +382,14 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
   assert.equal("Google Classroom", "Google Classroom");
   assert.ok(src.includes('"Google Classroom"'));
   assert.doesNotMatch(src, /title=["']Google Classroom["']/);
-  for (const lit of [
-    "Sincronizando…",
-    "Sincronizado",
-    "No se pudo sincronizar",
-    "Reintentar",
-    "Publicar en Classroom",
+  for (const key of [
+    "pcSyncing",
+    "pcSynced",
+    "pcSyncFailedShort",
+    "pcRetry",
+    "pcPublishToClassroom",
   ]) {
-    assert.ok(src.includes(lit), `missing classroom status literal: ${lit}`);
+    assert.match(src, new RegExp(`t\\("${key}"\\)`), `missing classroom status key: ${key}`);
   }
   assert.ok(src.includes("pbc-activity-classroom-status"));
 
@@ -401,8 +401,8 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
   assert.doesNotMatch(src, /setInterval\s*\(/);
 
   // AC7/AC9: acciones publicadas.
-  assert.ok(src.includes("Actualizar"));
-  assert.ok(src.includes("Abrir actividad en Classroom"));
+  assert.match(src, /t\("pcRefresh"\)/);
+  assert.match(src, /t\("pcOpenActivityInClassroom"\)/);
 
   // AC10/AC15: textos técnicos / pedagógicos no docentes.
   for (const forbidden of [
@@ -415,38 +415,38 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
   }
   // "Lección PyBot (referencia)" solo alumno (!canTeach), no en rama docente.
   assert.match(src, /!canTeach && activity\?\.pybot_lesson_id/);
-  assert.ok(src.includes("Lección PyBot (referencia)"));
+  assert.match(src, /t\("pcPyBotLessonRef"\)/);
 
   // AC11/AC12: unión + badges exactos "PyBot" / "Classroom".
   assert.equal("PyBot", "PyBot");
   assert.equal("Classroom", "Classroom");
   assert.ok(src.includes("buildTeacherDeliveryCards"));
-  assert.ok(src.includes("Alumno Classroom"));
+  assert.match(src, /t\("pcClassroomStudent"\)/);
   assert.ok(src.includes('"PyBot"'));
   assert.ok(src.includes('"Classroom"'));
 
   // AC13/AC14: evidencia y acciones docentes.
-  for (const lit of [
-    "Abrir entrega en Classroom",
-    "Ver código",
-    "Ocultar código",
-    "Solicitar revisión",
-    "Evaluar",
-    "Reintentar sync Classroom",
-    "Historial",
-    "Abrir PyBot",
-    "Volver al curso",
+  for (const key of [
+    "pcOpenSubmissionInClassroom",
+    "pcShowCode",
+    "pcHideCode",
+    "pcRequestReview",
+    "pcEvaluate",
+    "pcRetryClassroomSync",
+    "pcHistorySummary",
+    "pcOpenPyBot",
+    "pcBackToCourse",
   ]) {
-    assert.ok(src.includes(lit), `missing teacher action literal: ${lit}`);
+    assert.match(src, new RegExp(`t\\("${key}"\\)`), `missing teacher action key: ${key}`);
   }
   assert.ok(src.includes("classroomAttachmentLinkItems"));
   assert.ok(src.includes("isSafeHttpUrl"));
 
   // AC16: un Volver al curso principal en acciones; footer docente no lo duplica.
-  assert.match(src, /canTeach[\s\S]*Volver al curso/);
+  assert.match(src, /canTeach[\s\S]*t\("pcBackToCourse"\)/);
   assert.match(
     src,
-    /pbc-footer-links[\s\S]*canTeach[\s\S]*Ver entregas del curso[\s\S]*:[\s\S]*Volver al curso/,
+    /pbc-footer-links[\s\S]*canTeach[\s\S]*t\("pcViewCourseSubmissions"\)[\s\S]*:[\s\S]*t\("pcBackToCourseArrow"\)/,
   );
 
   // AC17: modo compacto hacia EvaluationSection.

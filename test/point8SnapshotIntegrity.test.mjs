@@ -359,7 +359,10 @@ test("11) P7 ok + P4 fail does NOT mark completed locally", () => {
   assert.doesNotMatch(submissionsSrc, /catch\s*\{\s*\/\* non-fatal \*\//);
   assert.match(activitySrc, /progressUpdated/);
   assert.match(activitySrc, /progressError/);
-  assert.match(activitySrc, /no se pudo sincronizar el progreso/);
+  assert.match(activitySrc, /t\("pcItemSubmitProgressSyncFail"\)/);
+  // Spanish product copy retained in PYBOTCLASS_STRINGS (exact_literal evidence).
+  const i18nSrc = readFileSync(resolve(root, "src/i18n/pybotclass.js"), "utf8");
+  assert.match(i18nSrc, /no se pudo sincronizar el progreso/);
   assert.match(activitySrc, /if \(progressUpdated\)/);
 
   // Behavioural orchestration: P7 success + P4 failure → keep submission, no local completed.

@@ -653,7 +653,7 @@ test("CASE C: frozen level points remain after template conceptual change", () =
 test("UX: matrix grading + student cards + draft button present", () => {
   assert.match(activityPage, /ActivityRubricGradeMatrix/);
   assert.match(activityPage, /ActivityRubricStudentResult/);
-  assert.match(activityPage, /Guardar borrador/);
+  assert.match(activityPage, /t\("pcSaveDraft"\)/);
   assert.match(activityPage, /onSaveRubricDraft/);
   assert.match(activityPage, /applyRubricTemplateToActivity/);
   assert.match(panelsSrc, /pbc-rubric-matrix/);

@@ -511,7 +511,7 @@ export default function ActivityEvaluationSection({
                 onClick={() => setCompactConfigOpen(true)}
               >
                 <IconAssign size={18} />
-                <span>Configurar</span>
+                <span>{t("pcConfigure")}</span>
               </button>
             </div>
           ) : null}

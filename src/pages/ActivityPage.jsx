@@ -52,7 +52,6 @@ import {
   reopenSubmissionForStudent,
   requestSubmissionReview,
   saveSubmissionRubricDraft,
-  submissionStatusLabelEs,
   submissionVersionLabel,
   submitActivity,
   upsertActivityRubric,
@@ -84,11 +83,7 @@ import {
   deriveProcessStatus,
   deriveSubmissionWindow,
   deriveTimeliness,
-  processStatusLabelEs,
-  studentNextActionMessage,
   sumRubricPoints,
-  timelinessLabelEs,
-  windowLabelEs,
 } from "../platform/submissionWorkflow.js";
 import {
   connectGoogleClassroom,
@@ -102,9 +97,6 @@ import {
   publishActivityToClassroom,
   sendGradeToClassroom,
   syncClassroomSubmissionsForActivity,
-  classroomGradeSyncUserMessage,
-  classroomTurnInUserMessage,
-  classroomTurnInSuccessMessage,
   turnInPybotActivityToClassroom,
   classroomAttachmentLinkItems,
   isSafeHttpUrl,
@@ -129,38 +121,142 @@ function fmtTs(v) {
 /** Auto-sync Classroom threshold: exactly 2 minutes. */
 const CLASSROOM_AUTO_SYNC_MS = 120000;
 
-function classroomSubmissionStateLabelEs(state) {
+function classroomSubmissionStateLabel(state) {
   switch (String(state || "").toUpperCase()) {
     case "NEW":
-      return "Nueva";
+      return t("pcNew");
     case "CREATED":
-      return "Asignada";
+      return t("pcClassroomStateAssigned");
     case "TURNED_IN":
-      return "Entregada";
+      return t("pcClassroomStateTurnedIn");
     case "RETURNED":
-      return "Devuelta";
+      return t("pcClassroomStateReturned");
     case "RECLAIMED_BY_STUDENT":
-      return "Recuperada";
+      return t("pcClassroomStateReclaimed");
     default:
-      return state ? "En Classroom" : "—";
+      return state ? t("pcClassroomStateInClassroom") : "—";
   }
 }
 
 function fmtSyncedRelative(iso) {
   if (!iso) return "";
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return fmtTs(iso);
-  const diff = Date.now() - t;
-  if (diff < 60_000) return "hace un momento";
+  const parsed = Date.parse(iso);
+  if (Number.isNaN(parsed)) return fmtTs(iso);
+  const diff = Date.now() - parsed;
+  if (diff < 60_000) return t("pcSyncedJustNow");
   if (diff < 3_600_000) {
     const m = Math.max(1, Math.floor(diff / 60_000));
-    return `hace ${m} min`;
+    return t("pcSyncedMinutesAgo").replace("{n}", String(m));
   }
   if (diff < 86_400_000) {
     const h = Math.max(1, Math.floor(diff / 3_600_000));
-    return `hace ${h} h`;
+    return t("pcSyncedHoursAgo").replace("{n}", String(h));
   }
   return fmtTs(iso);
+}
+
+function processStatusLabel(processStatus) {
+  switch (processStatus) {
+    case "en_progreso":
+      return t("pcStatusInProgress");
+    case "entregado":
+      return t("pcStatusSubmitted");
+    case "revision_solicitada":
+      return t("pcStatusReviewRequested");
+    case "reentregado":
+      return t("pcStatusResubmitted");
+    case "evaluado":
+      return t("pcStatusGraded");
+    case "cerrado":
+      return t("pcStatusClosed");
+    default:
+      return processStatus || "—";
+  }
+}
+
+function submissionStatusLabel(status, { version } = {}) {
+  const process = deriveProcessStatus({
+    status,
+    version,
+    hasSubmission: Boolean(status),
+  });
+  if (
+    status === "draft" ||
+    status === "submitted" ||
+    status === "returned" ||
+    status === "graded" ||
+    status === "closed"
+  ) {
+    return processStatusLabel(process);
+  }
+  return status || "—";
+}
+
+function studentNextActionMessageI18n(processStatus) {
+  switch (processStatus) {
+    case "en_progreso":
+      return t("pcStudentActionInProgress");
+    case "entregado":
+    case "reentregado":
+      return t("pcStudentActionWaiting");
+    case "revision_solicitada":
+      return t("pcStudentActionReviewRequested");
+    case "evaluado":
+      return t("pcStudentActionGraded");
+    case "cerrado":
+      return t("pcStudentActionClosed");
+    default:
+      return "";
+  }
+}
+
+function windowLabel(w) {
+  return w === "cerrada" ? t("pcWindowClosed") : t("pcWindowOpen");
+}
+
+function timelinessLabel(value) {
+  if (value === "a_tiempo") return t("pcOnTime");
+  if (value === "tarde") return t("pcLate");
+  return null;
+}
+
+function classroomGradeSyncUserMessageI18n({ warning, hasFeedback } = {}) {
+  const feedbackNote = hasFeedback ? t("pcFeedbackStaysInPyBot") : "";
+  if (warning) return `${warning}${feedbackNote}`;
+  return `${t("pcGradeSyncedClassroom")}${feedbackNote}`;
+}
+
+function classroomTurnInUserMessageI18n(classroomResult) {
+  if (!classroomResult || classroomResult.skipped || classroomResult.ok) return null;
+  if (classroomResult.needsAdmin || classroomResult.googleReason === "ClassroomApiDisabled") {
+    return t("pcClassroomTurnInAdminDisabled");
+  }
+  const err = String(classroomResult.error || "");
+  if (err === "coursework_not_associated_with_developer") {
+    return t("pcClassroomTurnInNotAssociated");
+  }
+  if (err === "classroom_submission_not_found" || err === "submission_not_found") {
+    return t("pcClassroomTurnInUpdateFail");
+  }
+  if (classroomResult.needsConnect) {
+    return t("pcClassroomTurnInNeedsAuth");
+  }
+  const stageHint =
+    classroomResult.stage && classroomResult.code
+      ? ` (${classroomResult.stage}/${classroomResult.code})`
+      : "";
+  return `${t("pcClassroomTurnInUpdateFail")}${stageHint}`;
+}
+
+function classroomTurnInSuccessMessageI18n(classroomResult) {
+  if (!classroomResult || classroomResult.skipped) {
+    return t("pcActivitySubmitted");
+  }
+  if (!classroomResult.ok) return null;
+  if (classroomResult.alreadyTurnedIn) {
+    return t("pcClassroomTurnInAlreadyThere");
+  }
+  return t("pcClassroomTurnInBothOk");
 }
 
 function classroomCacheIsStale(syncedAt, nowMs = Date.now()) {
@@ -361,7 +457,7 @@ export default function ActivityPage() {
       return;
     }
     if (!act) {
-      setLoadErr("Actividad no encontrada o sin permiso.");
+      setLoadErr(t("pcActivityNotFound"));
       setLoading(false);
       return;
     }
@@ -427,13 +523,13 @@ export default function ActivityPage() {
       setSavedCode(false);
     } else if (prog.code && prog.code.length > 0) {
       setSavedCode(true);
-      setProgressHint("Tenés código guardado en la nube para esta actividad.");
+      setProgressHint(t("pcProgressHintSaved"));
     } else if (act.starter_code && act.starter_code.length > 0) {
       setSavedCode(false);
-      setProgressHint("PyBot abre con el código inicial de esta tarea.");
+      setProgressHint(t("pcProgressHintStarter"));
     } else {
       setSavedCode(false);
-      setProgressHint("Todavía no hay progreso guardado en la nube.");
+      setProgressHint(t("pcProgressHintNone"));
     }
 
     writeActivityLaunchCache(activityId, launchCode);
@@ -770,7 +866,7 @@ export default function ActivityPage() {
         responseText: responseText || "",
       });
       if (!ok) {
-        setActionErr(error || "No se pudo entregar el ítem.");
+        setActionErr(error || t("pcItemSubmitFail"));
         setItemProgressBusy(null);
         return false;
       }
@@ -789,9 +885,7 @@ export default function ActivityPage() {
             },
         }));
       } else if (progressError) {
-        setActionErr(
-          "La entrega se guardó, pero no se pudo sincronizar el progreso. Intentá de nuevo más tarde.",
-        );
+        setActionErr(t("pcItemSubmitProgressSyncFail"));
       }
       setItemProgressBusy(null);
       return true;
@@ -809,19 +903,19 @@ export default function ActivityPage() {
     const possible =
       possibleRaw === "" || possibleRaw == null ? null : Number(possibleRaw);
     if (earned != null && (Number.isNaN(earned) || earned < 0)) {
-      setActionErr("Los puntos obtenidos deben ser ≥ 0.");
+      setActionErr(t("pcPointsEarnedMin"));
       return;
     }
     if (possible != null && (Number.isNaN(possible) || possible <= 0)) {
-      setActionErr("Los puntos posibles deben ser mayores que 0.");
+      setActionErr(t("pcPointsPossibleMin"));
       return;
     }
     if (earned != null && possible == null) {
-      setActionErr("Indicá los puntos posibles.");
+      setActionErr(t("pcPointsPossibleRequired"));
       return;
     }
     if (earned != null && possible != null && earned > possible) {
-      setActionErr("Los puntos obtenidos no pueden superar los posibles.");
+      setActionErr(t("pcPointsEarnedExceed"));
       return;
     }
     setBusy(true);
@@ -835,10 +929,10 @@ export default function ActivityPage() {
     });
     setBusy(false);
     if (!r.ok) {
-      setActionErr(r.error || "No se pudo calificar el ítem.");
+      setActionErr(r.error || t("pcItemGradeFail"));
       return;
     }
-    setActionMsg("Calificación de ítem guardada.");
+    setActionMsg(t("pcItemGradeSaved"));
     await load({ preserveActionMsg: true });
   };
 
@@ -871,21 +965,21 @@ export default function ActivityPage() {
       clearPendingClassroomTurnIn();
       setBusy(true);
       setActionErr("");
-      setActionMsg("Completando entrega en Google Classroom…");
+      setActionMsg(t("pcCompletingClassroomTurnIn"));
       try {
         const cr = await turnInPybotActivityToClassroom(activityId);
         if (cancelled) return;
         await load({ preserveActionMsg: true });
         if (cr?.needsConnect && !cr?.needsAdmin) {
-          setActionMsg(classroomTurnInUserMessage(cr) || "No se pudo completar Classroom.");
+          setActionMsg(classroomTurnInUserMessageI18n(cr) || t("pcClassroomTurnInFail"));
           return;
         }
-        const okMsg = classroomTurnInSuccessMessage(cr);
-        const failMsg = classroomTurnInUserMessage(cr);
-        setActionMsg(failMsg || okMsg || "Actividad entregada.");
+        const okMsg = classroomTurnInSuccessMessageI18n(cr);
+        const failMsg = classroomTurnInUserMessageI18n(cr);
+        setActionMsg(failMsg || okMsg || t("pcActivitySubmitted"));
       } catch (ex) {
         if (cancelled) return;
-        setActionErr(ex?.message || "No se pudo completar la entrega en Classroom.");
+        setActionErr(ex?.message || t("pcClassroomTurnInFail"));
         setActionMsg("");
       } finally {
         if (!cancelled) setBusy(false);
@@ -924,10 +1018,10 @@ export default function ActivityPage() {
     });
     setBusy(false);
     if (!r.ok) {
-      setActionErr(r.error || "No se pudo publicar en Classroom.");
+      setActionErr(r.error || t("pcPublishClassroomFail"));
       return;
     }
-    setActionMsg(r.alreadyPublished ? "Ya estaba publicada en Classroom." : "Publicada en Classroom.");
+    setActionMsg(r.alreadyPublished ? t("pcAlreadyPublishedClassroom") : t("pcPublishedClassroom"));
     await load();
   };
 
@@ -947,11 +1041,11 @@ export default function ActivityPage() {
         });
         if (!r.ok) {
           // Conservar classroomSubs cacheados; no OAuth ni redirect en auto-sync.
-          const msg = r.error || "No se pudo sincronizar Classroom.";
+          const msg = r.error || t("pcClassroomSyncError");
           const friendly = /guardar|persist|forbidden|invalid_rows|missing_activity/i.test(
             String(msg),
           )
-            ? "No se pudieron guardar las entregas sincronizadas."
+            ? t("pcClassroomSyncPersistFail")
             : msg;
           setClassroomSyncErr(friendly);
           return;
@@ -1042,9 +1136,7 @@ export default function ActivityPage() {
     if (!activity?.classroom_coursework_id || !classroomCourseId || !user || busy) return;
     const classroomSubmissionId = await resolveClassroomSubmissionId(row);
     if (!classroomSubmissionId) {
-      setActionErr(
-        "No se encontró la entrega Classroom del alumno. Primero usá «Actualizar».",
-      );
+      setActionErr(t("pcClassroomSubmissionNotFound"));
       return;
     }
     setBusy(true);
@@ -1060,11 +1152,11 @@ export default function ActivityPage() {
     });
     setBusy(false);
     if (!r.ok) {
-      setActionErr(r.error || "No se pudo enviar la nota a Classroom.");
+      setActionErr(r.error || t("pcSendGradeClassroomFail"));
       return;
     }
     setActionMsg(
-      classroomGradeSyncUserMessage({
+      classroomGradeSyncUserMessageI18n({
         warning: r.warning || null,
         hasFeedback: Boolean(row.feedback) && r.feedbackSynced !== true,
       }),
@@ -1074,7 +1166,7 @@ export default function ActivityPage() {
 
   const onSubmit = async () => {
     if (!activityId || !user || busy) return;
-    if (!window.confirm("¿Entregar esta actividad?")) return;
+    if (!window.confirm(t("pcConfirmSubmitActivity"))) return;
     setBusy(true);
     setActionErr("");
     setActionMsg("");
@@ -1086,8 +1178,8 @@ export default function ActivityPage() {
       setBusy(false);
       const msg =
         r.error === "submissions_closed"
-          ? "Las entregas están cerradas. Pedile al docente una reapertura individual."
-          : r.error || "No se pudo entregar.";
+          ? t("pcSubmissionsClosedAskReopen")
+          : r.error || t("pcSubmitFail");
       setActionErr(msg);
       return;
     }
@@ -1100,18 +1192,17 @@ export default function ActivityPage() {
         returnPath: `/actividad/${activityId}`,
       });
       setActionMsg(
-        classroomTurnInUserMessage(cr) ||
-          "Actividad entregada en PyBot. Autorizá Google Classroom para completar la entrega.",
+        classroomTurnInUserMessageI18n(cr) || t("pcSubmittedAuthorizeClassroom"),
       );
       setBusy(false);
       void connectGoogleClassroom(`/actividad/${activityId}`, { mode: "student" });
       return;
     }
     setBusy(false);
-    const lateNote = r.submission?.late ? " (tarde)" : "";
-    const okMsg = classroomTurnInSuccessMessage(cr);
-    const failMsg = classroomTurnInUserMessage(cr);
-    setActionMsg(failMsg || okMsg || `Actividad entregada${lateNote}.`);
+    const lateNote = r.submission?.late;
+    const okMsg = classroomTurnInSuccessMessageI18n(cr);
+    const failMsg = classroomTurnInUserMessageI18n(cr);
+    setActionMsg(failMsg || okMsg || (lateNote ? t("pcActivitySubmittedLate") : t("pcActivitySubmitted")));
   };
 
   const onRequestReview = async (submissionId) => {
@@ -1123,10 +1214,10 @@ export default function ActivityPage() {
     const r = await requestSubmissionReview(submissionId, draft.feedback || null);
     setBusy(false);
     if (!r.ok) {
-      setActionErr(r.error || "No se pudo solicitar la revisión.");
+      setActionErr(r.error || t("pcRequestReviewFail"));
       return;
     }
-    setActionMsg("Revisión solicitada. El alumno puede corregir y reentregar.");
+    setActionMsg(t("pcRequestReviewOk"));
     await load({ preserveActionMsg: true });
   };
 
@@ -1173,15 +1264,15 @@ export default function ActivityPage() {
       setBusy(false);
       setActionErr(
         r.error === "rubric_max_mismatch"
-          ? `La suma de la rúbrica no coincide con el puntaje máximo (${activity?.max_points}).`
+          ? t("pcRubricMaxMustMatch").replace("{n}", String(activity?.max_points ?? ""))
           : r.error === "incomplete_rubric"
-            ? "Completá un nivel por cada criterio antes de evaluar."
-            : r.error || "No se pudo guardar la evaluación.",
+            ? t("pcCompleteLevelsBeforeGrade")
+            : r.error || t("pcSaveEvaluationFail"),
       );
       return;
     }
 
-    let msg = "Evaluación guardada en PyBotClass.";
+    let msg = t("pcEvaluationSaved");
     if (activity?.classroom_coursework_id && classroomCourseId && row && r.result?.grade != null) {
       const gradedRow = {
         ...row,
@@ -1199,16 +1290,15 @@ export default function ActivityPage() {
           userId: user.id,
         });
         if (sync.ok) {
-          msg = classroomGradeSyncUserMessage({
+          msg = classroomGradeSyncUserMessageI18n({
             warning: sync.warning || null,
             hasFeedback: Boolean(draft.feedback) && sync.feedbackSynced !== true,
           });
         } else {
-          msg = `Evaluación guardada en PyBotClass. Sync Classroom pendiente: ${sync.error || "error"}. Podés reintentar.`;
+          msg = t("pcEvaluationSavedClassroomPending").replace("{error}", sync.error || t("pcErrorWord"));
         }
       } else {
-        msg =
-          "Evaluación guardada en PyBotClass. Sync Classroom pendiente: falta la entrega en Classroom (actualizá).";
+        msg = t("pcEvaluationSavedClassroomMissing");
       }
     }
 
@@ -1235,10 +1325,10 @@ export default function ActivityPage() {
     const r = await saveSubmissionRubricDraft(submissionId, payload);
     setBusy(false);
     if (!r.ok) {
-      setActionErr(r.error || "No se pudo guardar el borrador.");
+      setActionErr(r.error || t("pcSaveDraftFail"));
       return;
     }
-    setActionMsg("Borrador de rúbrica guardado (solo docentes; no evalúa).");
+    setActionMsg(t("pcRubricDraftSaved"));
   };
 
   const onCloseSubmission = async (submissionId) => {
@@ -1249,10 +1339,10 @@ export default function ActivityPage() {
     const r = await closeSubmission(submissionId);
     setBusy(false);
     if (!r.ok) {
-      setActionErr(r.error || "No se pudo cerrar.");
+      setActionErr(r.error || t("pcCloseFail"));
       return;
     }
-    setActionMsg("Corrección cerrada.");
+    setActionMsg(t("pcCorrectionClosed"));
     await load({ preserveActionMsg: true });
   };
 
@@ -1264,10 +1354,10 @@ export default function ActivityPage() {
     const r = await reopenSubmissionForStudent(activityId, userId);
     setBusy(false);
     if (!r.ok) {
-      setActionErr(r.error || "No se pudo reabrir.");
+      setActionErr(r.error || t("pcReopenFail"));
       return;
     }
-    setActionMsg("Entrega reabierta para este alumno (revisión solicitada).");
+    setActionMsg(t("pcReopenedForStudentMsg"));
     await load({ preserveActionMsg: true });
   };
 
@@ -1325,14 +1415,14 @@ export default function ActivityPage() {
       setBusy(false);
       if (restoreFailed) {
         setActionErr(
-          "El cambio de rúbrica falló y no se pudo restaurar el puntaje máximo anterior.",
+          t("pcRubricMaxRestoreFail"),
         );
       } else {
         setActionErr(
           r.error === "rubric_has_evaluations"
             ? t("pcRubricHasEvaluationsLocked")
             : r.error === "rubric_max_mismatch"
-              ? `La suma de la rúbrica debe ser igual al puntaje máximo (${originalMax}).`
+              ? t("pcRubricMaxMustMatch").replace("{n}", String(originalMax))
               : r.error || t("pcRubricApplyFail"),
         );
       }
@@ -1365,7 +1455,7 @@ export default function ActivityPage() {
   if (authLoading) {
     return (
       <main className="dash-root dash-root--center">
-        <PbcLoading label="Cargando actividad…" />
+        <PbcLoading label={t("pcLoadingActivity")} />
       </main>
     );
   }
@@ -1376,7 +1466,7 @@ export default function ActivityPage() {
     return (
       <PyBotClassShell user={user} showAdminTab={superAdmin} onSignOut={() => void signOut()}>
         <PbcPage>
-          <PbcLoading label="Cargando actividad…" />
+          <PbcLoading label={t("pcLoadingActivity")} />
         </PbcPage>
       </PyBotClassShell>
     );
@@ -1394,12 +1484,12 @@ export default function ActivityPage() {
 
   const breadcrumbItems = [];
   if (activity?.course_id) {
-    breadcrumbItems.push({ label: courseTitle || "Curso", href: courseHref });
+    breadcrumbItems.push({ label: courseTitle || t("pcSelectCourse"), href: courseHref });
     if (canTeach) {
-      breadcrumbItems.push({ label: "Entregas", href: entregasHref });
+      breadcrumbItems.push({ label: t("pcSubmissions"), href: entregasHref });
     }
   }
-  breadcrumbItems.push({ label: activity?.title || "Actividad" });
+  breadcrumbItems.push({ label: activity?.title || t("pcActivity") });
 
   const myProcess = deriveProcessStatus({
     status: mySubmission?.status,
@@ -1427,12 +1517,12 @@ export default function ActivityPage() {
     return (
       <PyBotClassShell user={user} showAdminTab={superAdmin} onSignOut={() => void signOut()}>
         <PbcPage>
-          <PyBotClassBreadcrumb items={[{ label: "Actividad" }]} />
-          <PbcCourseHeader title="Actividad" />
+          <PyBotClassBreadcrumb items={[{ label: t("pcActivity") }]} />
+          <PbcCourseHeader title={t("pcActivity")} />
           <PbcAlert variant="error">{loadErr}</PbcAlert>
           <div className="pbc-footer-links">
             <Link to="/dashboard/classes" className="auth-link">
-              ← Mis clases
+              {t("pcMyClassesBack")}
             </Link>
           </div>
         </PbcPage>
@@ -1446,9 +1536,9 @@ export default function ActivityPage() {
         <PyBotClassBreadcrumb items={breadcrumbItems} />
 
         <PbcCourseHeader
-          title={activity?.title || "Actividad"}
+          title={activity?.title || t("pcActivity")}
           orgName={courseTitle || undefined}
-          roleLabel={canTeach ? "Docente" : isStudent ? "Alumno" : undefined}
+          roleLabel={canTeach ? t("pcTeacher") : isStudent ? t("pcStudent") : undefined}
           classroomLinked={!!activity?.classroom_coursework_id}
         />
 
@@ -1458,13 +1548,13 @@ export default function ActivityPage() {
 
         <PbcSection
           className="pbc-activity-overview"
-          title="Detalle"
-          description={canTeach ? undefined : "Consigna, material y entrega de la actividad."}
+          title={t("pcDetail")}
+          description={canTeach ? undefined : t("pcActivityOverviewDesc")}
           actions={
             <div className="pbc-activity-actions">
               {isCodingActivity ? (
                 <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" onClick={openPyBot}>
-                  Abrir PyBot
+                  {t("pcOpenPyBot")}
                 </button>
               ) : null}
               {isStudent && isCodingActivity ? (
@@ -1474,56 +1564,60 @@ export default function ActivityPage() {
                   disabled={busy || !studentCanSubmit}
                   onClick={() => void onSubmit()}
                 >
-                  {busy ? "Entregando…" : "Entregar actividad"}
+                  {busy ? t("pcSubmitting") : t("pcSubmitActivity")}
                 </button>
               ) : null}
               <Link to={courseHref} className="auth-btn auth-btn--ghost auth-btn--sm">
-                Volver al curso
+                {t("pcBackToCourse")}
               </Link>
             </div>
           }
         >
           {canTeach ? (
-            <div className="pbc-activity-meta" aria-label="Configuración de la actividad">
+            <div className="pbc-activity-meta" aria-label={t("pcActivitySettingsAria")}>
               {activity?.due_at ? (
                 <p className="auth-card__muted" style={{ margin: 0 }}>
-                  Fecha límite: {fmtTs(activity.due_at)}
+                  {t("pcDueDateColon").replace("{date}", fmtTs(activity.due_at))}
                 </p>
               ) : null}
               {activity?.submission_close_at ? (
                 <p className="auth-card__muted" style={{ margin: 0 }}>
-                  Cierre: {fmtTs(activity.submission_close_at)}
+                  {t("pcCloseColon").replace("{date}", fmtTs(activity.submission_close_at))}
                 </p>
               ) : null}
               {activity?.max_points != null ? (
                 <p className="auth-card__muted" style={{ margin: 0 }}>
-                  Puntaje máximo: {activity.max_points}
+                  {t("pcMaxPointsColon").replace("{n}", String(activity.max_points))}
                 </p>
               ) : activity?.course_id ? (
                 <p className="auth-card__muted" style={{ margin: 0, fontSize: "0.9rem" }}>
-                  Definí el puntaje máximo en{" "}
+                  {t("pcDefineMaxInActivities").split("{link}")[0]}
                   <Link to={actividadesHref} className="auth-link">
-                    Actividades
+                    {t("pcActivities")}
                   </Link>
-                  .
+                  {t("pcDefineMaxInActivities").split("{link}")[1]}
                 </p>
               ) : null}
             </div>
           ) : (
             <div className="pbc-activity-meta">
               <p className="auth-card__muted" style={{ margin: 0 }}>
-                {activity?.due_at ? `Fecha límite: ${fmtTs(activity.due_at)}` : "Sin fecha límite"}
+                {activity?.due_at
+                  ? t("pcDueDateColon").replace("{date}", fmtTs(activity.due_at))
+                  : t("pcNoDueDate")}
                 {activity?.submission_close_at
-                  ? ` · Cierre: ${fmtTs(activity.submission_close_at)}`
-                  : " · Sin cierre de entregas"}
-                {activity?.max_points != null ? ` · Máximo: ${activity.max_points}` : ""}
+                  ? ` · ${t("pcCloseColon").replace("{date}", fmtTs(activity.submission_close_at))}`
+                  : ` · ${t("pcNoSubmissionClose")}`}
+                {activity?.max_points != null
+                  ? ` · ${t("pcMaxShortColon").replace("{n}", String(activity.max_points))}`
+                  : ""}
               </p>
               <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                Ventana: <strong>{windowLabelEs(myWindow)}</strong>
+                {t("pcWindow")}: <strong>{windowLabel(myWindow)}</strong>
                 {myTimeliness !== "sin_dato" ? (
                   <>
                     {" "}
-                    · Puntualidad: <strong>{timelinessLabelEs(myTimeliness)}</strong>
+                    · {t("pcTimeliness")}: <strong>{timelinessLabel(myTimeliness)}</strong>
                   </>
                 ) : null}
               </p>
@@ -1533,11 +1627,10 @@ export default function ActivityPage() {
           {isStudent && activity?.classroom_coursework_id && classroomCourseId ? (
             <div className="pbc-activity-classroom-hint">
               {classroomLinked ? (
-                <span className="auth-card__muted">Cuenta Google Classroom vinculada</span>
+                <span className="auth-card__muted">{t("pcClassroomAccountLinked")}</span>
               ) : (
                 <p className="auth-card__muted" style={{ margin: 0 }}>
-                  Esta actividad está vinculada a Google Classroom. Al entregar, PyBot intentará marcarla
-                  también allí (puede pedirte autorización de Google).
+                  {t("pcClassroomActivityHint")}
                 </p>
               )}
             </div>
@@ -1546,29 +1639,31 @@ export default function ActivityPage() {
           {activity?.description ? (
             <p className="pbc-activity-description">{activity.description}</p>
           ) : (
-            <p className="auth-card__muted">Sin descripción.</p>
+            <p className="auth-card__muted">{t("pcNoDescription")}</p>
           )}
 
           {activity?.content_snapshot || activity?.content_lesson_id ? (
             <p className="auth-card__muted">
-              {isMaterial ? "Material de Mi Contenido" : "Actividad desde Mi Contenido"}
+              {isMaterial ? t("pcMaterialFromMyContent") : t("pcActivityFromMyContent")}
               {activity?.content_snapshot?.title ? `: ${activity.content_snapshot.title}` : ""}
               {lessonMeta?.title && !activity?.content_snapshot ? `: ${lessonMeta.title}` : ""}
             </p>
           ) : !canTeach && activity?.pybot_lesson_id ? (
             <p className="auth-card__muted">
-              Lección PyBot (referencia): <code>{activity.pybot_lesson_id}</code>
+              {t("pcPyBotLessonRef")}: <code>{activity.pybot_lesson_id}</code>
             </p>
           ) : null}
 
           {lessonErr ? (
-            <PbcAlert variant="error">No se pudo cargar el documento de la lección: {lessonErr}</PbcAlert>
+            <PbcAlert variant="error">
+              {t("pcLessonDocLoadFail").replace("{error}", lessonErr)}
+            </PbcAlert>
           ) : null}
 
           {snapshot ? (
-            <section className="pbc-activity-lesson" aria-label="Contenido asignado">
+            <section className="pbc-activity-lesson" aria-label={t("pcAssignedContentAria")}>
               <h2 className="pbc-activity-lesson__title">
-                {isMaterial ? "Material" : activityKind === "task" ? "Tarea" : "Ejercicio"}
+                {isMaterial ? t("pcMaterial") : activityKind === "task" ? t("pcTask") : t("pcExercise")}
               </h2>
               <AssignedContentSnapshotViewer
                 snapshot={snapshot}
@@ -1587,7 +1682,7 @@ export default function ActivityPage() {
           ) : lessonDoc && activity?.content_lesson_id ? (
             <section
               className="pbc-activity-lesson"
-              aria-label="Contenido de la lección"
+              aria-label={t("pcLessonContentAria")}
               ref={isStudent ? engagement.setSurfaceRef : undefined}
               onPointerDown={
                 isStudent
@@ -1597,7 +1692,7 @@ export default function ActivityPage() {
                   : undefined
               }
             >
-              <h2 className="pbc-activity-lesson__title">Lección</h2>
+              <h2 className="pbc-activity-lesson__title">{t("pcLesson")}</h2>
               <AssignedLessonViewer
                 key={activity.content_lesson_id}
                 lessonId={activity.content_lesson_id}
@@ -1613,28 +1708,28 @@ export default function ActivityPage() {
           {isStudent && isCodingActivity ? (
             <div className="pbc-activity-my-submission">
               <p className="auth-card__muted" style={{ margin: 0 }}>
-                Estado: <strong>{processStatusLabelEs(myProcess)}</strong>
+                {t("pcStatus")}: <strong>{processStatusLabel(myProcess)}</strong>
                 {submissionVersionLabel(mySubmission?.version)
                   ? ` · ${submissionVersionLabel(mySubmission.version)}`
                   : null}
                 {mySubmission?.submitted_at ? ` · ${fmtTs(mySubmission.submitted_at)}` : null}
               </p>
               <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                {studentNextActionMessage(myProcess)}
+                {studentNextActionMessageI18n(myProcess)}
               </p>
               {!studentCanSubmit && myWindow === "cerrada" ? (
                 <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  Las entregas están cerradas.
+                  {t("pcSubmissionsClosed")}
                 </p>
               ) : null}
               {myProcess === "revision_solicitada" && mySubmission?.feedback ? (
                 <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  Tu docente solicitó una revisión. Feedback: {mySubmission.feedback}
+                  {t("pcTeacherRequestedReviewFeedback")} {mySubmission.feedback}
                 </p>
               ) : null}
               {(myProcess === "evaluado" || myProcess === "cerrado") && mySubmission?.grade != null ? (
                 <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  Nota: <strong>{mySubmission.grade}</strong>
+                  {t("pcGradePrefix")}: <strong>{mySubmission.grade}</strong>
                   {activity?.max_points != null ? ` / ${activity.max_points}` : null}
                 </p>
               ) : null}
@@ -1642,12 +1737,12 @@ export default function ActivityPage() {
               activityRubricMeta?.scoring_mode === "qualitative" &&
               myRubricScores.length > 0 ? (
                 <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  Evaluación cualitativa (sin nota numérica).
+                  {t("pcQualitativeNoNumeric")}
                 </p>
               ) : null}
               {(myProcess === "evaluado" || myProcess === "cerrado") && mySubmission?.feedback ? (
                 <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  Feedback: {mySubmission.feedback}
+                  {t("pcFeedbackLabel")}: {mySubmission.feedback}
                 </p>
               ) : null}
               {(myProcess === "evaluado" || myProcess === "cerrado") &&
@@ -1669,14 +1764,14 @@ export default function ActivityPage() {
             canTeach ? null : (
               <p className="auth-card__muted">
                 {savedCode
-                  ? "El autosave guarda progreso; «Entregar» registra la entrega formal."
+                  ? t("pcAutosaveHint")
                   : activity?.starter_code
-                    ? "PyBot abre con el código inicial. Usá «Entregar» cuando termines."
-                    : "Trabajá en el IDE y entregá cuando estés listo."}
+                    ? t("pcStarterCodeHint")
+                    : t("pcWorkInIdeHint")}
               </p>
             )
           ) : (
-            <p className="auth-card__muted">Este material es de solo lectura. No requiere entrega de código.</p>
+            <p className="auth-card__muted">{t("pcMaterialReadOnly")}</p>
           )}
         </PbcSection>
 
@@ -1695,29 +1790,29 @@ export default function ActivityPage() {
         ) : null}
 
         {canTeach ? (
-          <PbcSection title="Entregas" className="pbc-activity-deliveries">
+          <PbcSection title={t("pcSubmissions")} className="pbc-activity-deliveries">
             {classroomCourseId ? (
               /* Compact strip replaces former technical "Google Classroom" block title. */
               <div className="pbc-activity-classroom-status" role="status">
                 <div className="pbc-activity-classroom-status__main">
                   {activity?.classroom_coursework_id ? (
                     classroomSyncing || (!classroomSyncedAt && !classroomSyncErr) ? (
-                      <span className="pbc-activity-classroom-status__label">Sincronizando…</span>
+                      <span className="pbc-activity-classroom-status__label">{t("pcSyncing")}</span>
                     ) : classroomSyncErr ? (
                       <span className="pbc-activity-classroom-status__label">
-                        No se pudo sincronizar
+                        {t("pcSyncFailedShort")}
                         <button
                           type="button"
                           className="auth-btn auth-btn--ghost auth-btn--sm"
                           disabled={classroomSyncing}
                           onClick={() => void onSyncClassroom()}
                         >
-                          Reintentar
+                          {t("pcRetry")}
                         </button>
                       </span>
                     ) : (
                       <span className="pbc-activity-classroom-status__label">
-                        Sincronizado
+                        {t("pcSynced")}
                         {classroomSyncedAt
                           ? ` · ${fmtSyncedRelative(classroomSyncedAt)}`
                           : ""}
@@ -1730,7 +1825,7 @@ export default function ActivityPage() {
                       disabled={busy}
                       onClick={() => void onPublishClassroom()}
                     >
-                      Publicar en Classroom
+                      {t("pcPublishToClassroom")}
                     </button>
                   )}
                 </div>
@@ -1742,7 +1837,7 @@ export default function ActivityPage() {
                       disabled={classroomSyncing}
                       onClick={() => void onSyncClassroom()}
                     >
-                      Actualizar
+                      {t("pcRefresh")}
                     </button>
                     {activity.classroom_coursework_url ? (
                       <a
@@ -1751,7 +1846,7 @@ export default function ActivityPage() {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Abrir actividad en Classroom
+                        {t("pcOpenActivityInClassroom")}
                       </a>
                     ) : null}
                   </div>
@@ -1761,8 +1856,8 @@ export default function ActivityPage() {
 
             {teacherDeliveryCards.length === 0 ? (
               <PbcEmpty
-                title="Todavía no hay entregas"
-                description="Cuando los alumnos entreguen, aparecerán aquí."
+                title={t("pcNoSubmissionsYet")}
+                description={t("pcNoSubmissionsYetDesc")}
               />
             ) : (
               <ul className="pbc-list pbc-activity-submissions">
@@ -1773,7 +1868,7 @@ export default function ActivityPage() {
                   const identity =
                     profile?.display_name ||
                     profile?.email ||
-                    (row ? "Alumno" : "Alumno Classroom");
+                    (row ? t("pcStudent") : t("pcClassroomStudent"));
                   const isFocused = focusStudentId && card.userId === focusStudentId;
                   const linkItems = cs ? classroomAttachmentLinkItems(cs.attachments) : [];
                   const hasAttachments =
@@ -1795,12 +1890,12 @@ export default function ActivityPage() {
                           <div className="pbc-list-item__text">
                             <span className="pbc-list-item__title">{identity}</span>
                             <span className="pbc-list-item__meta">
-                              {classroomSubmissionStateLabelEs(cs.state)}
-                              {lateOnly ? " · Tarde" : ""}
+                              {classroomSubmissionStateLabel(cs.state)}
+                              {lateOnly ? ` · ${t("pcLate")}` : ""}
                               {cs?.updateTime ? ` · ${fmtTs(cs.updateTime)}` : ""}
-                              {cs?.assignedGrade != null ? ` · Nota ${cs.assignedGrade}` : ""}
+                              {cs?.assignedGrade != null ? ` · ${t("pcGradePrefix")} ${cs.assignedGrade}` : ""}
                             </span>
-                            <span className="pbc-activity-source-badges" aria-label="Fuentes">
+                            <span className="pbc-activity-source-badges" aria-label={t("pcSourcesAria")}>
                               <span className="pbc-activity-source-badge">{"Classroom"}</span>
                             </span>
                           </div>
@@ -1815,7 +1910,7 @@ export default function ActivityPage() {
                                   target="_blank"
                                   rel="noreferrer"
                                 >
-                                  {item.kind === "driveFile" ? "Archivo entregado" : item.title}
+                                  {item.kind === "driveFile" ? t("pcSubmittedFile") : item.title}
                                   {item.kind === "driveFile" && item.title && item.title !== item.href
                                     ? ` · ${item.title}`
                                     : ""}
@@ -1832,7 +1927,7 @@ export default function ActivityPage() {
                               target="_blank"
                               rel="noreferrer"
                             >
-                              {"Abrir entrega en Classroom"}
+                              {t("pcOpenSubmissionInClassroom")}
                             </a>
                           </p>
                         ) : null}
@@ -1893,22 +1988,22 @@ export default function ActivityPage() {
                           <span className="pbc-list-item__title">{identity}</span>
                           <span className="pbc-list-item__meta">
                             {verLabel ? `${verLabel} · ` : ""}
-                            {processStatusLabelEs(process)}
-                            {late ? " · Tarde" : ""}
+                            {processStatusLabel(process)}
+                            {late ? ` · ${t("pcLate")}` : ""}
                             {row.submitted_at
                               ? ` · ${fmtTs(row.submitted_at)}`
                               : cs?.updateTime
                                 ? ` · ${fmtTs(cs.updateTime)}`
                                 : ""}
-                            {gradeDisplay != null ? ` · Nota ${gradeDisplay}` : ""}
+                            {gradeDisplay != null ? ` · ${t("pcGradePrefix")} ${gradeDisplay}` : ""}
                             {row.classroom_grade_synced_at
-                              ? ` · Nota en Classroom ${fmtTs(row.classroom_grade_synced_at)}`
+                              ? ` · ${t("pcGradeInClassroom")} ${fmtTs(row.classroom_grade_synced_at)}`
                               : ""}
                             {row.classroom_grade_sync_error
-                              ? ` · Sync pendiente: ${row.classroom_grade_sync_error}`
+                              ? ` · ${t("pcSyncPendingPrefix")}: ${row.classroom_grade_sync_error}`
                               : ""}
                           </span>
-                          <span className="pbc-activity-source-badges" aria-label="Fuentes">
+                          <span className="pbc-activity-source-badges" aria-label={t("pcSourcesAria")}>
                             <span className="pbc-activity-source-badge">{"PyBot"}</span>
                             {cs ? (
                               <span className="pbc-activity-source-badge">{"Classroom"}</span>
@@ -1923,13 +2018,13 @@ export default function ActivityPage() {
                             setViewCode(showingCurrent ? null : row.id);
                           }}
                         >
-                          {showingCurrent ? "Ocultar código" : "Ver código"}
+                          {showingCurrent ? t("pcHideCode") : t("pcShowCode")}
                         </button>
                       </div>
                       {showingCurrent ? (
                         <SubmissionCodeViewer
                           code={row.submitted_code}
-                          ariaLabel={`Código ${verLabel || "actual"} de ${profile?.display_name || "alumno"}`}
+                          ariaLabel={t("pcCodeOfStudentAria").replace("{ver}", verLabel || t("pcCurrentVersion")).replace("{name}", profile?.display_name || t("pcStudent"))}
                         />
                       ) : null}
                       {linkItems.length > 0 ? (
@@ -1942,7 +2037,7 @@ export default function ActivityPage() {
                                 target="_blank"
                                 rel="noreferrer"
                               >
-                                {item.kind === "driveFile" ? "Archivo entregado" : item.title}
+                                {item.kind === "driveFile" ? t("pcSubmittedFile") : item.title}
                                 {item.kind === "driveFile" && item.title && item.title !== item.href
                                   ? ` · ${item.title}`
                                   : ""}
@@ -1959,15 +2054,21 @@ export default function ActivityPage() {
                             target="_blank"
                             rel="noreferrer"
                           >
-                            {"Abrir entrega en Classroom"}
+                            {t("pcOpenSubmissionInClassroom")}
                           </a>
                         </p>
                       ) : null}
                       {history.length > 0 ? (
                         <details className="pbc-activity-history">
                           <summary className="auth-card__muted">
-                            Historial ({history.length}{" "}
-                            {history.length === 1 ? "versión anterior" : "versiones anteriores"})
+                            {t("pcHistorySummary")
+                              .replace("{n}", String(history.length))
+                              .replace(
+                                "{unit}",
+                                history.length === 1
+                                  ? t("pcHistoryPrevVersion")
+                                  : t("pcHistoryPrevVersions"),
+                              )}
                           </summary>
                           <ul className="pbc-activity-history__list">
                             {history.map((h) => {
@@ -1979,23 +2080,23 @@ export default function ActivityPage() {
                                     <span className="auth-card__muted">
                                       {hLabel}
                                       {" · "}
-                                      {submissionStatusLabelEs(h.status, { version: h.version })}
+                                      {submissionStatusLabel(h.status, { version: h.version })}
                                       {h.submitted_at ? ` · ${fmtTs(h.submitted_at)}` : ""}
-                                      {h.grade != null ? ` · Nota ${h.grade}` : ""}
+                                      {h.grade != null ? ` · ${t("pcGradePrefix")} ${h.grade}` : ""}
                                     </span>
                                     <button
                                       type="button"
                                       className="auth-btn auth-btn--ghost auth-btn--sm"
                                       onClick={() => setViewHistoryId(showingHist ? null : h.id)}
                                     >
-                                      {showingHist ? "Ocultar" : "Ver código"}
+                                      {showingHist ? t("pcHide") : t("pcShowCode")}
                                     </button>
                                   </div>
                                   {showingHist ? (
                                     <SubmissionCodeViewer
                                       code={h.submitted_code}
                                       height={220}
-                                      ariaLabel={`Código ${hLabel} (historial)`}
+                                      ariaLabel={t("pcCodeHistoryAria").replace("{ver}", hLabel)}
                                     />
                                   ) : null}
                                 </li>
@@ -2026,7 +2127,7 @@ export default function ActivityPage() {
                               disabled={busy}
                               onClick={() => void onSaveRubricDraft(row.id)}
                             >
-                              Guardar borrador
+                              {t("pcSaveDraft")}
                             </button>
                           </div>
                         </div>
@@ -2037,8 +2138,8 @@ export default function ActivityPage() {
                             className="auth-org-input pbc-activity-grade-input"
                             placeholder={
                               activity?.max_points != null
-                                ? `Nota / ${activity.max_points}`
-                                : "Nota"
+                                ? t("pcGradeOverMax").replace("{n}", String(activity.max_points))
+                                : t("pcGradePrefix")
                             }
                             value={draft.grade}
                             onChange={(e) =>
@@ -2050,16 +2151,16 @@ export default function ActivityPage() {
                           />
                         ) : activityRubricMeta?.scoring_mode === "qualitative" ? (
                           <span className="auth-card__muted pbc-activity-grade-hint">
-                            Cualitativa — sin nota numérica
+                            {t("pcQualitativeDash")}
                           </span>
                         ) : (
                           <span className="auth-card__muted pbc-activity-grade-hint">
-                            Nota = total servidor (niveles congelados)
+                            {t("pcGradeEqualsServerTotal")}
                           </span>
                         )}
                         <input
                           className="auth-org-input pbc-activity-feedback-input"
-                          placeholder="Feedback general"
+                          placeholder={t("pcFeedbackGeneral")}
                           value={draft.feedback}
                           onChange={(e) =>
                             setGradeDraft((prev) => ({
@@ -2075,7 +2176,7 @@ export default function ActivityPage() {
                             disabled={busy}
                             onClick={() => void onRequestReview(row.id)}
                           >
-                            Solicitar revisión
+                            {t("pcRequestReview")}
                           </button>
                         ) : null}
                         {canEvaluate ? (
@@ -2085,7 +2186,7 @@ export default function ActivityPage() {
                             disabled={busy}
                             onClick={() => void onGrade(row.id)}
                           >
-                            Evaluar
+                            {t("pcEvaluate")}
                           </button>
                         ) : null}
                         {canClose ? (
@@ -2095,7 +2196,7 @@ export default function ActivityPage() {
                             disabled={busy}
                             onClick={() => void onCloseSubmission(row.id)}
                           >
-                            Cerrar
+                            {t("pcClose")}
                           </button>
                         ) : null}
                         {canReopen ? (
@@ -2105,7 +2206,7 @@ export default function ActivityPage() {
                             disabled={busy}
                             onClick={() => void onReopen(row.user_id)}
                           >
-                            Reabrir para este alumno
+                            {t("pcReopenForStudent")}
                           </button>
                         ) : null}
                         {activity?.classroom_coursework_id && row.grade != null ? (
@@ -2116,8 +2217,8 @@ export default function ActivityPage() {
                             onClick={() => void onSendGradeClassroom(row)}
                           >
                             {row.classroom_grade_sync_error
-                              ? "Reintentar sync Classroom"
-                              : "Enviar nota a Classroom"}
+                              ? t("pcRetryClassroomSync")
+                              : t("pcSendGradeToClassroom")}
                           </button>
                         ) : null}
                       </div>
@@ -2131,8 +2232,8 @@ export default function ActivityPage() {
 
         {canTeach && itemTeacherRows.length > 0 ? (
           <PbcSection
-            title="Entregas de ítems embebidos"
-            description="Evidencia por Activity + snapshot item + alumno. Independiente de las entregas activity-level."
+            title={t("pcEmbeddedItemSubmissions")}
+            description={t("pcEmbeddedItemSubmissionsDesc")}
           >
             <ul className="pbc-list pbc-activity-submissions">
               {itemTeacherRows.map((row) => {
@@ -2172,7 +2273,7 @@ export default function ActivityPage() {
                         min="0"
                         step="0.01"
                         className="auth-org-input pbc-activity-grade-input"
-                        placeholder="Obtenidos"
+                        placeholder={t("pcEarnedPoints")}
                         value={draft.earned}
                         onChange={(e) =>
                           setItemGradeDraft((prev) => ({
@@ -2186,7 +2287,7 @@ export default function ActivityPage() {
                         min="0"
                         step="0.01"
                         className="auth-org-input pbc-activity-grade-input"
-                        placeholder="Posibles"
+                        placeholder={t("pcPossiblePoints")}
                         value={draft.possible}
                         onChange={(e) => {
                           const v = e.target.value;
@@ -2200,7 +2301,7 @@ export default function ActivityPage() {
                       />
                       <input
                         className="auth-org-input"
-                        placeholder="Feedback (opcional)"
+                        placeholder={t("pcFeedbackOptional")}
                         value={draft.feedback}
                         onChange={(e) =>
                           setItemGradeDraft((prev) => ({
@@ -2215,7 +2316,7 @@ export default function ActivityPage() {
                         disabled={busy}
                         onClick={() => void onGradeItemSubmission(row.id)}
                       >
-                        Calificar ítem
+                        {t("pcGradeItem")}
                       </button>
                     </div>
                   </li>
@@ -2229,12 +2330,12 @@ export default function ActivityPage() {
           {canTeach ? (
             activity?.course_id ? (
               <Link to={entregasHref} className="auth-link">
-                Ver entregas del curso
+                {t("pcViewCourseSubmissions")}
               </Link>
             ) : null
           ) : (
             <Link to={courseHref} className="auth-link">
-              ← Volver al curso
+              {t("pcBackToCourseArrow")}
             </Link>
           )}
         </div>

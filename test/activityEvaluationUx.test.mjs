@@ -259,9 +259,9 @@ test("ActivityPage passes compact mode; default EvaluationSection unchanged", ()
   assert.match(evalSrc, /pcCreateNew/);
   assert.match(evalSrc, /pcCreateOnlyForActivity/);
   assert.match(evalSrc, /pcManageRubrics/);
-  // Compact initial: label + Configurar; full options after opening config.
+  // Compact initial: label + Configure (i18n); full options after opening config.
   assert.match(evalSrc, /showCompactEmpty/);
-  assert.match(evalSrc, /Configurar/);
+  assert.match(evalSrc, /t\("pcConfigure"\)/);
   assert.match(evalSrc, /setCompactConfigOpen\(true\)/);
   // Visible Spanish compact empty label (AC19).
   assert.equal(
