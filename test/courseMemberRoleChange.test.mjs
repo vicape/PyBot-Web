@@ -243,6 +243,34 @@ test("CourseRosterTab exposes role change UX with confirmation and preserves flo
   assert.doesNotMatch(rosterSrc, /preferred_role/);
 });
 
+test("CourseRosterTab: role label sits above shared action group with remove", () => {
+  // Layout contract: label "Rol en este curso" above the full group;
+  // wide row is exactly [ Cambiar a Docente/Alumno ] [ Quitar ].
+  const memberList = rosterSrc.slice(
+    rosterSrc.indexOf("function MemberList"),
+    rosterSrc.indexOf("export default function CourseRosterTab"),
+  );
+  assert.match(memberList, /pcCourseRoleLabel/);
+  assert.match(memberList, /pbc-course-member-actions__group/);
+  assert.ok(
+    memberList.indexOf("pbc-course-role-action__label") <
+      memberList.indexOf("pbc-course-member-actions__group"),
+  );
+  const afterGroup = memberList.slice(memberList.indexOf("pbc-course-member-actions__group"));
+  assert.match(afterGroup, /pcCourseRoleChangeToTeacher/);
+  assert.match(afterGroup, /pcCourseRoleChangeToStudent/);
+  assert.match(afterGroup, /pcRemove/);
+  assert.match(afterGroup, /onRequestRoleChange/);
+  assert.match(afterGroup, /onRemove\(m\.userId\)/);
+  assert.match(afterGroup, /roleChangingId === m\.userId/);
+  assert.match(afterGroup, /removingId === m\.userId/);
+  const cssSrc = readFileSync(resolve(root, "src/styles/pybotclass-dashboard.css"), "utf8");
+  assert.match(cssSrc, /\.pbc-course-member-actions__group\s*\{[^}]*flex-wrap:\s*wrap/s);
+  assert.match(cssSrc, /\[ Cambiar a Docente\/Alumno \]/);
+  assert.match(cssSrc, /\[ Quitar \]/);
+  assert.match(cssSrc, /Rol en este curso/);
+});
+
 test("CourseRosterTab: Personas tab remains teaching-only in course page", () => {
   const pageSrc = readFileSync(resolve(root, "src/pages/PyBotClassCoursePage.jsx"), "utf8");
   assert.match(pageSrc, /activeTab === "alumnos" && mode === COURSE_ACCESS_MODES\.TEACHING/);

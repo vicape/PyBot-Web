@@ -6624,3 +6624,20 @@
     background: color-mix(in srgb, var(--pbc-panel-hover, rgba(148, 163, 184, 0.12)) 70%, transparent);
   }
 }
+
+/* Course roster member actions: Rol en este curso above full group;
+   wide: [ Cambiar a Docente/Alumno ] [ Quitar ]; wrap/stack on narrow */
+.pbc-course-member-actions__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pbc-course-member-actions__group > .pbc-btn {
+  flex: 0 1 auto;
+  align-self: center;
+}

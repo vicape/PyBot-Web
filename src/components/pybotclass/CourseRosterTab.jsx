@@ -124,12 +124,14 @@ function MemberList({
         const nextRole = m.courseRole === "teacher" ? "student" : "teacher";
         const actions =
           showRoleChange || showRemove ? (
-            <div className="pbc-list-item__actions-row">
+            <div className="pbc-course-role-action">
               {showRoleChange ? (
-                <div className="pbc-course-role-action">
-                  <span className="pbc-course-role-action__label" id={`course-role-${m.userId}`}>
-                    {t("pcCourseRoleLabel")}
-                  </span>
+                <span className="pbc-course-role-action__label" id={`course-role-${m.userId}`}>
+                  {t("pcCourseRoleLabel")}
+                </span>
+              ) : null}
+              <div className="pbc-course-member-actions__group">
+                {showRoleChange ? (
                   <button
                     type="button"
                     className="pbc-btn pbc-btn--ghost pbc-btn--sm"
@@ -157,18 +159,18 @@ function MemberList({
                         ? t("pcCourseRoleChangeToTeacher")
                         : t("pcCourseRoleChangeToStudent")}
                   </button>
-                </div>
-              ) : null}
-              {showRemove ? (
-                <button
-                  type="button"
-                  className="pbc-btn pbc-btn--ghost pbc-btn--sm"
-                  disabled={removingId === m.userId}
-                  onClick={() => void onRemove(m.userId)}
-                >
-                  {removingId === m.userId ? "…" : t("pcRemove")}
-                </button>
-              ) : null}
+                ) : null}
+                {showRemove ? (
+                  <button
+                    type="button"
+                    className="pbc-btn pbc-btn--ghost pbc-btn--sm"
+                    disabled={removingId === m.userId}
+                    onClick={() => void onRemove(m.userId)}
+                  >
+                    {removingId === m.userId ? "…" : t("pcRemove")}
+                  </button>
+                ) : null}
+              </div>
             </div>
           ) : null;
         return (
