@@ -94,7 +94,9 @@ test("default empty Evaluación terminology and actions", () => {
   assert.match(evalSrc, /pcCreateNew/);
   assert.match(evalSrc, /pcCreateOnlyForActivity/);
   assert.match(evalSrc, /pcRubricChoiceNone/);
-  assert.match(evalSrc, /\{t\("pcRubric"\)\} · \{t\("pcRubricChoiceNone"\)\}/);
+  // Default (non-embedded) still uses Rúbrica · Sin rúbrica; embedded switches to Evaluación.
+  assert.match(evalSrc, /embedded \? t\("pcEvaluation"\) : t\("pcRubric"\)/);
+  assert.match(evalSrc, /t\("pcRubricChoiceNone"\)/);
   assert.equal(PYBOTCLASS_STRINGS.es.pcEvaluation, "Evaluación");
   assert.equal(PYBOTCLASS_STRINGS.es.pcRubric, "Rúbrica");
   assert.equal(PYBOTCLASS_STRINGS.es.pcRubricChoiceNone, "Sin rúbrica");
@@ -245,7 +247,7 @@ test("rubric_has_evaluations lock message exact", () => {
 
 test("ActivityPage Evaluación compact summary; grading matrix stays", () => {
   assert.match(activitySrc, /ActivityEvaluationSection/);
-  assert.match(activitySrc, /pcEvaluation/);
+  assert.match(evalSrc, /pcEvaluation/);
   assert.match(activitySrc, /ActivityRubricGradeMatrix/);
   assert.doesNotMatch(activitySrc, /ActivityRubricAuthoringPanel/);
 });
@@ -268,9 +270,27 @@ test("ActivityPage passes compact mode; default EvaluationSection unchanged", ()
     `${PYBOTCLASS_STRINGS.es.pcRubric} · ${PYBOTCLASS_STRINGS.es.pcRubricChoiceNone}`,
     "Rúbrica · Sin rúbrica",
   );
-  assert.match(evalSrc, /\{t\("pcRubric"\)\} · \{t\("pcRubricChoiceNone"\)\}/);
+  assert.match(evalSrc, /t\("pcRubric"\)\} · \{t\("pcRubricChoiceNone"\)/);
   // ActivityForm does not opt into compact.
   assert.doesNotMatch(formSrc, /\bcompact\b/);
+});
+
+test("ActivityPage embedded Evaluation suppresses heading; default still renders it", () => {
+  assert.match(activitySrc, /<ActivityEvaluationSection[\s\S]*embedded/);
+  assert.match(evalSrc, /embedded\s*=\s*false/);
+  assert.match(evalSrc, /pbc-eval-section--embedded/);
+  // Default mode still renders the Evaluation heading chrome.
+  assert.match(evalSrc, /!embedded[\s\S]*pbc-eval-section__head[\s\S]*t\("pcEvaluation"\)/);
+  // Embedded empty label uses Evaluation · No rubric; Configure still available.
+  assert.match(evalSrc, /embedded \? t\("pcEvaluation"\) : t\("pcRubric"\)/);
+  assert.match(evalSrc, /t\("pcConfigure"\)/);
+  // After disclosure, choose/create/one-off/manage remain.
+  assert.match(evalSrc, /pcChooseRubric/);
+  assert.match(evalSrc, /pcCreateNew/);
+  assert.match(evalSrc, /pcCreateOnlyForActivity/);
+  assert.match(evalSrc, /pcManageRubrics/);
+  // ActivityForm does not opt into embedded.
+  assert.doesNotMatch(formSrc, /\bembedded\b/);
 });
 
 test("library cards Usar primary, Editar secondary, Más with Duplicar/Eliminar", () => {

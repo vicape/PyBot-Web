@@ -265,6 +265,7 @@ function RubricPickerOverlay({
  *   maxLocked?: boolean,
  *   maxHint?: string | null,
  *   compact?: boolean,
+ *   embedded?: boolean,
  * }} props
  */
 export default function ActivityEvaluationSection({
@@ -282,6 +283,7 @@ export default function ActivityEvaluationSection({
   maxLocked = false,
   maxHint = null,
   compact = false,
+  embedded = false,
 }) {
   const selection = value || emptyEvaluationSelection();
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -436,25 +438,32 @@ export default function ActivityEvaluationSection({
     selection.mode === "none" && (!compact || compactConfigOpen);
   const manageVisible =
     showManageLink && (!compact || selection.mode !== "none" || compactConfigOpen);
+  const manageLink = manageVisible ? (
+    <Link to="/dashboard/rubrics" className="auth-link pbc-eval-section__manage">
+      {t("pcManageRubrics")}
+    </Link>
+  ) : null;
 
   return (
     <section
-      className={`pbc-eval-section${compact ? " pbc-eval-section--compact" : ""}`}
-      aria-labelledby="pbc-eval-title"
+      className={`pbc-eval-section${compact ? " pbc-eval-section--compact" : ""}${
+        embedded ? " pbc-eval-section--embedded" : ""
+      }`}
+      {...(embedded
+        ? { "aria-label": t("pcEvaluation") }
+        : { "aria-labelledby": "pbc-eval-title" })}
     >
-      <header className="pbc-eval-section__head">
-        <h3 id="pbc-eval-title" className="pbc-eval-section__title">
-          <span aria-hidden>
-            <IconRubricMatrix size={20} />
-          </span>
-          <span>{t("pcEvaluation")}</span>
-        </h3>
-        {manageVisible ? (
-          <Link to="/dashboard/rubrics" className="auth-link pbc-eval-section__manage">
-            {t("pcManageRubrics")}
-          </Link>
-        ) : null}
-      </header>
+      {!embedded ? (
+        <header className="pbc-eval-section__head">
+          <h3 id="pbc-eval-title" className="pbc-eval-section__title">
+            <span aria-hidden>
+              <IconRubricMatrix size={20} />
+            </span>
+            <span>{t("pcEvaluation")}</span>
+          </h3>
+          {manageLink}
+        </header>
+      ) : null}
 
       {showMaxPointsField ? (
         <div className="pbc-eval-max-points">
@@ -495,11 +504,13 @@ export default function ActivityEvaluationSection({
       {selection.mode === "none" ? (
         <div className="pbc-eval-empty">
           <div className="pbc-eval-empty__label">
-            <span aria-hidden>
-              <IconRubricMatrix size={18} />
-            </span>
+            {!embedded ? (
+              <span aria-hidden>
+                <IconRubricMatrix size={18} />
+              </span>
+            ) : null}
             <span>
-              {t("pcRubric")} · {t("pcRubricChoiceNone")}
+              {embedded ? t("pcEvaluation") : t("pcRubric")} · {t("pcRubricChoiceNone")}
             </span>
           </div>
           {showCompactEmpty ? (
@@ -544,13 +555,20 @@ export default function ActivityEvaluationSection({
                 <IconCopy size={18} />
                 <span>{t("pcCreateOnlyForActivity")}</span>
               </button>
+              {embedded ? manageLink : null}
             </div>
           ) : null}
         </div>
       ) : (
         <div className="pbc-eval-summary">
           <div className="pbc-eval-summary__main">
-            <h4 className="pbc-eval-summary__name">{selection.name || t("pcRubricUntitled")}</h4>
+            {embedded ? (
+              <p className="pbc-eval-summary__embed-label">
+                {t("pcEvaluation")} · {selection.name || t("pcRubricUntitled")}
+              </p>
+            ) : (
+              <h4 className="pbc-eval-summary__name">{selection.name || t("pcRubricUntitled")}</h4>
+            )}
             <p className="pbc-eval-summary__meta">
               {modeLabel(selection.scoringMode)}
               {criteriaLen ? ` · ${criteriaCountLabel(criteriaLen)}` : ""}
@@ -598,6 +616,7 @@ export default function ActivityEvaluationSection({
               <IconTrash size={18} />
               <span>{t("pcRemove")}</span>
             </button>
+            {embedded ? manageLink : null}
           </div>
           {previewOpen ? (
             <ReadOnlyRubricPreview

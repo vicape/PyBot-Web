@@ -3806,11 +3806,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 0.85rem;
-  margin: 0 0 0.85rem;
-  padding: 0.55rem 0.75rem;
-  border: 1px solid var(--pbc-border);
-  border-radius: var(--pbc-radius-md);
-  background: var(--pbc-panel);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   min-width: 0;
 }
 
@@ -3823,6 +3823,7 @@
   min-width: 0;
 }
 
+.pbc-activity-classroom-status__scope,
 .pbc-activity-classroom-status__label {
   display: inline-flex;
   flex-wrap: wrap;
@@ -3831,6 +3832,11 @@
   color: var(--pbc-muted, var(--pbc-text-muted, #64748b));
   font-size: 0.9rem;
   min-width: 0;
+}
+
+.pbc-activity-classroom-status__scope {
+  font-weight: 600;
+  color: var(--pbc-text, inherit);
 }
 
 .pbc-activity-classroom-status__link,
@@ -3886,10 +3892,123 @@
   margin-bottom: 0.35rem;
 }
 
-/* ActivityPage docente — densidad compacta (solo esta página; no altera PbcSection global).
+/* ActivityPage docente — un control panel + Submissions (no altera PbcSection global).
    Mobile breakpoint exactly <=640px (see @media below). */
+.pbc-page:has(> .pbc-activity-control-panel),
 .pbc-page:has(> .pbc-activity-section--compact) {
   gap: 0.7rem;
+}
+
+.pbc-activity-control-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0.65rem 0.75rem;
+  border-radius: 14px;
+  background: var(--pbc-panel-solid, var(--pbc-panel));
+  border: 1px solid var(--pbc-border);
+  color: var(--pbc-text);
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.pbc-activity-control-panel__row + .pbc-activity-control-panel__row {
+  border-top: 1px solid var(--pbc-border);
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+}
+
+.pbc-activity-control-panel__row--essentials {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 0.85rem;
+  min-width: 0;
+}
+
+.pbc-activity-control-panel__main {
+  flex: 1 1 14rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pbc-activity-control-panel__row--essentials .pbc-activity-actions {
+  flex: 0 1 auto;
+  margin-left: auto;
+  align-self: flex-start;
+}
+
+.pbc-activity-control-panel .pbc-activity-meta {
+  gap: 0.2rem 0.65rem;
+  margin-bottom: 0;
+  align-items: baseline;
+}
+
+.pbc-activity-control-panel .pbc-activity-description {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.pbc-activity-control-panel__row--evaluation,
+.pbc-activity-control-panel__row--classroom {
+  min-width: 0;
+}
+
+/* Evaluación embebida: sin card anidada ni heading duplicado */
+.pbc-activity-control-panel .pbc-eval-section--embedded,
+.pbc-activity-control-panel .pbc-eval-section--compact {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  min-height: 0;
+  height: auto;
+}
+
+.pbc-activity-control-panel .pbc-eval-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.65rem;
+}
+
+.pbc-activity-control-panel .pbc-eval-empty__actions {
+  gap: 0.35rem;
+}
+
+.pbc-activity-control-panel .pbc-eval-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.35rem 0.65rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+}
+
+.pbc-activity-control-panel .pbc-eval-summary__main {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.pbc-activity-control-panel .pbc-eval-summary__actions {
+  flex: 0 1 auto;
+  margin-left: auto;
+}
+
+.pbc-eval-summary__embed-label {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--pbc-text, inherit);
 }
 
 .pbc-activity-section--compact.pbc-section {
@@ -3907,52 +4026,6 @@
 .pbc-activity-section--compact > .pbc-section__head .pbc-section__title {
   font-size: 0.95rem;
   line-height: 1.25;
-}
-
-.pbc-activity-section--compact.pbc-activity-overview .pbc-activity-meta {
-  gap: 0.2rem 0.65rem;
-  margin-bottom: 0.3rem;
-  align-items: baseline;
-}
-
-.pbc-activity-section--compact.pbc-activity-overview .pbc-activity-description {
-  margin: 0.15rem 0 0;
-  line-height: 1.4;
-}
-
-.pbc-activity-section--compact.pbc-activity-overview,
-.pbc-activity-section--compact.pbc-activity-evaluation {
-  height: auto;
-  min-height: 0;
-}
-
-/* Evaluación: una sola unidad visual (aplana card interna anidada) */
-.pbc-activity-section--compact.pbc-activity-evaluation .pbc-eval-section--compact {
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  border-radius: 0;
-  min-height: 0;
-  height: auto;
-}
-
-.pbc-activity-section--compact.pbc-activity-evaluation .pbc-eval-section--compact .pbc-eval-section__head {
-  margin-bottom: 0.2rem;
-}
-
-.pbc-activity-section--compact.pbc-activity-evaluation .pbc-eval-section--compact .pbc-eval-empty {
-  gap: 0.35rem;
-}
-
-.pbc-activity-section--compact.pbc-activity-evaluation .pbc-eval-section--compact .pbc-eval-empty__actions {
-  gap: 0.35rem;
-}
-
-.pbc-activity-section--compact.pbc-activity-deliveries .pbc-activity-classroom-status {
-  margin: 0 0 0.45rem;
-  padding: 0.4rem 0.55rem;
-  gap: 0.3rem 0.55rem;
 }
 
 .pbc-activity-section--compact.pbc-activity-deliveries .pbc-activity-submissions {
@@ -3995,7 +4068,7 @@
 }
 
 .pbc-activity-section--compact .pbc-activity-evidence-link,
-.pbc-activity-section--compact .pbc-activity-classroom-status__link,
+.pbc-activity-control-panel .pbc-activity-classroom-status__link,
 .pbc-activity-section--compact .pbc-activity-attachment-list {
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -4044,7 +4117,33 @@
     text-align: center;
   }
 
-  /* ActivityPage docente mobile: Classroom status wrap + cards + no horizontal overflow */
+  /* ActivityPage docente mobile: control panel stack + cards + no horizontal overflow */
+  .pbc-activity-control-panel {
+    padding: 0.55rem 0.65rem;
+  }
+
+  .pbc-activity-control-panel__row--essentials {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pbc-activity-control-panel__row--essentials .pbc-activity-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .pbc-activity-control-panel .pbc-eval-empty,
+  .pbc-activity-control-panel .pbc-eval-summary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pbc-activity-control-panel .pbc-eval-summary__actions,
+  .pbc-activity-control-panel .pbc-eval-empty__actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
   .pbc-activity-classroom-status {
     flex-direction: column;
     align-items: stretch;
@@ -4097,7 +4196,7 @@
   }
 
   .pbc-activity-section--compact.pbc-activity-deliveries .pbc-activity-grade-row .auth-btn,
-  .pbc-activity-section--compact .pbc-activity-actions .auth-btn,
+  .pbc-activity-control-panel .pbc-activity-actions .auth-btn,
   .pbc-activity-section--compact .pbc-activity-submission__head .auth-btn {
     min-height: 40px;
   }

@@ -449,8 +449,9 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
     /pbc-footer-links[\s\S]*canTeach[\s\S]*t\("pcViewCourseSubmissions"\)[\s\S]*:[\s\S]*t\("pcBackToCourseArrow"\)/,
   );
 
-  // AC17: modo compacto hacia EvaluationSection.
+  // AC17: modo compacto + embedded hacia EvaluationSection.
   assert.match(src, /<ActivityEvaluationSection[\s\S]*compact/);
+  assert.match(src, /<ActivityEvaluationSection[\s\S]*embedded/);
 
   // AC20: CSS ActivityPage docente responsive.
   assert.match(css, /pbc-activity-classroom-status/);
@@ -463,15 +464,33 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
   assert.ok(src.includes('"PyBot"'));
   assert.ok(src.includes('"Classroom"'));
 
-  // Compact ActivityPage density: page-scoped class, not global PbcSection API change.
-  assert.match(src, /pbc-activity-section--compact/);
-  assert.match(src, /pbc-activity-evaluation/);
+  // Composition: one ActivityPage control panel (essentials + evaluation + Classroom),
+  // then independent Submissions; Classroom strip is not inside Submissions.
+  assert.match(src, /pbc-activity-control-panel/);
+  assert.match(src, /pbc-activity-control-panel__row--essentials/);
+  assert.match(src, /pbc-activity-control-panel__row--evaluation/);
+  assert.match(src, /pbc-activity-control-panel__row--classroom/);
   assert.match(src, /pbc-activity-deliveries pbc-activity-section--compact|pbc-activity-section--compact[\s\S]*pbc-activity-deliveries/);
+  const controlPanelIdx = src.indexOf("pbc-activity-control-panel");
+  const submissionsIdx = src.indexOf('title={t("pcSubmissions")}');
+  const classroomInPanelIdx = src.indexOf("pbc-activity-control-panel__row--classroom");
+  assert.ok(controlPanelIdx >= 0 && submissionsIdx > controlPanelIdx);
+  assert.ok(classroomInPanelIdx > controlPanelIdx && classroomInPanelIdx < submissionsIdx);
+  const submissionsBlock = src.slice(submissionsIdx, submissionsIdx + 800);
+  assert.doesNotMatch(submissionsBlock, /pbc-activity-classroom-status/);
+  // Student path stays on Details overview (outside teacher control panel).
+  assert.match(src, /pbc-activity-overview/);
+  assert.match(src, /title=\{t\("pcDetail"\)\}/);
+
+  // Compact density CSS: control-panel surface + deliveries; not global PbcSection API change.
+  assert.match(src, /pbc-activity-section--compact/);
+  assert.match(css, /\.pbc-activity-control-panel\s*\{/);
+  assert.match(css, /\.pbc-activity-control-panel__row \+ \.pbc-activity-control-panel__row/);
   assert.match(css, /\.pbc-activity-section--compact\.pbc-section/);
-  assert.match(css, /\.pbc-activity-section--compact\.pbc-activity-evaluation/);
   assert.match(css, /\.pbc-activity-section--compact\.pbc-activity-deliveries \.pbc-activity-submission/);
   assert.match(css, /padding:\s*0\.65rem\s+0\.7rem/);
   assert.match(css, /gap:\s*0\.35rem/);
+  assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.pbc-activity-control-panel__row--essentials/);
   assert.match(css, /@media \(max-width: 640px\)/);
 });
 

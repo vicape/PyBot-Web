@@ -1546,57 +1546,205 @@ export default function ActivityPage() {
         {actionErr ? <PbcAlert variant="error">{actionErr}</PbcAlert> : null}
         {actionMsg ? <PbcAlert variant="info">{actionMsg}</PbcAlert> : null}
 
-        <PbcSection
-          className={`pbc-activity-overview${canTeach ? " pbc-activity-section--compact" : ""}`}
-          title={t("pcDetail")}
-          description={canTeach ? undefined : t("pcActivityOverviewDesc")}
-          actions={
-            <div className="pbc-activity-actions">
-              {isCodingActivity ? (
-                <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" onClick={openPyBot}>
-                  {t("pcOpenPyBot")}
-                </button>
-              ) : null}
-              {isStudent && isCodingActivity ? (
-                <button
-                  type="button"
-                  className="auth-btn auth-btn--ghost auth-btn--sm"
-                  disabled={busy || !studentCanSubmit}
-                  onClick={() => void onSubmit()}
-                >
-                  {busy ? t("pcSubmitting") : t("pcSubmitActivity")}
-                </button>
-              ) : null}
-              <Link to={courseHref} className="auth-btn auth-btn--ghost auth-btn--sm">
-                {t("pcBackToCourse")}
-              </Link>
-            </div>
-          }
-        >
-          {canTeach ? (
-            <div className="pbc-activity-meta" aria-label={t("pcActivitySettingsAria")}>
-              <p className="auth-card__muted" style={{ margin: 0 }}>
-                {activity?.due_at
-                  ? t("pcDueDateColon").replace("{date}", fmtTs(activity.due_at))
-                  : null}
-                {activity?.submission_close_at
-                  ? `${activity?.due_at ? " · " : ""}${t("pcCloseColon").replace("{date}", fmtTs(activity.submission_close_at))}`
-                  : null}
-                {activity?.max_points != null ? (
-                  `${activity?.due_at || activity?.submission_close_at ? " · " : ""}${t("pcMaxPointsColon").replace("{n}", String(activity.max_points))}`
-                ) : activity?.course_id ? (
-                  <>
-                    {activity?.due_at || activity?.submission_close_at ? " · " : null}
-                    {t("pcDefineMaxInActivities").split("{link}")[0]}
-                    <Link to={actividadesHref} className="auth-link">
-                      {t("pcActivities")}
-                    </Link>
-                    {t("pcDefineMaxInActivities").split("{link}")[1]}
-                  </>
+        {canTeach ? (
+          <div className="pbc-activity-control-panel">
+            <div className="pbc-activity-control-panel__row pbc-activity-control-panel__row--essentials">
+              <div className="pbc-activity-control-panel__main">
+                <div className="pbc-activity-meta" aria-label={t("pcActivitySettingsAria")}>
+                  <p className="auth-card__muted" style={{ margin: 0 }}>
+                    {activity?.due_at
+                      ? t("pcDueDateColon").replace("{date}", fmtTs(activity.due_at))
+                      : null}
+                    {activity?.submission_close_at
+                      ? `${activity?.due_at ? " · " : ""}${t("pcCloseColon").replace("{date}", fmtTs(activity.submission_close_at))}`
+                      : null}
+                    {activity?.max_points != null ? (
+                      `${activity?.due_at || activity?.submission_close_at ? " · " : ""}${t("pcMaxPointsColon").replace("{n}", String(activity.max_points))}`
+                    ) : activity?.course_id ? (
+                      <>
+                        {activity?.due_at || activity?.submission_close_at ? " · " : null}
+                        {t("pcDefineMaxInActivities").split("{link}")[0]}
+                        <Link to={actividadesHref} className="auth-link">
+                          {t("pcActivities")}
+                        </Link>
+                        {t("pcDefineMaxInActivities").split("{link}")[1]}
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+                {activity?.description ? (
+                  <p className="pbc-activity-description">{activity.description}</p>
                 ) : null}
-              </p>
+                {activity?.content_snapshot || activity?.content_lesson_id ? (
+                  <p className="auth-card__muted">
+                    {isMaterial ? t("pcMaterialFromMyContent") : t("pcActivityFromMyContent")}
+                    {activity?.content_snapshot?.title ? `: ${activity.content_snapshot.title}` : ""}
+                    {lessonMeta?.title && !activity?.content_snapshot ? `: ${lessonMeta.title}` : ""}
+                  </p>
+                ) : null}
+                {lessonErr ? (
+                  <PbcAlert variant="error">
+                    {t("pcLessonDocLoadFail").replace("{error}", lessonErr)}
+                  </PbcAlert>
+                ) : null}
+                {snapshot ? (
+                  <section className="pbc-activity-lesson" aria-label={t("pcAssignedContentAria")}>
+                    <h2 className="pbc-activity-lesson__title">
+                      {isMaterial ? t("pcMaterial") : activityKind === "task" ? t("pcTask") : t("pcExercise")}
+                    </h2>
+                    <AssignedContentSnapshotViewer
+                      snapshot={snapshot}
+                      aggregates={snapshotItems.length ? itemAggregates : null}
+                      learningStatus={null}
+                      progressByItemId={itemProgressMap}
+                      interactive={false}
+                      busyId={itemProgressBusy}
+                      onStartItem={handleStartItem}
+                      onCompleteItem={handleCompleteItem}
+                      onSubmitItem={handleSubmitItem}
+                      itemSubmissionsById={itemSubmissionsById}
+                      engagement={null}
+                    />
+                  </section>
+                ) : lessonDoc && activity?.content_lesson_id ? (
+                  <section className="pbc-activity-lesson" aria-label={t("pcLessonContentAria")}>
+                    <h2 className="pbc-activity-lesson__title">{t("pcLesson")}</h2>
+                    <AssignedLessonViewer
+                      key={activity.content_lesson_id}
+                      lessonId={activity.content_lesson_id}
+                      initialContent={lessonDoc}
+                    />
+                  </section>
+                ) : null}
+                {!isCodingActivity ? (
+                  <p className="auth-card__muted">{t("pcMaterialReadOnly")}</p>
+                ) : null}
+              </div>
+              <div className="pbc-activity-actions">
+                {isCodingActivity ? (
+                  <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" onClick={openPyBot}>
+                    {t("pcOpenPyBot")}
+                  </button>
+                ) : null}
+                <Link to={courseHref} className="auth-btn auth-btn--ghost auth-btn--sm">
+                  {t("pcBackToCourse")}
+                </Link>
+              </div>
             </div>
-          ) : (
+
+            <div className="pbc-activity-control-panel__row pbc-activity-control-panel__row--evaluation">
+              {/* Compact+embedded: rubric flow pcChooseRubric / pcCreateNew / pcCreateOnlyForActivity / pcManageRubrics */}
+              <ActivityEvaluationSection
+                compact
+                embedded
+                value={evaluationSelection}
+                onChange={onEvaluationChange}
+                onCommitOneOff={onCommitOneOff}
+                commitOneOffBusy={busy}
+                disabled={busy}
+                hasEvaluations={rubricHasEvaluations}
+              />
+            </div>
+
+            {classroomCourseId ? (
+              <div className="pbc-activity-control-panel__row pbc-activity-control-panel__row--classroom">
+                {/* Compact strip replaces former technical "Google Classroom" block title. */}
+                <div className="pbc-activity-classroom-status" role="status">
+                  <div className="pbc-activity-classroom-status__main">
+                    <span className="pbc-activity-classroom-status__scope">{"Classroom"}</span>
+                    {activity?.classroom_coursework_id ? (
+                      classroomSyncing || (!classroomSyncedAt && !classroomSyncErr) ? (
+                        <span className="pbc-activity-classroom-status__label">
+                          {" · "}
+                          {t("pcSyncing")}
+                        </span>
+                      ) : classroomSyncErr ? (
+                        <span className="pbc-activity-classroom-status__label">
+                          {" · "}
+                          {t("pcSyncFailedShort")}
+                          <button
+                            type="button"
+                            className="auth-btn auth-btn--ghost auth-btn--sm"
+                            disabled={classroomSyncing}
+                            onClick={() => void onSyncClassroom()}
+                          >
+                            {t("pcRetry")}
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="pbc-activity-classroom-status__label">
+                          {" · "}
+                          {t("pcSynced")}
+                          {classroomSyncedAt
+                            ? ` · ${fmtSyncedRelative(classroomSyncedAt)}`
+                            : ""}
+                        </span>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        className="auth-btn auth-btn--ghost auth-btn--sm"
+                        disabled={busy}
+                        onClick={() => void onPublishClassroom()}
+                      >
+                        {t("pcPublishToClassroom")}
+                      </button>
+                    )}
+                  </div>
+                  {activity?.classroom_coursework_id ? (
+                    <div className="pbc-activity-classroom-status__actions">
+                      <button
+                        type="button"
+                        className="auth-btn auth-btn--ghost auth-btn--sm"
+                        disabled={classroomSyncing}
+                        onClick={() => void onSyncClassroom()}
+                      >
+                        {t("pcRefresh")}
+                      </button>
+                      {activity.classroom_coursework_url ? (
+                        <a
+                          className="auth-link pbc-activity-classroom-status__link"
+                          href={activity.classroom_coursework_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {t("pcOpenActivityInClassroom")}
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <PbcSection
+            className="pbc-activity-overview"
+            title={t("pcDetail")}
+            description={t("pcActivityOverviewDesc")}
+            actions={
+              <div className="pbc-activity-actions">
+                {isCodingActivity ? (
+                  <button type="button" className="auth-btn auth-btn--primary auth-btn--sm" onClick={openPyBot}>
+                    {t("pcOpenPyBot")}
+                  </button>
+                ) : null}
+                {isStudent && isCodingActivity ? (
+                  <button
+                    type="button"
+                    className="auth-btn auth-btn--ghost auth-btn--sm"
+                    disabled={busy || !studentCanSubmit}
+                    onClick={() => void onSubmit()}
+                  >
+                    {busy ? t("pcSubmitting") : t("pcSubmitActivity")}
+                  </button>
+                ) : null}
+                <Link to={courseHref} className="auth-btn auth-btn--ghost auth-btn--sm">
+                  {t("pcBackToCourse")}
+                </Link>
+              </div>
+            }
+          >
             <div className="pbc-activity-meta">
               <p className="auth-card__muted" style={{ margin: 0 }}>
                 {activity?.due_at
@@ -1619,146 +1767,144 @@ export default function ActivityPage() {
                 ) : null}
               </p>
             </div>
-          )}
 
-          {isStudent && activity?.classroom_coursework_id && classroomCourseId ? (
-            <div className="pbc-activity-classroom-hint">
-              {classroomLinked ? (
-                <span className="auth-card__muted">{t("pcClassroomAccountLinked")}</span>
-              ) : (
-                <p className="auth-card__muted" style={{ margin: 0 }}>
-                  {t("pcClassroomActivityHint")}
-                </p>
-              )}
-            </div>
-          ) : null}
+            {isStudent && activity?.classroom_coursework_id && classroomCourseId ? (
+              <div className="pbc-activity-classroom-hint">
+                {classroomLinked ? (
+                  <span className="auth-card__muted">{t("pcClassroomAccountLinked")}</span>
+                ) : (
+                  <p className="auth-card__muted" style={{ margin: 0 }}>
+                    {t("pcClassroomActivityHint")}
+                  </p>
+                )}
+              </div>
+            ) : null}
 
-          {activity?.description ? (
-            <p className="pbc-activity-description">{activity.description}</p>
-          ) : (
-            <p className="auth-card__muted">{t("pcNoDescription")}</p>
-          )}
+            {activity?.description ? (
+              <p className="pbc-activity-description">{activity.description}</p>
+            ) : (
+              <p className="auth-card__muted">{t("pcNoDescription")}</p>
+            )}
 
-          {activity?.content_snapshot || activity?.content_lesson_id ? (
-            <p className="auth-card__muted">
-              {isMaterial ? t("pcMaterialFromMyContent") : t("pcActivityFromMyContent")}
-              {activity?.content_snapshot?.title ? `: ${activity.content_snapshot.title}` : ""}
-              {lessonMeta?.title && !activity?.content_snapshot ? `: ${lessonMeta.title}` : ""}
-            </p>
-          ) : !canTeach && activity?.pybot_lesson_id ? (
-            <p className="auth-card__muted">
-              {t("pcPyBotLessonRef")}: <code>{activity.pybot_lesson_id}</code>
-            </p>
-          ) : null}
-
-          {lessonErr ? (
-            <PbcAlert variant="error">
-              {t("pcLessonDocLoadFail").replace("{error}", lessonErr)}
-            </PbcAlert>
-          ) : null}
-
-          {snapshot ? (
-            <section className="pbc-activity-lesson" aria-label={t("pcAssignedContentAria")}>
-              <h2 className="pbc-activity-lesson__title">
-                {isMaterial ? t("pcMaterial") : activityKind === "task" ? t("pcTask") : t("pcExercise")}
-              </h2>
-              <AssignedContentSnapshotViewer
-                snapshot={snapshot}
-                aggregates={snapshotItems.length ? itemAggregates : null}
-                learningStatus={isStudent ? learningStatus : null}
-                progressByItemId={itemProgressMap}
-                interactive={Boolean(isStudent && snapshotItems.length)}
-                busyId={itemProgressBusy}
-                onStartItem={handleStartItem}
-                onCompleteItem={handleCompleteItem}
-                onSubmitItem={handleSubmitItem}
-                itemSubmissionsById={itemSubmissionsById}
-                engagement={isStudent ? engagement : null}
-              />
-            </section>
-          ) : lessonDoc && activity?.content_lesson_id ? (
-            <section
-              className="pbc-activity-lesson"
-              aria-label={t("pcLessonContentAria")}
-              ref={isStudent ? engagement.setSurfaceRef : undefined}
-              onPointerDown={
-                isStudent
-                  ? () => {
-                      engagement.activateLessonDocument?.();
-                    }
-                  : undefined
-              }
-            >
-              <h2 className="pbc-activity-lesson__title">{t("pcLesson")}</h2>
-              <AssignedLessonViewer
-                key={activity.content_lesson_id}
-                lessonId={activity.content_lesson_id}
-                initialContent={lessonDoc}
-              />
-            </section>
-          ) : null}
-
-          {!isMaterial && !canTeach && progressHint ? (
-            <p className="auth-card__muted">{progressHint}</p>
-          ) : null}
-
-          {isStudent && isCodingActivity ? (
-            <div className="pbc-activity-my-submission">
-              <p className="auth-card__muted" style={{ margin: 0 }}>
-                {t("pcStatus")}: <strong>{processStatusLabel(myProcess)}</strong>
-                {submissionVersionLabel(mySubmission?.version)
-                  ? ` · ${submissionVersionLabel(mySubmission.version)}`
-                  : null}
-                {mySubmission?.submitted_at ? ` · ${fmtTs(mySubmission.submitted_at)}` : null}
+            {activity?.content_snapshot || activity?.content_lesson_id ? (
+              <p className="auth-card__muted">
+                {isMaterial ? t("pcMaterialFromMyContent") : t("pcActivityFromMyContent")}
+                {activity?.content_snapshot?.title ? `: ${activity.content_snapshot.title}` : ""}
+                {lessonMeta?.title && !activity?.content_snapshot ? `: ${lessonMeta.title}` : ""}
               </p>
-              <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                {studentNextActionMessageI18n(myProcess)}
+            ) : !canTeach && activity?.pybot_lesson_id ? (
+              <p className="auth-card__muted">
+                {t("pcPyBotLessonRef")}: <code>{activity.pybot_lesson_id}</code>
               </p>
-              {!studentCanSubmit && myWindow === "cerrada" ? (
-                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  {t("pcSubmissionsClosed")}
-                </p>
-              ) : null}
-              {myProcess === "revision_solicitada" && mySubmission?.feedback ? (
-                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  {t("pcTeacherRequestedReviewFeedback")} {mySubmission.feedback}
-                </p>
-              ) : null}
-              {(myProcess === "evaluado" || myProcess === "cerrado") && mySubmission?.grade != null ? (
-                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  {t("pcGradePrefix")}: <strong>{mySubmission.grade}</strong>
-                  {activity?.max_points != null ? ` / ${activity.max_points}` : null}
-                </p>
-              ) : null}
-              {(myProcess === "evaluado" || myProcess === "cerrado") &&
-              activityRubricMeta?.scoring_mode === "qualitative" &&
-              myRubricScores.length > 0 ? (
-                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  {t("pcQualitativeNoNumeric")}
-                </p>
-              ) : null}
-              {(myProcess === "evaluado" || myProcess === "cerrado") && mySubmission?.feedback ? (
-                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
-                  {t("pcFeedbackLabel")}: {mySubmission.feedback}
-                </p>
-              ) : null}
-              {(myProcess === "evaluado" || myProcess === "cerrado") &&
-              rubricCriteria.length > 0 &&
-              myRubricScores.length > 0 ? (
-                <ActivityRubricStudentResult
-                  criteria={rubricCriteria}
-                  scores={myRubricScores}
-                  scoringMode={activityRubricMeta?.scoring_mode || "points"}
-                  grade={mySubmission?.grade}
-                  maxPoints={activity?.max_points}
-                  feedback={null}
+            ) : null}
+
+            {lessonErr ? (
+              <PbcAlert variant="error">
+                {t("pcLessonDocLoadFail").replace("{error}", lessonErr)}
+              </PbcAlert>
+            ) : null}
+
+            {snapshot ? (
+              <section className="pbc-activity-lesson" aria-label={t("pcAssignedContentAria")}>
+                <h2 className="pbc-activity-lesson__title">
+                  {isMaterial ? t("pcMaterial") : activityKind === "task" ? t("pcTask") : t("pcExercise")}
+                </h2>
+                <AssignedContentSnapshotViewer
+                  snapshot={snapshot}
+                  aggregates={snapshotItems.length ? itemAggregates : null}
+                  learningStatus={isStudent ? learningStatus : null}
+                  progressByItemId={itemProgressMap}
+                  interactive={Boolean(isStudent && snapshotItems.length)}
+                  busyId={itemProgressBusy}
+                  onStartItem={handleStartItem}
+                  onCompleteItem={handleCompleteItem}
+                  onSubmitItem={handleSubmitItem}
+                  itemSubmissionsById={itemSubmissionsById}
+                  engagement={isStudent ? engagement : null}
                 />
-              ) : null}
-            </div>
-          ) : null}
+              </section>
+            ) : lessonDoc && activity?.content_lesson_id ? (
+              <section
+                className="pbc-activity-lesson"
+                aria-label={t("pcLessonContentAria")}
+                ref={isStudent ? engagement.setSurfaceRef : undefined}
+                onPointerDown={
+                  isStudent
+                    ? () => {
+                        engagement.activateLessonDocument?.();
+                      }
+                    : undefined
+                }
+              >
+                <h2 className="pbc-activity-lesson__title">{t("pcLesson")}</h2>
+                <AssignedLessonViewer
+                  key={activity.content_lesson_id}
+                  lessonId={activity.content_lesson_id}
+                  initialContent={lessonDoc}
+                />
+              </section>
+            ) : null}
 
-          {isCodingActivity ? (
-            canTeach ? null : (
+            {!isMaterial && progressHint ? (
+              <p className="auth-card__muted">{progressHint}</p>
+            ) : null}
+
+            {isStudent && isCodingActivity ? (
+              <div className="pbc-activity-my-submission">
+                <p className="auth-card__muted" style={{ margin: 0 }}>
+                  {t("pcStatus")}: <strong>{processStatusLabel(myProcess)}</strong>
+                  {submissionVersionLabel(mySubmission?.version)
+                    ? ` · ${submissionVersionLabel(mySubmission.version)}`
+                    : null}
+                  {mySubmission?.submitted_at ? ` · ${fmtTs(mySubmission.submitted_at)}` : null}
+                </p>
+                <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                  {studentNextActionMessageI18n(myProcess)}
+                </p>
+                {!studentCanSubmit && myWindow === "cerrada" ? (
+                  <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                    {t("pcSubmissionsClosed")}
+                  </p>
+                ) : null}
+                {myProcess === "revision_solicitada" && mySubmission?.feedback ? (
+                  <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                    {t("pcTeacherRequestedReviewFeedback")} {mySubmission.feedback}
+                  </p>
+                ) : null}
+                {(myProcess === "evaluado" || myProcess === "cerrado") && mySubmission?.grade != null ? (
+                  <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                    {t("pcGradePrefix")}: <strong>{mySubmission.grade}</strong>
+                    {activity?.max_points != null ? ` / ${activity.max_points}` : null}
+                  </p>
+                ) : null}
+                {(myProcess === "evaluado" || myProcess === "cerrado") &&
+                activityRubricMeta?.scoring_mode === "qualitative" &&
+                myRubricScores.length > 0 ? (
+                  <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                    {t("pcQualitativeNoNumeric")}
+                  </p>
+                ) : null}
+                {(myProcess === "evaluado" || myProcess === "cerrado") && mySubmission?.feedback ? (
+                  <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
+                    {t("pcFeedbackLabel")}: {mySubmission.feedback}
+                  </p>
+                ) : null}
+                {(myProcess === "evaluado" || myProcess === "cerrado") &&
+                rubricCriteria.length > 0 &&
+                myRubricScores.length > 0 ? (
+                  <ActivityRubricStudentResult
+                    criteria={rubricCriteria}
+                    scores={myRubricScores}
+                    scoringMode={activityRubricMeta?.scoring_mode || "points"}
+                    grade={mySubmission?.grade}
+                    maxPoints={activity?.max_points}
+                    feedback={null}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+
+            {isCodingActivity ? (
               <p className="auth-card__muted">
                 {savedCode
                   ? t("pcAutosaveHint")
@@ -1766,98 +1912,17 @@ export default function ActivityPage() {
                     ? t("pcStarterCodeHint")
                     : t("pcWorkInIdeHint")}
               </p>
-            )
-          ) : (
-            <p className="auth-card__muted">{t("pcMaterialReadOnly")}</p>
-          )}
-        </PbcSection>
-
-        {canTeach ? (
-          <PbcSection
-            title={t("pcEvaluation")}
-            className="pbc-activity-section--compact pbc-activity-evaluation"
-          >
-            {/* Compact mode keeps rubric flow: pcChooseRubric / pcCreateNew / pcCreateOnlyForActivity / pcManageRubrics */}
-            <ActivityEvaluationSection
-              compact
-              value={evaluationSelection}
-              onChange={onEvaluationChange}
-              onCommitOneOff={onCommitOneOff}
-              commitOneOffBusy={busy}
-              disabled={busy}
-              hasEvaluations={rubricHasEvaluations}
-            />
+            ) : (
+              <p className="auth-card__muted">{t("pcMaterialReadOnly")}</p>
+            )}
           </PbcSection>
-        ) : null}
+        )}
 
         {canTeach ? (
           <PbcSection
             title={t("pcSubmissions")}
             className="pbc-activity-deliveries pbc-activity-section--compact"
           >
-            {classroomCourseId ? (
-              /* Compact strip replaces former technical "Google Classroom" block title. */
-              <div className="pbc-activity-classroom-status" role="status">
-                <div className="pbc-activity-classroom-status__main">
-                  {activity?.classroom_coursework_id ? (
-                    classroomSyncing || (!classroomSyncedAt && !classroomSyncErr) ? (
-                      <span className="pbc-activity-classroom-status__label">{t("pcSyncing")}</span>
-                    ) : classroomSyncErr ? (
-                      <span className="pbc-activity-classroom-status__label">
-                        {t("pcSyncFailedShort")}
-                        <button
-                          type="button"
-                          className="auth-btn auth-btn--ghost auth-btn--sm"
-                          disabled={classroomSyncing}
-                          onClick={() => void onSyncClassroom()}
-                        >
-                          {t("pcRetry")}
-                        </button>
-                      </span>
-                    ) : (
-                      <span className="pbc-activity-classroom-status__label">
-                        {t("pcSynced")}
-                        {classroomSyncedAt
-                          ? ` · ${fmtSyncedRelative(classroomSyncedAt)}`
-                          : ""}
-                      </span>
-                    )
-                  ) : (
-                    <button
-                      type="button"
-                      className="auth-btn auth-btn--ghost auth-btn--sm"
-                      disabled={busy}
-                      onClick={() => void onPublishClassroom()}
-                    >
-                      {t("pcPublishToClassroom")}
-                    </button>
-                  )}
-                </div>
-                {activity?.classroom_coursework_id ? (
-                  <div className="pbc-activity-classroom-status__actions">
-                    <button
-                      type="button"
-                      className="auth-btn auth-btn--ghost auth-btn--sm"
-                      disabled={classroomSyncing}
-                      onClick={() => void onSyncClassroom()}
-                    >
-                      {t("pcRefresh")}
-                    </button>
-                    {activity.classroom_coursework_url ? (
-                      <a
-                        className="auth-link pbc-activity-classroom-status__link"
-                        href={activity.classroom_coursework_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {t("pcOpenActivityInClassroom")}
-                      </a>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
             {teacherDeliveryCards.length === 0 ? (
               <PbcEmpty
                 title={t("pcNoSubmissionsYet")}
