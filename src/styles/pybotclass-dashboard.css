@@ -3799,6 +3799,93 @@
   padding-top: 0.5rem;
 }
 
+/* ActivityPage docente — Classroom status + unified delivery cards */
+.pbc-activity-classroom-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.85rem;
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--pbc-border);
+  border-radius: var(--pbc-radius-md);
+  background: var(--pbc-panel);
+  min-width: 0;
+}
+
+.pbc-activity-classroom-status__main,
+.pbc-activity-classroom-status__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+  min-width: 0;
+}
+
+.pbc-activity-classroom-status__label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.55rem;
+  color: var(--pbc-muted, var(--pbc-text-muted, #64748b));
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.pbc-activity-classroom-status__link,
+.pbc-activity-evidence-link {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.pbc-activity-source-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.25rem;
+}
+
+.pbc-activity-source-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  padding: 0.12rem 0.4rem;
+  border: 1px solid var(--pbc-border);
+  border-radius: var(--pbc-radius-sm, 4px);
+  color: var(--pbc-muted, var(--pbc-text-muted, #64748b));
+  background: transparent;
+}
+
+.pbc-activity-attachment-list {
+  list-style: none;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.pbc-activity-classroom-open {
+  margin: 0.2rem 0 0;
+  min-width: 0;
+}
+
+.pbc-activity-rubric-block {
+  margin-top: 0.35rem;
+  min-width: 0;
+}
+
+.pbc-activity-grade-hint {
+  font-size: 0.9rem;
+}
+
+.pbc-eval-section--compact .pbc-eval-section__head {
+  margin-bottom: 0.35rem;
+}
+
 @media (max-width: 640px) {
   .pbc-activity-grade-input,
   .pbc-activity-feedback-input {
@@ -3831,6 +3918,43 @@
   .pbc-activity-actions .auth-link {
     flex: 1 1 auto;
     text-align: center;
+  }
+
+  /* ActivityPage docente mobile: Classroom status wrap + cards + no horizontal overflow */
+  .pbc-activity-classroom-status {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pbc-activity-classroom-status__main,
+  .pbc-activity-classroom-status__actions {
+    width: 100%;
+  }
+
+  .pbc-activity-classroom-status__actions .auth-btn,
+  .pbc-activity-classroom-status__actions .auth-link {
+    flex: 1 1 auto;
+  }
+
+  .pbc-activity-deliveries .pbc-activity-submission {
+    flex-direction: column;
+  }
+
+  .pbc-activity-attachment-list,
+  .pbc-activity-evidence-link,
+  .pbc-activity-classroom-status__link {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+  }
+
+  .pbc-activity-grade-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pbc-activity-grade-row .auth-btn {
+    width: 100%;
   }
 }
 

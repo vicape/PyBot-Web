@@ -126,6 +126,79 @@ function fmtTs(v) {
   }
 }
 
+/** Auto-sync Classroom threshold: exactly 2 minutes. */
+const CLASSROOM_AUTO_SYNC_MS = 120000;
+
+function classroomSubmissionStateLabelEs(state) {
+  switch (String(state || "").toUpperCase()) {
+    case "NEW":
+      return "Nueva";
+    case "CREATED":
+      return "Asignada";
+    case "TURNED_IN":
+      return "Entregada";
+    case "RETURNED":
+      return "Devuelta";
+    case "RECLAIMED_BY_STUDENT":
+      return "Recuperada";
+    default:
+      return state ? "En Classroom" : "—";
+  }
+}
+
+function fmtSyncedRelative(iso) {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return fmtTs(iso);
+  const diff = Date.now() - t;
+  if (diff < 60_000) return "hace un momento";
+  if (diff < 3_600_000) {
+    const m = Math.max(1, Math.floor(diff / 60_000));
+    return `hace ${m} min`;
+  }
+  if (diff < 86_400_000) {
+    const h = Math.max(1, Math.floor(diff / 3_600_000));
+    return `hace ${h} h`;
+  }
+  return fmtTs(iso);
+}
+
+function classroomCacheIsStale(syncedAt, nowMs = Date.now()) {
+  if (!syncedAt) return true;
+  const t = Date.parse(syncedAt);
+  if (Number.isNaN(t)) return true;
+  return nowMs - t >= CLASSROOM_AUTO_SYNC_MS;
+}
+
+/** Unión docente PyBot + Classroom: una tarjeta por user_id mapeado. */
+function buildTeacherDeliveryCards(teacherRows = [], classroomSubs = []) {
+  const cards = [];
+  const byUserId = new Map();
+
+  for (const row of teacherRows) {
+    if (!row?.user_id) continue;
+    const card = { key: row.user_id, userId: row.user_id, pybot: row, classroom: null };
+    byUserId.set(row.user_id, card);
+    cards.push(card);
+  }
+
+  for (const cs of classroomSubs) {
+    if (cs?.user_id && byUserId.has(cs.user_id)) {
+      byUserId.get(cs.user_id).classroom = cs;
+      continue;
+    }
+    const key = cs?.user_id || `classroom:${cs?.id || cs?.userId || cards.length}`;
+    cards.push({
+      key,
+      userId: cs?.user_id || null,
+      pybot: null,
+      classroom: cs,
+    });
+  }
+
+  return cards;
+}
+
 export default function ActivityPage() {
   const { activityId } = useParams();
   const [searchParams] = useSearchParams();
@@ -139,6 +212,10 @@ export default function ActivityPage() {
   const [classroomCourseId, setClassroomCourseId] = useState(null);
   const [classroomSubs, setClassroomSubs] = useState([]);
   const [classroomSyncedAt, setClassroomSyncedAt] = useState(null);
+  const [classroomSyncing, setClassroomSyncing] = useState(false);
+  const [classroomSyncErr, setClassroomSyncErr] = useState("");
+  const classroomSyncInFlightRef = useRef(false);
+  const classroomSyncedAtRef = useRef(null);
   const [progressHint, setProgressHint] = useState("");
   const [savedCode, setSavedCode] = useState(false);
   const [loadErr, setLoadErr] = useState("");
@@ -179,6 +256,10 @@ export default function ActivityPage() {
   const [superAdmin, setSuperAdmin] = useState(false);
   const focusRowRef = useRef(null);
   const didFocusStudent = useRef(false);
+
+  useEffect(() => {
+    classroomSyncedAtRef.current = classroomSyncedAt;
+  }, [classroomSyncedAt]);
 
   const canTeach = canTeachCourse({ orgRole, courseRole });
   const isStudent = isCourseStudent({ courseRole });
@@ -349,7 +430,7 @@ export default function ActivityPage() {
       setProgressHint("Tenés código guardado en la nube para esta actividad.");
     } else if (act.starter_code && act.starter_code.length > 0) {
       setSavedCode(false);
-      setProgressHint("Al abrir PyBot vas a ver el código inicial de esta tarea.");
+      setProgressHint("PyBot abre con el código inicial de esta tarea.");
     } else {
       setSavedCode(false);
       setProgressHint("Todavía no hay progreso guardado en la nube.");
@@ -616,6 +697,12 @@ export default function ActivityPage() {
     activityPerformance,
   ]);
 
+  // teacherRows + classroomSubs → una tarjeta por alumno mapeado (Classroom-only / PyBot-only).
+  const teacherDeliveryCards = useMemo(
+    () => buildTeacherDeliveryCards(teacherRows, classroomSubs),
+    [teacherRows, classroomSubs],
+  );
+
   const handleStartItem = useCallback(
     async (item) => {
       if (!activityId || !item?.snapshotItemId || !isStudent) return;
@@ -844,34 +931,85 @@ export default function ActivityPage() {
     await load();
   };
 
-  const onSyncClassroom = async () => {
-    if (!activity?.classroom_coursework_id || !classroomCourseId || !user || busy) return;
-    setBusy(true);
-    setActionErr("");
-    setActionMsg("");
-    const r = await syncClassroomSubmissionsForActivity({
-      activityId: activity.id,
-      classroomCourseId,
-      courseWorkId: activity.classroom_coursework_id,
-      userId: user.id,
-    });
-    setBusy(false);
-    if (!r.ok) {
-      const msg = r.error || "No se pudo sincronizar Classroom.";
-      if (/guardar|persist|forbidden|invalid_rows|missing_activity/i.test(String(msg))) {
-        setActionErr("No se pudieron guardar las entregas sincronizadas.");
-      } else {
-        setActionErr(msg);
+  const runClassroomSync = useCallback(
+    async ({ manual = false } = {}) => {
+      if (!activity?.classroom_coursework_id || !classroomCourseId || !user) return;
+      if (classroomSyncInFlightRef.current) return;
+      classroomSyncInFlightRef.current = true;
+      setClassroomSyncing(true);
+      if (manual) setClassroomSyncErr("");
+      try {
+        const r = await syncClassroomSubmissionsForActivity({
+          activityId: activity.id,
+          classroomCourseId,
+          courseWorkId: activity.classroom_coursework_id,
+          userId: user.id,
+        });
+        if (!r.ok) {
+          // Conservar classroomSubs cacheados; no OAuth ni redirect en auto-sync.
+          const msg = r.error || "No se pudo sincronizar Classroom.";
+          const friendly = /guardar|persist|forbidden|invalid_rows|missing_activity/i.test(
+            String(msg),
+          )
+            ? "No se pudieron guardar las entregas sincronizadas."
+            : msg;
+          setClassroomSyncErr(friendly);
+          return;
+        }
+        setClassroomSubs(r.rows ?? []);
+        setClassroomSyncedAt(r.syncedAt ?? new Date().toISOString());
+        setClassroomSyncErr("");
+        // Sync exitoso: estado compacto (sin banner actionMsg).
+      } finally {
+        classroomSyncInFlightRef.current = false;
+        setClassroomSyncing(false);
       }
-      return;
+    },
+    [activity?.classroom_coursework_id, activity?.id, classroomCourseId, user],
+  );
+
+  const onSyncClassroom = useCallback(() => {
+    void runClassroomSync({ manual: true });
+  }, [runClassroomSync]);
+
+  // Auto-sync en background al abrir (cache ausente o >= 2 min). Sin polling continuo.
+  useEffect(() => {
+    if (!canTeach || !activity?.classroom_coursework_id || !classroomCourseId || !user) return;
+    if (loading) return;
+    if (!classroomCacheIsStale(classroomSyncedAtRef.current)) return;
+    void runClassroomSync({ manual: false });
+  }, [
+    canTeach,
+    activity?.classroom_coursework_id,
+    classroomCourseId,
+    user,
+    loading,
+    runClassroomSync,
+  ]);
+
+  // Revalidación al volver a pestaña/ventana (visibilitychange / focus).
+  useEffect(() => {
+    if (!canTeach || !activity?.classroom_coursework_id || !classroomCourseId || !user) {
+      return undefined;
     }
-    setClassroomSubs(r.rows ?? []);
-    setClassroomSyncedAt(r.syncedAt ?? new Date().toISOString());
-    const n = r.persisted ?? r.rows?.length ?? 0;
-    setActionMsg(
-      `Classroom sincronizado: ${n} entrega${n === 1 ? "" : "s"} actualizada${n === 1 ? "" : "s"}. Las entregas de Classroom se registran por separado de las entregas PyBot.`,
-    );
-  };
+    const maybeSync = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (!classroomCacheIsStale(classroomSyncedAtRef.current)) return;
+      void runClassroomSync({ manual: false });
+    };
+    window.addEventListener("focus", maybeSync);
+    document.addEventListener("visibilitychange", maybeSync);
+    return () => {
+      window.removeEventListener("focus", maybeSync);
+      document.removeEventListener("visibilitychange", maybeSync);
+    };
+  }, [
+    canTeach,
+    activity?.classroom_coursework_id,
+    classroomCourseId,
+    user,
+    runClassroomSync,
+  ]);
 
   const resolveClassroomSubmissionId = async (row) => {
     let classroomSubmissionId = row.classroom_submission_id || null;
@@ -905,7 +1043,7 @@ export default function ActivityPage() {
     const classroomSubmissionId = await resolveClassroomSubmissionId(row);
     if (!classroomSubmissionId) {
       setActionErr(
-        "No se encontró la entrega Classroom del alumno. Primero «Sincronizar entregas Classroom».",
+        "No se encontró la entrega Classroom del alumno. Primero usá «Actualizar».",
       );
       return;
     }
@@ -1070,7 +1208,7 @@ export default function ActivityPage() {
         }
       } else {
         msg =
-          "Evaluación guardada en PyBotClass. Sync Classroom pendiente: falta StudentSubmission (sincronizá entregas).";
+          "Evaluación guardada en PyBotClass. Sync Classroom pendiente: falta la entrega en Classroom (actualizá).";
       }
     }
 
@@ -1321,11 +1459,7 @@ export default function ActivityPage() {
         <PbcSection
           className="pbc-activity-overview"
           title="Detalle"
-          description={
-            canTeach
-              ? "Revisión y corrección de la actividad en el contexto del curso."
-              : "Consigna, material y entrega de la actividad."
-          }
+          description={canTeach ? undefined : "Consigna, material y entrega de la actividad."}
           actions={
             <div className="pbc-activity-actions">
               {isCodingActivity ? (
@@ -1351,15 +1485,16 @@ export default function ActivityPage() {
         >
           {canTeach ? (
             <div className="pbc-activity-meta" aria-label="Configuración de la actividad">
-              <p className="auth-card__muted" style={{ margin: 0 }}>
-                Fecha de entrega: {activity?.due_at ? fmtTs(activity.due_at) : "Sin fecha"}
-              </p>
-              <p className="auth-card__muted" style={{ margin: 0 }}>
-                Cierre de entregas:{" "}
-                {activity?.submission_close_at
-                  ? fmtTs(activity.submission_close_at)
-                  : "Sin cierre (se permite entrega tarde tras la fecha límite)"}
-              </p>
+              {activity?.due_at ? (
+                <p className="auth-card__muted" style={{ margin: 0 }}>
+                  Fecha límite: {fmtTs(activity.due_at)}
+                </p>
+              ) : null}
+              {activity?.submission_close_at ? (
+                <p className="auth-card__muted" style={{ margin: 0 }}>
+                  Cierre: {fmtTs(activity.submission_close_at)}
+                </p>
+              ) : null}
               {activity?.max_points != null ? (
                 <p className="auth-card__muted" style={{ margin: 0 }}>
                   Puntaje máximo: {activity.max_points}
@@ -1369,14 +1504,10 @@ export default function ActivityPage() {
                   Definí el puntaje máximo en{" "}
                   <Link to={actividadesHref} className="auth-link">
                     Actividades
-                  </Link>{" "}
-                  (requerido para enviar notas a Classroom).
+                  </Link>
+                  .
                 </p>
-              ) : (
-                <p className="auth-card__muted" style={{ margin: 0, fontSize: "0.9rem" }}>
-                  Requerido definir puntaje máximo en Actividades para enviar notas a Classroom.
-                </p>
-              )}
+              ) : null}
             </div>
           ) : (
             <div className="pbc-activity-meta">
@@ -1424,7 +1555,7 @@ export default function ActivityPage() {
               {activity?.content_snapshot?.title ? `: ${activity.content_snapshot.title}` : ""}
               {lessonMeta?.title && !activity?.content_snapshot ? `: ${lessonMeta.title}` : ""}
             </p>
-          ) : activity?.pybot_lesson_id ? (
+          ) : !canTeach && activity?.pybot_lesson_id ? (
             <p className="auth-card__muted">
               Lección PyBot (referencia): <code>{activity.pybot_lesson_id}</code>
             </p>
@@ -1475,7 +1606,9 @@ export default function ActivityPage() {
             </section>
           ) : null}
 
-          {!isMaterial ? <p className="auth-card__muted">{progressHint}</p> : null}
+          {!isMaterial && !canTeach && progressHint ? (
+            <p className="auth-card__muted">{progressHint}</p>
+          ) : null}
 
           {isStudent && isCodingActivity ? (
             <div className="pbc-activity-my-submission">
@@ -1533,143 +1666,24 @@ export default function ActivityPage() {
           ) : null}
 
           {isCodingActivity ? (
-            <p className="auth-card__muted">
-              {canTeach
-                ? "«Abrir PyBot» abre el IDE con el código inicial o tu progreso (para probar la consigna). El código del alumno se ve en cada entrega."
-                : savedCode
+            canTeach ? null : (
+              <p className="auth-card__muted">
+                {savedCode
                   ? "El autosave guarda progreso; «Entregar» registra la entrega formal."
                   : activity?.starter_code
                     ? "PyBot abre con el código inicial. Usá «Entregar» cuando termines."
                     : "Trabajá en el IDE y entregá cuando estés listo."}
-            </p>
+              </p>
+            )
           ) : (
             <p className="auth-card__muted">Este material es de solo lectura. No requiere entrega de código.</p>
           )}
         </PbcSection>
 
-        {canTeach && classroomCourseId ? (
-          <PbcSection
-            title="Google Classroom"
-            description="Publicación, sincronización de entregas y envío de notas (sin reescribir el mecanismo actual)."
-          >
-            <div className="pbc-activity-actions pbc-activity-actions--wrap">
-              {activity?.classroom_coursework_id ? (
-                <>
-                  <span className="auth-card__muted">Vinculada a Classroom (sincronización externa)</span>
-                  {activity.classroom_coursework_url ? (
-                    <a
-                      className="auth-link"
-                      href={activity.classroom_coursework_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Abrir courseWork
-                    </a>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="auth-btn auth-btn--ghost auth-btn--sm"
-                    disabled={busy}
-                    onClick={() => void onSyncClassroom()}
-                  >
-                    Sincronizar entregas Classroom
-                  </button>
-                  <span className="auth-card__muted" style={{ fontSize: "0.85rem" }}>
-                    {classroomSyncedAt
-                      ? `Última sincronización: ${fmtTs(classroomSyncedAt)}`
-                      : "Sin sincronizar aún"}
-                    {classroomSubs.length
-                      ? ` · ${classroomSubs.length} StudentSubmission${classroomSubs.length === 1 ? "" : "s"}`
-                      : ""}
-                  </span>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="auth-btn auth-btn--ghost auth-btn--sm"
-                  disabled={busy}
-                  onClick={() => void onPublishClassroom()}
-                >
-                  Publicar en Classroom
-                </button>
-              )}
-            </div>
-            {classroomSubs.length > 0 ? (
-              <div style={{ marginTop: "0.75rem" }}>
-                {/* PRE_QA AC11/AC15: driveFile → driveFile.alternateLink; link → link.url; sin adjuntos → StudentSubmission.alternateLink; ; los enlaces usan únicamente URLs http/https de Classroom */}
-                <p className="auth-card__muted" style={{ marginBottom: "0.35rem" }}>
-                  Entregas de Google Classroom (independientes de las entregas PyBot)
-                </p>
-                <ul className="pbc-list pbc-activity-submissions">
-                  {classroomSubs.map((cs) => {
-                    const profile = cs.user_id ? profilesById.get(cs.user_id) : null;
-                    const identity =
-                      profile?.display_name ||
-                      profile?.email ||
-                      (cs.user_id ? cs.user_id.slice(0, 8) : cs.userId || "Alumno Classroom");
-                    const linkItems = classroomAttachmentLinkItems(cs.attachments);
-                    const hasAttachments = Array.isArray(cs.attachments) && cs.attachments.length > 0;
-                    const openClassroomHref =
-                      !hasAttachments && isSafeHttpUrl(cs.alternateLink)
-                        ? cs.alternateLink
-                        : null;
-                    return (
-                      <li
-                        key={cs.id || cs.userId || identity}
-                        className="pbc-list-item pbc-activity-submission"
-                      >
-                        <div className="pbc-list-item__text">
-                          <span className="pbc-list-item__title">{identity}</span>
-                          <span className="pbc-list-item__meta">
-                            {cs.state || "—"}
-                            {cs.late ? " · Tarde" : ""}
-                            {cs.updateTime ? ` · ${fmtTs(cs.updateTime)}` : ""}
-                            {cs.assignedGrade != null ? ` · Nota Classroom ${cs.assignedGrade}` : ""}
-                          </span>
-                          {linkItems.length > 0 ? (
-                            <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem" }}>
-                              {linkItems.map((item) => (
-                                <li key={`${item.kind}:${item.href}`}>
-                                  <a
-                                    className="auth-link"
-                                    href={item.href}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    {item.title}
-                                  </a>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-                          {openClassroomHref ? (
-                            <p style={{ margin: "0.35rem 0 0" }}>
-                              <a
-                                className="auth-link"
-                                href={openClassroomHref}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                {"Abrir entrega en Classroom"}
-                              </a>
-                            </p>
-                          ) : null}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ) : null}
-          </PbcSection>
-        ) : null}
-
         {canTeach ? (
-          <PbcSection
-            title={t("pcEvaluation")}
-            description={t("pcRubricsPageLead")}
-          >
+          <PbcSection title={t("pcEvaluation")}>
             <ActivityEvaluationSection
+              compact
               value={evaluationSelection}
               onChange={onEvaluationChange}
               onCommitOneOff={onCommitOneOff}
@@ -1681,16 +1695,151 @@ export default function ActivityPage() {
         ) : null}
 
         {canTeach ? (
-          <PbcSection
-            title="Entregas · revisar y corregir"
-            description="Solicitar revisión y Evaluar son acciones distintas. Classroom solo sincroniza la nota (no el feedback)."
-          >
-            {teacherRows.length === 0 ? (
-              <PbcEmpty title="Todavía no hay entregas" description="Cuando los alumnos entreguen, aparecerán aquí." />
+          <PbcSection title="Entregas" className="pbc-activity-deliveries">
+            {classroomCourseId ? (
+              /* Compact strip replaces former technical "Google Classroom" block title. */
+              <div className="pbc-activity-classroom-status" role="status">
+                <div className="pbc-activity-classroom-status__main">
+                  {activity?.classroom_coursework_id ? (
+                    classroomSyncing || (!classroomSyncedAt && !classroomSyncErr) ? (
+                      <span className="pbc-activity-classroom-status__label">Sincronizando…</span>
+                    ) : classroomSyncErr ? (
+                      <span className="pbc-activity-classroom-status__label">
+                        No se pudo sincronizar
+                        <button
+                          type="button"
+                          className="auth-btn auth-btn--ghost auth-btn--sm"
+                          disabled={classroomSyncing}
+                          onClick={() => void onSyncClassroom()}
+                        >
+                          Reintentar
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="pbc-activity-classroom-status__label">
+                        Sincronizado
+                        {classroomSyncedAt
+                          ? ` · ${fmtSyncedRelative(classroomSyncedAt)}`
+                          : ""}
+                      </span>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      disabled={busy}
+                      onClick={() => void onPublishClassroom()}
+                    >
+                      Publicar en Classroom
+                    </button>
+                  )}
+                </div>
+                {activity?.classroom_coursework_id ? (
+                  <div className="pbc-activity-classroom-status__actions">
+                    <button
+                      type="button"
+                      className="auth-btn auth-btn--ghost auth-btn--sm"
+                      disabled={classroomSyncing}
+                      onClick={() => void onSyncClassroom()}
+                    >
+                      Actualizar
+                    </button>
+                    {activity.classroom_coursework_url ? (
+                      <a
+                        className="auth-link pbc-activity-classroom-status__link"
+                        href={activity.classroom_coursework_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Abrir actividad en Classroom
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {teacherDeliveryCards.length === 0 ? (
+              <PbcEmpty
+                title="Todavía no hay entregas"
+                description="Cuando los alumnos entreguen, aparecerán aquí."
+              />
             ) : (
               <ul className="pbc-list pbc-activity-submissions">
-                {teacherRows.map((row) => {
-                  const profile = profilesById.get(row.user_id);
+                {teacherDeliveryCards.map((card) => {
+                  const row = card.pybot;
+                  const cs = card.classroom;
+                  const profile = card.userId ? profilesById.get(card.userId) : null;
+                  const identity =
+                    profile?.display_name ||
+                    profile?.email ||
+                    (row ? "Alumno" : "Alumno Classroom");
+                  const isFocused = focusStudentId && card.userId === focusStudentId;
+                  const linkItems = cs ? classroomAttachmentLinkItems(cs.attachments) : [];
+                  const hasAttachments =
+                    Boolean(cs) && Array.isArray(cs.attachments) && cs.attachments.length > 0;
+                  const openClassroomHref =
+                    cs && !hasAttachments && isSafeHttpUrl(cs.alternateLink)
+                      ? cs.alternateLink
+                      : null;
+                  {/* adjuntos Classroom + fallback alternateLink (http/https) */}
+
+                  if (!row) {
+                    const lateOnly = Boolean(cs?.late);
+                    return (
+                      <li
+                        key={card.key}
+                        className="pbc-list-item pbc-activity-submission"
+                      >
+                        <div className="pbc-activity-submission__head">
+                          <div className="pbc-list-item__text">
+                            <span className="pbc-list-item__title">{identity}</span>
+                            <span className="pbc-list-item__meta">
+                              {classroomSubmissionStateLabelEs(cs.state)}
+                              {lateOnly ? " · Tarde" : ""}
+                              {cs?.updateTime ? ` · ${fmtTs(cs.updateTime)}` : ""}
+                              {cs?.assignedGrade != null ? ` · Nota ${cs.assignedGrade}` : ""}
+                            </span>
+                            <span className="pbc-activity-source-badges" aria-label="Fuentes">
+                              <span className="pbc-activity-source-badge">{"Classroom"}</span>
+                            </span>
+                          </div>
+                        </div>
+                        {linkItems.length > 0 ? (
+                          <ul className="pbc-activity-attachment-list">
+                            {linkItems.map((item) => (
+                              <li key={`${item.kind}:${item.href}`}>
+                                <a
+                                  className="auth-link pbc-activity-evidence-link"
+                                  href={item.href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  {item.kind === "driveFile" ? "Archivo entregado" : item.title}
+                                  {item.kind === "driveFile" && item.title && item.title !== item.href
+                                    ? ` · ${item.title}`
+                                    : ""}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        {openClassroomHref ? (
+                          <p className="pbc-activity-classroom-open">
+                            <a
+                              className="auth-link pbc-activity-evidence-link"
+                              href={openClassroomHref}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {"Abrir entrega en Classroom"}
+                            </a>
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  }
+
                   const draft = gradeDraft[row.id] || {
                     grade: row.grade ?? "",
                     feedback: row.feedback ?? "",
@@ -1699,18 +1848,18 @@ export default function ActivityPage() {
                     (h) => h.id !== row.id,
                   );
                   const verLabel = submissionVersionLabel(row.version);
-                  const isFocused = focusStudentId && row.user_id === focusStudentId;
                   const showingCurrent = viewCode === row.id;
                   const process = deriveProcessStatus({
                     status: row.status,
                     version: row.version,
                     hasSubmission: true,
                   });
-                  const late =
+                  const latePybot =
                     deriveTimeliness({
                       submittedAt: row.submitted_at,
                       dueAt: activity?.due_at,
                     }) === "tarde";
+                  const late = latePybot || Boolean(cs?.late);
                   const rd = rubricDraftBySubmission[row.id] || {};
                   const canReview = row.status === "submitted" || row.status === "returned";
                   const canEvaluate =
@@ -1726,30 +1875,44 @@ export default function ActivityPage() {
                     row.status === "closed" ||
                     row.status === "graded" ||
                     activityWindowClosed;
+                  const gradeDisplay =
+                    row.grade != null
+                      ? row.grade
+                      : cs?.assignedGrade != null
+                        ? cs.assignedGrade
+                        : null;
                   return (
                     <li
-                      key={row.id}
+                      key={card.key}
                       ref={isFocused ? focusRowRef : undefined}
                       className={`pbc-list-item pbc-activity-submission${isFocused ? " pbc-activity-submission--focus" : ""}`}
-                      id={`entrega-${row.user_id}`}
+                      id={card.userId ? `entrega-${card.userId}` : undefined}
                     >
                       <div className="pbc-activity-submission__head">
                         <div className="pbc-list-item__text">
-                          <span className="pbc-list-item__title">
-                            {profile?.display_name || profile?.email || row.user_id.slice(0, 8)}
-                          </span>
+                          <span className="pbc-list-item__title">{identity}</span>
                           <span className="pbc-list-item__meta">
                             {verLabel ? `${verLabel} · ` : ""}
                             {processStatusLabelEs(process)}
                             {late ? " · Tarde" : ""}
-                            {row.submitted_at ? ` · ${fmtTs(row.submitted_at)}` : ""}
-                            {row.grade != null ? ` · Nota ${row.grade}` : ""}
+                            {row.submitted_at
+                              ? ` · ${fmtTs(row.submitted_at)}`
+                              : cs?.updateTime
+                                ? ` · ${fmtTs(cs.updateTime)}`
+                                : ""}
+                            {gradeDisplay != null ? ` · Nota ${gradeDisplay}` : ""}
                             {row.classroom_grade_synced_at
                               ? ` · Nota en Classroom ${fmtTs(row.classroom_grade_synced_at)}`
                               : ""}
                             {row.classroom_grade_sync_error
                               ? ` · Sync pendiente: ${row.classroom_grade_sync_error}`
                               : ""}
+                          </span>
+                          <span className="pbc-activity-source-badges" aria-label="Fuentes">
+                            <span className="pbc-activity-source-badge">{"PyBot"}</span>
+                            {cs ? (
+                              <span className="pbc-activity-source-badge">{"Classroom"}</span>
+                            ) : null}
                           </span>
                         </div>
                         <button
@@ -1768,6 +1931,37 @@ export default function ActivityPage() {
                           code={row.submitted_code}
                           ariaLabel={`Código ${verLabel || "actual"} de ${profile?.display_name || "alumno"}`}
                         />
+                      ) : null}
+                      {linkItems.length > 0 ? (
+                        <ul className="pbc-activity-attachment-list">
+                          {linkItems.map((item) => (
+                            <li key={`${item.kind}:${item.href}`}>
+                              <a
+                                className="auth-link pbc-activity-evidence-link"
+                                href={item.href}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {item.kind === "driveFile" ? "Archivo entregado" : item.title}
+                                {item.kind === "driveFile" && item.title && item.title !== item.href
+                                  ? ` · ${item.title}`
+                                  : ""}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {openClassroomHref ? (
+                        <p className="pbc-activity-classroom-open">
+                          <a
+                            className="auth-link pbc-activity-evidence-link"
+                            href={openClassroomHref}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {"Abrir entrega en Classroom"}
+                          </a>
+                        </p>
                       ) : null}
                       {history.length > 0 ? (
                         <details className="pbc-activity-history">
@@ -1811,7 +2005,7 @@ export default function ActivityPage() {
                         </details>
                       ) : null}
                       {rubricCriteria.length > 0 ? (
-                        <div style={{ marginTop: "0.5rem" }}>
+                        <div className="pbc-activity-rubric-block">
                           <ActivityRubricGradeMatrix
                             criteria={rubricCriteria}
                             scoringMode={activityRubricMeta?.scoring_mode || "points"}
@@ -1825,7 +2019,7 @@ export default function ActivityPage() {
                             }
                             disabled={busy}
                           />
-                          <div className="pbc-activity-actions pbc-activity-actions--wrap" style={{ marginTop: "0.35rem" }}>
+                          <div className="pbc-activity-actions pbc-activity-actions--wrap">
                             <button
                               type="button"
                               className="auth-btn auth-btn--ghost auth-btn--sm"
@@ -1855,11 +2049,11 @@ export default function ActivityPage() {
                             }
                           />
                         ) : activityRubricMeta?.scoring_mode === "qualitative" ? (
-                          <span className="auth-card__muted" style={{ fontSize: "0.9rem" }}>
+                          <span className="auth-card__muted pbc-activity-grade-hint">
                             Cualitativa — sin nota numérica
                           </span>
                         ) : (
-                          <span className="auth-card__muted" style={{ fontSize: "0.9rem" }}>
+                          <span className="auth-card__muted pbc-activity-grade-hint">
                             Nota = total servidor (niveles congelados)
                           </span>
                         )}
@@ -2032,14 +2226,17 @@ export default function ActivityPage() {
         ) : null}
 
         <div className="pbc-footer-links">
-          <Link to={courseHref} className="auth-link">
-            ← Volver al curso
-          </Link>
-          {canTeach && activity?.course_id ? (
-            <Link to={entregasHref} className="auth-link">
-              Ver entregas del curso
+          {canTeach ? (
+            activity?.course_id ? (
+              <Link to={entregasHref} className="auth-link">
+                Ver entregas del curso
+              </Link>
+            ) : null
+          ) : (
+            <Link to={courseHref} className="auth-link">
+              ← Volver al curso
             </Link>
-          ) : null}
+          )}
         </div>
       </PbcPage>
     </PyBotClassShell>

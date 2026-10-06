@@ -180,6 +180,18 @@ test("V/W/X: Classroom note auto + retry; feedback never synced", () => {
   assert.doesNotMatch(msg, /feedback sincronizado/i);
 });
 
+// Teacher ActivityPage UI simplification: unified delivery cards still expose the
+// full grading workflow (review / evaluate / history / Classroom grade retry).
+test("ActivityPage docente: unión PyBot+Classroom conserva Solicitar revisión, Evaluar, Historial y retry Classroom", () => {
+  assert.match(activityPage, /buildTeacherDeliveryCards/);
+  assert.match(activityPage, /Solicitar revisión/);
+  assert.match(activityPage, />\s*Evaluar\s*</);
+  assert.match(activityPage, /Historial/);
+  assert.match(activityPage, /Reintentar sync Classroom/);
+  assert.match(activityPage, /Ver código/);
+  assert.match(activityPage, /Actualizar/);
+});
+
 test("Y: RPCs docentes security definer + teacher check (alumno forbidden)", () => {
   assert.match(mig046, /request_activity_review/);
   assert.match(mig046, /is_course_teacher/);

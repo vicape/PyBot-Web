@@ -250,6 +250,29 @@ test("ActivityPage Evaluación compact summary; grading matrix stays", () => {
   assert.doesNotMatch(activitySrc, /ActivityRubricAuthoringPanel/);
 });
 
+test("ActivityPage passes compact mode; default EvaluationSection unchanged", () => {
+  assert.match(activitySrc, /<ActivityEvaluationSection[\s\S]*compact/);
+  assert.match(evalSrc, /compact\s*=\s*false/);
+  assert.match(evalSrc, /compactConfigOpen|showCompactEmpty/);
+  // Default empty still exposes the three options (ActivityForm path).
+  assert.match(evalSrc, /pcChooseRubric/);
+  assert.match(evalSrc, /pcCreateNew/);
+  assert.match(evalSrc, /pcCreateOnlyForActivity/);
+  assert.match(evalSrc, /pcManageRubrics/);
+  // Compact initial: label + Configurar; full options after opening config.
+  assert.match(evalSrc, /showCompactEmpty/);
+  assert.match(evalSrc, /Configurar/);
+  assert.match(evalSrc, /setCompactConfigOpen\(true\)/);
+  // Visible Spanish compact empty label (AC19).
+  assert.equal(
+    `${PYBOTCLASS_STRINGS.es.pcRubric} · ${PYBOTCLASS_STRINGS.es.pcRubricChoiceNone}`,
+    "Rúbrica · Sin rúbrica",
+  );
+  assert.match(evalSrc, /\{t\("pcRubric"\)\} · \{t\("pcRubricChoiceNone"\)\}/);
+  // ActivityForm does not opt into compact.
+  assert.doesNotMatch(formSrc, /\bcompact\b/);
+});
+
 test("library cards Usar primary, Editar secondary, Más with Duplicar/Eliminar", () => {
   assert.match(librarySrc, /pcUse/);
   assert.match(librarySrc, /pcEdit/);

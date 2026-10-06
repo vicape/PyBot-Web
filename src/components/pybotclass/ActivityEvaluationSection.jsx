@@ -264,6 +264,7 @@ function RubricPickerOverlay({
  *   onMaxPointsChange?: (next: string) => void,
  *   maxLocked?: boolean,
  *   maxHint?: string | null,
+ *   compact?: boolean,
  * }} props
  */
 export default function ActivityEvaluationSection({
@@ -280,6 +281,7 @@ export default function ActivityEvaluationSection({
   onMaxPointsChange = null,
   maxLocked = false,
   maxHint = null,
+  compact = false,
 }) {
   const selection = value || emptyEvaluationSelection();
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -290,6 +292,7 @@ export default function ActivityEvaluationSection({
   const [busy, setBusy] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [oneOffOpen, setOneOffOpen] = useState(selection.mode === "oneoff");
+  const [compactConfigOpen, setCompactConfigOpen] = useState(false);
   const [err, setErr] = useState("");
   const [createForm, setCreateForm] = useState(() => {
     const seed = defaultRubricEditorState("qualitative");
@@ -428,8 +431,17 @@ export default function ActivityEvaluationSection({
       ? rubricPointsCeiling(criteriaPayloadFromEditor(selection.criteria, "points"))
       : null;
 
+  const showCompactEmpty = compact && selection.mode === "none" && !compactConfigOpen;
+  const showEmptyActions =
+    selection.mode === "none" && (!compact || compactConfigOpen);
+  const manageVisible =
+    showManageLink && (!compact || selection.mode !== "none" || compactConfigOpen);
+
   return (
-    <section className="pbc-eval-section" aria-labelledby="pbc-eval-title">
+    <section
+      className={`pbc-eval-section${compact ? " pbc-eval-section--compact" : ""}`}
+      aria-labelledby="pbc-eval-title"
+    >
       <header className="pbc-eval-section__head">
         <h3 id="pbc-eval-title" className="pbc-eval-section__title">
           <span aria-hidden>
@@ -437,7 +449,7 @@ export default function ActivityEvaluationSection({
           </span>
           <span>{t("pcEvaluation")}</span>
         </h3>
-        {showManageLink ? (
+        {manageVisible ? (
           <Link to="/dashboard/rubrics" className="auth-link pbc-eval-section__manage">
             {t("pcManageRubrics")}
           </Link>
@@ -490,35 +502,50 @@ export default function ActivityEvaluationSection({
               {t("pcRubric")} · {t("pcRubricChoiceNone")}
             </span>
           </div>
-          <div className="pbc-eval-empty__actions">
-            <button
-              type="button"
-              className="pbc-btn pbc-btn--primary pbc-btn--sm pbc-eval-btn-with-icon"
-              disabled={disabled || hasEvaluations}
-              onClick={() => void openPicker()}
-            >
-              <IconAssign size={18} />
-              <span>{t("pcChooseRubric")}</span>
-            </button>
-            <button
-              type="button"
-              className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
-              disabled={disabled || hasEvaluations}
-              onClick={() => void openCreateInOverlay()}
-            >
-              <IconPlus size={18} />
-              <span>{t("pcCreateNew")}</span>
-            </button>
-            <button
-              type="button"
-              className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon pbc-eval-empty__secondary"
-              disabled={disabled || hasEvaluations}
-              onClick={startOneOff}
-            >
-              <IconCopy size={18} />
-              <span>{t("pcCreateOnlyForActivity")}</span>
-            </button>
-          </div>
+          {showCompactEmpty ? (
+            <div className="pbc-eval-empty__actions">
+              <button
+                type="button"
+                className="pbc-btn pbc-btn--primary pbc-btn--sm pbc-eval-btn-with-icon"
+                disabled={disabled || hasEvaluations}
+                onClick={() => setCompactConfigOpen(true)}
+              >
+                <IconAssign size={18} />
+                <span>Configurar</span>
+              </button>
+            </div>
+          ) : null}
+          {showEmptyActions ? (
+            <div className="pbc-eval-empty__actions">
+              <button
+                type="button"
+                className="pbc-btn pbc-btn--primary pbc-btn--sm pbc-eval-btn-with-icon"
+                disabled={disabled || hasEvaluations}
+                onClick={() => void openPicker()}
+              >
+                <IconAssign size={18} />
+                <span>{t("pcChooseRubric")}</span>
+              </button>
+              <button
+                type="button"
+                className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon"
+                disabled={disabled || hasEvaluations}
+                onClick={() => void openCreateInOverlay()}
+              >
+                <IconPlus size={18} />
+                <span>{t("pcCreateNew")}</span>
+              </button>
+              <button
+                type="button"
+                className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-eval-btn-with-icon pbc-eval-empty__secondary"
+                disabled={disabled || hasEvaluations}
+                onClick={startOneOff}
+              >
+                <IconCopy size={18} />
+                <span>{t("pcCreateOnlyForActivity")}</span>
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="pbc-eval-summary">
