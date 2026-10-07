@@ -20,7 +20,10 @@ import {
   submissionStatusLabelEs,
   submissionVersionLabel,
 } from "../src/platform/activitySubmissions.js";
-import { classroomGradeSyncUserMessage } from "../src/platform/activityClassroom.js";
+import {
+  classroomGradeSyncUserMessage,
+  gradesAreEqual,
+} from "../src/platform/activityClassroom.js";
 import { CLASSROOM_TEACHER_FEEDBACK_SYNC_SUPPORTED } from "../src/classroom/classroomApi.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -33,6 +36,10 @@ const mig045 = readFileSync(
   "utf8",
 );
 const activityPage = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
+const activityClassroomSrc = readFileSync(
+  resolve(root, "src/platform/activityClassroom.js"),
+  "utf8",
+);
 const submissionsTab = readFileSync(
   resolve(root, "src/components/pybotclass/CourseSubmissionsTab.jsx"),
   "utf8",
@@ -260,4 +267,61 @@ test("Transiciones: entregado no puede auto-evaluarse vía canStudentSubmit", ()
     }),
     true,
   );
+});
+
+test("AC1: gradesAreEqual trata 4 y 4.0 como iguales (numérico, no string)", () => {
+  assert.equal(gradesAreEqual(4, 4.0), true);
+  assert.equal(gradesAreEqual("4", 4), true);
+  assert.equal(gradesAreEqual(4, 5), false);
+  assert.equal(gradesAreEqual(null, 4), false);
+  assert.equal(gradesAreEqual(4, null), false);
+});
+
+test("AC2–AC9: conflicto de notas y resolución explícita en ActivityPage", () => {
+  assert.match(activityPage, /gradesAreEqual/);
+  assert.match(activityPage, /t\("pcGradeConflict"\)/);
+  assert.match(activityPage, /t\("pcGradePyClass"\)/);
+  assert.match(activityPage, /t\("pcGradeClassroom"\)/);
+  assert.match(activityPage, /t\("pcUsePyClassGrade"\)/);
+  assert.match(activityPage, /t\("pcUseClassroomGrade"\)/);
+  assert.match(activityPage, /t\("pcRubricGradeCannotImport"\)/);
+  assert.match(activityPage, /onSendGradeClassroom\(row\)/);
+  assert.match(activityPage, /gradeSubmission\(row\.id, cs\.assignedGrade, row\.feedback \?\? draft\.feedback \?\? null, null\)/);
+  assert.match(activityClassroomSrc, /returnStudentSubmission\(\)/);
+  assert.match(activityPage, /onUseClassroomGrade/);
+  assert.match(activityPage, /pbc-activity-grade-conflict/);
+  // Adopción Classroom → PyClass no reenvía a Classroom en el mismo handler.
+  const adoptStart = activityPage.indexOf("const onUseClassroomGrade = async");
+  const adoptEnd = activityPage.indexOf("const onGrade = async");
+  assert.ok(adoptStart >= 0 && adoptEnd > adoptStart, "onUseClassroomGrade antes de onGrade");
+  const adoptFn = activityPage.slice(adoptStart, adoptEnd);
+  assert.match(adoptFn, /gradeSubmission/);
+  assert.match(adoptFn, /cs\.assignedGrade/);
+  assert.match(adoptFn, /row\.feedback \?\? draft\.feedback \?\? null/);
+  assert.doesNotMatch(adoptFn, /sendGradeToClassroom/);
+});
+
+test("AC10–AC15: Request review → return Classroom best-effort", () => {
+  assert.match(activityClassroomSrc, /export async function returnSubmissionToClassroom/);
+  assert.match(activityClassroomSrc, /returnStudentSubmission/);
+  assert.match(activityClassroomSrc, /getValidClassroomToken\(userId\)/);
+  assert.match(activityPage, /returnSubmissionToClassroom/);
+  const reviewFn = activityPage.slice(
+    activityPage.indexOf("const onRequestReview"),
+    activityPage.indexOf("const onUseClassroomGrade"),
+  );
+  const pyFirst = reviewFn.indexOf("requestSubmissionReview");
+  const classroomRet = reviewFn.indexOf("returnSubmissionToClassroom");
+  assert.ok(pyFirst >= 0, "requestSubmissionReview presente");
+  assert.ok(classroomRet > pyFirst, "Classroom return después de PyClass");
+  assert.match(reviewFn, /RETURNED/);
+  assert.match(reviewFn, /t\("pcReviewSyncedClassroom"\)/);
+  assert.match(reviewFn, /t\("pcReviewClassroomPending"\)/);
+  assert.match(reviewFn, /t\("pcReviewClassroomWarn"\)/);
+  // Si PyClass falla, no se intenta return Classroom.
+  const failBlock = reviewFn.slice(
+    reviewFn.indexOf("if (!r.ok)"),
+    reviewFn.indexOf("let msg"),
+  );
+  assert.doesNotMatch(failBlock, /returnSubmissionToClassroom/);
 });

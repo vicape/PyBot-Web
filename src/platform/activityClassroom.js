@@ -81,6 +81,44 @@ export function validateGradeForActivity(activity, grade) {
   return null;
 }
 
+/** Comparación numérica de notas (4 y 4.0 son iguales; no usa identidad de string). */
+export function gradesAreEqual(a, b) {
+  if (a == null || b == null) return false;
+  const na = Number(a);
+  const nb = Number(b);
+  if (!Number.isFinite(na) || !Number.isFinite(nb)) return false;
+  return na === nb;
+}
+
+/**
+ * Best-effort: devolver (return) una StudentSubmission en Classroom con token docente.
+ * No modifica classroomApi.js; no envía feedback.
+ */
+export async function returnSubmissionToClassroom({
+  classroomCourseId,
+  courseWorkId,
+  classroomSubmissionId,
+  userId,
+}) {
+  if (!classroomCourseId || !courseWorkId || !classroomSubmissionId || !userId) {
+    return { ok: false, error: "missing_args" };
+  }
+  let tok;
+  try {
+    tok = await getValidClassroomToken(userId);
+  } catch {
+    return { ok: false, error: "classroom_unavailable" };
+  }
+  if (!tok) return { ok: false, error: "classroom_unavailable" };
+  try {
+    // TEACHER token + existing returnStudentSubmission() (no classroomApi.js changes).
+    await returnStudentSubmission(tok, classroomCourseId, courseWorkId, classroomSubmissionId);
+    return { ok: true, error: null };
+  } catch {
+    return { ok: false, error: "classroom_return_failed" };
+  }
+}
+
 /**
  * Publica la actividad PyBot como courseWork en Classroom (sin duplicar).
  */

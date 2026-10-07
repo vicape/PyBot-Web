@@ -556,6 +556,56 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
   );
 });
 
+test("ActivityPage: conflicto de notas compacto + return Classroom sin UI técnica", () => {
+  const src = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
+  const css = readFileSync(resolve(root, "src/styles/pybotclass-dashboard.css"), "utf8");
+  const i18n = readFileSync(resolve(root, "src/i18n/pybotclass.js"), "utf8");
+
+  assert.match(src, /gradesAreEqual/);
+  assert.match(src, /returnSubmissionToClassroom/);
+  assert.match(src, /pbc-activity-grade-conflict/);
+  assert.match(src, /t\("pcGradeConflict"\)/);
+  assert.match(src, /t\("pcUsePyClassGrade"\)/);
+  assert.match(src, /t\("pcUseClassroomGrade"\)/);
+  assert.match(src, /t\("pcRubricGradeCannotImport"\)/);
+  assert.match(src, /t\("pcReviewSyncedClassroom"\)/);
+  assert.match(src, /t\("pcReviewClassroomPending"\)/);
+  assert.match(src, /t\("pcReviewClassroomWarn"\)/);
+  assert.equal(src.includes("StudentSubmission"), false);
+  // Mensajes nuevos de conflicto/review no exponen códigos técnicos.
+  const conflictUi = src.slice(
+    src.indexOf("pbc-activity-grade-conflict"),
+    src.indexOf('className="pbc-activity-grade-row"'),
+  );
+  assert.doesNotMatch(conflictUi, /ACCESS_TOKEN|invalid_grant|stack|googleapis/i);
+  const reviewFn = src.slice(
+    src.indexOf("const onRequestReview"),
+    src.indexOf("const onUseClassroomGrade"),
+  );
+  assert.doesNotMatch(reviewFn, /ex\.message|error\.message|stack/);
+  assert.match(reviewFn, /t\("pcReviewClassroomWarn"\)/);
+
+  assert.match(css, /\.pbc-activity-grade-conflict\s*\{/);
+  assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.pbc-activity-grade-conflict/);
+
+  for (const key of [
+    "pcGradeConflict",
+    "pcGradePyClass",
+    "pcGradeClassroom",
+    "pcUsePyClassGrade",
+    "pcUseClassroomGrade",
+    "pcRubricGradeCannotImport",
+    "pcReviewSyncedClassroom",
+    "pcReviewClassroomPending",
+    "pcReviewClassroomWarn",
+  ]) {
+    assert.match(i18n, new RegExp(`${key}:`), `missing i18n key ${key}`);
+  }
+
+  assert.match(activityClassroomSrc, /export async function returnSubmissionToClassroom/);
+  assert.match(activityClassroomSrc, /export function gradesAreEqual/);
+});
+
 function loadResolveSubmissionCodeHeight() {
   const viewerSrc = readFileSync(
     resolve(root, "src/components/pybotclass/SubmissionCodeViewer.jsx"),

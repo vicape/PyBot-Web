@@ -3909,6 +3909,55 @@
   flex: 1 1 12rem;
 }
 
+.pbc-activity-grade-conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+  margin-top: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--pbc-border, rgba(127, 127, 127, 0.35));
+  background: color-mix(in srgb, var(--pbc-warn, #c9a227) 12%, transparent);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.pbc-activity-grade-conflict--adopt {
+  background: color-mix(in srgb, var(--pbc-border, rgba(127, 127, 127, 0.35)) 18%, transparent);
+}
+
+.pbc-activity-grade-conflict__title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--pbc-text);
+}
+
+.pbc-activity-grade-conflict__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--pbc-text);
+  min-width: 0;
+}
+
+.pbc-activity-grade-conflict__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pbc-activity-grade-conflict__hint {
+  font-size: 0.8rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .pbc-activity-grade-row {
   display: flex;
   flex-wrap: wrap;
@@ -4360,6 +4409,21 @@
 
   .pbc-activity-grade-row .auth-btn {
     width: 100%;
+  }
+
+  .pbc-activity-grade-conflict,
+  .pbc-activity-grade-conflict__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pbc-activity-grade-conflict__actions .auth-btn {
+    width: 100%;
+  }
+
+  .pbc-activity-grade-conflict__values {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   /* ActivityPage compact mobile: densidad + tap targets prácticos + sin overflow */

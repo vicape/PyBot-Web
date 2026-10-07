@@ -100,6 +100,8 @@ import {
   turnInPybotActivityToClassroom,
   classroomAttachmentLinkItems,
   isSafeHttpUrl,
+  gradesAreEqual,
+  returnSubmissionToClassroom,
 } from "../platform/activityClassroom.js";
 import { fetchAssignedLessonDocument } from "../platform/contentAssignApi.js";
 import { listLessonBlocks } from "../platform/contentApi.js";
@@ -1208,16 +1210,59 @@ export default function ActivityPage() {
   const onRequestReview = async (submissionId) => {
     if (busy) return;
     const draft = gradeDraft[submissionId] || {};
+    const row = teacherRows.find((r) => r.id === submissionId);
     setBusy(true);
     setActionErr("");
     setActionMsg("");
     const r = await requestSubmissionReview(submissionId, draft.feedback || null);
-    setBusy(false);
     if (!r.ok) {
+      setBusy(false);
       setActionErr(r.error || t("pcRequestReviewFail"));
       return;
     }
-    setActionMsg(t("pcRequestReviewOk"));
+    // PyClass es autoritativo; Classroom return es best-effort y no revierte el éxito.
+    let msg = t("pcRequestReviewOk");
+    if (activity?.classroom_coursework_id && classroomCourseId && row && user) {
+      const cs =
+        classroomSubs.find((c) => c.user_id && c.user_id === row.user_id) ||
+        classroomSubs.find((c) => c.id && c.id === row.classroom_submission_id) ||
+        null;
+      const classroomSubmissionId =
+        (await resolveClassroomSubmissionId(row)) || cs?.id || null;
+      if (!classroomSubmissionId) {
+        msg = t("pcReviewClassroomPending");
+      } else if (String(cs?.state || "").toUpperCase() === "RETURNED") {
+        msg = t("pcReviewSyncedClassroom");
+      } else {
+        const ret = await returnSubmissionToClassroom({
+          classroomCourseId,
+          courseWorkId: activity.classroom_coursework_id,
+          classroomSubmissionId,
+          userId: user.id,
+        });
+        msg = ret.ok ? t("pcReviewSyncedClassroom") : t("pcReviewClassroomWarn");
+      }
+    }
+    setBusy(false);
+    setActionMsg(msg);
+    await load({ preserveActionMsg: true });
+  };
+
+  const onUseClassroomGrade = async (row, cs) => {
+    if (!row || busy || rubricCriteria.length > 0) return;
+    if (cs?.assignedGrade == null) return;
+    const draft = gradeDraft[row.id] || {};
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+    const r = await gradeSubmission(row.id, cs.assignedGrade, row.feedback ?? draft.feedback ?? null, null);
+    if (!r.ok) {
+      setBusy(false);
+      setActionErr(r.error || t("pcSaveEvaluationFail"));
+      return;
+    }
+    setBusy(false);
+    setActionMsg(t("pcEvaluationSaved"));
     await load({ preserveActionMsg: true });
   };
 
@@ -2039,10 +2084,17 @@ export default function ActivityPage() {
                     row.status === "closed" ||
                     row.status === "graded" ||
                     activityWindowClosed;
-                  const gradeDisplay =
-                    row.grade != null
+                  const hasPyGrade = row.grade != null;
+                  const hasClGrade = cs?.assignedGrade != null;
+                  const gradesConflict =
+                    hasPyGrade && hasClGrade && !gradesAreEqual(row.grade, cs.assignedGrade);
+                  const classroomOnlyGrade = !hasPyGrade && hasClGrade;
+                  const hasRubric = rubricCriteria.length > 0;
+                  const gradeDisplay = gradesConflict
+                    ? null
+                    : hasPyGrade
                       ? row.grade
-                      : cs?.assignedGrade != null
+                      : hasClGrade
                         ? cs.assignedGrade
                         : null;
                   return (
@@ -2064,7 +2116,11 @@ export default function ActivityPage() {
                               : cs?.updateTime
                                 ? ` · ${fmtTs(cs.updateTime)}`
                                 : ""}
-                            {gradeDisplay != null ? ` · ${t("pcGradePrefix")} ${gradeDisplay}` : ""}
+                            {gradeDisplay != null
+                              ? classroomOnlyGrade
+                                ? ` · ${t("pcGradeClassroom")} ${gradeDisplay}`
+                                : ` · ${t("pcGradePrefix")} ${gradeDisplay}`
+                              : ""}
                             {row.classroom_grade_synced_at
                               ? ` · ${t("pcGradeInClassroom")} ${fmtTs(row.classroom_grade_synced_at)}`
                               : ""}
@@ -2202,6 +2258,69 @@ export default function ActivityPage() {
                           </div>
                         </div>
                       ) : null}
+                      {gradesConflict ? (
+                        <div className="pbc-activity-grade-conflict" role="status">
+                          <span className="pbc-activity-grade-conflict__title">
+                            {t("pcGradeConflict")}
+                          </span>
+                          <span className="pbc-activity-grade-conflict__values">
+                            <span>
+                              {t("pcGradePyClass")}: {row.grade}
+                            </span>
+                            <span>
+                              {t("pcGradeClassroom")}: {cs.assignedGrade}
+                            </span>
+                          </span>
+                          <div className="pbc-activity-grade-conflict__actions">
+                            <button
+                              type="button"
+                              className="auth-btn auth-btn--ghost auth-btn--sm"
+                              disabled={busy}
+                              onClick={() => void onSendGradeClassroom(row)}
+                            >
+                              {t("pcUsePyClassGrade")}
+                            </button>
+                            {hasRubric ? (
+                              <span className="auth-card__muted pbc-activity-grade-conflict__hint">
+                                {t("pcRubricGradeCannotImport")}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="auth-btn auth-btn--ghost auth-btn--sm"
+                                disabled={busy}
+                                onClick={() => void onUseClassroomGrade(row, cs)}
+                              >
+                                {t("pcUseClassroomGrade")}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                      {classroomOnlyGrade &&
+                      activity?.classroom_coursework_id &&
+                      !hasRubric ? (
+                        <div
+                          className="pbc-activity-grade-conflict pbc-activity-grade-conflict--adopt"
+                          role="status"
+                        >
+                          <span className="pbc-activity-grade-conflict__values">
+                            <span>
+                              {t("pcGradeClassroom")}: {cs.assignedGrade}
+                            </span>
+                          </span>
+                          <div className="pbc-activity-grade-conflict__actions">
+                            <button
+                              type="button"
+                              className="auth-btn auth-btn--ghost auth-btn--sm"
+                              disabled={busy}
+                              onClick={() => void onUseClassroomGrade(row, cs)}
+                            >
+                              {t("pcUseClassroomGrade")}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="pbc-activity-grade-row">
                         {rubricCriteria.length === 0 ? (
                           <input
@@ -2281,7 +2400,9 @@ export default function ActivityPage() {
                             {t("pcReopenForStudent")}
                           </button>
                         ) : null}
-                        {activity?.classroom_coursework_id && row.grade != null ? (
+                        {activity?.classroom_coursework_id &&
+                        row.grade != null &&
+                        !gradesConflict ? (
                           <button
                             type="button"
                             className="auth-btn auth-btn--ghost auth-btn--sm"
