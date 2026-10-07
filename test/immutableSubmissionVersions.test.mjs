@@ -492,6 +492,51 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
   assert.match(css, /gap:\s*0\.35rem/);
   assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.pbc-activity-control-panel__row--essentials/);
   assert.match(css, /@media \(max-width: 640px\)/);
+
+  // Mobile flex-axis fix: content-driven overrides after row→column (no horizontal basis as height).
+  const mobileMarker = "/* ActivityPage / deliveries mobile exactly <=640px */";
+  const mobileStart = css.indexOf(mobileMarker);
+  assert.ok(mobileStart >= 0, "ActivityPage mobile CSS marker present");
+  const afterMarker = css.slice(mobileStart);
+  const mediaOpen = afterMarker.indexOf("@media (max-width: 640px) {");
+  assert.ok(mediaOpen >= 0, "ActivityPage mobile @media present after marker");
+  let depth = 0;
+  let mobileEnd = -1;
+  for (let i = mediaOpen; i < afterMarker.length; i += 1) {
+    const ch = afterMarker[i];
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        mobileEnd = i + 1;
+        break;
+      }
+    }
+  }
+  assert.ok(mobileEnd > 0, "ActivityPage mobile @media block closed");
+  const mobileCss = afterMarker.slice(mediaOpen, mobileEnd);
+  assert.match(
+    mobileCss,
+    /\.pbc-activity-control-panel__row--essentials\s+\.pbc-activity-control-panel__main\s*\{[^}]*flex-grow:\s*0;[^}]*flex-shrink:\s*1;[^}]*flex-basis:\s*auto;/,
+  );
+  assert.doesNotMatch(mobileCss, /flex:\s*1\s+1\s+14rem/);
+  assert.match(
+    mobileCss,
+    /\.pbc-activity-grade-input,\s*\.pbc-activity-feedback-input\s*\{[^}]*flex:\s*0\s+0\s+auto;/,
+  );
+  // Mobile column axis: must NOT use flex-basis: 100% (horizontal leftover) on grade/feedback.
+  assert.ok(!mobileCss.includes("flex-basis: 100%"));
+  assert.doesNotMatch(mobileCss, /flex:\s*1\s+1\s+100%/);
+  assert.match(
+    mobileCss,
+    /\.pbc-activity-submission__head\s+\.pbc-list-item__text\s*\{[^}]*flex-grow:\s*0;/,
+  );
+  assert.match(mobileCss, /min-height:\s*40px/);
+  // No global auth-org-input / pbc-list-item base geometry changes in this fix surface.
+  const authOrgBase = css.match(/\.pbc-dashboard \.auth-org-input,\s*\.pbc-dashboard \.auth-org-input--block,\s*\.pbc-dashboard select\.auth-org-input\s*\{([^}]*)\}/);
+  assert.ok(authOrgBase, "scoped auth-org-input theme rule present");
+  assert.doesNotMatch(authOrgBase[1], /(?:^|;)\s*(?:min-height|height|flex(?:-basis)?)\s*:/);
+  assert.doesNotMatch(css, /^\.pbc-list-item\s*\{/m);
 });
 
 function loadResolveSubmissionCodeHeight() {

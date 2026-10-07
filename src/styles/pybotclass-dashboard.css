@@ -4248,18 +4248,26 @@
 
 /* ActivityPage / deliveries mobile exactly <=640px */
 @media (max-width: 640px) {
+  /* Column axis: content-driven sizing (do not inherit horizontal flex-basis as height) */
   .pbc-activity-grade-input,
   .pbc-activity-feedback-input {
-    flex: 1 1 100%;
+    flex: 0 0 auto;
     width: 100%;
   }
 
   .pbc-activity-grade-row .auth-btn {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
   }
 
   .pbc-activity-submission__head {
     flex-direction: column;
+  }
+
+  /* ActivityPage-scoped: meta text must not flex-grow on vertical axis */
+  .pbc-activity-submission__head .pbc-list-item__text {
+    flex-grow: 0;
+    flex-shrink: 1;
+    flex-basis: auto;
   }
 
   .pbc-section__head {
@@ -4291,9 +4299,19 @@
     align-items: stretch;
   }
 
+  /* Essentials column: drop desktop horizontal 14rem basis on the vertical axis */
+  .pbc-activity-control-panel__row--essentials .pbc-activity-control-panel__main {
+    flex-grow: 0;
+    flex-shrink: 1;
+    flex-basis: auto;
+  }
+
   .pbc-activity-control-panel__row--essentials .pbc-activity-actions {
     width: 100%;
     margin-left: 0;
+    flex-grow: 0;
+    flex-shrink: 1;
+    flex-basis: auto;
   }
 
   .pbc-activity-control-panel .pbc-eval-empty,
