@@ -332,6 +332,34 @@ test("Classroom-only materialize never guesses identity by name/email", () => {
   assert.doesNotMatch(page, /\.from\("activity_submissions"\)\s*\.insert/);
 });
 
+test("Classroom-only materialize: advisory lock before idempotency SELECT", () => {
+  const mig = readSrc(
+    "supabase/migrations/20261007033000_classroom_only_submission_grading.sql",
+  );
+  const matFn = mig.slice(
+    mig.indexOf("create or replace function public.materialize_classroom_submission_for_grading"),
+    mig.indexOf("grant execute on function public.materialize_classroom_submission_for_grading"),
+  );
+  assert.ok(matFn.includes("v_cache.user_id is null"));
+  assert.ok(matFn.includes("TURNED_IN"));
+  assert.ok(matFn.includes("RETURNED"));
+  assert.ok(
+    matFn.includes(
+      "perform pg_advisory_xact_lock(hashtext(p_activity_id::text), hashtext(v_cache.user_id::text));",
+    ),
+    "exact advisory lock key on activity_id + mapped user_id",
+  );
+  const unmappedIdx = matFn.indexOf("classroom_student_unmapped");
+  const notReadyIdx = matFn.indexOf("classroom_submission_not_ready");
+  const lockIdx = matFn.indexOf("pg_advisory_xact_lock");
+  const existingSelectIdx = matFn.indexOf("into v_existing");
+  const insertIdx = matFn.indexOf("insert into public.activity_submissions");
+  assert.ok(unmappedIdx >= 0 && notReadyIdx > unmappedIdx);
+  assert.ok(lockIdx > notReadyIdx, "lock after user_id + TURNED_IN/RETURNED validation");
+  assert.ok(existingSelectIdx > lockIdx, "existing-row SELECT under lock");
+  assert.ok(insertIdx > existingSelectIdx, "insert after SELECT");
+});
+
 test("P4 confirmClassroomPersistence teacher sigue ok (smoke P2)", async () => {
   const r = await confirmClassroomPersistence(
     { userId: "u1", mode: "teacher", refreshToken: "RT", expiresIn: 3600 },

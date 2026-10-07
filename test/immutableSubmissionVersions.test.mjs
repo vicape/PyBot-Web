@@ -634,6 +634,31 @@ test("migración Classroom-only: submission_origin + RPC materialize", () => {
   assert.match(mig, /submitted_code/);
   assert.doesNotMatch(mig, /update public\.activity_submissions\s+set\s+submitted_code/i);
   assert.doesNotMatch(mig, /display_name|email/i);
+
+  // Concurrency: advisory lock serializes check-before-insert (same logical key as version trigger).
+  const matFn = mig.slice(
+    mig.indexOf("create or replace function public.materialize_classroom_submission_for_grading"),
+    mig.indexOf("grant execute on function public.materialize_classroom_submission_for_grading"),
+  );
+  assert.match(
+    matFn,
+    /perform pg_advisory_xact_lock\(hashtext\(p_activity_id::text\), hashtext\(v_cache\.user_id::text\)\);/,
+  );
+  const stateReadyIdx = matFn.indexOf("classroom_submission_not_ready");
+  const lockIdx = matFn.indexOf("pg_advisory_xact_lock");
+  const existingSelectIdx = matFn.indexOf("into v_existing");
+  const insertIdx = matFn.indexOf("insert into public.activity_submissions");
+  assert.ok(stateReadyIdx >= 0 && lockIdx > stateReadyIdx, "lock after TURNED_IN/RETURNED validation");
+  assert.ok(existingSelectIdx > lockIdx, "idempotency SELECT under lock");
+  assert.ok(insertIdx > existingSelectIdx, "insert after existing-row SELECT");
+  assert.match(matFn, /'created', false/);
+  assert.match(matFn, /submission_origin,\s*[\s\S]*'classroom'/);
+  // Trigger de versionado inmutable permanece en migración 045 (no debilitado aquí).
+  assert.match(migration045, /activity_submissions_assign_version/);
+  assert.match(
+    migration045,
+    /perform pg_advisory_xact_lock\(\s*hashtext\(NEW\.activity_id::text\),\s*hashtext\(NEW\.user_id::text\)\s*\);/,
+  );
 });
 
 test("activitySubmissions: submission_origin en selects + helper materialize RPC", () => {

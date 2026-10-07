@@ -112,6 +112,9 @@ begin
     return jsonb_build_object('ok', false, 'error', 'classroom_submission_not_ready');
   end if;
 
+  -- Serializa materialización concurrente (misma activity + user que el trigger de versionado).
+  perform pg_advisory_xact_lock(hashtext(p_activity_id::text), hashtext(v_cache.user_id::text));
+
   -- Idempotencia: última activity_submissions del alumno mapeado (no duplicar versión).
   select *
     into v_existing
