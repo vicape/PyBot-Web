@@ -203,6 +203,8 @@ test("1: teacher preference remains presentation-only on Home", () => {
   assert.match(home, /wantsTeacherExperience/);
   assert.match(home, /canUseTeacherCapabilities/);
   assert.match(home, /pcHomeLead/);
+  // Student composition uses factual hasTeachingContext, not preferred_role alone.
+  assert.match(home, /isStudentHome\s*=\s*!hasTeachingContext/);
   assert.match(page, /preferredRole=\{preferredRole\}/);
   assert.match(
     page,

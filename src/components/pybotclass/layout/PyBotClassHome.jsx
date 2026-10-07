@@ -20,6 +20,7 @@ import { GoogleClassroomIcon } from "../illustrations/SidebarIcons.jsx";
 import PbcIcon from "../PbcIcon.jsx";
 import { UxIcon } from "../illustrations/UxIcons.jsx";
 import RoleBadges from "./RoleBadges.jsx";
+import StudentHomeOverview from "./StudentHomeOverview.jsx";
 
 const ROLE_BADGE = {
   teacher: { label: t("pcTeacher"), variant: "purple" },
@@ -524,6 +525,14 @@ export default function PyBotClassHome({
     return pool.slice(0, 6);
   }, [courses, hasTeachingContext]);
 
+  const studentCourses = useMemo(
+    () => courses.filter((c) => normalizeCourseRole(c.my_course_role) === "student"),
+    [courses],
+  );
+
+  // Student Home primary CTA: best real destination already in Home data (no extra fetch).
+  const continueCourse = recentCourses[0] || null;
+
   const primaryCountry = orgMemberships.find((o) => o.country_code)?.country_code;
   const onClassroomConnect = () => {
     void connectGoogleClassroom("/dashboard/classes", { mode: "teacher" });
@@ -533,6 +542,8 @@ export default function PyBotClassHome({
     classroomLinked == null ? "…" : classroomLinked ? t("pcLinked") : t("pcNotLinked");
 
   const homeLead = t("pcHomeLead");
+  // Authoritative student vs teacher Home: factual teaching context, not preferred_role.
+  const isStudentHome = !hasTeachingContext;
 
   if (isCoursesView) {
     return (
@@ -626,7 +637,61 @@ export default function PyBotClassHome({
     );
   }
 
-  // ── HOME (situation center) ──────────────────────────────────────────────
+  // ── HOME student (learning-first; gated by !hasTeachingContext) ──────────
+  if (isStudentHome) {
+    return (
+      <div className="pbc-home pbc-home--student">
+        <div className="pbc-home__main">
+          <StudentHomeOverview
+            firstName={firstName}
+            studentCourseCount={studentCourses.length}
+            continueCourse={continueCourse}
+            onCreateCourse={onCreateCourse}
+            onJoinCourse={onJoinCourse}
+          />
+
+          <section className="pbc-recent-courses" aria-labelledby="recent-courses-heading">
+            <div className="pbc-section-head">
+              <h2 id="recent-courses-heading" className="pbc-section-head__title">
+                {t("pcRecentCourses")}
+              </h2>
+              <Link to="/dashboard/classes?view=courses" className="pbc-btn pbc-btn--ghost pbc-btn--sm">
+                {t("pcViewAllCourses")}
+              </Link>
+            </div>
+            <CourseCards
+              filtered={recentCourses}
+              canTeach={canCreateCourse}
+              wantsTeacher={wantsTeacher}
+              onCreateCourse={onCreateCourse}
+              onJoinCourse={onJoinCourse}
+              variant="courses"
+            />
+          </section>
+        </div>
+
+        <aside className="pbc-home__aside">
+          <div className="pbc-panel-card">
+            <h3 className="pbc-panel-card__title">{t("pcMyAccount")}</h3>
+            {primaryCountry ? (
+              <p className="pbc-account-card__email" style={{ marginTop: 0 }}>
+                {countryNameByCode(primaryCountry)}
+              </p>
+            ) : null}
+            <RoleBadges badges={badges} />
+            <Link
+              to="/dashboard/classes?panel=account"
+              className="pbc-btn pbc-btn--ghost pbc-btn--sm pbc-panel-card__action"
+            >
+              {t("pcAccount")}
+            </Link>
+          </div>
+        </aside>
+      </div>
+    );
+  }
+
+  // ── HOME teacher (situation center; preserved) ───────────────────────────
   return (
     <div className="pbc-home">
       <div className="pbc-home__main">

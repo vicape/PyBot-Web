@@ -29,6 +29,10 @@ const homeSrc = readFileSync(
   resolve(root, "src/components/pybotclass/layout/PyBotClassHome.jsx"),
   "utf8",
 );
+const studentHomeSrc = readFileSync(
+  resolve(root, "src/components/pybotclass/layout/StudentHomeOverview.jsx"),
+  "utf8",
+);
 const pageSrc = readFileSync(resolve(root, "src/pages/PyBotClassPage.jsx"), "utf8");
 const coursePageSrc = readFileSync(resolve(root, "src/pages/PyBotClassCoursePage.jsx"), "utf8");
 const summarySrc = readFileSync(
@@ -57,6 +61,13 @@ const NEW_I18N = [
   "pcNavRubrics",
   "pcDailyNav",
   "pcHomeLead",
+  "pcStudentHomeLead",
+  "pcContinueLearning",
+  "pcContinueLearningIn",
+  "pcViewMyCourses",
+  "pcStudentHomeEmptyHint",
+  "pcStudentCourseCount",
+  "pcStudentSecondaryActions",
   "pcCoursesViewLead",
   "pcNeedsAttention",
   "pcCreateActivity",
@@ -129,7 +140,7 @@ test("AC5: Home vs Courses + #mis-cursos compatibility", () => {
   assert.match(homeSrc, /isCoursesView|classesView/);
 });
 
-test("AC6/AC7: role-aware Home attention + student hides teacher create actions", () => {
+test("AC6/AC7: role-aware Home attention + student Home gated by !hasTeachingContext", () => {
   const items = buildTeacherAttentionItems([
     {
       course_id: "c1",
@@ -172,6 +183,16 @@ test("AC6/AC7: role-aware Home attention + student hides teacher create actions"
   assert.match(homeSrc, /pcCreateCourse/);
   // Create course available without institution staff (personal course path)
   assert.match(homeSrc, /canCreateCourse = true/);
+  // Student Home is gated by factual teaching context; teacher path remains.
+  assert.match(homeSrc, /isStudentHome\s*=\s*!hasTeachingContext/);
+  assert.match(homeSrc, /StudentHomeOverview/);
+  assert.match(homeSrc, /pcHomeLead/);
+  assert.match(homeSrc, /hasTeachingContext && attentionItems/);
+  assert.match(studentHomeSrc, /pcContinueLearning|pcViewMyCourses/);
+  assert.match(studentHomeSrc, /pcStudentHomeLead/);
+  assert.doesNotMatch(studentHomeSrc, /fetchPybotclassStudentSummary/);
+  assert.doesNotMatch(homeSrc, /fetchPybotclassStudentSummary/);
+  assert.doesNotMatch(studentHomeSrc, /Tutor IA|aiChat|streak|Plan Pro|upcoming/i);
 });
 
 test("AC8–AC10: course contextual shortcuts reuse canonical flows", () => {
@@ -310,6 +331,19 @@ test("AC29: responsive helpers for quick actions / wrap", () => {
   assert.match(cssSrc, /flex-wrap:\s*wrap/);
   assert.match(cssSrc, /max-width:\s*430px/);
   assert.match(cssSrc, /overflow-wrap:\s*anywhere/);
+});
+
+test("Student Home: canonical cards + theme tokens + responsive breakpoints", () => {
+  assert.match(homeSrc, /pbc-home--student/);
+  assert.match(homeSrc, /pbc-content-card--library/);
+  assert.match(cssSrc, /\.pbc-home--student/);
+  assert.match(cssSrc, /\.pbc-student-continue__card/);
+  assert.match(cssSrc, /var\(--pbc-/);
+  assert.match(cssSrc, /\.pbc-home--student[\s\S]*max-width:\s*350px/);
+  assert.match(cssSrc, /@media\s*\(\s*max-width:\s*1100px\s*\)[\s\S]*\.pbc-home--student/);
+  assert.match(cssSrc, /@media\s*\(\s*max-width:\s*960px\s*\)[\s\S]*\.pbc-home--student/);
+  assert.match(cssSrc, /@media\s*\(\s*max-width:\s*768px\s*\)[\s\S]*\.pbc-home--student/);
+  assert.doesNotMatch(studentHomeSrc, /data-pbc-theme\s*=\s*["']dark["']/);
 });
 
 test("AC31: new UX strings present in all supported languages", () => {

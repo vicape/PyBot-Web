@@ -161,6 +161,7 @@ test("AC11/AC29: invite redeem supports zero-institution joiners; no auto-join b
 
 test("AC12/AC13/AC32: Home surfaces create/join/courses without forcing institution gateway", () => {
   const home = read("src/components/pybotclass/layout/PyBotClassHome.jsx");
+  const studentHome = read("src/components/pybotclass/layout/StudentHomeOverview.jsx");
   const sidebar = read("src/components/pybotclass/layout/PyBotClassSidebar.jsx");
   assert.match(home, /canCreateCourse = true/);
   assert.doesNotMatch(home, /needsTeacherOnboarding/);
@@ -168,6 +169,9 @@ test("AC12/AC13/AC32: Home surfaces create/join/courses without forcing institut
   assert.match(home, /onJoinCourse/);
   assert.match(home, /pcPersonalCourse/);
   assert.match(home, /\/dashboard\/content/);
+  assert.match(studentHome, /onCreateCourse/);
+  assert.match(studentHome, /onJoinCourse/);
+  assert.match(studentHome, /\/dashboard\/content/);
   assert.match(sidebar, /pcCommunity/);
   assert.match(sidebar, /\/dashboard\/community/);
 });

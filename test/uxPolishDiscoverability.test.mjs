@@ -15,6 +15,10 @@ const homeSrc = readFileSync(
   resolve(root, "src/components/pybotclass/layout/PyBotClassHome.jsx"),
   "utf8",
 );
+const studentHomeSrc = readFileSync(
+  resolve(root, "src/components/pybotclass/layout/StudentHomeOverview.jsx"),
+  "utf8",
+);
 const contentCardSrc = readFileSync(
   resolve(root, "src/components/pybotclass/content/ContentCard.jsx"),
   "utf8",
@@ -92,6 +96,12 @@ test("Home quick actions are compact icon+label; no orphan Courses mega-card", (
   assert.match(homeSrc, /pcCreateContent/);
   assert.match(homeSrc, /pcJoinCourse/);
   assert.match(homeSrc, /pcOpenIde/);
+  // Student Home keeps Join/Create/Content/IDE reachable as secondary actions.
+  assert.match(studentHomeSrc, /pcJoinCourse/);
+  assert.match(studentHomeSrc, /pcCreateCourse/);
+  assert.match(studentHomeSrc, /pcCreateContent/);
+  assert.match(studentHomeSrc, /pcOpenIde/);
+  assert.match(studentHomeSrc, /pbc-student-continue/);
   assert.doesNotMatch(homeSrc, /pbc-action-card__illus/);
   assert.doesNotMatch(homeSrc, /CreateCourseIllustration/);
   assert.doesNotMatch(homeSrc, /JoinCourseIllustration/);
