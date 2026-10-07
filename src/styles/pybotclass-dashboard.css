@@ -4064,6 +4064,8 @@
   flex-wrap: wrap;
   gap: 0.3rem;
   margin-top: 0.25rem;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .pbc-activity-source-badge {
@@ -4075,6 +4077,18 @@
   border-radius: var(--pbc-radius-sm, 4px);
   color: var(--pbc-muted, var(--pbc-text-muted, #64748b));
   background: transparent;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.pbc-activity-origin-note {
+  display: block;
+  margin-top: 0.25rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .pbc-activity-attachment-list {

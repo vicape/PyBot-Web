@@ -7,9 +7,15 @@ import {
 } from "./submissionWorkflow.js";
 
 const SUBMISSION_SELECT =
-  "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, returned_at, closed_at";
+  "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, returned_at, closed_at, submission_origin";
 
 const SUBMISSION_TEACHER_SELECT =
+  "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, returned_at, closed_at, closed_by, classroom_grade_synced_at, classroom_grade_sync_error, classroom_submission_id, submission_origin";
+
+const SUBMISSION_SELECT_FALLBACK =
+  "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, returned_at, closed_at";
+
+const SUBMISSION_TEACHER_SELECT_FALLBACK =
   "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, returned_at, closed_at, closed_by, classroom_grade_synced_at, classroom_grade_sync_error, classroom_submission_id";
 
 /** Etiqueta corta de versión formal (V1, V2…). */
@@ -107,18 +113,29 @@ export async function fetchMySubmission(activityId, userId) {
     .maybeSingle();
 
   if (error) {
-    // Fallback sin columnas 046
+    // Fallback sin submission_origin / columnas 046
     const fb = await sb
       .from("activity_submissions")
-      .select(
-        "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version",
-      )
+      .select(SUBMISSION_SELECT_FALLBACK)
       .eq("activity_id", activityId)
       .eq("user_id", userId)
       .order("version", { ascending: false })
       .limit(1)
       .maybeSingle();
-    return { submission: fb.data, error: fb.error?.message ?? null };
+    if (fb.error) {
+      const fb2 = await sb
+        .from("activity_submissions")
+        .select(
+          "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version",
+        )
+        .eq("activity_id", activityId)
+        .eq("user_id", userId)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return { submission: fb2.data, error: fb2.error?.message ?? null };
+    }
+    return { submission: fb.data, error: null };
   }
   return { submission: data, error: null };
 }
@@ -138,7 +155,15 @@ export async function fetchSubmissionHistory(activityId, userId) {
     .eq("user_id", userId)
     .order("version", { ascending: false });
 
-  if (error) return { rows: [], error: error.message };
+  if (error) {
+    const fb = await sb
+      .from("activity_submissions")
+      .select(SUBMISSION_SELECT_FALLBACK)
+      .eq("activity_id", activityId)
+      .eq("user_id", userId)
+      .order("version", { ascending: false });
+    return { rows: fb.data ?? [], error: fb.error?.message ?? null };
+  }
   return { rows: data ?? [], error: null };
 }
 
@@ -160,22 +185,58 @@ export async function fetchActivitySubmissions(activityId) {
   if (error) {
     const fb = await sb
       .from("activity_submissions")
-      .select(
-        "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, classroom_grade_synced_at, classroom_grade_sync_error, classroom_submission_id",
-      )
+      .select(SUBMISSION_TEACHER_SELECT_FALLBACK)
       .eq("activity_id", activityId)
       .order("version", { ascending: false })
       .order("submitted_at", { ascending: false });
+    if (fb.error) {
+      const fb2 = await sb
+        .from("activity_submissions")
+        .select(
+          "id, activity_id, user_id, submitted_code, status, submitted_at, grade, feedback, graded_at, updated_at, version, classroom_grade_synced_at, classroom_grade_sync_error, classroom_submission_id",
+        )
+        .eq("activity_id", activityId)
+        .order("version", { ascending: false })
+        .order("submitted_at", { ascending: false });
+      const allRows = fb2.data ?? [];
+      return {
+        rows: pickLatestSubmissionPerUser(allRows),
+        allRows,
+        error: fb2.error?.message ?? null,
+      };
+    }
     const allRows = fb.data ?? [];
     return {
       rows: pickLatestSubmissionPerUser(allRows),
       allRows,
-      error: fb.error?.message ?? null,
+      error: null,
     };
   }
 
   const allRows = data ?? [];
   return { rows: pickLatestSubmissionPerUser(allRows), allRows, error: null };
+}
+
+/**
+ * Materializa una entrega Classroom-only como activity_submissions (RPC).
+ * No inserta desde el cliente; idempotente si ya existe fila PyClass.
+ */
+export async function materializeClassroomSubmissionForGrading(activityId, classroomSubmissionId) {
+  const sb = getSupabase();
+  if (!sb || !activityId || !classroomSubmissionId) {
+    return { ok: false, error: "missing_args" };
+  }
+
+  const { data, error } = await sb.rpc("materialize_classroom_submission_for_grading", {
+    p_activity_id: activityId,
+    p_classroom_submission_id: classroomSubmissionId,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) {
+    return { ok: false, error: data?.error || "materialize_failed", detail: data };
+  }
+  return { ok: true, result: data, error: null };
 }
 
 /** Evaluar (nota + feedback + rúbrica opcional). */

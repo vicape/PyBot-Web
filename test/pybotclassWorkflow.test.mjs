@@ -325,3 +325,26 @@ test("AC10–AC15: Request review → return Classroom best-effort", () => {
   );
   assert.doesNotMatch(failBlock, /returnSubmissionToClassroom/);
 });
+
+test("Classroom-only grading: materialize then gradeSubmission; feedback PyClass-only", () => {
+  const mig = readFileSync(
+    resolve(root, "supabase/migrations/20261007033000_classroom_only_submission_grading.sql"),
+    "utf8",
+  );
+  assert.match(mig, /materialize_classroom_submission_for_grading/);
+  assert.match(activityPage, /onGradeClassroomOnly/);
+  assert.match(activityPage, /materializeClassroomSubmissionForGrading\(activity\.id, cs\.id\)/);
+  assert.match(activityPage, /t\("pcFeedbackPyClassOnly"\)/);
+  const gradeOnly = activityPage.slice(
+    activityPage.indexOf("const onGradeClassroomOnly"),
+    activityPage.indexOf("const onSaveRubricDraft"),
+  );
+  assert.match(gradeOnly, /materializeClassroomSubmissionForGrading/);
+  assert.match(gradeOnly, /finishGradeWithClassroomSync/);
+  assert.doesNotMatch(gradeOnly, /\.from\("activity_submissions"\)\s*\.insert/);
+  // Sync Classroom solo tras grade PyClass (en finishGradeWithClassroomSync).
+  assert.match(activityPage, /finishGradeWithClassroomSync[\s\S]*sendGradeToClassroom/);
+  // Rúbrica Classroom-only reutiliza draft key temporal + gradeSubmission path.
+  assert.match(activityPage, /classroom:\$\{cs\.id\}/);
+  assert.match(activityPage, /buildRubricScoresForDraft\(draftKey, draft\)/);
+});

@@ -318,6 +318,20 @@ test("P4 P3 estado intacto", () => {
   assert.equal(ok.status, CLASSROOM_CONNECTION.ERROR);
 });
 
+test("Classroom-only materialize never guesses identity by name/email", () => {
+  const mig = readSrc(
+    "supabase/migrations/20261007033000_classroom_only_submission_grading.sql",
+  );
+  assert.match(mig, /classroom_student_unmapped/);
+  assert.match(mig, /v_cache\.user_id is null/);
+  assert.doesNotMatch(mig, /display_name/);
+  assert.doesNotMatch(mig, /\.email\b/);
+  const page = readSrc("src/pages/ActivityPage.jsx");
+  assert.match(page, /materializeClassroomSubmissionForGrading\(activity\.id, cs\.id\)/);
+  assert.match(page, /t\("pcClassroomStudentUnmapped"\)/);
+  assert.doesNotMatch(page, /\.from\("activity_submissions"\)\s*\.insert/);
+});
+
 test("P4 confirmClassroomPersistence teacher sigue ok (smoke P2)", async () => {
   const r = await confirmClassroomPersistence(
     { userId: "u1", mode: "teacher", refreshToken: "RT", expiresIn: 3600 },

@@ -191,3 +191,27 @@ test("ActivityPage: no hardcoded Spanish UI deny-list outside PYBOTCLASS_STRINGS
   );
   assert.match(evalSrc, /t\("pcConfigure"\)/);
 });
+
+test("Classroom-only grading strings exist in es/en/fr/pt/de", () => {
+  const keys = [
+    "pcClassroomOnlySubmission",
+    "pcClassroomStudentUnmapped",
+    "pcClassroomSubmissionNotReadyToGrade",
+    "pcClassroomSubmissionMaterializeFail",
+    "pcClassroomOrigin",
+    "pcFeedbackPyClassOnly",
+  ];
+  for (const lang of SUPPORTED_LANGS) {
+    for (const key of keys) {
+      assert.equal(typeof PYBOTCLASS_STRINGS[lang][key], "string", `${lang}.${key}`);
+      assert.ok(PYBOTCLASS_STRINGS[lang][key].length > 0, `${lang}.${key}`);
+    }
+  }
+  const src = readFileSync(
+    new URL("../src/pages/ActivityPage.jsx", import.meta.url),
+    "utf8",
+  );
+  for (const key of keys) {
+    assert.match(src, new RegExp(`t\\("${key}"\\)`), `ActivityPage missing t("${key}")`);
+  }
+});

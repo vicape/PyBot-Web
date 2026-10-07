@@ -573,10 +573,10 @@ test("ActivityPage: conflicto de notas compacto + return Classroom sin UI técni
   assert.match(src, /t\("pcReviewClassroomWarn"\)/);
   assert.equal(src.includes("StudentSubmission"), false);
   // Mensajes nuevos de conflicto/review no exponen códigos técnicos.
-  const conflictUi = src.slice(
-    src.indexOf("pbc-activity-grade-conflict"),
-    src.indexOf('className="pbc-activity-grade-row"'),
-  );
+  const conflictStart = src.indexOf("pbc-activity-grade-conflict");
+  const conflictGradeRow = src.indexOf('className="pbc-activity-grade-row"', conflictStart);
+  assert.ok(conflictStart >= 0 && conflictGradeRow > conflictStart);
+  const conflictUi = src.slice(conflictStart, conflictGradeRow);
   assert.doesNotMatch(conflictUi, /ACCESS_TOKEN|invalid_grant|stack|googleapis/i);
   const reviewFn = src.slice(
     src.indexOf("const onRequestReview"),
@@ -604,6 +604,93 @@ test("ActivityPage: conflicto de notas compacto + return Classroom sin UI técni
 
   assert.match(activityClassroomSrc, /export async function returnSubmissionToClassroom/);
   assert.match(activityClassroomSrc, /export function gradesAreEqual/);
+});
+
+test("migración Classroom-only: submission_origin + RPC materialize", () => {
+  const mig = readFileSync(
+    resolve(root, "supabase/migrations/20261007033000_classroom_only_submission_grading.sql"),
+    "utf8",
+  );
+  assert.match(mig, /add column if not exists submission_origin text/);
+  assert.match(mig, /default 'pybot'/);
+  assert.match(mig, /submission_origin in \('pybot', 'classroom'\)/);
+  assert.match(mig, /NEW\.submission_origin is distinct from OLD\.submission_origin/);
+  assert.match(
+    mig,
+    /create or replace function public\.materialize_classroom_submission_for_grading/,
+  );
+  assert.match(mig, /security definer/i);
+  assert.match(mig, /set search_path = public/);
+  assert.match(mig, /is_course_teacher/);
+  assert.match(mig, /is_super_admin/);
+  assert.match(mig, /classroom_student_unmapped/);
+  assert.match(mig, /classroom_submission_not_ready/);
+  assert.match(mig, /TURNED_IN/);
+  assert.match(mig, /RETURNED/);
+  assert.match(mig, /submission_origin/);
+  assert.match(mig, /'classroom'/);
+  assert.match(mig, /'created', false/);
+  assert.match(mig, /'created', true/);
+  assert.match(mig, /submitted_code/);
+  assert.doesNotMatch(mig, /update public\.activity_submissions\s+set\s+submitted_code/i);
+  assert.doesNotMatch(mig, /display_name|email/i);
+});
+
+test("activitySubmissions: submission_origin en selects + helper materialize RPC", () => {
+  assert.match(activitySubmissionsSrc, /submission_origin/);
+  assert.match(
+    activitySubmissionsSrc,
+    /export async function materializeClassroomSubmissionForGrading/,
+  );
+  assert.match(
+    activitySubmissionsSrc,
+    /rpc\("materialize_classroom_submission_for_grading"/,
+  );
+  assert.doesNotMatch(
+    activitySubmissionsSrc,
+    /\.from\("activity_submissions"\)\s*\.insert/,
+  );
+});
+
+test("ActivityPage Classroom-only: materialize on Evaluate, origin UX, no auto-materialize", () => {
+  const src = readFileSync(resolve(root, "src/pages/ActivityPage.jsx"), "utf8");
+  assert.match(src, /materializeClassroomSubmissionForGrading/);
+  assert.match(src, /onGradeClassroomOnly/);
+  assert.match(src, /classroom:\$\{cs\.id\}/);
+  assert.match(src, /t\("pcClassroomOnlySubmission"\)/);
+  assert.match(src, /t\("pcClassroomStudentUnmapped"\)/);
+  assert.match(src, /t\("pcClassroomSubmissionNotReadyToGrade"\)/);
+  assert.match(src, /t\("pcClassroomOrigin"\)/);
+  assert.match(src, /t\("pcFeedbackPyClassOnly"\)/);
+  assert.match(src, /submission_origin === "classroom"/);
+  // No materialización automática en load/sync/rubric.
+  const loadFn = src.slice(
+    src.indexOf("const load = useCallback"),
+    src.indexOf("const snapshotItems = useMemo"),
+  );
+  assert.ok(loadFn.length > 100);
+  assert.doesNotMatch(loadFn, /materializeClassroomSubmissionForGrading/);
+  const syncFn = src.slice(
+    src.indexOf("const runClassroomSync = useCallback"),
+    src.indexOf("const onSyncClassroom = useCallback"),
+  );
+  assert.doesNotMatch(syncFn, /materializeClassroomSubmissionForGrading/);
+  // Evaluate Classroom-only: materialize → gradeSubmission → sendGradeToClassroom.
+  const gradeOnly = src.slice(
+    src.indexOf("const onGradeClassroomOnly"),
+    src.indexOf("const onSaveRubricDraft"),
+  );
+  const matIdx = gradeOnly.indexOf("materializeClassroomSubmissionForGrading");
+  const gradeIdx = gradeOnly.indexOf("finishGradeWithClassroomSync");
+  assert.ok(matIdx >= 0 && gradeIdx > matIdx);
+  assert.match(gradeOnly, /TURNED_IN/);
+  assert.match(gradeOnly, /RETURNED/);
+  // Origin classroom: sin PyBot badge / sin Show code / sin viewer.
+  assert.match(src, /isClassroomOrigin \? \(/);
+  assert.match(src, /!isClassroomOrigin \? \(/);
+  assert.match(src, /!isClassroomOrigin && showingCurrent/);
+  assert.match(src, /histClassroom/);
+  assert.match(src, /!histClassroom && showingHist/);
 });
 
 function loadResolveSubmissionCodeHeight() {

@@ -49,6 +49,7 @@ import {
   fetchSubmissionRubricScores,
   getRubricTemplate,
   gradeSubmission,
+  materializeClassroomSubmissionForGrading,
   reopenSubmissionForStudent,
   requestSubmissionReview,
   saveSubmissionRubricDraft,
@@ -948,7 +949,9 @@ export default function ActivityPage() {
     const row = teacherRows.find((r) => r.user_id === focusStudentId);
     if (!row) return;
     didFocusStudent.current = true;
-    setViewCode(row.id);
+    if (row.submission_origin !== "classroom") {
+      setViewCode(row.id);
+    }
     setViewHistoryId(null);
     requestAnimationFrame(() => {
       focusRowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1207,6 +1210,98 @@ export default function ActivityPage() {
     setActionMsg(failMsg || okMsg || (lateNote ? t("pcActivitySubmittedLate") : t("pcActivitySubmitted")));
   };
 
+  const buildRubricScoresForDraft = (draftKey, draft) => {
+    let rubricScores = null;
+    const scoringMode = activityRubricMeta?.scoring_mode || rubricScoringMode || "points";
+    const legacy = isLegacyActivityRubric(activityRubricMeta, rubricCriteria);
+    if (rubricCriteria.length > 0) {
+      const rd = rubricDraftBySubmission[draftKey] || {};
+      if (legacy) {
+        rubricScores = rubricCriteria.map((c) => ({
+          criterion_id: c.id,
+          points: Number(rd[c.id]?.points ?? 0),
+          comment: rd[c.id]?.comment || null,
+        }));
+        draft.grade = sumRubricPoints(rubricScores);
+      } else {
+        rubricScores = rubricCriteria.map((c) => ({
+          criterion_id: c.id,
+          level_id: rd[c.id]?.level_id || null,
+          comment: rd[c.id]?.comment || null,
+        }));
+        // Server derives points; client must not invent qualitative totals.
+        if (scoringMode === "qualitative") {
+          draft.grade = null;
+        }
+      }
+    }
+    return rubricScores;
+  };
+
+  const finishGradeWithClassroomSync = async ({
+    submissionId,
+    row,
+    draft,
+    rubricScores,
+    classroomSubmissionIdHint = null,
+  }) => {
+    const r = await gradeSubmission(
+      submissionId,
+      draft.grade,
+      draft.feedback,
+      rubricScores,
+    );
+    if (!r.ok) {
+      setBusy(false);
+      setActionErr(
+        r.error === "rubric_max_mismatch"
+          ? t("pcRubricMaxMustMatch").replace("{n}", String(activity?.max_points ?? ""))
+          : r.error === "incomplete_rubric"
+            ? t("pcCompleteLevelsBeforeGrade")
+            : r.error || t("pcSaveEvaluationFail"),
+      );
+      return false;
+    }
+
+    let msg = t("pcEvaluationSaved");
+    if (activity?.classroom_coursework_id && classroomCourseId && row && r.result?.grade != null) {
+      const gradedRow = {
+        ...row,
+        id: submissionId,
+        grade: r.result?.grade ?? Number(draft.grade),
+        feedback: draft.feedback,
+      };
+      const classroomSubmissionId =
+        classroomSubmissionIdHint ||
+        (await resolveClassroomSubmissionId(gradedRow));
+      if (classroomSubmissionId) {
+        const sync = await sendGradeToClassroom({
+          submission: gradedRow,
+          activity,
+          classroomCourseId,
+          courseWorkId: activity.classroom_coursework_id,
+          classroomSubmissionId,
+          userId: user.id,
+        });
+        if (sync.ok) {
+          msg = classroomGradeSyncUserMessageI18n({
+            warning: sync.warning || null,
+            hasFeedback: Boolean(draft.feedback) && sync.feedbackSynced !== true,
+          });
+        } else {
+          msg = t("pcEvaluationSavedClassroomPending").replace("{error}", sync.error || t("pcErrorWord"));
+        }
+      } else {
+        msg = t("pcEvaluationSavedClassroomMissing");
+      }
+    }
+
+    setBusy(false);
+    setActionMsg(msg);
+    await load({ preserveActionMsg: true });
+    return true;
+  };
+
   const onRequestReview = async (submissionId) => {
     if (busy) return;
     const draft = gradeDraft[submissionId] || {};
@@ -1274,82 +1369,77 @@ export default function ActivityPage() {
     setActionErr("");
     setActionMsg("");
 
-    let rubricScores = null;
-    const scoringMode = activityRubricMeta?.scoring_mode || rubricScoringMode || "points";
-    const legacy = isLegacyActivityRubric(activityRubricMeta, rubricCriteria);
-    if (rubricCriteria.length > 0) {
-      const rd = rubricDraftBySubmission[submissionId] || {};
-      if (legacy) {
-        rubricScores = rubricCriteria.map((c) => ({
-          criterion_id: c.id,
-          points: Number(rd[c.id]?.points ?? 0),
-          comment: rd[c.id]?.comment || null,
-        }));
-        draft.grade = sumRubricPoints(rubricScores);
-      } else {
-        rubricScores = rubricCriteria.map((c) => ({
-          criterion_id: c.id,
-          level_id: rd[c.id]?.level_id || null,
-          comment: rd[c.id]?.comment || null,
-        }));
-        // Server derives points; client must not invent qualitative totals.
-        if (scoringMode === "qualitative") {
-          draft.grade = null;
-        }
-      }
-    }
-
-    const r = await gradeSubmission(
+    const rubricScores = buildRubricScoresForDraft(submissionId, draft);
+    await finishGradeWithClassroomSync({
       submissionId,
-      draft.grade,
-      draft.feedback,
+      row,
+      draft,
       rubricScores,
-    );
-    if (!r.ok) {
+    });
+  };
+
+  /** Classroom-only: materializa en Evaluate, luego reutiliza gradeSubmission. */
+  const onGradeClassroomOnly = async (cs) => {
+    if (busy || !activity?.id || !cs?.id) return;
+    if (!cs.user_id) {
+      setActionErr(t("pcClassroomStudentUnmapped"));
+      return;
+    }
+    const state = String(cs.state || "").toUpperCase();
+    if (state !== "TURNED_IN" && state !== "RETURNED") {
+      setActionErr(t("pcClassroomSubmissionNotReadyToGrade"));
+      return;
+    }
+    const draftKey = `classroom:${cs.id}`;
+    const draft = {
+      ...(gradeDraft[draftKey] || {
+        grade: cs.assignedGrade != null ? String(cs.assignedGrade) : "",
+        feedback: "",
+      }),
+    };
+    setBusy(true);
+    setActionErr("");
+    setActionMsg("");
+
+    const mat = await materializeClassroomSubmissionForGrading(activity.id, cs.id);
+    if (!mat.ok) {
       setBusy(false);
+      const err = mat.error || "";
       setActionErr(
-        r.error === "rubric_max_mismatch"
-          ? t("pcRubricMaxMustMatch").replace("{n}", String(activity?.max_points ?? ""))
-          : r.error === "incomplete_rubric"
-            ? t("pcCompleteLevelsBeforeGrade")
-            : r.error || t("pcSaveEvaluationFail"),
+        err === "classroom_student_unmapped"
+          ? t("pcClassroomStudentUnmapped")
+          : err === "classroom_submission_not_ready" || err === "activity_not_gradeable"
+            ? t("pcClassroomSubmissionNotReadyToGrade")
+            : t("pcClassroomSubmissionMaterializeFail"),
       );
       return;
     }
 
-    let msg = t("pcEvaluationSaved");
-    if (activity?.classroom_coursework_id && classroomCourseId && row && r.result?.grade != null) {
-      const gradedRow = {
-        ...row,
-        grade: r.result?.grade ?? Number(draft.grade),
-        feedback: draft.feedback,
-      };
-      const classroomSubmissionId = await resolveClassroomSubmissionId(gradedRow);
-      if (classroomSubmissionId) {
-        const sync = await sendGradeToClassroom({
-          submission: gradedRow,
-          activity,
-          classroomCourseId,
-          courseWorkId: activity.classroom_coursework_id,
-          classroomSubmissionId,
-          userId: user.id,
-        });
-        if (sync.ok) {
-          msg = classroomGradeSyncUserMessageI18n({
-            warning: sync.warning || null,
-            hasFeedback: Boolean(draft.feedback) && sync.feedbackSynced !== true,
-          });
-        } else {
-          msg = t("pcEvaluationSavedClassroomPending").replace("{error}", sync.error || t("pcErrorWord"));
-        }
-      } else {
-        msg = t("pcEvaluationSavedClassroomMissing");
-      }
+    const submissionId = mat.result?.submission_id;
+    if (!submissionId) {
+      setBusy(false);
+      setActionErr(t("pcClassroomSubmissionMaterializeFail"));
+      return;
     }
 
-    setBusy(false);
-    setActionMsg(msg);
-    await load({ preserveActionMsg: true });
+    const rubricScores = buildRubricScoresForDraft(draftKey, draft);
+    const row = {
+      id: submissionId,
+      user_id: mat.result?.user_id || cs.user_id,
+      classroom_submission_id: cs.id,
+      feedback: draft.feedback || null,
+      grade: null,
+      submission_origin: mat.result?.submission_origin || "classroom",
+      version: mat.result?.version,
+    };
+
+    await finishGradeWithClassroomSync({
+      submissionId,
+      row,
+      draft,
+      rubricScores,
+      classroomSubmissionIdHint: cs.id,
+    });
   };
 
   const onSaveRubricDraft = async (submissionId) => {
@@ -1903,6 +1993,11 @@ export default function ActivityPage() {
                     : null}
                   {mySubmission?.submitted_at ? ` · ${fmtTs(mySubmission.submitted_at)}` : null}
                 </p>
+                {mySubmission?.submission_origin === "classroom" ? (
+                  <p className="auth-card__muted pbc-activity-origin-note" style={{ margin: "0.35rem 0 0" }}>
+                    {t("pcClassroomOnlySubmission")}
+                  </p>
+                ) : null}
                 <p className="auth-card__muted" style={{ margin: "0.35rem 0 0" }}>
                   {studentNextActionMessageI18n(myProcess)}
                 </p>
@@ -1995,6 +2090,22 @@ export default function ActivityPage() {
 
                   if (!row) {
                     const lateOnly = Boolean(cs?.late);
+                    const csState = String(cs?.state || "").toUpperCase();
+                    const mapped = Boolean(cs?.user_id);
+                    const actionable =
+                      csState === "TURNED_IN" || csState === "RETURNED";
+                    const activityGradeable = !isMaterial;
+                    const canGradeClassroomOnly =
+                      mapped && actionable && activityGradeable;
+                    const draftKey = cs?.id ? `classroom:${cs.id}` : null;
+                    const draft =
+                      (draftKey && gradeDraft[draftKey]) || {
+                        grade:
+                          cs?.assignedGrade != null ? String(cs.assignedGrade) : "",
+                        feedback: "",
+                      };
+                    const rd =
+                      (draftKey && rubricDraftBySubmission[draftKey]) || {};
                     return (
                       <li
                         key={card.key}
@@ -2011,6 +2122,9 @@ export default function ActivityPage() {
                             </span>
                             <span className="pbc-activity-source-badges" aria-label={t("pcSourcesAria")}>
                               <span className="pbc-activity-source-badge">{"Classroom"}</span>
+                            </span>
+                            <span className="auth-card__muted pbc-activity-origin-note">
+                              {t("pcClassroomOnlySubmission")}
                             </span>
                           </div>
                         </div>
@@ -2044,6 +2158,86 @@ export default function ActivityPage() {
                               {t("pcOpenSubmissionInClassroom")}
                             </a>
                           </p>
+                        ) : null}
+                        {!mapped ? (
+                          <p className="auth-card__muted pbc-activity-origin-note">
+                            {t("pcClassroomStudentUnmapped")}
+                          </p>
+                        ) : null}
+                        {mapped && !actionable ? (
+                          <p className="auth-card__muted pbc-activity-origin-note">
+                            {t("pcClassroomSubmissionNotReadyToGrade")}
+                          </p>
+                        ) : null}
+                        {canGradeClassroomOnly && rubricCriteria.length > 0 && draftKey ? (
+                          <div className="pbc-activity-rubric-block">
+                            <ActivityRubricGradeMatrix
+                              criteria={rubricCriteria}
+                              scoringMode={activityRubricMeta?.scoring_mode || "points"}
+                              schemaGeneration={activityRubricMeta?.schema_generation ?? 2}
+                              draft={rd}
+                              onChange={(next) =>
+                                setRubricDraftBySubmission((prev) => ({
+                                  ...prev,
+                                  [draftKey]: next,
+                                }))
+                              }
+                              disabled={busy}
+                            />
+                          </div>
+                        ) : null}
+                        {canGradeClassroomOnly && draftKey ? (
+                          <>
+                            <div className="pbc-activity-grade-row">
+                              {rubricCriteria.length === 0 ? (
+                                <input
+                                  className="auth-org-input pbc-activity-grade-input"
+                                  placeholder={
+                                    activity?.max_points != null
+                                      ? t("pcGradeOverMax").replace("{n}", String(activity.max_points))
+                                      : t("pcGradePrefix")
+                                  }
+                                  value={draft.grade}
+                                  onChange={(e) =>
+                                    setGradeDraft((prev) => ({
+                                      ...prev,
+                                      [draftKey]: { ...draft, grade: e.target.value },
+                                    }))
+                                  }
+                                />
+                              ) : activityRubricMeta?.scoring_mode === "qualitative" ? (
+                                <span className="auth-card__muted pbc-activity-grade-hint">
+                                  {t("pcQualitativeDash")}
+                                </span>
+                              ) : (
+                                <span className="auth-card__muted pbc-activity-grade-hint">
+                                  {t("pcGradeEqualsServerTotal")}
+                                </span>
+                              )}
+                              <input
+                                className="auth-org-input pbc-activity-feedback-input"
+                                placeholder={t("pcFeedbackGeneral")}
+                                value={draft.feedback}
+                                onChange={(e) =>
+                                  setGradeDraft((prev) => ({
+                                    ...prev,
+                                    [draftKey]: { ...draft, feedback: e.target.value },
+                                  }))
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="auth-btn auth-btn--primary auth-btn--sm"
+                                disabled={busy}
+                                onClick={() => void onGradeClassroomOnly(cs)}
+                              >
+                                {t("pcEvaluate")}
+                              </button>
+                            </div>
+                            <p className="auth-card__muted pbc-activity-origin-note">
+                              {t("pcFeedbackPyClassOnly")}
+                            </p>
+                          </>
                         ) : null}
                       </li>
                     );
@@ -2090,6 +2284,7 @@ export default function ActivityPage() {
                     hasPyGrade && hasClGrade && !gradesAreEqual(row.grade, cs.assignedGrade);
                   const classroomOnlyGrade = !hasPyGrade && hasClGrade;
                   const hasRubric = rubricCriteria.length > 0;
+                  const isClassroomOrigin = row.submission_origin === "classroom";
                   const gradeDisplay = gradesConflict
                     ? null
                     : hasPyGrade
@@ -2129,25 +2324,33 @@ export default function ActivityPage() {
                               : ""}
                           </span>
                           <span className="pbc-activity-source-badges" aria-label={t("pcSourcesAria")}>
-                            <span className="pbc-activity-source-badge">{"PyBot"}</span>
-                            {cs ? (
-                              <span className="pbc-activity-source-badge">{"Classroom"}</span>
-                            ) : null}
+                            {isClassroomOrigin ? (
+                              <span className="pbc-activity-source-badge">{t("pcClassroomOrigin")}</span>
+                            ) : (
+                              <>
+                                <span className="pbc-activity-source-badge">{"PyBot"}</span>
+                                {cs ? (
+                                  <span className="pbc-activity-source-badge">{"Classroom"}</span>
+                                ) : null}
+                              </>
+                            )}
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          className="auth-btn auth-btn--ghost auth-btn--sm"
-                          onClick={() => {
-                            setViewHistoryId(null);
-                            setViewCode(showingCurrent ? null : row.id);
-                          }}
-                        >
-                          {/* Ver código */}
-                          {showingCurrent ? t("pcHideCode") : t("pcShowCode")}
-                        </button>
+                        {!isClassroomOrigin ? (
+                          <button
+                            type="button"
+                            className="auth-btn auth-btn--ghost auth-btn--sm"
+                            onClick={() => {
+                              setViewHistoryId(null);
+                              setViewCode(showingCurrent ? null : row.id);
+                            }}
+                          >
+                            {/* Ver código */}
+                            {showingCurrent ? t("pcHideCode") : t("pcShowCode")}
+                          </button>
+                        ) : null}
                       </div>
-                      {showingCurrent ? (
+                      {!isClassroomOrigin && showingCurrent ? (
                         <SubmissionCodeViewer
                           code={row.submitted_code}
                           ariaLabel={t("pcCodeOfStudentAria").replace("{ver}", verLabel || t("pcCurrentVersion")).replace("{name}", profile?.display_name || t("pcStudent"))}
@@ -2200,25 +2403,35 @@ export default function ActivityPage() {
                             {history.map((h) => {
                               const hLabel = submissionVersionLabel(h.version) || "V?";
                               const showingHist = viewHistoryId === h.id;
+                              const histClassroom = h.submission_origin === "classroom";
                               return (
                                 <li key={h.id} className="pbc-activity-history__item">
                                   <div className="pbc-activity-submission__head">
-                                    <span className="auth-card__muted">
+                                    <span className="auth-card__muted pbc-activity-origin-note">
                                       {hLabel}
                                       {" · "}
                                       {submissionStatusLabel(h.status, { version: h.version })}
                                       {h.submitted_at ? ` · ${fmtTs(h.submitted_at)}` : ""}
                                       {h.grade != null ? ` · ${t("pcGradePrefix")} ${h.grade}` : ""}
+                                      {histClassroom
+                                        ? ` · ${t("pcClassroomOrigin")}`
+                                        : ""}
                                     </span>
-                                    <button
-                                      type="button"
-                                      className="auth-btn auth-btn--ghost auth-btn--sm"
-                                      onClick={() => setViewHistoryId(showingHist ? null : h.id)}
-                                    >
-                                      {showingHist ? t("pcHide") : t("pcShowCode")}
-                                    </button>
+                                    {!histClassroom ? (
+                                      <button
+                                        type="button"
+                                        className="auth-btn auth-btn--ghost auth-btn--sm"
+                                        onClick={() => setViewHistoryId(showingHist ? null : h.id)}
+                                      >
+                                        {showingHist ? t("pcHide") : t("pcShowCode")}
+                                      </button>
+                                    ) : (
+                                      <span className="pbc-activity-source-badge">
+                                        {t("pcClassroomOrigin")}
+                                      </span>
+                                    )}
                                   </div>
-                                  {showingHist ? (
+                                  {!histClassroom && showingHist ? (
                                     <SubmissionCodeViewer
                                       code={h.submitted_code}
                                       height={220}
@@ -2358,6 +2571,11 @@ export default function ActivityPage() {
                             }))
                           }
                         />
+                        {isClassroomOrigin ? (
+                          <span className="auth-card__muted pbc-activity-origin-note">
+                            {t("pcFeedbackPyClassOnly")}
+                          </span>
+                        ) : null}
                         {canReview ? (
                           <button
                             type="button"

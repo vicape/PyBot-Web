@@ -678,6 +678,22 @@ test("student cannot read another student's evaluation", () => {
   );
 });
 
+test("Classroom-only rubric grading reuses ActivityPage gradeSubmission semantics", () => {
+  assert.match(activityPage, /onGradeClassroomOnly/);
+  assert.match(activityPage, /buildRubricScoresForDraft/);
+  assert.match(activityPage, /classroom:\$\{cs\.id\}/);
+  assert.match(activityPage, /ActivityRubricGradeMatrix/);
+  const gradeOnly = activityPage.slice(
+    activityPage.indexOf("const onGradeClassroomOnly"),
+    activityPage.indexOf("const onSaveRubricDraft"),
+  );
+  assert.match(gradeOnly, /materializeClassroomSubmissionForGrading/);
+  assert.match(gradeOnly, /buildRubricScoresForDraft\(draftKey, draft\)/);
+  assert.match(gradeOnly, /finishGradeWithClassroomSync/);
+  // No invented qualitative totals in shared helper.
+  assert.match(activityPage, /scoringMode === "qualitative"[\s\S]{0,80}draft\.grade = null/);
+});
+
 test("P9 contract literals: grade / max_points / CASE E / closure / no DECISION REQUIRED", () => {
   // Exact product literals required by PRE_QA acceptance scanners
   assert.match(rubricsSrc, /activity_submissions\.grade/);
