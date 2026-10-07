@@ -4389,6 +4389,15 @@
     max-width: 100%;
     box-sizing: border-box;
   }
+
+  /* Override global .auth-org-input { flex: 1 1 200px } on column grade rows */
+  .pbc-activity-section--compact.pbc-activity-deliveries .pbc-activity-grade-row > .auth-org-input {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    box-sizing: border-box;
+  }
 }
 
 /* P9 — generic multidimensional rubrics */

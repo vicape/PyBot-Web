@@ -524,6 +524,17 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
     mobileCss,
     /\.pbc-activity-grade-input,\s*\.pbc-activity-feedback-input\s*\{[^}]*flex:\s*0\s+0\s+auto;/,
   );
+  // Direct-child .auth-org-input override (covers inputs without named subclasses).
+  const gradeRowAuthOrg = mobileCss.match(
+    /\.pbc-activity-section--compact\.pbc-activity-deliveries\s+\.pbc-activity-grade-row\s*>\s*\.auth-org-input\s*\{([^}]*)\}/,
+  );
+  assert.ok(gradeRowAuthOrg, "mobile grade-row > .auth-org-input selector present");
+  assert.match(
+    gradeRowAuthOrg[1],
+    /(?:flex:\s*0\s+0\s+auto;|flex-basis:\s*auto;)/,
+  );
+  assert.match(gradeRowAuthOrg[1], /height:\s*auto;/);
+  assert.doesNotMatch(gradeRowAuthOrg[1], /flex-grow:\s*[1-9]/);
   // Mobile column axis: must NOT use flex-basis: 100% (horizontal leftover) on grade/feedback.
   assert.ok(!mobileCss.includes("flex-basis: 100%"));
   assert.doesNotMatch(mobileCss, /flex:\s*1\s+1\s+100%/);
@@ -537,6 +548,12 @@ test("ActivityPage docente PRE_QA: literales UI, auto-sync y ausencia técnica",
   assert.ok(authOrgBase, "scoped auth-org-input theme rule present");
   assert.doesNotMatch(authOrgBase[1], /(?:^|;)\s*(?:min-height|height|flex(?:-basis)?)\s*:/);
   assert.doesNotMatch(css, /^\.pbc-list-item\s*\{/m);
+  // Global index.css .auth-org-input flex shorthand must remain untouched.
+  const indexCss = readFileSync(resolve(root, "src/index.css"), "utf8");
+  assert.match(
+    indexCss,
+    /\.auth-org-input\s*\{[^}]*flex:\s*1\s+1\s+200px;/,
+  );
 });
 
 function loadResolveSubmissionCodeHeight() {
