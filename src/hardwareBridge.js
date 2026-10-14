@@ -215,13 +215,9 @@ export function isMicroPythonOnBoard() {
   return _mode === "esp32-micropython" || _mode === "esp32-eda6";
 }
 
-/** Prelude EDA6 para Run en vivo: import del módulo instalado + perfil del menú. */
-function buildEda6RunPrelude(code, profile) {
-  let prelude = buildEda6ImportedPrelude(profile);
-  if (detectPybotGpioUsage(prepareUserCodeForExec(code))) {
-    prelude = prelude + "\n" + MPY_PRELUDE;
-  }
-  return prelude;
+/** EDA6 corre únicamente con su propio módulo y perfil, sin inyectar PyBot GPIO. */
+function buildEda6RunPrelude(_code, profile) {
+  return buildEda6ImportedPrelude(profile);
 }
 
 /** Envuelve el código del alumno para que errores en placa aparezcan en consola. */
