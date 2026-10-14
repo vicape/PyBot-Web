@@ -64,8 +64,8 @@ export function getEda6ExecPrelude(profile = getEda6Profile()) {
 /** Diagnóstico que no depende de `from EDA6 import *` (nombres privados). */
 export function buildEda6ModuleProbe() {
   return (
-    'print("EDA6", EDA6.PLACA_ACTUAL, "salida 1 -> GPIO", EDA6._pins()["digital_outputs"][0]' +
-    ', "servo 1 -> GPIO", EDA6._pins()["servo_pins"][0])\n'
+    'print("EDA6", EDA6.PLACA_ACTUAL, "salida 1 -> GPIO", EDA6.PINS["digital_outputs"][0]' +
+    ', "servo 1 -> GPIO", EDA6.PINS["servo_pins"][0])\n'
   );
 }
 
