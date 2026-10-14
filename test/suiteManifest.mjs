@@ -54,6 +54,7 @@ export const TEST_SUITES = Object.freeze({
     "bleRuntimeUpdateSession.test.mjs",
     "eda6Adc2WifiWarning.test.mjs",
     "eda6InputPath.test.mjs",
+    "eda6ImportScope.test.mjs",
     "eda6ServoHold.test.mjs",
     "eda6UsbImport.test.mjs",
     "esp32BoardProbe.test.mjs",
