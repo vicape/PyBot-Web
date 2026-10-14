@@ -25,10 +25,11 @@ export function buildEda6ImportedPrelude(profile) {
   const placa = profile === "ESP32" ? "ESP32" : "WEMOS";
   return [
     "import EDA6",
-    "try:",
+    "if hasattr(EDA6, '_aplicar_placa'):",
     `    EDA6._aplicar_placa("${placa}")`,
-    "except Exception:",
-    `    EDA6.PLACA_ACTUAL = "${placa}"`,
+    "else:",
+    `    if EDA6.PLACA_ACTUAL != "${placa}" or EDA6.PINS != EDA6.PIN_MAPS["${placa}"]:`,
+    "        raise RuntimeError('EDA6_PROFILE_MISMATCH_USB_SYNC')",
     "from EDA6 import *",
     "try:",
     "    _pybot_cleanup_normal = EDA6._pybot_cleanup_normal",

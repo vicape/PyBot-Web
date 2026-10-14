@@ -672,7 +672,7 @@ export async function runOnBoard(code, cb = {}) {
       });
       const body = prepareUserCodeForExec(code);
       const probe = buildEda6ModuleProbe();
-      const userCode = probe + "detenerTodo()\n" + wrapEda6UserCodeForRun(body);
+      const userCode = probe + wrapEda6UserCodeForRun(body);
       const prelude = buildEda6RunPrelude(code, profile);
       return _mpSession.runProgram(userCode, { ...cb, prelude });
     }
