@@ -789,14 +789,10 @@ export default function PyBotIDE() {
     return () => clearTimeout(handle);
   }, [code, editorMode, applySyntaxResult]);
 
-  const prevBoardTypeRef = useRef(boardType);
-
   useEffect(() => {
+    // El perfil EDA6 es independiente del tipo de placa del editor.
+    // Nunca cambiar ESP32 a WEMOS automáticamente al ingresar a EDA6.
     localStorage.setItem("pybot_board_type", boardType);
-    if (boardType === "esp32-eda6" && prevBoardTypeRef.current !== "esp32-eda6") {
-      setEda6ProfileState("WEMOS");
-    }
-    prevBoardTypeRef.current = boardType;
   }, [boardType]);
 
   useEffect(() => {
