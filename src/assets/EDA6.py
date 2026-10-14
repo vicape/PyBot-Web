@@ -235,20 +235,16 @@ def sensorDistancia(n_entrada):
     t_pin = Pin(trig, Pin.OUT)
     e_pin = Pin(echo, Pin.IN)
     t_pin.value(0)
-    time.sleep_us(2)
+    time.sleep_us(5)
     t_pin.value(1)
     time.sleep_us(10)
     t_pin.value(0)
-    timeout = time.ticks_us() + 30000
-    while e_pin.value() == 0:
-        if time.ticks_diff(timeout, time.ticks_us()) <= 0:
-            return -1
-    start = time.ticks_us()
-    timeout = time.ticks_us() + 30000
-    while e_pin.value() == 1:
-        if time.ticks_diff(timeout, time.ticks_us()) <= 0:
-            return -1
-    elapsed = time.ticks_diff(time.ticks_us(), start)
+    try:
+        elapsed = machine.time_pulse_us(e_pin, 1, 30000)
+    except OSError:
+        return -1
+    if elapsed < 0:
+        return -1
     return round(elapsed * 0.034 / 2, 1)
 
 
