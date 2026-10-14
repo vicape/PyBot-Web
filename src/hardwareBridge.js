@@ -33,7 +33,6 @@ import {
   getEda6Profile,
   getEda6LibrarySource,
   buildEda6ImportedPrelude,
-  buildEda6ModuleProbe,
   prepareUserCodeForExec,
   prepareMainPyForFlash,
   detectPybotGpioUsage,
@@ -671,8 +670,7 @@ export async function runOnBoard(code, cb = {}) {
         getSource: () => getEda6LibrarySource(profile),
       });
       const body = prepareUserCodeForExec(code);
-      const probe = buildEda6ModuleProbe();
-      const userCode = probe + wrapEda6UserCodeForRun(body);
+      const userCode = wrapEda6UserCodeForRun(body);
       const prelude = buildEda6RunPrelude(code, profile);
       return _mpSession.runProgram(userCode, { ...cb, prelude });
     }
@@ -691,8 +689,7 @@ export async function runOnBoard(code, cb = {}) {
         getSource: () => getEda6LibrarySource(profile),
       });
       const body = prepareUserCodeForExec(code);
-      const probe = buildEda6ModuleProbe();
-      const userCode = probe + wrapEda6UserCodeForRun(body);
+      const userCode = wrapEda6UserCodeForRun(body);
       const prelude = BLE_NATIVE_PRELUDE + buildEda6ImportedPrelude(profile);
       return _bleMpSession.runProgram(userCode, { ...cb, prelude });
     }
