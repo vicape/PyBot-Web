@@ -140,7 +140,7 @@ export class MicroPythonSession {
       const prefix = prelude != null ? prelude : MPY_PRELUDE;
       const wrap = cb.wrap !== false;
       const program = wrap
-        ? buildRunnableProgram(prefix, userCode)
+        ? buildRunnableProgram(prefix, userCode, { eda6Lifecycle: cb.eda6Lifecycle === true })
         : prefix + "\n" + String(userCode ?? "") + "\n";
 
       await this.protocol.enterRawRepl();

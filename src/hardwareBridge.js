@@ -672,7 +672,7 @@ export async function runOnBoard(code, cb = {}) {
       const body = prepareUserCodeForExec(code);
       const userCode = wrapEda6UserCodeForRun(body);
       const prelude = buildEda6RunPrelude(code, profile);
-      return _mpSession.runProgram(userCode, { ...cb, prelude });
+      return _mpSession.runProgram(userCode, { ...cb, prelude, eda6Lifecycle: true });
     }
     return _mpSession.runProgram(code, cb);
   }
@@ -691,7 +691,7 @@ export async function runOnBoard(code, cb = {}) {
       const body = prepareUserCodeForExec(code);
       const userCode = wrapEda6UserCodeForRun(body);
       const prelude = BLE_NATIVE_PRELUDE + buildEda6ImportedPrelude(profile);
-      return _bleMpSession.runProgram(userCode, { ...cb, prelude });
+      return _bleMpSession.runProgram(userCode, { ...cb, prelude, eda6Lifecycle: true });
     }
     return _bleMpSession.runProgram(code, { ...cb, prelude: BLE_NATIVE_PRELUDE });
   }

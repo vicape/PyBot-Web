@@ -13,8 +13,8 @@ test("EDA6 USB and native BLE do not inject a module probe before user's import"
   assert.doesNotMatch(bridge, /probe\s*\+\s*wrapEda6UserCodeForRun/);
   const calls = bridge.match(/const userCode = wrapEda6UserCodeForRun\(body\);/g) ?? [];
   assert.equal(calls.length, 2, "USB and native BLE must share the no-probe path");
-  assert.match(bridge, /return _mpSession\.runProgram\(userCode, \{ \.\.\.cb, prelude \}\)/);
-  assert.match(bridge, /return _bleMpSession\.runProgram\(userCode, \{ \.\.\.cb, prelude \}\)/);
+  assert.match(bridge, /return _mpSession\.runProgram\(userCode, \{ \.\.\.cb, prelude, eda6Lifecycle: true \}\)/);
+  assert.match(bridge, /return _bleMpSession\.runProgram\(userCode, \{ \.\.\.cb, prelude, eda6Lifecycle: true \}\)/);
 });
 
 test("student code with import EDA6 executes without Python local-variable scope error", () => {

@@ -37,15 +37,21 @@ export const HELD_HARDWARE_RELEASE_SCRIPT = [
  * Fin normal: si existe `_pybot_cleanup_normal` (EDA6) se usa; si no, limpieza completa (GPIO).
  *
  * @param {string} userCode
+ * @param {{eda6Lifecycle?: boolean}} [options]
  * @returns {string}
  */
-export function wrapStudentExecution(userCode) {
+export function wrapStudentExecution(userCode, options = {}) {
   const body = indentPython(String(userCode ?? ""));
-  return [
+  // EDA6 crea los PWM durante el import; el Stop inicial los desactivaba
+  // antes de servomotor()/motorRC(). GPIO mantiene su limpieza habitual.
+  const preRunStop = options.eda6Lifecycle === true ? [] : [
     "try:",
     "    detenerTodo()",
     "except Exception:",
     "    pass",
+  ];
+  return [
+    ...preRunStop,
     "try:",
     "    _pybot_cleanup()",
     "except Exception:",
@@ -87,7 +93,7 @@ export function wrapStudentExecution(userCode) {
  * @param {string} prelude
  * @param {string} userCode
  */
-export function buildRunnableProgram(prelude, userCode) {
+export function buildRunnableProgram(prelude, userCode, options = {}) {
   const prefix = prelude != null ? String(prelude) : "";
-  return prefix + (prefix && !prefix.endsWith("\n") ? "\n" : "") + wrapStudentExecution(userCode);
+  return prefix + (prefix && !prefix.endsWith("\n") ? "\n" : "") + wrapStudentExecution(userCode, options);
 }
