@@ -24,6 +24,16 @@ export function eda6CanonicalHash(source) {
 export function buildEda6ImportedPrelude(profile) {
   const placa = profile === "ESP32" ? "ESP32" : "WEMOS";
   return [
+    // La librería original crea PWM al importar y detenerTodo() los desinicializa.
+    // Cada Run vuelve a importar EDA6 para recuperar objetos PWM válidos después
+    // de Stop, error o fin normal. No se modifica EDA6.py ni su contenido.
+    "import sys",
+    "if 'EDA6' in sys.modules:",
+    "    try:",
+    "        sys.modules['EDA6'].detenerTodo()",
+    "    except Exception:",
+    "        pass",
+    "    del sys.modules['EDA6']",
     "import EDA6",
     "if hasattr(EDA6, '_aplicar_placa'):",
     `    EDA6._aplicar_placa("${placa}")`,
