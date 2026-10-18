@@ -17,7 +17,6 @@ import {
   hasFlashableFirmwareImage,
   getFirmwareImageManifest,
 } from "../firmwareManifest.js";
-import { listC6ModulesForInstall } from "../pythonApi/boardModules.js";
 import {
   clearLabSession,
   getLabSession,
@@ -30,10 +29,23 @@ import {
   writeC6Firmware,
   resetC6AndRelease,
 } from "./c6Flasher.js";
+import {
+  installC6LabModules,
+  ensureC6PybotInstallRoot,
+  C6_SAFE_RECOVERY_HINT,
+  C6_MODULE_ROOT,
+} from "./c6ModuleInstall.js";
 import { WAVESHARE_ESP32_C6_LCD_147_ID } from "../profiles/waveshareEsp32C6Lcd147.js";
 
 /** Sentinel board type for lab-only callers (stored in pybot_board_type when lab selected). */
 export const LAB_BOARD_TYPE_SENTINEL = "esp32-universal-lab";
+
+export {
+  ensureC6PybotInstallRoot,
+  installC6LabModules,
+  C6_SAFE_RECOVERY_HINT,
+  C6_MODULE_ROOT,
+};
 
 export class Esp32UniversalLabNotActiveError extends Error {
   constructor(message = "ESP32 Universal Lab is not active") {
@@ -140,19 +152,18 @@ async function requestLabPort() {
   }
 }
 
-async function installC6Modules(session) {
-  for (const [path, source] of listC6ModulesForInstall()) {
-    await session.installFile(path, source);
-  }
-}
-
 /**
  * @param {string|null|undefined} [boardType]
- * @param {{ requestPort?: () => Promise<any>, skipModuleInstall?: boolean }} [options]
+ * @param {{
+ *   requestPort?: () => Promise<any>,
+ *   skipModuleInstall?: boolean,
+ *   onLog?: (line: string) => void,
+ * }} [options]
  */
 export async function connectLabBoard(boardType, options = {}) {
   const ctx = requireActiveLab(boardType);
   requireRuntimeReady(ctx, "connect");
+  const onLog = typeof options.onLog === "function" ? options.onLog : undefined;
 
   await clearLabSession();
 
@@ -176,26 +187,34 @@ export async function connectLabBoard(boardType, options = {}) {
     const msg = e?.message ?? String(e);
     if (msg === "NEEDS_PREP") {
       throw new Error(
-        "PYBOT_LAB:NEEDS_FIRMWARE MicroPython not detected. Use Flash MicroPython (C6) first.",
+        "PYBOT_LAB:NEEDS_FIRMWARE MicroPython not detected. " +
+          "Use Flash MicroPython (C6) only via the explicit button (no automatic reflash). " +
+          C6_SAFE_RECOVERY_HINT,
       );
     }
     if (msg === "BUSY") {
       throw new Error("PYBOT_LAB:PORT_BUSY");
     }
-    throw new Error(`PYBOT_LAB:CONNECT_FAIL:${msg}`);
+    throw new Error(
+      `PYBOT_LAB:CONNECT_FAIL:${msg} ${C6_SAFE_RECOVERY_HINT}`,
+    );
   }
 
+  let modulesInstalled = false;
   if (options.skipModuleInstall !== true) {
     try {
-      await installC6Modules(session);
+      await installC6LabModules(session, { onLog });
+      modulesInstalled = true;
     } catch (e) {
       try {
         await session.close();
       } catch {
         /* ignore */
       }
+      // Never mark connected / never false PASS when modules fail.
       throw new Error(
-        `PYBOT_LAB:MODULE_INSTALL_FAIL:${e?.message ?? String(e)}`,
+        `PYBOT_LAB:MODULE_INSTALL_FAIL:${e?.message ?? String(e)} ` +
+          `(firmware flashed ≠ modules installed/connected) ${C6_SAFE_RECOVERY_HINT}`,
       );
     }
   }
@@ -212,9 +231,13 @@ export async function connectLabBoard(boardType, options = {}) {
     mode: LAB_BOARD_TYPE_SENTINEL,
     profileId: ctx.profileId,
     baudRate,
+    modulesInstalled,
+    modulesRoot: C6_MODULE_ROOT,
     hardwareValidation: "UNVERIFIED",
     message:
-      "Connected via Web Serial to Universal Lab C6 profile. Hardware I/O remains UNVERIFIED until bench tests.",
+      "Connected via Web Serial to Universal Lab C6 profile; lab modules installed under /" +
+      C6_MODULE_ROOT +
+      ". Firmware flashed ≠ board fully operational. Hardware I/O remains UNVERIFIED until bench tests.",
   };
 }
 
@@ -278,15 +301,28 @@ export async function flashLabFirmware(boardType, options = {}) {
     throw e;
   }
 
+  options.onLog?.(
+    "PYBOT_LAB:FIRMWARE_FLASHED ESP32_GENERIC_C6 — not yet connected; modules not installed.",
+  );
+  options.onLog?.(
+    "PYBOT_LAB:LCD_NOTE Stock generic MicroPython has no onboard LCD boot init; a dark LCD alone may be expected and does not prove hardware failure.",
+  );
+  options.onLog?.(C6_SAFE_RECOVERY_HINT);
+
   return {
     ok: true,
     profileId: ctx.profileId,
     version: manifest.version,
     sha256,
     imageId: manifest.board,
+    modulesInstalled: false,
+    connected: false,
     hardwareValidation: "UNVERIFIED",
     message:
-      "MicroPython ESP32_GENERIC_C6 flashed after SHA-256 validation. Physical verify pending.",
+      "MicroPython ESP32_GENERIC_C6 flashed after SHA-256 validation. " +
+      "Firmware flashed ≠ modules installed or board connected/operational. " +
+      "LCD may remain dark with stock generic MicroPython (no onboard LCD init) — not proof of board failure. " +
+      "Next: Connect to run filesystem preflight and install lab modules. Physical verify pending.",
   };
 }
 
@@ -358,19 +394,30 @@ export async function saveLabProgram(code, boardType) {
   return { ok: true, path: "main.py", hardwareValidation: "UNVERIFIED" };
 }
 
-/** @param {string|null|undefined} [boardType] */
+/**
+ * Soft REPL recovery only — never erases flash or refrashes firmware.
+ * @param {string|null|undefined} [boardType]
+ */
 export async function recoverLabBoard(boardType) {
   const ctx = requireActiveLab(boardType);
   requireRuntimeReady(ctx, "recover");
   const session = getLabSession();
   if (!session) {
     // Soft recovery without an open session: require user reconnect.
+    // No automatic reflash/wipe — user must Connect (or Flash explicitly).
     throw new Error(
-      "PYBOT_LAB:RECOVER_NEEDS_CONNECT Connect the board first, then recover REPL.",
+      "PYBOT_LAB:RECOVER_NEEDS_CONNECT Connect the board first, then recover REPL. " +
+        "No automatic erase/reflash. " +
+        C6_SAFE_RECOVERY_HINT,
     );
   }
   await session.interruptAndRecoverRepl();
-  return { ok: true, hardwareValidation: "UNVERIFIED" };
+  return {
+    ok: true,
+    hardwareValidation: "UNVERIFIED",
+    refrashed: false,
+    erased: false,
+  };
 }
 
 /** @param {string|null|undefined} [boardType] */

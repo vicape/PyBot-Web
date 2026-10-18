@@ -1138,7 +1138,9 @@ export default function PyBotIDE() {
           appendConsole(t("labBoardNotReady") + "\n", "err");
           return { ok: false, message: "LAB_NOT_READY", display: t("labBoardNotReady") };
         }
-        const result = await connectLabBoard(LAB_BOARD_TYPE_SENTINEL);
+        const result = await connectLabBoard(LAB_BOARD_TYPE_SENTINEL, {
+          onLog: (line) => appendConsole(String(line) + "\n", "info"),
+        });
         setConnected(true);
         setPybotBoardState(null);
         appendConsole((result.message || t("labConnected")) + "\n", "info");

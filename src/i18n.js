@@ -58,15 +58,16 @@ const STRINGS = {
     labBoardModalLabel: "Waveshare ESP32 Universal Lab",
     labBoardNotReady:
       "Este perfil Waveshare está marcado not ready: aún no se puede conectar ni programar (M3).",
-    labConnected: "Universal Lab (C6) conectado por Web Serial.",
+    labConnected: "Universal Lab (C6) conectado por Web Serial; módulos instalados.",
     labHardwareUnverified:
-      "Validación de hardware físico: UNVERIFIED (pendiente de prueba en banco).",
+      "Validación de hardware físico: UNVERIFIED (pendiente de prueba en banco). Firmware flasheado ≠ placa operativa.",
     labRunning: "Ejecutando en Universal Lab (C6)…",
     labFlashFirmwareBtn: "Instalar MicroPython (C6)",
     labFlashFirmwareHint:
-      "Flashea la imagen oficial MicroPython ESP32_GENERIC_C6 (SHA validado) antes de conectar.",
+      "Flashea la imagen oficial MicroPython ESP32_GENERIC_C6 (SHA validado) antes de conectar. Luego usá Conectar para instalar módulos (no es automático).",
     labFlashingFirmware: "Validando y flasheando firmware C6…",
-    labFlashOk: "Firmware C6 instalado. Validación física pendiente.",
+    labFlashOk:
+      "Firmware C6 flasheado (≠ módulos instalados ni conexión). La LCD puede quedar apagada con MicroPython genérico; no prueba falla de hardware. Conectá a continuación.",
     labSaveBtn: "Guardar programa en la placa (main.py)",
     labSaveOk: "Programa guardado como main.py en la placa.",
     labRecoverBtn: "Recuperar REPL",
@@ -687,15 +688,16 @@ Creado por VIC.`,
     labBoardModalLabel: "Waveshare ESP32 Universal Lab",
     labBoardNotReady:
       "This Waveshare profile is marked not ready: connect/program are disabled until M3.",
-    labConnected: "Universal Lab (C6) connected via Web Serial.",
+    labConnected: "Universal Lab (C6) connected via Web Serial; modules installed.",
     labHardwareUnverified:
-      "Physical hardware validation: UNVERIFIED (bench test pending).",
+      "Physical hardware validation: UNVERIFIED (bench test pending). Firmware flashed ≠ board operational.",
     labRunning: "Running on Universal Lab (C6)…",
     labFlashFirmwareBtn: "Install MicroPython (C6)",
     labFlashFirmwareHint:
-      "Flash the official MicroPython ESP32_GENERIC_C6 image (SHA validated) before connecting.",
+      "Flash the official MicroPython ESP32_GENERIC_C6 image (SHA validated) before connecting. Then use Connect to install modules (not automatic).",
     labFlashingFirmware: "Validating and flashing C6 firmware…",
-    labFlashOk: "C6 firmware installed. Physical validation pending.",
+    labFlashOk:
+      "C6 firmware flashed (≠ modules installed or connected). LCD may stay dark with stock generic MicroPython; not proof of hardware failure. Connect next.",
     labSaveBtn: "Save program to board (main.py)",
     labSaveOk: "Program saved as main.py on the board.",
     labRecoverBtn: "Recover REPL",
@@ -1361,8 +1363,18 @@ export function formatHardwareError(message) {
     const code = m.slice("PYBOT_LAB:".length);
     if (code.startsWith("NEEDS_FIRMWARE")) {
       return getLang() === "es"
-        ? "No se detectó MicroPython en la placa. Usá «Instalar MicroPython (C6)» primero."
-        : "MicroPython was not detected. Use “Install MicroPython (C6)” first.";
+        ? "No se detectó MicroPython en la placa. Usá «Instalar MicroPython (C6)» solo con acción explícita (sin reflash automático). Recuperación: mantené BOOT al pulsar RESET, elegí el puerto USB correcto, flasheá la imagen oficial verificada y después Conectá."
+        : "MicroPython was not detected. Use “Install MicroPython (C6)” only via explicit action (no automatic reflash). Recovery: hold BOOT while pressing RESET, pick the correct USB serial device, flash the verified official image, then Connect.";
+    }
+    if (code.startsWith("MODULE_INSTALL_FAIL")) {
+      return getLang() === "es"
+        ? "Falló la instalación de módulos del lab (firmware flasheado ≠ módulos instalados/conectado). Revisá el terminal: hace falta el directorio /pybot en el filesystem. Reintentá Conectar; no borres ni reflashees en bucle. Recuperación manual: BOOT+RESET si no hay REPL."
+        : "Lab module install failed (firmware flashed ≠ modules installed/connected). Check the terminal: /pybot must exist on the filesystem. Retry Connect; do not erase/reflash in a loop. Manual recovery: BOOT+RESET if REPL is absent.";
+    }
+    if (code.startsWith("CONNECT_FAIL")) {
+      return getLang() === "es"
+        ? "No se pudo conectar al REPL de Universal Lab. Si no hay MicroPython: mantené BOOT al pulsar RESET, elegí el puerto USB correcto y flasheá solo con el botón explícito. Una LCD apagada con firmware genérico puede ser normal."
+        : "Could not connect to the Universal Lab REPL. If MicroPython is absent: hold BOOT while pressing RESET, pick the correct USB serial device, and flash only via the explicit button. A dark LCD with stock generic firmware may be normal.";
     }
     if (code === "MISSING_WEB_SERIAL") {
       return getLang() === "es"

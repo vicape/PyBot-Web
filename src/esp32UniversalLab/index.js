@@ -56,6 +56,10 @@ export {
   disconnectLabBoard,
   isLabSessionConnected,
   getLabSession,
+  ensureC6PybotInstallRoot,
+  installC6LabModules,
+  C6_SAFE_RECOVERY_HINT,
+  C6_MODULE_ROOT,
 } from "./runtime/adapter.js";
 
 export {
