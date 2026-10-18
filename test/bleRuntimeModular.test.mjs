@@ -300,6 +300,7 @@ test("GPIO2 must not be claimed by BLE runtime at boot", () => {
     join(__dirname, "..", "src", "assets", "EDA6.py"),
     "utf8",
   );
-  assert.match(eda6, /"adc_inputs": \[2, 4, 35, 34\]/);
-  assert.match(eda6, /"digital_inputs": \[4, 2, 15, 0\]/);
+  // Vendor EDA6 PIN_MAPS use single-quoted keys; WEMOS ADC2 + ESP32 dig maps.
+  assert.match(eda6, /'adc_inputs': \[2, 4, 35, 34\]/);
+  assert.match(eda6, /'digital_inputs': \[4, 2, 15, 0\]/);
 });

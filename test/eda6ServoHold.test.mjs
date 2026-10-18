@@ -63,13 +63,16 @@ test("GPIO wrap still falls back to full cleanup when _pybot_cleanup_normal is m
 
 test("EDA6 registers servo vs motorRC and keeps positional PWM on normal cleanup", () => {
   const src = readFileSync(EDA6, "utf8");
-  assert.match(src, /servo_pins": \[25, 16, 14, 13\]/);
-  assert.match(src, /_pwm_role/);
-  assert.match(src, /_pwm_role\[gpio\] = "servo"/);
-  assert.match(src, /_pwm_role\[gpio\] = "motor"/);
-  assert.match(src, /def _pybot_cleanup_normal\(/);
-  assert.match(src, /def _stop_pwm\(keep_positional=False\)/);
-  assert.match(src, /_map_val\(a, 0, 180, 31, 120\)/);
+  // Vendor EDA6: shared _servo_pwms list; positional hold is external (re-import),
+  // not in-library _pwm_role / _pybot_cleanup_normal helpers.
+  assert.match(src, /'servo_pins': \[25, 16, 14, 13\]/);
+  assert.match(src, /_servo_pwms\s*=\s*\[PWM\(Pin\(p\),\s*freq=50\)/);
+  assert.match(src, /def servomotor\(/);
+  assert.match(src, /def motorRC\(/);
+  assert.match(src, /_map_value\(angulo, 0, 180, 31, 120\)/);
+  assert.match(src, /_map_value\(valor, -100, 100, 31, 120\)/);
+  assert.doesNotMatch(src, /_pwm_role/);
+  assert.doesNotMatch(src, /def _pybot_cleanup_normal\(/);
   assert.doesNotMatch(src, /sleep\((0\.[1-9]|[1-9])/);
 });
 
@@ -104,17 +107,19 @@ test("BLE prelude imports EDA6, applies profile via _aplicar_placa, and does not
   assert.match(profile, /buildEda6ImportedPrelude/);
   assert.match(profile, /export function buildEda6ModuleProbe/);
   assert.match(preludeMod, /export function buildEda6ImportedPrelude/);
+  assert.match(preludeMod, /hasattr\(EDA6, '_aplicar_placa'\)/);
   assert.match(preludeMod, /EDA6\._aplicar_placa\("\$\{placa\}"\)/);
   assert.match(preludeMod, /_pybot_cleanup_normal = EDA6\._pybot_cleanup_normal/);
-  assert.match(profile, /EDA6\._pins\(\)/);
+  // Vendor probe uses public PINS (no private _pins helper).
+  assert.match(profile, /EDA6\.PINS\["digital_outputs"\]/);
   assert.match(profile, /servo_pins/);
+  assert.doesNotMatch(profile, /EDA6\._pins\(\)/);
 
   const bridge = readFileSync(BRIDGE, "utf8");
   assert.match(bridge, /buildEda6ImportedPrelude/);
-  assert.match(bridge, /buildEda6ModuleProbe/);
+  // Probe helper lives in eda6Profile; BLE run path uses prelude + canonical hash.
   const bleNative = bridge.slice(bridge.indexOf("if (isNativeBleEnabled() && _bleMpSession)"));
   assert.match(bleNative, /buildEda6ImportedPrelude\(profile\)/);
-  assert.match(bleNative, /buildEda6ModuleProbe\(\)/);
   assert.match(bleNative, /assertEda6CanonicalOnSession/);
   assert.doesNotMatch(bleNative, /BLE_NATIVE_PRELUDE \+ "from EDA6 import \*\\n"/);
   assert.match(bridge, /releaseHeldHardware/);
@@ -165,21 +170,22 @@ test("releaseHeldHardware skips while a program is active", async () => {
 test("EDA6 servo hold simulation (USB wrap + BLE profile)", () => {
   const py = findPython();
   if (!py) {
-    assert.ok(read("src/assets/EDA6.py").includes("_pybot_cleanup_normal"));
+    // Without Python, still assert vendor contract (no in-lib hold helper).
+    assert.equal(read("src/assets/EDA6.py").includes("_pybot_cleanup_normal"), false);
+    assert.ok(read("src/assets/EDA6.py").includes("_servo_pwms"));
     return;
   }
   const r = spawnSync(py, [SIM, EDA6], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr || r.stdout);
   const data = JSON.parse(String(r.stdout).trim().split("\n").pop());
   assert.equal(data.ok, true);
-  assert.equal(data.normal_hold.gpio, 25);
-  assert.equal(data.normal_hold.alive, true);
-  assert.equal(data.normal_hold.duty, data.normal_hold.expected_duty);
-  assert.equal(data.second_angle.alive, true);
-  assert.equal(data.second_angle.duty, data.second_angle.expected_duty);
-  assert.equal(data.stop_after_idle.alive, false);
+  assert.equal(data.normal_end.gpio, 25);
+  assert.equal(data.normal_end.alive_after_cleanup, false);
+  assert.equal(data.reimport_run.alive, true);
+  assert.equal(data.reimport_run.duty, data.reimport_run.expected_duty);
   assert.equal(data.on_error.alive, false);
-  assert.equal(data.motor_rc.alive, false);
-  assert.equal(data.ble_profile.module_gpio, 25);
-  assert.equal(data.ble_profile.pins_imported_by_star, false);
+  assert.equal(data.motor_rc.alive_after_cleanup, false);
+  assert.equal(data.profile_wemos.servo_gpio, 25);
+  assert.equal(data.profile_esp32.servo_gpio, 33);
+  assert.equal(data.pins_imported_by_star, false);
 });

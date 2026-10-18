@@ -41,13 +41,14 @@ function findPython() {
 test("WEMOS digital map unchanged [5,23,19,18]", () => {
   assert.deepEqual(PIN_MAPS.WEMOS.digital_inputs, [5, 23, 19, 18]);
   const eda6 = read("src/assets/EDA6.py");
-  assert.match(eda6, /"digital_inputs":\s*\[5,\s*23,\s*19,\s*18\]/);
+  // Vendor EDA6 uses single-quoted dict keys (immutable manufacturer source).
+  assert.match(eda6, /'digital_inputs':\s*\[5,\s*23,\s*19,\s*18\]/);
 });
 
 test("WEMOS analog map unchanged [2,4,35,34]", () => {
   assert.deepEqual(PIN_MAPS.WEMOS.adc_inputs, [2, 4, 35, 34]);
   const eda6 = read("src/assets/EDA6.py");
-  assert.match(eda6, /"adc_inputs":\s*\[2,\s*4,\s*35,\s*34\]/);
+  assert.match(eda6, /'adc_inputs':\s*\[2,\s*4,\s*35,\s*34\]/);
 });
 
 test("ESP32 maps unchanged", () => {

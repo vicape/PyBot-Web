@@ -115,21 +115,18 @@ test("BLE assertEda6CanonicalOnSession errors clearly when hash mismatches", asy
 test("buildEda6ImportedPrelude applies WEMOS and ESP32 profiles; bundled has no VERSION", () => {
   assert.match(buildEda6ImportedPrelude("WEMOS"), /EDA6\._aplicar_placa\("WEMOS"\)/);
   assert.match(buildEda6ImportedPrelude("ESP32"), /EDA6\._aplicar_placa\("ESP32"\)/);
+  assert.match(buildEda6ImportedPrelude("WEMOS"), /hasattr\(EDA6, '_aplicar_placa'\)/);
   assert.doesNotMatch(BUNDLED_SOURCE, /EDA6_VERSION/);
   assert.doesNotMatch(BUNDLED_SOURCE, /1\.1\.0|1\.1\.1/);
-  assert.match(BUNDLED_SOURCE, /def _aplicar_placa\(/);
+  // Vendor library has no PyBot helpers; prelude gates _aplicar_placa via hasattr.
+  assert.doesNotMatch(BUNDLED_SOURCE, /def _aplicar_placa\(/);
 });
 
-test("bundled EDA6.py has no trailing whitespace (git diff --check hygiene)", () => {
-  const normalized = BUNDLED_SOURCE.replace(/\r\n/g, "\n");
-  assert.equal(normalized.includes("\r"), false);
-  const lines = normalized.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    assert.equal(
-      line,
-      line.replace(/[ \t]+$/, ""),
-      `EDA6.py line ${i + 1} has trailing whitespace`,
-    );
-  }
+test("bundled EDA6.py matches immutable vendor original (byte-identical)", () => {
+  const vendor = readFileSync(
+    join(root, "src", "assets", "EDA6.vendor-original.py"),
+    "utf8",
+  );
+  assert.equal(BUNDLED_SOURCE, vendor);
+  assert.equal(BUNDLED_SOURCE.includes("\r"), false);
 });

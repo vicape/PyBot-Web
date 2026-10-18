@@ -1,4 +1,4 @@
-"""Simula EDA6 + wrap educativo sin placa: PWM mock de machine."""
+"""Simula EDA6 vendor + wrap educativo: PWM mock; hold vía reimport tras Stop."""
 from __future__ import annotations
 
 import json
@@ -34,9 +34,9 @@ class FakePin:
 class FakePWM:
     instances = []
 
-    def __init__(self, pin):
+    def __init__(self, pin, freq=50):
         self.gpio = pin.gpio
-        self._freq = 0
+        self._freq = int(freq) if freq is not None else 50
         self._duty = 0
         self.alive = True
         FakePWM.instances.append(self)
@@ -85,12 +85,25 @@ class FakeADC:
         return 0
 
 
+class FakeI2C:
+    def __init__(self, *_a, **_k):
+        pass
+
+    def scan(self):
+        return []
+
+    def writeto(self, *_a, **_k):
+        return None
+
+
 def install_mocks():
     FakePWM.instances = []
     machine = types.ModuleType("machine")
     machine.Pin = FakePin
     machine.PWM = FakePWM
     machine.ADC = FakeADC
+    machine.I2C = FakeI2C
+    machine.time_pulse_us = lambda *_a, **_k: -1
     sys.modules["machine"] = machine
     t = types.ModuleType("time")
     t.sleep = lambda *_a, **_k: None
@@ -99,14 +112,12 @@ def install_mocks():
     t.ticks_us = lambda: 0
     t.ticks_diff = lambda a, b: a - b
     sys.modules["time"] = t
+    sys.modules["utime"] = t
     return machine
 
 
+# Mirrors programWrap: missing _pybot_cleanup_normal → detenerTodo (vendor).
 WRAP = """
-try:
-    detenerTodo()
-except Exception:
-    pass
 try:
     _pybot_cleanup()
 except Exception:
@@ -169,41 +180,36 @@ def main():
     eda6_path = sys.argv[1]
     results = {}
 
-    # 1) Fin normal servomotor(1, 90): PWM GPIO 25 activo.
+    # 1) Fin normal: vendor no conserva PWM; wrap cae a detenerTodo.
     install_mocks()
     ns = {"__name__": "__main__"}
     load_eda6(eda6_path, ns, "WEMOS")
     run_wrapped(ns, "servomotor(1, 90)")
     p = pwm_for(25)
-    results["normal_hold"] = {
+    results["normal_end"] = {
         "gpio": 25 if p else None,
-        "alive": bool(p and p.alive),
-        "duty": None if p is None else p._duty,
-        "freq": None if p is None else p._freq,
-        "expected_duty": expected_duty(90),
-        "role": ns.get("_pwm_role", {}).get(25),
-        "in_cache": 25 in ns.get("_pwm_cache", {}),
+        "alive_after_cleanup": bool(p and p.alive),
+        "duty_before_was_set": expected_duty(90),
     }
 
-    # 2) Nueva ejecución con otro ángulo sobre el mismo namespace (USB persistente).
-    run_wrapped(ns, "servomotor(1, 0)")
+    # 2) Reimport tras Stop: nuevo PWM usable (contrato vendor / eda6Lifecycle).
+    install_mocks()
+    ns2 = {"__name__": "__main__"}
+    load_eda6(eda6_path, ns2, "WEMOS")
+    run_wrapped(ns2, "servomotor(1, 0)")
+    # Mid-run state is cleaned by wrap; reimport again to prove PWM recreation.
+    install_mocks()
+    ns3 = {"__name__": "__main__"}
+    load_eda6(eda6_path, ns3, "WEMOS")
+    ns3["servomotor"](1, 0)
     p2 = pwm_for(25)
-    results["second_angle"] = {
+    results["reimport_run"] = {
         "alive": bool(p2 and p2.alive),
         "duty": None if p2 is None else p2._duty,
         "expected_duty": expected_duty(0),
-        "same_instance": p2 is p,
     }
 
-    # 3) Stop / detenerTodo tras fin normal.
-    ns["detenerTodo"]()
-    results["stop_after_idle"] = {
-        "alive": bool(p2 and p2.alive),
-        "cache_empty": len(ns.get("_pwm_cache", {})) == 0,
-        "role_empty": len(ns.get("_pwm_role", {})) == 0,
-    }
-
-    # 4) Error: limpieza completa.
+    # 3) Error: limpieza completa.
     install_mocks()
     ns_err = {"__name__": "__main__"}
     load_eda6(eda6_path, ns_err, "WEMOS")
@@ -216,79 +222,52 @@ def main():
     results["on_error"] = {
         "raised": raised,
         "alive": bool(p_err and p_err.alive),
-        "cache_empty": len(ns_err.get("_pwm_cache", {})) == 0,
     }
 
-    # 5) motorRC no queda activo por la excepción de servos posicionales.
+    # 4) motorRC + cleanup → PWM muerto.
     install_mocks()
     ns_m = {"__name__": "__main__"}
     load_eda6(eda6_path, ns_m, "WEMOS")
     run_wrapped(ns_m, "motorRC(1, 50)")
     p_m = pwm_for(25)
     results["motor_rc"] = {
-        "alive": bool(p_m and p_m.alive),
-        "role_after": ns_m.get("_pwm_role", {}).get(25),
-        "in_cache": 25 in ns_m.get("_pwm_cache", {}),
+        "alive_after_cleanup": bool(p_m and p_m.alive),
     }
 
-    # Servo + motorRC en el mismo puerto: gana motorRC, no se conserva.
+    # 5) Perfiles por PLACA_ACTUAL en fuente (sin _pins / _aplicar_placa).
     install_mocks()
-    ns_mix = {"__name__": "__main__"}
-    load_eda6(eda6_path, ns_mix, "WEMOS")
-    run_wrapped(ns_mix, "servomotor(1, 90)\nmotorRC(1, 40)")
-    p_mix = pwm_for(25)
-    results["servo_then_motor"] = {
-        "alive": bool(p_mix and p_mix.alive),
-        "in_cache": 25 in ns_mix.get("_pwm_cache", {}),
-    }
-
-    # 6) Módulo EDA6 quedó ESP32; el prelude aplica WEMOS vía _aplicar_placa → servo 1 = GPIO 25.
+    ns_w = {}
+    load_eda6(eda6_path, ns_w, "WEMOS")
     install_mocks()
-    mod = types.ModuleType("EDA6")
-    load_eda6(eda6_path, mod.__dict__, "ESP32")
-    sys.modules["EDA6"] = mod
-    assert mod.PLACA_ACTUAL == "ESP32"
-    assert mod._pins()["servo_pins"][0] == 33
+    ns_e = {}
+    load_eda6(eda6_path, ns_e, "ESP32")
     star_ns = {}
+    # Star-import must not expose private helpers (vendor has none anyway).
+    mod = types.ModuleType("EDA6")
+    mod.__dict__.update(ns_w)
+    sys.modules["EDA6"] = mod
     exec("from EDA6 import *", star_ns)
-    pins_imported = "_pins" in star_ns
-    if hasattr(mod, "_aplicar_placa"):
-        mod._aplicar_placa("WEMOS")
-    else:
-        mod.PLACA_ACTUAL = "WEMOS"
-    gpio = mod._pins()["servo_pins"][0]
-    star_ns["servomotor"] = mod.servomotor
-    star_ns["_pybot_cleanup_normal"] = mod._pybot_cleanup_normal
-    star_ns["detenerTodo"] = mod.detenerTodo
-    run_wrapped(star_ns, "servomotor(1, 90)")
-    p_ble = pwm_for(25)
-    results["ble_profile"] = {
-        "pins_imported_by_star": pins_imported,
-        "module_gpio": gpio,
-        "alive": bool(p_ble and p_ble.alive),
-        "duty": None if p_ble is None else p_ble._duty,
-        "student_placa_unchanged": star_ns.get("PLACA_ACTUAL") == "ESP32",
-        "module_placa": mod.PLACA_ACTUAL,
+    results["profile_wemos"] = {
+        "servo_gpio": ns_w["PINS"]["servo_pins"][0],
+        "placa": ns_w["PLACA_ACTUAL"],
     }
+    results["profile_esp32"] = {
+        "servo_gpio": ns_e["PINS"]["servo_pins"][0],
+        "placa": ns_e["PLACA_ACTUAL"],
+    }
+    results["pins_imported_by_star"] = "_pins" in star_ns or "_aplicar_placa" in star_ns
 
     ok = (
-        results["normal_hold"]["alive"]
-        and results["normal_hold"]["duty"] == results["normal_hold"]["expected_duty"]
-        and results["normal_hold"]["freq"] == 50
-        and results["normal_hold"]["in_cache"]
-        and results["second_angle"]["alive"]
-        and results["second_angle"]["duty"] == results["second_angle"]["expected_duty"]
-        and results["stop_after_idle"]["alive"] is False
-        and results["stop_after_idle"]["cache_empty"]
+        results["normal_end"]["gpio"] == 25
+        and results["normal_end"]["alive_after_cleanup"] is False
+        and results["reimport_run"]["alive"] is True
+        and results["reimport_run"]["duty"] == results["reimport_run"]["expected_duty"]
         and results["on_error"]["raised"]
         and results["on_error"]["alive"] is False
-        and results["motor_rc"]["alive"] is False
-        and results["motor_rc"]["in_cache"] is False
-        and results["servo_then_motor"]["alive"] is False
-        and results["ble_profile"]["pins_imported_by_star"] is False
-        and results["ble_profile"]["module_gpio"] == 25
-        and results["ble_profile"]["alive"]
-        and results["ble_profile"]["student_placa_unchanged"]
+        and results["motor_rc"]["alive_after_cleanup"] is False
+        and results["profile_wemos"]["servo_gpio"] == 25
+        and results["profile_esp32"]["servo_gpio"] == 33
+        and results["pins_imported_by_star"] is False
     )
     print(json.dumps({"ok": ok, **results}, sort_keys=True))
     raise SystemExit(0 if ok else 1)

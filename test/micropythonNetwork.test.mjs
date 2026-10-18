@@ -59,12 +59,15 @@ test("pybot_net HTTP GET/POST with JSON, headers, timeout, HTTPS hook", () => {
 });
 
 test("EDA6 reexports network functions without duplicating them", () => {
-  assert.match(eda6, /from pybot_net import/);
+  // Vendor EDA6 is immutable and does not reexport pybot_net; Wi-Fi/HTTP live in
+  // pybot_net (and pybot_mpy). IDE still lists the names for example detection.
+  assert.doesNotMatch(eda6, /from pybot_net import/);
   for (const fn of [...WIFI_FUNCS, ...HTTP_FUNCS]) {
-    assert.match(eda6, new RegExp(fn));
+    assert.match(net, new RegExp("def " + fn + "\\("));
     assert.match(eda6Profile, new RegExp(fn));
     assert.doesNotMatch(eda6, new RegExp("def " + fn + "\\("));
   }
+  assert.match(mpy, /from pybot_net import/);
 });
 
 test("pybot_mpy reexports pybot_net", () => {

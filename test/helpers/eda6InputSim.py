@@ -1,5 +1,5 @@
-"""Simula EDA6 entradas digitales/analógicas sin placa (fake machine).
-Verifica semántica original: PULL_DOWN, ADC preinit, /4050, perfil, sin EDA6_VERSION.
+"""Simula EDA6 vendor (fake machine): dig/analog, PWM list, perfil por reimport.
+Verifica semántica original: PULL_DOWN, ADC preinit, /4050, sin EDA6_VERSION.
 """
 from __future__ import annotations
 
@@ -61,16 +61,21 @@ class FakeADC:
 
 
 class FakePWM:
-    def __init__(self, pin):
+    def __init__(self, pin, freq=50):
         self.gpio = pin.gpio
+        self._freq = int(freq) if freq is not None else 50
         self._duty = None
+        self.alive = True
 
-    def freq(self, *_a):
-        return 50
+    def freq(self, f=None):
+        if f is None:
+            return self._freq
+        self._freq = int(f)
+        return None
 
     def duty(self, v=None):
         if v is not None:
-            self._duty = v
+            self._duty = int(v)
         return self._duty
 
     def duty_u16(self, v=None):
@@ -79,6 +84,18 @@ class FakePWM:
         return self._duty
 
     def deinit(self):
+        self.alive = False
+        return None
+
+
+class FakeI2C:
+    def __init__(self, *_a, **_k):
+        pass
+
+    def scan(self):
+        return []
+
+    def writeto(self, *_a, **_k):
         return None
 
 
@@ -93,6 +110,8 @@ def install_mocks():
     machine.Pin = FakePin
     machine.ADC = FakeADC
     machine.PWM = FakePWM
+    machine.I2C = FakeI2C
+    machine.time_pulse_us = lambda *_a, **_k: -1
     sys.modules["machine"] = machine
 
     t = types.ModuleType("time")
@@ -108,16 +127,20 @@ def install_mocks():
     t.ticks_us = ticks_us
     t.ticks_diff = lambda a, b: a - b
     sys.modules["time"] = t
+    # Vendor EDA6 imports utime
+    sys.modules["utime"] = t
     return machine
 
 
-def load_eda6(path: Path):
+def load_eda6(path: Path, placa: str = "WEMOS"):
     for name in list(sys.modules):
         if name == "EDA6" or name.endswith(".EDA6"):
             del sys.modules[name]
     mod = types.ModuleType("EDA6")
     mod.__file__ = str(path)
     code = path.read_text(encoding="utf-8")
+    code = code.replace('PLACA_ACTUAL = "WEMOS"', 'PLACA_ACTUAL = "%s"' % placa, 1)
+    code = code.replace('PLACA_ACTUAL = "ESP32"', 'PLACA_ACTUAL = "%s"' % placa, 1)
     exec(compile(code, str(path), "exec"), mod.__dict__)
     sys.modules["EDA6"] = mod
     return mod
@@ -126,7 +149,7 @@ def load_eda6(path: Path):
 def main():
     eda6_path = Path(sys.argv[1])
     install_mocks()
-    E = load_eda6(eda6_path)
+    E = load_eda6(eda6_path, "WEMOS")
 
     assert not hasattr(E, "EDA6_VERSION")
     assert list(E.PIN_MAPS["WEMOS"]["digital_inputs"]) == [5, 23, 19, 18]
@@ -185,33 +208,33 @@ def main():
     FakePin.values[5] = 1
     assert E.entradaDigital(1) == 1
 
-    # servo / motorRC sin regresión
+    # servo / motorRC sobre lista vendor _servo_pwms
     E.servomotor(1, 90)
-    assert 25 in E._pwm_cache
-    assert E._pwm_role.get(25) == "servo"
+    assert E._servo_pwms[0].gpio == 25
+    assert E._servo_pwms[0]._duty == int(E._map_value(90, 0, 180, 31, 120))
     E.motorRC(2, 50)
-    assert 16 in E._pwm_cache
-    assert E._pwm_role.get(16) == "motor"
+    assert E._servo_pwms[1].gpio == 16
+    assert E._servo_pwms[1]._duty == int(E._map_value(50, -100, 100, 31, 120))
     servo_ok = True
     motor_ok = True
 
-    # Run -> Stop -> Run
-    E._pybot_cleanup_normal()
-    assert 25 in E._pwm_cache
-    assert 16 not in E._pwm_cache
+    # Run -> Stop -> Run: detenerTodo deinits; reimport recrea PWM (vendor contract)
     E.detenerTodo()
-    assert E._pwm_cache == {}
+    assert all(not p.alive for p in E._servo_pwms)
+    install_mocks()
     FakeADC.raw_by_gpio[35] = 4095
+    E = load_eda6(eda6_path, "WEMOS")
     assert E.entradaAnalogica(3) == 100
     E.servomotor(1, 45)
-    E._pybot_cleanup_normal()
-    assert 25 in E._pwm_cache
+    assert E._servo_pwms[0].alive
+    assert E._servo_pwms[0]._duty == int(E._map_value(45, 0, 180, 31, 120))
     run_stop_run_ok = True
 
-    # PERFIL: cambio no deja hardware del perfil anterior
+    # PERFIL: vendor no tiene _aplicar_placa; cambio = reimport con otra PLACA_ACTUAL
     wemos_dig_ids = [id(p) for p in E._digital_inputs]
     wemos_adc_ids = [id(a) for a in E._adc_inputs]
-    E._aplicar_placa("ESP32")
+    install_mocks()
+    E = load_eda6(eda6_path, "ESP32")
     assert E.PLACA_ACTUAL == "ESP32"
     assert [p.gpio for p in E._digital_inputs] == [4, 2, 15, 0]
     assert [a.gpio for a in E._adc_inputs] == [35, 34, 39, 36]
@@ -221,7 +244,8 @@ def main():
     assert [id(a) for a in E._adc_inputs] != wemos_adc_ids
     FakePin.values = {4: 1, 2: 0, 15: 1, 0: 0}
     assert [E.entradaDigital(n) for n in range(1, 5)] == [1, 0, 1, 0]
-    E._aplicar_placa("WEMOS")
+    install_mocks()
+    E = load_eda6(eda6_path, "WEMOS")
     assert E.PLACA_ACTUAL == "WEMOS"
     assert [p.gpio for p in E._digital_inputs] == [5, 23, 19, 18]
     profile_ok = True
@@ -236,6 +260,8 @@ def main():
         "detenerTodo",
     ):
         assert hasattr(E, name)
+    assert not hasattr(E, "_aplicar_placa")
+    assert not hasattr(E, "_pybot_cleanup_normal")
 
     print(
         json.dumps(
