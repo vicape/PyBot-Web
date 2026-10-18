@@ -28,8 +28,10 @@ import {
   ZIGBEE_COORDINATOR_MANIFEST,
   loadZigbeeCoordinatorManifest,
   isZigbeeCoordinatorSourcePresent,
+  isValidatedZigbeePackaging,
   resolveZigbeeCoordinatorArtifact,
   describeZigbeeCoordinatorReadiness,
+  getZigbeeIdeIntegration,
   C6_FIRMWARE_MODE_MICROPYTHON,
   C6_FIRMWARE_MODE_ZIGBEE_COORDINATOR,
   getDefaultC6FirmwareMode,
@@ -53,16 +55,21 @@ test("M2A: native Zigbee coordinator source tree and partition map exist", () =>
   assert.equal(isZigbeeCoordinatorSourcePresent(), true);
   assert.ok(existsSync(join(fwRoot, "main/zb_coord_main.c")));
   assert.ok(existsSync(join(fwRoot, "main/zb_host_proto.c")));
-  assert.ok(existsSync(join(fwRoot, "partitions.csv")));
+  assert.ok(existsSync(join(root, "firmware/esp32c6-zigbee-coordinator/partitions.csv")));
   assert.ok(existsSync(join(fwRoot, "sdkconfig.defaults")));
   assert.ok(existsSync(join(fwRoot, "build.sh")));
   assert.ok(existsSync(join(fwRoot, "host/pybot_zb_control.py")));
   assert.ok(existsSync(join(fwRoot, "manifest.json")));
   assert.ok(existsSync(join(root, "docs/ESP32_UNIVERSAL_LAB_M2A.md")));
 
-  const parts = readFileSync(join(fwRoot, "partitions.csv"), "utf8");
+  const parts = readFileSync(
+    join(root, "firmware/esp32c6-zigbee-coordinator/partitions.csv"),
+    "utf8",
+  );
   assert.match(parts, /factory/);
   assert.match(parts, /nvs/);
+  assert.match(parts, /phy_init/);
+  assert.match(parts, /zb_fct/);
 
   const yml = readFileSync(join(fwRoot, "main/idf_component.yml"), "utf8");
   assert.match(yml, /esp-zigbee-lib/);
@@ -229,7 +236,13 @@ test("M2A: build.sh reports BLOCKED without inventing binary when idf missing", 
   const buildSh = readFileSync(join(fwRoot, "build.sh"), "utf8");
   assert.match(buildSh, /BLOCKED/);
   assert.match(buildSh, /idf\.py/);
-  assert.match(buildSh, /sha256sum|sha256/);
+  assert.match(buildSh, /sha256|hashlib\.sha256/);
+  assert.match(buildSh, /merge-bin/);
+  assert.match(buildSh, /exit 2/);
+  assert.doesNotMatch(
+    buildSh,
+    /artifact.*"status":\s*"READY"[\s\S]*flashOffset":\s*0[\s\S]*solo.?app|cp -f "\$APP_BIN"/,
+  );
   // No pre-baked READY binary committed; BLOCKED status file from local smoke is OK
   const artifactDir = join(fwRoot, "build-artifact");
   if (existsSync(artifactDir)) {
@@ -237,6 +250,53 @@ test("M2A: build.sh reports BLOCKED without inventing binary when idf missing", 
     const bins = readdirSync(artifactDir).filter((n) => n.endsWith(".bin"));
     assert.equal(bins.length, 0, "must not invent/commit a Zigbee .bin without real build");
   }
+});
+
+test("M2A: READY requires validated packaging (not app-only @ flashOffset 0)", () => {
+  const appOnly = {
+    ...ZIGBEE_COORDINATOR_MANIFEST,
+    artifact: {
+      status: "READY",
+      sha256: "a".repeat(64),
+      filename: "app-only.bin",
+      flashOffset: 0,
+      packaging: null,
+      components: null,
+    },
+  };
+  assert.equal(isValidatedZigbeePackaging(appOnly.artifact), false);
+  assert.equal(resolveZigbeeCoordinatorArtifact(appOnly).status, "BLOCKED");
+
+  const mergedArt = {
+    status: "READY",
+    sha256: "b".repeat(64),
+    filename: "merged.bin",
+    flashOffset: 0,
+    packaging: "merged-raw",
+    components: [
+      { role: "bootloader", flashOffset: 0, sha256: "c".repeat(64), filename: "boot.bin" },
+      {
+        role: "partition-table",
+        flashOffset: 0x8000,
+        sha256: "d".repeat(64),
+        filename: "pt.bin",
+      },
+      { role: "app", flashOffset: 0x20000, sha256: "e".repeat(64), filename: "app.bin" },
+    ],
+  };
+  assert.equal(isValidatedZigbeePackaging(mergedArt), true);
+  assert.equal(
+    resolveZigbeeCoordinatorArtifact({
+      ...ZIGBEE_COORDINATOR_MANIFEST,
+      artifact: mergedArt,
+    }).status,
+    "READY",
+  );
+
+  const ide = getZigbeeIdeIntegration();
+  assert.equal(ide.status, "BLOCKED");
+  assert.equal(ide.webSerialEnabled, false);
+  assert.equal(ide.autoFlash, false);
 });
 
 test("M2A: no workflow edits in this slice", async () => {

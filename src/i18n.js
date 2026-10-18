@@ -72,6 +72,14 @@ const STRINGS = {
     labSaveOk: "Programa guardado como main.py en la placa.",
     labRecoverBtn: "Recuperar REPL",
     labRecoverOk: "REPL recuperado.",
+    labZigbeeBlockedHint:
+      "Zigbee coordinador: BLOCKED (sin imagen validada merged/multi-offset). No hay botón READY ni auto-flash. MicroPython sigue siendo el modo seguro.",
+    labZigbeeReadyHint:
+      "Zigbee artifact READY (hardware UNVERIFIED). Conexión host USB; programación en Python (create network, allow joining, status, command on/off, read). autoFlash=false.",
+    labZigbeeConnectBtn: "Conectar host Zigbee (WebSerial)",
+    labZigbeeConnecting: "Abriendo WebSerial para protocolo Zigbee host…",
+    labZigbeeConnected:
+      "Puerto Zigbee host abierto. Usá Python host (pybot_zb_control.py) — no es pybot.zigbee on-device.",
     eda6ProfileLabel: "Perfil EDA6",
     eda6ProfileWemos: "WEMOS (recomendado)",
     eda6ProfileEsp32: "ESP32 (otro pinout)",
@@ -702,6 +710,14 @@ Creado por VIC.`,
     labSaveOk: "Program saved as main.py on the board.",
     labRecoverBtn: "Recover REPL",
     labRecoverOk: "REPL recovered.",
+    labZigbeeBlockedHint:
+      "Zigbee coordinator: BLOCKED (no validated merged/multi-offset image). No READY button and no auto-flash. MicroPython remains the safe default.",
+    labZigbeeReadyHint:
+      "Zigbee artifact READY (hardware UNVERIFIED). USB host path; program in Python (create network, allow joining, status, command on/off, read). autoFlash=false.",
+    labZigbeeConnectBtn: "Connect Zigbee host (WebSerial)",
+    labZigbeeConnecting: "Opening WebSerial for Zigbee host protocol…",
+    labZigbeeConnected:
+      "Zigbee host port open. Use Python host (pybot_zb_control.py) — not on-device pybot.zigbee.",
     eda6ProfileLabel: "EDA6 profile",
     eda6ProfileWemos: "WEMOS (recommended)",
     eda6ProfileEsp32: "ESP32 (alternate pinout)",

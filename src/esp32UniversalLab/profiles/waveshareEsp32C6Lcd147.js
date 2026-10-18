@@ -2,9 +2,10 @@
  * Waveshare ESP32-C6-LCD-1.47 (SKU 28563 / 30381-M)
  * Pin map from Waveshare docs: https://docs.waveshare.com/ESP32-C6-LCD-1.47
  *
- * Zigbee: native ESP-IDF coordinator firmware exists as an explicit opt-in mode
- * (M2A). Default safe path remains stock MicroPython — stacks do not coexist on
- * 4MB. Hardware pairing remains UNVERIFIED. Thread deferred to M2B.
+ * Zigbee: native ESP-IDF coordinator firmware exists as an interim opt-in mode
+ * (M2A). Default safe path remains stock MicroPython. Same-image coexistence on
+ * 4MB is unmeasured; 2-board / custom stack remain open. Hardware pairing
+ * remains UNVERIFIED. Thread deferred to M2B.
  */
 
 import { CAPABILITY_STATUS } from "../capabilityStatus.js";
@@ -23,6 +24,8 @@ export const waveshareEsp32C6Lcd147 = Object.freeze({
   pinoutSource: "waveshare-docs-esp32-c6-lcd-1.47",
   display: Object.freeze({
     controller: "ST7789",
+    /** Stock MicroPython LCD geometry — must remain exactly 172x320 (driver untouched). */
+    resolution: "172x320",
     width: 172,
     height: 320,
     interface: "spi",
@@ -101,9 +104,10 @@ export const waveshareEsp32C6Lcd147 = Object.freeze({
       "Source IMPLEMENTED ST7789 driver (pybot.display) using Waveshare pin map. Hardware validation: UNVERIFIED.",
     tfCard: "Pins documented; driver path not exercised — UNVERIFIED.",
     zigbee:
-      "Native Zigbee 3.x coordinator firmware + USB JSON host protocol exist as opt-in ESP-IDF target (M2A). " +
-      "Does NOT coexist with MicroPython on 4MB. pybot.zigbee MicroPython module remains unusable. " +
-      "Physical pairing UNVERIFIED. Artifact may be BLOCKED until ESP-IDF build produces a binary.",
+      "Native Zigbee 3.x coordinator firmware + USB JSON host protocol exist as interim opt-in ESP-IDF target (M2A). " +
+      "Stock MicroPython+full Zigbee SDK fit on 4MB is unmeasured; custom stack or 2-board remain open. " +
+      "pybot.zigbee on-device module remains unusable — use host-side Python (pybot_zb_control.py). " +
+      "Physical pairing UNVERIFIED. Artifact BLOCKED until validated merged/multi-offset build. Smart Life not claimed.",
     thread:
       "Thread/OpenThread is a separate stack/firmware role — deferred to M2B. UNSUPPORTED in M2A.",
     touch: "This commercial model has no touch controller.",

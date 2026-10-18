@@ -124,6 +124,8 @@ import {
   saveLabProgram,
   recoverLabBoard,
   isLabSessionConnected,
+  getZigbeeIdeIntegration,
+  connectZigbeeWebSerial,
 } from "./esp32UniversalLab/index.js";
 import {
   IconExplorer,
@@ -398,6 +400,7 @@ export default function PyBotIDE() {
   const labProfile = labProfileId ? getBoardProfile(labProfileId) : null;
   const labRuntimeReady = labProfile?.runtimeReady === true;
   const isLabBoard = boardType === LAB_BOARD_TYPE_SENTINEL;
+  const zigbeeIde = isLabBoard ? getZigbeeIdeIntegration() : null;
   const [eda6Profile, setEda6ProfileState] = useState(() => getEda6Profile());
   const [, forceLang] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(
@@ -2694,6 +2697,53 @@ export default function PyBotIDE() {
                       {isLabBoard && !labRuntimeReady ? (
                         <div className="toolbar-menu-hint" data-testid="lab-not-ready-hint">
                           {t("labBoardNotReady")}
+                        </div>
+                      ) : null}
+                      {isLabBoard && zigbeeIde ? (
+                        <div
+                          className="toolbar-menu-subgroup"
+                          data-testid="lab-zigbee-status"
+                          data-zigbee-status={zigbeeIde.status}
+                        >
+                          {zigbeeIde.status === "READY" ? (
+                            <>
+                              <button
+                                type="button"
+                                className="toolbar-menu-item toolbar-menu-item--secondary"
+                                data-testid="lab-zigbee-webserial-btn"
+                                onClick={() => {
+                                  void (async () => {
+                                    appendConsole(t("labZigbeeConnecting") + "\n", "info");
+                                    try {
+                                      await connectZigbeeWebSerial();
+                                      appendConsole(t("labZigbeeConnected") + "\n", "info");
+                                      appendConsole(
+                                        "Python host cmds: create network | allow joining | status | command on/off | read | monitor --seconds N\n",
+                                        "info",
+                                      );
+                                    } catch (e) {
+                                      appendConsole(
+                                        formatHardwareError(e?.message) + "\n",
+                                        "err",
+                                      );
+                                    }
+                                    setBoardMenuOpen(false);
+                                  })();
+                                }}
+                                disabled={connecting}
+                              >
+                                {t("labZigbeeConnectBtn")}
+                              </button>
+                              <div className="toolbar-menu-hint">{t("labZigbeeReadyHint")}</div>
+                            </>
+                          ) : (
+                            <div className="toolbar-menu-hint" data-testid="lab-zigbee-blocked">
+                              {t("labZigbeeBlockedHint")}
+                              {zigbeeIde.blockReason
+                                ? ` (${zigbeeIde.blockReason})`
+                                : ""}
+                            </div>
+                          )}
                         </div>
                       ) : null}
                       {isLabBoard && labRuntimeReady && !connected ? (

@@ -8,8 +8,9 @@
  * - home_automation_devices/on_off_light (ZC form / steering / device_annce)
  * - home_automation_devices/on_off_switch (OnOff client + match_desc)
  *
- * This firmware REPLACES MicroPython when flashed (4MB cannot host both).
- * Flash only via explicit opt-in; restore MicroPython from Universal Lab M1 image.
+ * Interim opt-in firmware: replaces MicroPython when flashed.
+ * Same-image MicroPython+Zigbee on 4MB is unmeasured here; flash only via
+ * explicit opt-in; restore MicroPython from Universal Lab M1 image.
  */
 
 #include <stdio.h>

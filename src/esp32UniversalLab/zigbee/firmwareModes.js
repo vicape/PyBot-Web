@@ -128,8 +128,8 @@ export function listC6FirmwareModeDescriptors(profileId = WAVESHARE_ESP32_C6_LCD
         "Restore via MicroPython mode using the official C6 image. Not auto-flashed.",
       note:
         zb.artifact.status === "READY"
-          ? "Native ESP-IDF Zigbee 3.x coordinator with USB JSON control protocol."
-          : `Source present; artifact BLOCKED (${zb.artifact.blockReason}).`,
+          ? "Native ESP-IDF Zigbee 3.x coordinator with USB JSON control protocol (interim opt-in; hardware UNVERIFIED)."
+          : `Source present; artifact BLOCKED (${zb.artifact.blockReason}). Zigbee UI not READY.`,
     }),
   ]);
 }

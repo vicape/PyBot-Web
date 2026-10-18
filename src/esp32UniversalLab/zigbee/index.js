@@ -15,9 +15,16 @@ export {
   ZIGBEE_COORDINATOR_MANIFEST,
   loadZigbeeCoordinatorManifest,
   isZigbeeCoordinatorSourcePresent,
+  isValidatedZigbeePackaging,
   resolveZigbeeCoordinatorArtifact,
   describeZigbeeCoordinatorReadiness,
 } from "./zigbeeCoordinatorManifest.js";
+
+export {
+  ZB_PYTHON_COMMANDS,
+  getZigbeeIdeIntegration,
+  connectZigbeeWebSerial,
+} from "./ideBridge.js";
 
 export {
   C6_FIRMWARE_MODE_MICROPYTHON,

@@ -24,18 +24,26 @@
   },
   "coexistence": {
     "micropythonSameImage": false,
-    "reason": "4MB flash cannot host stock MicroPython (~1.9MB) and ESP Zigbee stack in one image; modes are mutually exclusive opt-in full-flash targets",
+    "reason": "Interim opt-in: separate native Zigbee firmware is the reliable path today. Feasibility of a custom MicroPython+native Zigbee stack on 4MB, or a 2-board architecture (MicroPython UI + Zigbee radio), remains open pending flash/RAM measurements — not asserted as physically impossible. Stock MicroPython (~1.9MB) plus full ESP Zigbee SDK has not been measured to fit; this target does not fulfill the long-term same-board Python+Zigbee goal.",
     "wifiBleWithZigbee": "Espressif documents multi-radio SoC capabilities; this M2A slice does not enable Wi-Fi SoftAP gateway or claim concurrent radio QA",
-    "thread": "Separate stack/role — deferred to M2B"
+    "thread": "Separate stack/role — deferred to M2B",
+    "architectures": {
+      "interimSeparateFirmware": "Current M2A path — opt-in full-flash Zigbee coordinator; restore MicroPython via M1 image",
+      "customMicropythonZigbee": "Possible future: trimmed MicroPython + native Zigbee binding — requires size measurements before claiming fit",
+      "twoBoard": "Possible future: MicroPython board for UI/logic + second C6 as Zigbee coordinator over UART/USB host protocol"
+    }
   },
   "artifact": {
     "status": "BLOCKED",
-    "blockReason": "ESP-IDF v5.5.4 + esp-zigbee-lib toolchain not installed in this execution environment; binary produced only by firmware/esp32c6-zigbee-coordinator/build.sh when IDF is available",
+    "blockReason": "ESP-IDF v5.5.4 + esp-zigbee-lib toolchain not installed in this execution environment; binary produced only by firmware/esp32c6-zigbee-coordinator/build.sh when IDF is available (merged-raw or multi-offset bundle with bootloader)",
     "filename": null,
     "sha256": null,
     "size": null,
-    "flashOffset": 0,
-    "builtAt": null
+    "flashOffset": null,
+    "builtAt": null,
+    "path": null,
+    "packaging": null,
+    "components": null
   },
   "license": {
     "projectCode": "same as repository",
@@ -43,11 +51,15 @@
     "espIdf": "Apache-2.0 / Espressif"
   },
   "autoFlash": false,
+  "tuya": {
+    "standaloneZcl": "ZCL OnOff baseline only — separate from Smart Life",
+    "smartLifeOfficialGateway": "BLOCKED — requires Tuya PID/license/SDK; no vendor credentials hardcoded; no spoofing; Smart Life pairing not claimed"
+  },
   "restoreMicroPython": {
     "imageId": "ESP32_GENERIC_C6",
     "version": "1.27.0",
     "url": "/firmware/micropython/ESP32_GENERIC_C6-20251209-v1.27.0.bin",
     "sha256": "111ca6322520f56ca44c41b6993d56ff75d7c1c0c3939991e53463024bb0e183",
-    "note": "Re-flash official MicroPython to restore USB REPL + pybot modules + ST7789 path"
+    "note": "Re-flash official MicroPython to restore USB REPL + pybot modules + ST7789 path. Backup user main.py before any opt-in Zigbee flash."
   }
 }
