@@ -2,8 +2,9 @@
  * Waveshare ESP32-C6-LCD-1.47 (SKU 28563 / 30381-M)
  * Pin map from Waveshare docs: https://docs.waveshare.com/ESP32-C6-LCD-1.47
  *
- * Zigbee/Thread: SoC has IEEE 802.15.4 radio; MicroPython/Python bindings are
- * NOT VERIFIED on this product path — exposed as UNSUPPORTED until real-device proof.
+ * Zigbee: native ESP-IDF coordinator firmware exists as an explicit opt-in mode
+ * (M2A). Default safe path remains stock MicroPython — stacks do not coexist on
+ * 4MB. Hardware pairing remains UNVERIFIED. Thread deferred to M2B.
  */
 
 import { CAPABILITY_STATUS } from "../capabilityStatus.js";
@@ -87,7 +88,7 @@ export const waveshareEsp32C6Lcd147 = Object.freeze({
     uart: CAPABILITY_STATUS.IMPLEMENTED,
     tfCard: CAPABILITY_STATUS.UNVERIFIED,
     powerSleep: CAPABILITY_STATUS.IMPLEMENTED,
-    zigbee: CAPABILITY_STATUS.UNSUPPORTED,
+    zigbee: CAPABILITY_STATUS.UNVERIFIED,
     thread: CAPABILITY_STATUS.UNSUPPORTED,
     can: CAPABILITY_STATUS.UNSUPPORTED,
     rs485: CAPABILITY_STATUS.UNSUPPORTED,
@@ -100,9 +101,11 @@ export const waveshareEsp32C6Lcd147 = Object.freeze({
       "Source IMPLEMENTED ST7789 driver (pybot.display) using Waveshare pin map. Hardware validation: UNVERIFIED.",
     tfCard: "Pins documented; driver path not exercised — UNVERIFIED.",
     zigbee:
-      "NOT VERIFIED / UNSUPPORTED until native stack + Python bindings are proven on this board firmware (M2).",
+      "Native Zigbee 3.x coordinator firmware + USB JSON host protocol exist as opt-in ESP-IDF target (M2A). " +
+      "Does NOT coexist with MicroPython on 4MB. pybot.zigbee MicroPython module remains unusable. " +
+      "Physical pairing UNVERIFIED. Artifact may be BLOCKED until ESP-IDF build produces a binary.",
     thread:
-      "NOT VERIFIED / UNSUPPORTED until native stack + Python bindings are proven on this board firmware (M2).",
+      "Thread/OpenThread is a separate stack/firmware role — deferred to M2B. UNSUPPORTED in M2A.",
     touch: "This commercial model has no touch controller.",
   }),
 });

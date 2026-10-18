@@ -1,0 +1,26 @@
+#
+# Target: ESP32-C6 (Waveshare ESP32-C6-LCD-1.47 — 4MB flash, no PSRAM)
+#
+CONFIG_IDF_TARGET="esp32c6"
+
+#
+# Partition Table
+#
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+#
+# Flash (4MB)
+#
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+#
+# USB Serial/JTAG console (Waveshare C6 USB path)
+#
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_UART_DEFAULT=n
+
+#
+# Zigbee
+#
+CONFIG_ZB_ENABLED=y

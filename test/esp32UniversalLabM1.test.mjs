@@ -199,15 +199,16 @@ test("AC9/AC10: C6 Python API exposes only IMPLEMENTED modules; Zigbee NOT VERIF
   assert.ok(!usable.includes("pybot.touch"));
 
   const zig = describePythonModuleAvailability(c6Id, "pybot.zigbee");
-  assert.equal(zig.status, CAPABILITY_STATUS.UNSUPPORTED);
+  assert.equal(zig.status, CAPABILITY_STATUS.UNVERIFIED);
   assert.equal(zig.usable, false);
 
   const zigCap = getCapability(c6Id, "zigbee");
-  assert.match(zigCap.note ?? "", /NOT VERIFIED|UNSUPPORTED/i);
+  assert.equal(zigCap.status, CAPABILITY_STATUS.UNVERIFIED);
+  assert.match(zigCap.note ?? "", /UNVERIFIED|opt-in|MicroPython/i);
 
   const thread = getCapability(c6Id, "thread");
   assert.equal(thread.status, CAPABILITY_STATUS.UNSUPPORTED);
-  assert.match(thread.note ?? "", /NOT VERIFIED|UNSUPPORTED/i);
+  assert.match(thread.note ?? "", /M2B|UNSUPPORTED/i);
 
   const profile = getBoardProfile(c6Id);
   assert.equal(profile.hardwareValidation, "UNVERIFIED");

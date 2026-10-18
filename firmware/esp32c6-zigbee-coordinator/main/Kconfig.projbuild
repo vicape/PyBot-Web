@@ -1,0 +1,22 @@
+menu "PyBot Zigbee Coordinator"
+
+    config PYBOT_ZB_PRIMARY_CHANNEL
+        int "Primary Zigbee channel (11-26)"
+        range 11 26
+        default 13
+        help
+            Primary 802.15.4 channel used when forming the network.
+
+    config PYBOT_ZB_MAX_CHILDREN
+        int "Max Zigbee children"
+        range 1 20
+        default 10
+
+    config PYBOT_ZB_DEFAULT_PERMIT_JOIN_S
+        int "Default permit-join timeout (seconds)"
+        range 1 254
+        default 60
+        help
+            Bounded permit-join window. Never left open indefinitely by default.
+
+endmenu

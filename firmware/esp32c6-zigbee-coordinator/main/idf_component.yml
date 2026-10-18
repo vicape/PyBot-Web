@@ -1,0 +1,8 @@
+## IDF Component Manager — pinned for reproducible native Zigbee coordinator builds.
+## Official pairing: ESP Zigbee SDK v2.x + ESP-IDF v5.5.4
+## https://docs.espressif.com/projects/esp-zigbee-sdk/en/latest/esp32c6/developing.html
+dependencies:
+  idf:
+    version: ">=5.5.4,<5.6"
+  espressif/esp-zigbee-lib:
+    version: "~2.0.0"

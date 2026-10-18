@@ -1,0 +1,8 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# Sized for ESP32-C6FH4 4MB flash (Waveshare ESP32-C6-LCD-1.47).
+# Mutually exclusive with MicroPython full-flash image — opt-in firmware target only.
+nvs,        data, nvs,      ,        0x6000,
+otadata,    data, ota,      ,        0x2000,
+phy_init,   data, phy,      ,        0x1000,
+factory,    app,  factory,  ,        940K,
+zb_fct,     data, fat,      ,        1K,

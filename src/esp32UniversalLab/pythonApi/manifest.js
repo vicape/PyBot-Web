@@ -27,7 +27,8 @@ export const PYBOT_PYTHON_API_MODULES = Object.freeze([
   Object.freeze({
     module: "pybot.zigbee",
     capability: "zigbee",
-    description: "Zigbee (only when native stack verified)",
+    description:
+      "Zigbee MicroPython module (not available — use opt-in native coordinator + USB host protocol in M2A)",
   }),
   Object.freeze({
     module: "pybot.display",

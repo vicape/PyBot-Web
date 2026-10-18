@@ -57,7 +57,8 @@ S3 capabilities remain PLANNED / not ready (M3).
 
 ## Blocked / next (M2–M4)
 
-- **M2:** Zigbee/Thread native stack + Python bindings + device proof (keep NOT VERIFIED until then).
+- **M2A:** Native Zigbee coordinator firmware + USB host protocol — see `docs/ESP32_UNIVERSAL_LAB_M2A.md` (hardware pairing still UNVERIFIED; binary may be BLOCKED without ESP-IDF).
+- **M2B:** Thread/OpenThread (separate stack/role).
 - **M3:** S3 1.54 / S3 7 runtimeReady + display/touch/IMU/audio as hardware permits.
 - **M4:** shared capability library, docs/examples hardening.
 

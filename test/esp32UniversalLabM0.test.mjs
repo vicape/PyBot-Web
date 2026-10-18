@@ -142,12 +142,13 @@ test("three Waveshare commercial profiles with manufacturer pin definitions", ()
   assert.equal(s7.buses.rs485.tx, 15);
 });
 
-test("unsupported capabilities are explicitly detectable; Zigbee/Thread not claimed", () => {
+test("unsupported capabilities are explicitly detectable; Zigbee/Thread not claimed usable", () => {
   const c6Id = BOARD_PROFILE_IDS.WAVESHARE_ESP32_C6_LCD_147;
   const zigbee = getCapability(c6Id, "zigbee");
-  assert.equal(zigbee.status, CAPABILITY_STATUS.UNSUPPORTED);
+  // M2A: native coordinator source path → UNVERIFIED (not MicroPython-usable).
+  assert.equal(zigbee.status, CAPABILITY_STATUS.UNVERIFIED);
   assert.equal(zigbee.usable, false);
-  assert.match(zigbee.note ?? "", /NOT VERIFIED|UNSUPPORTED/i);
+  assert.match(zigbee.note ?? "", /UNVERIFIED|opt-in|MicroPython/i);
 
   const thread = getCapability(c6Id, "thread");
   assert.equal(thread.status, CAPABILITY_STATUS.UNSUPPORTED);
@@ -155,7 +156,7 @@ test("unsupported capabilities are explicitly detectable; Zigbee/Thread not clai
 
   assert.throws(
     () => assertCapabilityAvailable(c6Id, "zigbee"),
-    /not available|UNSUPPORTED/i,
+    /not available|UNVERIFIED|UNSUPPORTED/i,
   );
 
   const s7Can = getCapability(
@@ -208,7 +209,7 @@ test("isolated adapter refuses when inactive; legacy board never activates lab",
 test("Python API never exposes Zigbee; unimplemented modules stay unusable", () => {
   const c6Id = BOARD_PROFILE_IDS.WAVESHARE_ESP32_C6_LCD_147;
   const zig = describePythonModuleAvailability(c6Id, "pybot.zigbee");
-  assert.equal(zig.status, CAPABILITY_STATUS.UNSUPPORTED);
+  assert.equal(zig.status, CAPABILITY_STATUS.UNVERIFIED);
   assert.equal(zig.usable, false);
   const touch = describePythonModuleAvailability(c6Id, "pybot.touch");
   assert.equal(touch.usable, false);
