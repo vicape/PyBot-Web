@@ -124,8 +124,11 @@ import {
   saveLabProgram,
   recoverLabBoard,
   isLabSessionConnected,
+  getLabSession,
   getZigbeeIdeIntegration,
   connectZigbeeWebSerial,
+  convertImageFileToPbi,
+  uploadC6ImageAsset,
 } from "./esp32UniversalLab/index.js";
 import {
   IconExplorer,
@@ -386,6 +389,7 @@ export default function PyBotIDE() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   const [boardMenuOpen, setBoardMenuOpen] = useState(false);
+  const [labImageFullscreen, setLabImageFullscreen] = useState(false);
   const [boardMenuFloatStyle, setBoardMenuFloatStyle] = useState(null);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [viewMenuFloatStyle, setViewMenuFloatStyle] = useState(null);
@@ -2827,6 +2831,113 @@ export default function PyBotIDE() {
                           >
                             {t("labRecoverBtn")}
                           </button>
+                          <label
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
+                            data-testid="lab-c6-image-fullscreen"
+                            style={{ cursor: "pointer", display: "flex", gap: "0.4rem", alignItems: "center" }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={labImageFullscreen}
+                              onChange={(e) => setLabImageFullscreen(e.target.checked)}
+                            />
+                            <span>{t("labImageFullScreenConfirm")}</span>
+                          </label>
+                          <label
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
+                            data-testid="lab-c6-image-import"
+                            style={{ cursor: "pointer" }}
+                          >
+                            {t("labImageImportBtn")}
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                              hidden
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = "";
+                                if (!file) return;
+                                const useFullscreen = labImageFullscreen;
+                                void (async () => {
+                                  const session = getLabSession();
+                                  if (!session || !isLabSessionConnected()) {
+                                    appendConsole(t("labImageNeedConnect") + "\n", "err");
+                                    return;
+                                  }
+                                  appendConsole(t("labImageConverting") + "\n", "info");
+                                  let asset;
+                                  try {
+                                    asset = await convertImageFileToPbi(file, {
+                                      originalName: file.name,
+                                      ...(useFullscreen
+                                        ? { profile: "fullscreen" }
+                                        : { maxEdge: 96 }),
+                                    });
+                                  } catch (err) {
+                                    appendConsole(
+                                      t("labImageInvalid") +
+                                        ` (${err?.message || err})\n`,
+                                      "err",
+                                    );
+                                    return;
+                                  }
+                                  appendConsole(
+                                    `${t("labImagePreview")}: ${asset.originalName} → ${asset.boardPath} (${asset.width}x${asset.height}, ${asset.byteLength} B, colorOrder=${asset.colorOrder})\n`,
+                                    "info",
+                                  );
+                                  appendConsole(t("labImageUploading") + "\n", "info");
+                                  try {
+                                    await uploadC6ImageAsset(session, {
+                                      bytes: asset.bytes,
+                                      boardPath: asset.boardPath,
+                                      originalName: asset.originalName,
+                                      replaceConfirmed: false,
+                                      onProgress: ({ pct }) => {
+                                        if (pct === 100 || pct % 25 === 0) {
+                                          appendConsole(
+                                            `C6 image transfer ${pct}%\n`,
+                                            "info",
+                                          );
+                                        }
+                                      },
+                                    });
+                                  } catch (err) {
+                                    if (err?.code === "C6_ASSET_REPLACE_REQUIRED") {
+                                      appendConsole(
+                                        t("labImageReplaceConfirm") + "\n",
+                                        "info",
+                                      );
+                                      try {
+                                        await uploadC6ImageAsset(session, {
+                                          bytes: asset.bytes,
+                                          boardPath: asset.boardPath,
+                                          originalName: asset.originalName,
+                                          replaceConfirmed: true,
+                                        });
+                                      } catch (err2) {
+                                        appendConsole(
+                                          t("labImageUploadFail") +
+                                            ` (${err2?.message || err2})\n`,
+                                          "err",
+                                        );
+                                        return;
+                                      }
+                                    } else {
+                                      appendConsole(
+                                        t("labImageUploadFail") +
+                                          ` (${err?.message || err})\n`,
+                                        "err",
+                                      );
+                                      return;
+                                    }
+                                  }
+                                  appendConsole(t("labImageUploadOk") + "\n", "info");
+                                  setBoardMenuOpen(false);
+                                })();
+                              }}
+                            />
+                          </label>
+                          <div className="toolbar-menu-hint">{t("labImageImportHint")}</div>
                           <div className="toolbar-menu-hint">{t("labHardwareUnverified")}</div>
                         </div>
                       ) : null}

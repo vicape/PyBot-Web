@@ -71,6 +71,33 @@ export {
 export { listC6ModulesForInstall, C6_BOARD_MODULES } from "./pythonApi/boardModules.js";
 
 export {
+  PBI_MAGIC,
+  MAX_ASSET_EDGE,
+  MAX_ASSET_BYTES,
+  MAX_FULLSCREEN_WIDTH,
+  MAX_FULLSCREEN_HEIGHT,
+  MAX_FULLSCREEN_BYTES,
+  rgbTo565,
+  encodePbi,
+  decodePbi,
+  checksumSum32,
+  detectImageMime,
+  assetStemFromName,
+  convertImageFileToPbi,
+} from "./graphics/index.js";
+
+export {
+  C6_ASSET_DIR,
+  C6_ASSET_MANIFEST,
+  ensureC6AssetDir,
+  probeC6FilesystemSpace,
+  transferC6BinaryAsset,
+  uploadC6ImageAsset,
+  cleanupOwnedTemp,
+  bytesToBase64,
+} from "./runtime/c6AssetTransfer.js";
+
+export {
   LAB_BOARD_PICKER_LABELS,
   LAB_BOARD_GROUP_LABEL,
   LEGACY_BOARD_PICKER_VALUES,

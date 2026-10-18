@@ -80,6 +80,20 @@ const STRINGS = {
     labZigbeeConnecting: "Abriendo WebSerial para protocolo Zigbee host…",
     labZigbeeConnected:
       "Puerto Zigbee host abierto. Usá Python host (pybot_zb_control.py) — no es pybot.zigbee on-device.",
+    labImageImportBtn: "Importar imagen LCD (PNG/JPG)",
+    labImageImportHint:
+      "Convierte en el navegador a RGB565 (.pbi) y transfiere por la sesión C6 activa. Icono ≤128 px o foto a pantalla completa ≤172×320. Requiere C6 conectado. No flashea firmware.",
+    labImageNeedConnect: "Conectá la placa C6 antes de transferir una imagen.",
+    labImageConverting: "Decodificando y convirtiendo imagen a PBI/RGB565…",
+    labImagePreview: "Vista previa",
+    labImageFullScreenConfirm:
+      "Foto a pantalla completa (hasta 172×320, ~110 KB); sin marcar = icono ≤96–128 px",
+    labImageReplaceConfirm:
+      "Ya existía un asset con ese nombre en la placa; se reemplaza.",
+    labImageUploading: "Transfiriendo asset binario a la placa…",
+    labImageUploadOk: "Imagen transferida. Usá lcd.image(\"nombre.png\", x, y) y luego refrescar el panel.",
+    labImageUploadFail: "Fallo al transferir la imagen (no se reporta éxito).",
+    labImageInvalid: "Archivo rechazado (firma MIME, tamaño o dimensiones inválidas).",
     eda6ProfileLabel: "Perfil EDA6",
     eda6ProfileWemos: "WEMOS (recomendado)",
     eda6ProfileEsp32: "ESP32 (otro pinout)",
@@ -718,6 +732,20 @@ Creado por VIC.`,
     labZigbeeConnecting: "Opening WebSerial for Zigbee host protocol…",
     labZigbeeConnected:
       "Zigbee host port open. Use Python host (pybot_zb_control.py) — not on-device pybot.zigbee.",
+    labImageImportBtn: "Import LCD image (PNG/JPG)",
+    labImageImportHint:
+      "Browser-converts to RGB565 (.pbi) and transfers on the active C6 session. Icon ≤128 px or full-screen photo ≤172×320. Requires connected C6. Does not flash firmware.",
+    labImageNeedConnect: "Connect the C6 board before transferring an image.",
+    labImageConverting: "Decoding and converting image to PBI/RGB565…",
+    labImagePreview: "Preview",
+    labImageFullScreenConfirm:
+      "Full-screen photo (up to 172×320, ~110 KB); unchecked = icon ≤96–128 px",
+    labImageReplaceConfirm:
+      "An asset with that name already existed on the board; replacing it.",
+    labImageUploading: "Transferring binary asset to the board…",
+    labImageUploadOk: "Image transferred. Use lcd.image(\"name.png\", x, y) then refresh the panel.",
+    labImageUploadFail: "Image transfer failed (success is not reported).",
+    labImageInvalid: "File rejected (bad MIME signature, size, or dimensions).",
     eda6ProfileLabel: "EDA6 profile",
     eda6ProfileWemos: "WEMOS (recommended)",
     eda6ProfileEsp32: "ESP32 (alternate pinout)",
