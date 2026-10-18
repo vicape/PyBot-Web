@@ -20,9 +20,9 @@
 | Option | Status |
 | --- | --- |
 | Stock MicroPython (~1.9MB) + full ESP Zigbee SDK on one 4MB image | **Not measured to fit** in this slice. Do **not** treat as proven physical impossibility without flash/RAM measurements. |
-| Custom trimmed MicroPython + native Zigbee binding | **Open** — requires size engineering and measurements before claiming same-board Python+Zigbee. |
+| Custom trimmed MicroPython + native Zigbee binding | **In progress (PoC)** — see `firmware/pybot-c6-micropython-zigbee/` (uZigbee v1.6 pin). Artifact may be BLOCKED; hardware UNVERIFIED. This M2A interim path is **not** that solution. |
 | 2-board architecture (MicroPython UI + Zigbee radio) | **Open** — host protocol already targets USB/UART control of a dedicated coordinator. |
-| **Interim** separate opt-in Zigbee firmware (this M2A path) | **Accepted for reliability now** — does **not** fulfill the long-term same-board Python everything goal. |
+| **Interim** separate opt-in Zigbee firmware (this M2A path) | **Accepted for reliability now** — NON-MicroPython host-controlled ESP-IDF v2 target; does **not** fulfill the standalone Python+Zigbee goal. |
 
 ## Build / artifact
 

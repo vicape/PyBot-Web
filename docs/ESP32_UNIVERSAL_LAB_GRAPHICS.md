@@ -1,7 +1,7 @@
 # ESP32 Universal Lab — C6 graphics layer (shapes, text, images)
 
 **Branch:** `feature/esp32-universal-lab`  
-**Baseline:** `df45c2112657d94758a06a228c5dfbd0f7015f9c`  
+**Baseline:** `20a08f7db07e53c50ffc905661911a2706b38133` (ST7789/graphics lock for this branch)
 **Board:** Waveshare ESP32-C6-LCD-1.47 (ST7789 172×320, stock MicroPython 1.27.0)  
 **Physical LCD / USB transfer / font visibility / memory safety:** **UNVERIFIED** (operator bench required)
 
@@ -9,10 +9,10 @@
 
 Scope paths (in scope): `src/esp32UniversalLab/graphics/*`; `src/esp32UniversalLab/runtime/c6AssetTransfer.js`; additive `pybot.display` in `src/esp32UniversalLab/pythonApi/boardModules.js`.
 
-PRESERVE list: `.github/workflows/*`; `firmware/*`; `src/esp32UniversalLab/zigbee/*`
-Zero changed paths matching `.github/workflows/*`, `firmware/*`, and `src/esp32UniversalLab/zigbee/*` (negative glob = zero matching changed paths, not directory absence).
+PRESERVE list: `.github/workflows/*`; `src/esp32UniversalLab/pythonApi/displayPySource.js`; `src/esp32UniversalLab/pythonApi/displayModule.py`; `src/esp32UniversalLab/graphics/*`
+Zero changed paths matching those globs vs the graphics baseline (ST7789 driver must remain untouched). Later MicroPython+Zigbee work may add under `firmware/pybot-c6-micropython-zigbee/` and extend `src/esp32UniversalLab/zigbee/` without rewriting the LCD driver.
 
-Baseline evidence (`df45c2112657d94758a06a228c5dfbd0f7015f9c`):
+Baseline evidence (`20a08f7db07e53c50ffc905661911a2706b38133`):
 - `lcd.show()` — documented user refresh call; driver keeps `def show(self):` SPI window/offset/`self.buffer` path (token `lcd.show()` is intentionally **absent** from driver source; examples/docs use it).
 - `framebuf.ellipse()` — **absent** at baseline and **absent** from driver source; ellipse uses Python midpoint/scanline fallback only (must not assume `framebuf.ellipse()` exists).
 

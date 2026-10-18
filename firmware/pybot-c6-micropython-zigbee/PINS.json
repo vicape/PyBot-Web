@@ -1,0 +1,41 @@
+{
+  "decision": "PIN_UZIGBEE_V1_6_AS_POC",
+  "decidedAt": "2026-10-18",
+  "rationaleSummary": "Pin mateuszsury/uZigbee ZBOSS/v1.6 stack as MicroPython+native Zigbee PoC. Do not mix with ESP Zigbee SDK v2 / esp-zigbee-lib ~2.0.0 used by interim firmware/esp32c6-zigbee-coordinator/. Full v2 API port deferred (genuine rewrite required).",
+  "upstream": {
+    "repo": "https://github.com/mateuszsury/uZigbee",
+    "commit": "ff25553c5fc9d59754eba9a89811e6433e0d4479",
+    "license": "MIT",
+    "starsObserved": "low (marketing claims not trusted)",
+    "ciWorkflow": ".github/workflows/firmware-artifacts.yml (workflow_dispatch + path push)",
+    "nativeModule": "_uzigbee (c_module/mod_uzigbee.c + uzb_core.c)",
+    "zigbeeSdk": {
+      "esp-zigbee-lib": "~1.6.0",
+      "esp-zboss-lib": "~1.6.0",
+      "stack": "ZBOSS (ESP Zigbee SDK v1.x)"
+    }
+  },
+  "toolchain": {
+    "espIdf": "v5.3.2",
+    "micropython": "v1.27.0",
+    "target": "esp32c6",
+    "board": "ESP32_GENERIC_C6",
+    "idfInstallHint": "git clone --recursive https://github.com/espressif/esp-idf.git && cd esp-idf && git checkout v5.3.2 && ./install.sh esp32c6 && . ./export.sh"
+  },
+  "incompatibleWith": {
+    "path": "firmware/esp32c6-zigbee-coordinator/",
+    "espIdf": "v5.5.4",
+    "espZigbeeLib": "~2.0.0",
+    "reason": "Espressif v2.x replaced ZBOSS; headers/libs/API are not ABI-compatible with v1.6 uZigbee. Official migration: https://docs.espressif.com/projects/esp-zigbee-sdk/en/latest/esp32c6/migration-guide/v2.x/overview.html"
+  },
+  "rejectedAlternatives": [
+    {
+      "option": "PORT_TO_V2_NOW",
+      "whyNot": "Requires rewriting the entire native C bridge from esp_zb_* (ZBOSS) to ezb_* / esp-zigbee-lib 2.x APIs — not a drop-in pin bump."
+    },
+    {
+      "option": "REUSE_V2_COORDINATOR_ABI",
+      "whyNot": "Interim host-controlled ESP-IDF target has no MicroPython _uzigbee module; mixing v1 headers with v2 libs is undefined."
+    }
+  ]
+}

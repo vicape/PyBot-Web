@@ -1,0 +1,13 @@
+# Never commit toolchain trees or Zigbee SDK binaries
+third_party/
+.work/
+build-artifact/*.bin
+build-artifact/SHA256SUMS.txt
+build-artifact/flash_args
+build-artifact/metadata.txt
+build-artifact/sdkconfig
+*.o
+*.a
+__pycache__/
+*.pyc
+.idf-env/

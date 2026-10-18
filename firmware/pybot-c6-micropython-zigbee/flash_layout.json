@@ -1,0 +1,40 @@
+{
+  "flashMb": 4,
+  "flashBytes": 4194304,
+  "chip": "ESP32-C6FH4",
+  "board": "waveshare-esp32-c6-lcd-1.47",
+  "notes": [
+    "Official ESP32 bootloader + partition-table + app offsets; never flash app-only at offset 0.",
+    "Offsets below match MicroPython ports/esp32 defaults + this partitions.csv factory@0x10000.",
+    "Checksum: esptool / idf flash_args SHA-256 of each component; merged-raw optional."
+  ],
+  "components": [
+    {
+      "role": "bootloader",
+      "flashOffset": 0,
+      "flashOffsetHex": "0x0",
+      "typicalFilename": "bootloader.bin"
+    },
+    {
+      "role": "partition-table",
+      "flashOffset": 32768,
+      "flashOffsetHex": "0x8000",
+      "typicalFilename": "partition-table.bin"
+    },
+    {
+      "role": "app",
+      "flashOffset": 65536,
+      "flashOffsetHex": "0x10000",
+      "typicalFilename": "micropython.bin",
+      "partition": "factory",
+      "maxSizeHex": "0x390000"
+    }
+  ],
+  "dataPartitions": [
+    { "name": "nvs", "offsetHex": "0x9000", "sizeHex": "0x6000" },
+    { "name": "phy_init", "offsetHex": "0xf000", "sizeHex": "0x1000" },
+    { "name": "vfs", "offsetHex": "0x3A0000", "sizeHex": "0x5B000" },
+    { "name": "zb_storage", "offsetHex": "0x3FB000", "sizeHex": "0x4000", "purpose": "Zigbee NVRAM / persistent pairing where SDK supports" },
+    { "name": "zb_fct", "offsetHex": "0x3FF000", "sizeHex": "0x1000" }
+  ]
+}

@@ -29,6 +29,7 @@ export {
 export {
   C6_FIRMWARE_MODE_MICROPYTHON,
   C6_FIRMWARE_MODE_ZIGBEE_COORDINATOR,
+  C6_FIRMWARE_MODE_MICROPYTHON_ZIGBEE,
   C6_FIRMWARE_MODES,
   getDefaultC6FirmwareMode,
   getC6FirmwareRuntimeMode,
@@ -41,4 +42,17 @@ export {
   resolveC6RuntimePathBoundary,
   assertZigbeeFlashExplicitOptIn,
   getC6FirmwareModeSnapshot,
+  canSelectMicropythonZigbeeMode,
+  canOfferMicropythonZigbeeFlash,
+  assertMicropythonZigbeeFlashExplicitOptIn,
+  describeMicropythonZigbeeReadiness,
 } from "./firmwareModes.js";
+
+export {
+  MICROPYTHON_ZIGBEE_MANIFEST_PATH,
+  MICROPYTHON_ZIGBEE_PROJECT_DIR,
+  MICROPYTHON_ZIGBEE_MANIFEST,
+  loadMicropythonZigbeeManifest,
+  isMicropythonZigbeeSourcePresent,
+  resolveMicropythonZigbeeArtifact,
+} from "./micropythonZigbeeManifest.js";

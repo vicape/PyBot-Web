@@ -1,0 +1,16 @@
+{
+  "status": "BLOCKED",
+  "reason": "idf.py not found \u2014 install ESP-IDF v5.3.2 and run: . $IDF_PATH/export.sh",
+  "espIdfRequired": "v5.3.2",
+  "micropythonRequired": "v1.27.0",
+  "uzigbeeCommit": "ff25553c5fc9d59754eba9a89811e6433e0d4479",
+  "espZigbeeLib": "~1.6.0",
+  "espZbossLib": "~1.6.0",
+  "target": "esp32c6",
+  "filename": null,
+  "sha256": null,
+  "size": null,
+  "packaging": null,
+  "components": null,
+  "nextStep": "Install ESP-IDF v5.3.2, run scripts/fetch_upstream.sh, then third_party/uzigbee/tools/bootstrap_third_party.sh and re-run build.sh"
+}

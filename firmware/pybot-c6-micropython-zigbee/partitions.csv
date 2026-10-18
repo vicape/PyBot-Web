@@ -1,0 +1,11 @@
+# Name,    Type, SubType, Offset,  Size,    Flags
+# Waveshare ESP32-C6-LCD-1.47 (ESP32-C6FH4) — exactly 4 MB flash, no PSRAM.
+# Layout aligned with pinned uZigbee v1.6 MicroPython+Zigbee PoC (not the
+# interim native-only v2 coordinator at firmware/esp32c6-zigbee-coordinator/).
+# End of flash = 0x400000 (4 MiB). Do not enlarge factory without size proof.
+nvs,       data, nvs,     0x9000,  0x6000,
+phy_init,  data, phy,     0xf000,  0x1000,
+factory,   app,  factory, 0x10000, 0x390000,
+vfs,       data, fat,     0x3A0000,0x5B000,
+zb_storage,data, fat,     0x3FB000,0x4000,
+zb_fct,    data, fat,     0x3FF000,0x1000,

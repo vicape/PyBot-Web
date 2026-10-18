@@ -28,7 +28,7 @@ export const PYBOT_PYTHON_API_MODULES = Object.freeze([
     module: "pybot.zigbee",
     capability: "zigbee",
     description:
-      "Zigbee MicroPython module (not available — use opt-in native coordinator + USB host protocol in M2A)",
+      "On-device Zigbee adapter over native _uzigbee (custom MicroPython+Zigbee firmware). Stock C6: NATIVE_MODULE_MISSING. Capability remains UNVERIFIED until hardware bench. Interim host-only M2A path is not a substitute.",
   }),
   Object.freeze({
     module: "pybot.display",

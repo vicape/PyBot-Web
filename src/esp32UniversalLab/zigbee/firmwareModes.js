@@ -10,13 +10,22 @@ import {
   describeZigbeeCoordinatorReadiness,
   loadZigbeeCoordinatorManifest,
 } from "./zigbeeCoordinatorManifest.js";
+import {
+  canOfferMicropythonZigbeeFlash,
+  canSelectMicropythonZigbeeMode,
+  describeMicropythonZigbeeReadiness,
+  assertMicropythonZigbeeFlashExplicitOptIn,
+} from "./micropythonZigbeeManifest.js";
 
 export const C6_FIRMWARE_MODE_MICROPYTHON = "micropython";
 export const C6_FIRMWARE_MODE_ZIGBEE_COORDINATOR = "zigbee-coordinator";
+/** Desired same-image MicroPython + native Zigbee path (uZigbee v1.6 PoC). */
+export const C6_FIRMWARE_MODE_MICROPYTHON_ZIGBEE = "micropython-zigbee";
 
 export const C6_FIRMWARE_MODES = Object.freeze([
   C6_FIRMWARE_MODE_MICROPYTHON,
   C6_FIRMWARE_MODE_ZIGBEE_COORDINATOR,
+  C6_FIRMWARE_MODE_MICROPYTHON_ZIGBEE,
 ]);
 
 /** In-memory / test override. Browser callers may set via setC6FirmwareRuntimeMode. */
@@ -46,6 +55,13 @@ export function setC6FirmwareRuntimeMode(mode) {
       "Zigbee coordinator mode is not selectable until a READY firmware artifact exists. " +
         "Build with firmware/esp32c6-zigbee-coordinator/build.sh (ESP-IDF v5.5.4). " +
         "Default safe path remains MicroPython.",
+    );
+  }
+  if (m === C6_FIRMWARE_MODE_MICROPYTHON_ZIGBEE && !canSelectMicropythonZigbeeMode()) {
+    throw new Error(
+      "MicroPython+Zigbee mode is NOT READY until a READY multi-offset/merged artifact exists. " +
+        "Build with firmware/pybot-c6-micropython-zigbee/build.sh (ESP-IDF v5.3.2 + uZigbee v1.6 PoC). " +
+        "Default safe path remains stock MicroPython. Hardware Zigbee UNVERIFIED.",
     );
   }
   runtimeModeOverride = m;
@@ -100,6 +116,7 @@ export function listC6FirmwareModeDescriptors(profileId = WAVESHARE_ESP32_C6_LCD
     return Object.freeze([]);
   }
   const zb = describeZigbeeCoordinatorReadiness();
+  const mpyZb = describeMicropythonZigbeeReadiness();
   return Object.freeze([
     Object.freeze({
       id: C6_FIRMWARE_MODE_MICROPYTHON,
@@ -114,7 +131,7 @@ export function listC6FirmwareModeDescriptors(profileId = WAVESHARE_ESP32_C6_LCD
     }),
     Object.freeze({
       id: C6_FIRMWARE_MODE_ZIGBEE_COORDINATOR,
-      label: "Native Zigbee coordinator (opt-in)",
+      label: "Native Zigbee coordinator (interim opt-in)",
       default: false,
       selectable: canSelectZigbeeCoordinatorMode(),
       flashable: canOfferZigbeeCoordinatorFlash(),
@@ -125,11 +142,34 @@ export function listC6FirmwareModeDescriptors(profileId = WAVESHARE_ESP32_C6_LCD
       artifactBlockReason: zb.artifact.blockReason,
       warning:
         "Flashing Zigbee firmware ERASES MicroPython, pybot modules, and saved programs. " +
-        "Restore via MicroPython mode using the official C6 image. Not auto-flashed.",
+        "Restore via MicroPython mode using the official C6 image. Not auto-flashed. " +
+        "Interim NON-MicroPython host path — not the desired standalone Python solution.",
       note:
         zb.artifact.status === "READY"
           ? "Native ESP-IDF Zigbee 3.x coordinator with USB JSON control protocol (interim opt-in; hardware UNVERIFIED)."
           : `Source present; artifact BLOCKED (${zb.artifact.blockReason}). Zigbee UI not READY.`,
+    }),
+    Object.freeze({
+      id: C6_FIRMWARE_MODE_MICROPYTHON_ZIGBEE,
+      label: "MicroPython + native Zigbee (desired path, opt-in)",
+      default: false,
+      selectable: canSelectMicropythonZigbeeMode(),
+      flashable: canOfferMicropythonZigbeeFlash(),
+      autoFlash: false,
+      replacesUserData: true,
+      coexistsWithMicroPython: true,
+      modeReady: false,
+      artifactStatus: mpyZb.artifact.status,
+      artifactBlockReason: mpyZb.artifact.blockReason,
+      decision: mpyZb.decision,
+      warning:
+        "Custom MicroPython+_uzigbee image ERASES stock MicroPython. Backup first. " +
+        "Never auto-flashed. NOT READY until READY artifact + validated boot/partition. " +
+        "Hardware Zigbee UNVERIFIED.",
+      note:
+        mpyZb.artifact.status === "READY"
+          ? "uZigbee v1.6 PoC image with on-device pybot.zigbee (hardware UNVERIFIED; modeReady still gated)."
+          : `Source present; artifact BLOCKED (${mpyZb.artifact.blockReason}). Mode NOT READY.`,
     }),
   ]);
 }
@@ -146,6 +186,14 @@ export function resolveC6RuntimePathBoundary() {
       micropythonPath: false,
       zigbeeControlPath: true,
       connectedClaim: "zigbee-coordinator",
+    };
+  }
+  if (mode === C6_FIRMWARE_MODE_MICROPYTHON_ZIGBEE) {
+    return {
+      mode,
+      micropythonPath: true,
+      zigbeeControlPath: true,
+      connectedClaim: "micropython-zigbee",
     };
   }
   return {
@@ -189,6 +237,14 @@ export function getC6FirmwareModeSnapshot() {
     activeMode: getC6FirmwareRuntimeMode(),
     modes: listC6FirmwareModeDescriptors(),
     zigbee: describeZigbeeCoordinatorReadiness(manifest),
+    micropythonZigbee: describeMicropythonZigbeeReadiness(),
     boundary: resolveC6RuntimePathBoundary(),
   };
 }
+
+export {
+  canSelectMicropythonZigbeeMode,
+  canOfferMicropythonZigbeeFlash,
+  assertMicropythonZigbeeFlashExplicitOptIn,
+  describeMicropythonZigbeeReadiness,
+};

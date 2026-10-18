@@ -8,6 +8,7 @@
  */
 
 import { DISPLAY_PY_SOURCE } from "./displayPySource.js";
+import { ZIGBEE_PY_SOURCE } from "./zigbeePySource.js";
 
 /** @type {Readonly<Record<string, string>>} */
 export const C6_BOARD_MODULES = Object.freeze({
@@ -152,6 +153,13 @@ export const C6_BOARD_MODULES = Object.freeze({
     "    machine.reset()",
     "",
   ].join("\n"),
+
+  /**
+   * On-device adapter over native _uzigbee (custom firmware only).
+   * On stock MicroPython, imports fail honestly via diagnose() — not usable
+   * in listUsablePythonModules while capability remains UNVERIFIED.
+   */
+  "pybot/zigbee.py": ZIGBEE_PY_SOURCE,
 });
 
 /**

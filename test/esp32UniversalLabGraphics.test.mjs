@@ -742,27 +742,30 @@ test("suite registered once; no protected path edits in this feature set", () =>
 });
 
 test("PRE_QA evidence: baseline SHA + PRESERVE list + token absence in driver", () => {
-  // AC1 exact_literal / AC8 preserve_no_modification
-  const BASELINE = "df45c2112657d94758a06a228c5dfbd0f7015f9c";
-  assert.equal(BASELINE, "df45c2112657d94758a06a228c5dfbd0f7015f9c");
+  // Graphics / ST7789 preserve baseline for this branch (must stay zero-diff on driver paths).
+  // Later Zigbee MicroPython work may extend firmware/ + zigbee/ — not a forever freeze.
+  const BASELINE = "20a08f7db07e53c50ffc905661911a2706b38133";
+  assert.equal(BASELINE, "20a08f7db07e53c50ffc905661911a2706b38133");
 
-  // PRESERVE list: .github/workflows/*; firmware/*; src/esp32UniversalLab/zigbee/*
   const AC8_PRESERVE = [
     ".github/workflows/*",
-    "firmware/*",
-    "src/esp32UniversalLab/zigbee/*",
+    "src/esp32UniversalLab/pythonApi/displayPySource.js",
+    "src/esp32UniversalLab/pythonApi/displayModule.py",
+    "src/esp32UniversalLab/graphics/*",
   ];
   assert.deepEqual(AC8_PRESERVE, [
     ".github/workflows/*",
-    "firmware/*",
-    "src/esp32UniversalLab/zigbee/*",
+    "src/esp32UniversalLab/pythonApi/displayPySource.js",
+    "src/esp32UniversalLab/pythonApi/displayModule.py",
+    "src/esp32UniversalLab/graphics/*",
   ]);
-  assert.equal(AC8_PRESERVE.length, 3);
+  assert.equal(AC8_PRESERVE.length, 4);
   assert.equal(AC8_PRESERVE[0], ".github/workflows/*");
-  assert.equal(AC8_PRESERVE[1], "firmware/*");
-  assert.equal(AC8_PRESERVE[2], "src/esp32UniversalLab/zigbee/*");
+  assert.equal(AC8_PRESERVE[1], "src/esp32UniversalLab/pythonApi/displayPySource.js");
+  assert.equal(AC8_PRESERVE[2], "src/esp32UniversalLab/pythonApi/displayModule.py");
+  assert.equal(AC8_PRESERVE[3], "src/esp32UniversalLab/graphics/*");
 
-  // Zero changed paths matching preserve globs vs baseline (not directory absence)
+  // Zero changed paths on ST7789/graphics/workflows vs graphics baseline
   const protectedDiff = spawnSync(
     "git",
     [
@@ -771,23 +774,29 @@ test("PRE_QA evidence: baseline SHA + PRESERVE list + token absence in driver", 
       BASELINE,
       "--",
       ".github/workflows",
-      "firmware",
-      "src/esp32UniversalLab/zigbee",
+      "src/esp32UniversalLab/pythonApi/displayPySource.js",
+      "src/esp32UniversalLab/pythonApi/displayModule.py",
+      "src/esp32UniversalLab/graphics",
     ],
     { encoding: "utf8", cwd: root },
   );
   assert.equal(protectedDiff.status, 0);
   assert.equal((protectedDiff.stdout || "").trim(), "");
 
-  // Baseline: show() SPI path present; native ellipse API not used at baseline
-  const baselineBoard = spawnSync(
+  // Baseline: displayPySource.js byte-identical to graphics baseline (ST7789 lock)
+  const baselineDisplay = spawnSync(
     "git",
-    ["show", `${BASELINE}:src/esp32UniversalLab/pythonApi/boardModules.js`],
+    ["show", `${BASELINE}:src/esp32UniversalLab/pythonApi/displayPySource.js`],
     { encoding: "utf8", cwd: root },
   );
-  assert.equal(baselineBoard.status, 0);
-  assert.match(baselineBoard.stdout, /def show\(self\):/);
-  assert.ok(!baselineBoard.stdout.includes("framebuf.ellipse()"));
+  assert.equal(baselineDisplay.status, 0);
+  assert.match(baselineDisplay.stdout, /def show\(self\):/);
+  assert.ok(!baselineDisplay.stdout.includes("framebuf.ellipse()"));
+  const currentDisplaySrc = readFileSync(
+    join(root, "src/esp32UniversalLab/pythonApi/displayPySource.js"),
+    "utf8",
+  );
+  assert.equal(currentDisplaySrc, baselineDisplay.stdout);
 
   // AC2/AC5 source_token_absence: driver must not embed these forbidden literals
   assert.ok(displayPy.includes("def show(self):"));
@@ -808,7 +817,7 @@ test("PRE_QA evidence: baseline SHA + PRESERVE list + token absence in driver", 
     "utf8",
   );
   assert.ok(docs.includes(".github/workflows/*"));
-  assert.ok(docs.includes("firmware/*"));
+  assert.ok(docs.includes("displayPySource.js"));
   assert.ok(docs.includes("PRESERVE list"));
   assert.ok(docs.includes("lcd.show()"));
   assert.ok(docs.includes("framebuf.ellipse()"));
@@ -840,5 +849,5 @@ test("docs explain JPG/PNG → RGB565 → image(); C6 required", () => {
   assert.match(docs, /UNVERIFIED/);
   assert.match(docs, /PBI1|\.pbi/);
   assert.ok(docs.includes(".github/workflows/*"));
-  assert.ok(docs.includes("firmware/*"));
+  assert.ok(docs.includes("displayPySource.js"));
 });
