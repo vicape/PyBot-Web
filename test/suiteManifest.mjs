@@ -24,6 +24,7 @@ export const TEST_SUITES = Object.freeze({
     "courseRosterPending.test.mjs",
     "micropythonFeatureFlags.test.mjs",
     "esp32UniversalLabM0.test.mjs",
+    "esp32UniversalLabM1.test.mjs",
     "orgRole.test.mjs",
     "orgRoleMulti.test.mjs",
     "personCenteredModel.test.mjs",

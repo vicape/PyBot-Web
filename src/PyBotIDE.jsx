@@ -106,6 +106,26 @@ import { track } from "./telemetry/index.js";
 import { isConnectAssistantEnabled, setConnectAssistantEnabled } from "./connectUsbAssistant.js";
 import { PHASE, BOARD_STATE, canCloseModal } from "./esp32/provisioningPhases.js";
 import {
+  LAB_BOARD_TYPE_SENTINEL,
+  LAB_BOARD_GROUP_LABEL,
+  listLabBoardPickerOptions,
+  parseBoardPickerValue,
+  applyLabBoardSelection,
+  clearLabBoardSelection,
+  resolveBoardPickerSelectValue,
+  getEsp32UniversalLabProfileId,
+  getBoardProfile,
+  canOfferFirmwareFlash,
+  connectLabBoard,
+  disconnectLabBoard,
+  executeLabProgram,
+  stopLabProgram,
+  flashLabFirmware,
+  saveLabProgram,
+  recoverLabBoard,
+  isLabSessionConnected,
+} from "./esp32UniversalLab/index.js";
+import {
   IconExplorer,
   IconPlay,
   IconSquare,
@@ -371,6 +391,13 @@ export default function PyBotIDE() {
   const [helpLesson, setHelpLesson] = useState(null);
   const [pythonOnly, setPythonOnly] = useState(() => readInitialPythonOnly());
   const [boardType, setBoardType] = useState(() => getBoardType());
+  const [labProfileId, setLabProfileId] = useState(
+    () => getEsp32UniversalLabProfileId(),
+  );
+  const labPickerOptions = listLabBoardPickerOptions();
+  const labProfile = labProfileId ? getBoardProfile(labProfileId) : null;
+  const labRuntimeReady = labProfile?.runtimeReady === true;
+  const isLabBoard = boardType === LAB_BOARD_TYPE_SENTINEL;
   const [eda6Profile, setEda6ProfileState] = useState(() => getEda6Profile());
   const [, forceLang] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(
@@ -792,8 +819,23 @@ export default function PyBotIDE() {
   useEffect(() => {
     // El perfil EDA6 es independiente del tipo de placa del editor.
     // Nunca cambiar ESP32 a WEMOS automáticamente al ingresar a EDA6.
+    // Lab profiles keep the sentinel in pybot_board_type; profile id lives in lab keys.
     localStorage.setItem("pybot_board_type", boardType);
   }, [boardType]);
+
+  const onBoardPickerChange = useCallback((rawValue) => {
+    const parsed = parseBoardPickerValue(rawValue);
+    if (!parsed) return;
+    if (parsed.kind === "lab") {
+      const applied = applyLabBoardSelection(parsed.profileId);
+      setLabProfileId(applied.profileId);
+      setBoardType(applied.boardType);
+      return;
+    }
+    clearLabBoardSelection();
+    setLabProfileId(null);
+    setBoardType(parsed.boardType);
+  }, []);
 
   useEffect(() => {
     setEda6Profile(eda6Profile);
@@ -1091,6 +1133,28 @@ export default function PyBotIDE() {
     if (connecting) return { ok: false, skipped: true };
     setConnecting(true);
     try {
+      if (boardType === LAB_BOARD_TYPE_SENTINEL) {
+        if (!labRuntimeReady) {
+          appendConsole(t("labBoardNotReady") + "\n", "err");
+          return { ok: false, message: "LAB_NOT_READY", display: t("labBoardNotReady") };
+        }
+        const result = await connectLabBoard(LAB_BOARD_TYPE_SENTINEL);
+        setConnected(true);
+        setPybotBoardState(null);
+        appendConsole((result.message || t("labConnected")) + "\n", "info");
+        appendConsole(t("labHardwareUnverified") + "\n", "info");
+        try {
+          track("usb_connect", {
+            transport: "usb",
+            board_type: LAB_BOARD_TYPE_SENTINEL,
+            lab_profile: labProfileId,
+          });
+        } catch {
+          //
+        }
+        return { ok: true };
+      }
+
       const result = await hardwareConnect({
         onArduinoPrepare: (info) => {
           if (info.phase === "start") {
@@ -1148,7 +1212,7 @@ export default function PyBotIDE() {
       setConnecting(false);
       setConnectModalPreparing(false);
     }
-  }, [connecting, appendConsole, eda6Profile]);
+  }, [connecting, appendConsole, eda6Profile, boardType, labRuntimeReady, labProfileId]);
 
   const openConnectFlow = useCallback(() => {
     if (connecting) return;
@@ -1302,7 +1366,11 @@ export default function PyBotIDE() {
   const onDisconnect = useCallback(async () => {
     const wasEsp =
       boardType === "esp32-eda6" || boardType === "esp32-micropython";
-    await hardwareDisconnect();
+    if (boardType === LAB_BOARD_TYPE_SENTINEL || isLabSessionConnected()) {
+      await disconnectLabBoard(LAB_BOARD_TYPE_SENTINEL);
+    } else {
+      await hardwareDisconnect();
+    }
     setConnected(false);
     setPybotBoardState(null);
     try {
@@ -1334,6 +1402,35 @@ export default function PyBotIDE() {
     }
     const needsHw = codeNeedsHardware(activeCode);
     const canvasCode = hasCanvasCode(activeCode);
+
+    // Universal Lab C6: isolated runtime only (never legacy handlers / Pyodide HW).
+    if (boardType === LAB_BOARD_TYPE_SENTINEL) {
+      if (!labRuntimeReady) {
+        appendConsole(t("labBoardNotReady") + "\n", "err");
+        return;
+      }
+      if (!isLabSessionConnected() && !connected) {
+        appendConsole(t("needConnect") + "\n", "err");
+        return;
+      }
+      if (pythonOnly) setPythonOnly(false);
+      appendConsole(t("labRunning") + "\n", "info");
+      setRunning(true);
+      try {
+        await executeLabProgram(activeCode, LAB_BOARD_TYPE_SENTINEL, {
+          onOut: (s) => appendConsole(s, "out"),
+          onErr: (s) => appendConsole(formatPythonError(s), "err"),
+          shouldStop: () => stopping,
+        });
+        appendConsole("\n[Fin]\n", "info");
+      } catch (e) {
+        appendConsole(formatPythonError(e?.message) + "\n", "err");
+      } finally {
+        setRunning(false);
+        setStopping(false);
+      }
+      return;
+    }
 
     // ESP32 MicroPython / EDA6: APIs de hardware NUNCA caen a Pyodide.
     // Canvas/dibujo solo corre en pantalla (Pyodide), nunca en la placa.
@@ -1421,7 +1518,7 @@ export default function PyBotIDE() {
       setInputPrompt("");
       inputResolveRef.current = null;
     }
-  }, [running, stopping, captureProgramSnapshot, editorMode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, bleConnected, applySyntaxResult]);
+  }, [running, stopping, captureProgramSnapshot, editorMode, appendConsole, pythonOnly, codeNeedsHardware, onInput, onCanvas, runBoardProgram, boardType, eda6Profile, bleConnected, applySyntaxResult, labRuntimeReady, connected]);
 
   const onInstallEda6 = useCallback(async () => {
     if (!connected) {
@@ -1908,6 +2005,17 @@ export default function PyBotIDE() {
     // curso resuelva su outcome (RUN:STOPPED / desconexión) y limpie los flags.
     // Importante: con BLE, Stop DEBE intentar aunque `running` local sea false
     // (app autostart / programa bajado sin sesión web activa).
+    if (boardType === LAB_BOARD_TYPE_SENTINEL && (isLabSessionConnected() || connected)) {
+      const expectRunCleanup = running;
+      setStopping(true);
+      appendConsole("\n" + t("stoppingMsg") + "\n", "info");
+      stopLabProgram(LAB_BOARD_TYPE_SENTINEL)
+        .catch(() => {})
+        .finally(() => {
+          if (!expectRunCleanup) setStopping(false);
+        });
+      return;
+    }
     const onBoard =
       (boardType === "esp32-micropython" || boardType === "esp32-eda6") &&
       (hardwareIsConnected() || bleConnected);
@@ -2555,17 +2663,121 @@ export default function PyBotIDE() {
                         <span className="toolbar-menu-mode__label">{t("boardLabel")}</span>
                         <select
                           className="toolbar-menu-board"
-                          value={boardType}
-                          onChange={(e) => setBoardType(e.target.value)}
+                          value={resolveBoardPickerSelectValue(boardType, labProfileId)}
+                          onChange={(e) => onBoardPickerChange(e.target.value)}
                           disabled={connected || connecting}
                           title={connected ? t("disconnect") : t("boardHint")}
                           aria-label={t("boardLabel")}
+                          data-testid="ide-board-picker"
                         >
-                          <option value="arduino-firmata">{t("boardArduino")}</option>
-                          <option value="esp32-micropython">{t("boardEsp32Mp")}</option>
-                          <option value="esp32-eda6">{t("boardEsp32Eda6")}</option>
+                          <optgroup label={t("boardGroupLegacy")}>
+                            <option value="arduino-firmata">{t("boardArduino")}</option>
+                            <option value="esp32-micropython">{t("boardEsp32Mp")}</option>
+                            <option value="esp32-eda6">{t("boardEsp32Eda6")}</option>
+                          </optgroup>
+                          <optgroup label={LAB_BOARD_GROUP_LABEL}>
+                            {labPickerOptions.map((opt) => (
+                              <option
+                                key={opt.profileId}
+                                value={opt.value}
+                                data-lab-profile={opt.profileId}
+                                data-lab-ready={opt.runtimeReady ? "1" : "0"}
+                              >
+                                {opt.displayLabel}
+                              </option>
+                            ))}
+                          </optgroup>
                         </select>
                       </div>
+                      {isLabBoard && !labRuntimeReady ? (
+                        <div className="toolbar-menu-hint" data-testid="lab-not-ready-hint">
+                          {t("labBoardNotReady")}
+                        </div>
+                      ) : null}
+                      {isLabBoard && labRuntimeReady && !connected ? (
+                        <div className="toolbar-menu-subgroup">
+                          {labProfileId && canOfferFirmwareFlash(labProfileId) ? (
+                            <button
+                              type="button"
+                              className="toolbar-menu-item toolbar-menu-item--highlight"
+                              onClick={() => {
+                                void (async () => {
+                                  appendConsole(t("labFlashingFirmware") + "\n", "info");
+                                  try {
+                                    const result = await flashLabFirmware(LAB_BOARD_TYPE_SENTINEL, {
+                                      onLog: (line) => appendConsole(String(line) + "\n", "info"),
+                                    });
+                                    appendConsole(
+                                      (result.message || t("labFlashOk")) + "\n",
+                                      "info",
+                                    );
+                                  } catch (e) {
+                                    appendConsole(
+                                      formatHardwareError(e?.message) + "\n",
+                                      "err",
+                                    );
+                                  }
+                                  setBoardMenuOpen(false);
+                                })();
+                              }}
+                              disabled={connecting}
+                            >
+                              {t("labFlashFirmwareBtn")}
+                            </button>
+                          ) : null}
+                          <div className="toolbar-menu-hint">{t("labFlashFirmwareHint")}</div>
+                        </div>
+                      ) : null}
+                      {isLabBoard && labRuntimeReady && connected ? (
+                        <div className="toolbar-menu-subgroup">
+                          <span className="toolbar-menu-mode__label">{t("menuBoardToolsLabel")}</span>
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
+                            onClick={() => {
+                              void (async () => {
+                                try {
+                                  const snapshot = captureProgramSnapshot();
+                                  await saveLabProgram(
+                                    snapshot.source,
+                                    LAB_BOARD_TYPE_SENTINEL,
+                                  );
+                                  appendConsole(t("labSaveOk") + "\n", "info");
+                                } catch (e) {
+                                  appendConsole(
+                                    formatPythonError(e?.message) + "\n",
+                                    "err",
+                                  );
+                                }
+                                setBoardMenuOpen(false);
+                              })();
+                            }}
+                          >
+                            {t("labSaveBtn")}
+                          </button>
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
+                            onClick={() => {
+                              void (async () => {
+                                try {
+                                  await recoverLabBoard(LAB_BOARD_TYPE_SENTINEL);
+                                  appendConsole(t("labRecoverOk") + "\n", "info");
+                                } catch (e) {
+                                  appendConsole(
+                                    formatPythonError(e?.message) + "\n",
+                                    "err",
+                                  );
+                                }
+                                setBoardMenuOpen(false);
+                              })();
+                            }}
+                          >
+                            {t("labRecoverBtn")}
+                          </button>
+                          <div className="toolbar-menu-hint">{t("labHardwareUnverified")}</div>
+                        </div>
+                      ) : null}
                       {boardType === "esp32-eda6" ? (
                         <div className="toolbar-menu-mode">
                           <span className="toolbar-menu-mode__label">{t("eda6ProfileLabel")}</span>

@@ -3,7 +3,7 @@
  *
  * Additive seam: import from here. Do not rewrite legacy board handlers.
  * Wire into the IDE only behind isEsp32UniversalLabActive() and a
- * non-legacy board selection (future milestone).
+ * non-legacy board selection (M1: PyBotIDE board picker + lab runtime).
  */
 
 export {
@@ -36,7 +36,11 @@ export {
   FIRMWARE_MANIFEST_VERSION,
   resolveFirmwareTarget,
   hasFlashableFirmwareImage,
+  getFirmwareImageManifest,
+  canOfferFirmwareFlash,
 } from "./firmwareManifest.js";
+
+export { ESP32_GENERIC_C6_FIRMWARE, isEsp32C6Chip } from "./firmware/esp32GenericC6.js";
 
 export {
   LAB_BOARD_TYPE_SENTINEL,
@@ -47,7 +51,11 @@ export {
   flashLabFirmware,
   executeLabProgram,
   stopLabProgram,
+  saveLabProgram,
   recoverLabBoard,
+  disconnectLabBoard,
+  isLabSessionConnected,
+  getLabSession,
 } from "./runtime/adapter.js";
 
 export {
@@ -55,3 +63,19 @@ export {
   listUsablePythonModules,
   describePythonModuleAvailability,
 } from "./pythonApi/manifest.js";
+
+export { listC6ModulesForInstall, C6_BOARD_MODULES } from "./pythonApi/boardModules.js";
+
+export {
+  LAB_BOARD_PICKER_LABELS,
+  LAB_BOARD_GROUP_LABEL,
+  LEGACY_BOARD_PICKER_VALUES,
+  listLabBoardPickerOptions,
+  parseBoardPickerValue,
+  applyLabBoardSelection,
+  clearLabBoardSelection,
+  resolveBoardPickerSelectValue,
+  isLabProfileRuntimeReady,
+  getLabPickerState,
+  labPickerOptionValue,
+} from "./ide/boardPicker.js";

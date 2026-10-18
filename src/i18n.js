@@ -51,9 +51,26 @@ const STRINGS = {
     modeHardware: "Python + Hardware",
     modePythonOnly: "Python Solo",
     boardLabel: "Placa",
+    boardGroupLegacy: "Placas existentes",
     boardArduino: "Arduino Uno/Nano compatible",
     boardEsp32Mp: "ESP32 MicroPython - GPIO directo",
     boardEsp32Eda6: "ESP32 EDA6 / WEMOS",
+    labBoardModalLabel: "Waveshare ESP32 Universal Lab",
+    labBoardNotReady:
+      "Este perfil Waveshare está marcado not ready: aún no se puede conectar ni programar (M3).",
+    labConnected: "Universal Lab (C6) conectado por Web Serial.",
+    labHardwareUnverified:
+      "Validación de hardware físico: UNVERIFIED (pendiente de prueba en banco).",
+    labRunning: "Ejecutando en Universal Lab (C6)…",
+    labFlashFirmwareBtn: "Instalar MicroPython (C6)",
+    labFlashFirmwareHint:
+      "Flashea la imagen oficial MicroPython ESP32_GENERIC_C6 (SHA validado) antes de conectar.",
+    labFlashingFirmware: "Validando y flasheando firmware C6…",
+    labFlashOk: "Firmware C6 instalado. Validación física pendiente.",
+    labSaveBtn: "Guardar programa en la placa (main.py)",
+    labSaveOk: "Programa guardado como main.py en la placa.",
+    labRecoverBtn: "Recuperar REPL",
+    labRecoverOk: "REPL recuperado.",
     eda6ProfileLabel: "Perfil EDA6",
     eda6ProfileWemos: "WEMOS (recomendado)",
     eda6ProfileEsp32: "ESP32 (otro pinout)",
@@ -663,9 +680,26 @@ Creado por VIC.`,
     modeHardware: "Python + Hardware",
     modePythonOnly: "Python only",
     boardLabel: "Board",
+    boardGroupLegacy: "Existing boards",
     boardArduino: "Arduino Uno/Nano compatible",
     boardEsp32Mp: "ESP32 MicroPython - direct GPIO",
     boardEsp32Eda6: "ESP32 EDA6 / WEMOS",
+    labBoardModalLabel: "Waveshare ESP32 Universal Lab",
+    labBoardNotReady:
+      "This Waveshare profile is marked not ready: connect/program are disabled until M3.",
+    labConnected: "Universal Lab (C6) connected via Web Serial.",
+    labHardwareUnverified:
+      "Physical hardware validation: UNVERIFIED (bench test pending).",
+    labRunning: "Running on Universal Lab (C6)…",
+    labFlashFirmwareBtn: "Install MicroPython (C6)",
+    labFlashFirmwareHint:
+      "Flash the official MicroPython ESP32_GENERIC_C6 image (SHA validated) before connecting.",
+    labFlashingFirmware: "Validating and flashing C6 firmware…",
+    labFlashOk: "C6 firmware installed. Physical validation pending.",
+    labSaveBtn: "Save program to board (main.py)",
+    labSaveOk: "Program saved as main.py on the board.",
+    labRecoverBtn: "Recover REPL",
+    labRecoverOk: "REPL recovered.",
     eda6ProfileLabel: "EDA6 profile",
     eda6ProfileWemos: "WEMOS (recommended)",
     eda6ProfileEsp32: "ESP32 (alternate pinout)",
@@ -1322,6 +1356,40 @@ export function formatHardwareError(message) {
     const out = t(key);
     if (out !== key) return out;
     return t("usbErr_MPY_GENERIC");
+  }
+  if (m.startsWith("PYBOT_LAB:")) {
+    const code = m.slice("PYBOT_LAB:".length);
+    if (code.startsWith("NEEDS_FIRMWARE")) {
+      return getLang() === "es"
+        ? "No se detectó MicroPython en la placa. Usá «Instalar MicroPython (C6)» primero."
+        : "MicroPython was not detected. Use “Install MicroPython (C6)” first.";
+    }
+    if (code === "MISSING_WEB_SERIAL") {
+      return getLang() === "es"
+        ? "Este navegador no soporta Web Serial. Usá Chrome o Edge."
+        : "This browser does not support Web Serial. Use Chrome or Edge.";
+    }
+    if (code === "HTTPS_REQUIRED") {
+      return getLang() === "es"
+        ? "Web Serial requiere HTTPS (o localhost)."
+        : "Web Serial requires HTTPS (or localhost).";
+    }
+    if (code === "PERMISSION" || code === "PORT_LIST_EMPTY") {
+      return getLang() === "es"
+        ? "No se eligió un puerto USB o se denegó el permiso."
+        : "No USB port was selected or permission was denied.";
+    }
+    if (code === "NOT_CONNECTED") {
+      return getLang() === "es"
+        ? "Universal Lab no está conectado."
+        : "Universal Lab is not connected.";
+    }
+    if (code === "USE_LAB_RUNTIME") {
+      return getLang() === "es"
+        ? "Este perfil usa el runtime Universal Lab (no el camino legacy)."
+        : "This profile uses the Universal Lab runtime (not the legacy path).";
+    }
+    return m;
   }
   return m;
 }

@@ -169,40 +169,35 @@ test("unsupported capabilities are explicitly detectable; Zigbee/Thread not clai
   assert.equal(touchOnC6.status, CAPABILITY_STATUS.UNSUPPORTED);
 });
 
-test("firmware targeting is profile-driven; no flashable image in M0", () => {
+test("firmware targeting is profile-driven (C6 image arrives in M1)", () => {
   const c6 = resolveFirmwareTarget(BOARD_PROFILE_IDS.WAVESHARE_ESP32_C6_LCD_147);
   assert.equal(c6.target, "esp32c6");
-  assert.equal(c6.status, CAPABILITY_STATUS.PLANNED);
-  assert.equal(c6.imageId, null);
-  assert.equal(hasFlashableFirmwareImage(c6.profileId), false);
+  // M1 registers official MicroPython C6 image; M0 schema still applies.
+  assert.ok(
+    c6.status === CAPABILITY_STATUS.IMPLEMENTED ||
+      c6.status === CAPABILITY_STATUS.PLANNED,
+  );
 
   const unknown = resolveFirmwareTarget("nope");
   assert.equal(unknown.status, CAPABILITY_STATUS.UNSUPPORTED);
+
+  const s3 = resolveFirmwareTarget(
+    BOARD_PROFILE_IDS.WAVESHARE_ESP32_S3_TOUCH_LCD_154,
+  );
+  assert.equal(hasFlashableFirmwareImage(s3.profileId), false);
 });
 
-test("isolated adapter refuses when inactive and is not ready when active", async () => {
+test("isolated adapter refuses when inactive; legacy board never activates lab", async () => {
   clearLabOverrides();
   await assert.rejects(
     () => connectLabBoard(LAB_BOARD_TYPE_SENTINEL),
     (err) => err instanceof Esp32UniversalLabNotActiveError,
   );
 
+  // Legacy board type must not activate lab transport even if gate+profile set
   globalThis.__PYBOT_ESP32_LAB_ENABLED__ = true;
   globalThis.__PYBOT_ESP32_LAB_PROFILE__ =
     BOARD_PROFILE_IDS.WAVESHARE_ESP32_C6_LCD_147;
-
-  await assert.rejects(
-    () => connectLabBoard(LAB_BOARD_TYPE_SENTINEL),
-    (err) =>
-      err instanceof Esp32UniversalLabNotReadyError && err.operation === "connect",
-  );
-  await assert.rejects(
-    () => flashLabFirmware(LAB_BOARD_TYPE_SENTINEL),
-    (err) =>
-      err instanceof Esp32UniversalLabNotReadyError && err.operation === "flash",
-  );
-
-  // Legacy board type must not activate lab transport
   await assert.rejects(
     () => connectLabBoard("esp32-micropython"),
     (err) => err instanceof Esp32UniversalLabNotActiveError,
@@ -210,14 +205,13 @@ test("isolated adapter refuses when inactive and is not ready when active", asyn
   clearLabOverrides();
 });
 
-test("Python API exposes only implemented modules (none yet in M0)", () => {
+test("Python API never exposes Zigbee; unimplemented modules stay unusable", () => {
   const c6Id = BOARD_PROFILE_IDS.WAVESHARE_ESP32_C6_LCD_147;
-  assert.deepEqual(listUsablePythonModules(c6Id), []);
-  const gpio = describePythonModuleAvailability(c6Id, "pybot.gpio");
-  assert.equal(gpio.usable, false);
-  assert.equal(gpio.status, CAPABILITY_STATUS.PLANNED);
   const zig = describePythonModuleAvailability(c6Id, "pybot.zigbee");
   assert.equal(zig.status, CAPABILITY_STATUS.UNSUPPORTED);
+  assert.equal(zig.usable, false);
+  const touch = describePythonModuleAvailability(c6Id, "pybot.touch");
+  assert.equal(touch.usable, false);
 });
 
 test("legacy shared paths are not imported by Universal Lab package", () => {
@@ -232,7 +226,12 @@ test("legacy shared paths are not imported by Universal Lab package", () => {
     "profiles/waveshareEsp32S3TouchLcd154.js",
     "profiles/waveshareEsp32S3TouchLcd7.js",
     "runtime/adapter.js",
+    "runtime/labSession.js",
+    "runtime/c6Flasher.js",
     "pythonApi/manifest.js",
+    "pythonApi/boardModules.js",
+    "ide/boardPicker.js",
+    "firmware/esp32GenericC6.js",
   ];
   for (const rel of files) {
     const src = readFileSync(join(labDir, rel), "utf8");
@@ -240,7 +239,10 @@ test("legacy shared paths are not imported by Universal Lab package", () => {
     assert.doesNotMatch(src, /import\s*\([^)]*hardwareBridge/);
     assert.doesNotMatch(src, /from\s+["'][^"']*PyBotIDE/);
     assert.doesNotMatch(src, /from\s+["'][^"']*eda6(Profile|PinMaps|Ensure)/);
+    // Static imports of micropython/ remain forbidden; adapter may dynamic-import
+    // the session transport behind the lab gate (M1).
     assert.doesNotMatch(src, /from\s+["']\.\.\/micropython\//);
+    assert.doesNotMatch(src, /from\s+["']\.\.\/\.\.\/micropython\//);
   }
 });
 

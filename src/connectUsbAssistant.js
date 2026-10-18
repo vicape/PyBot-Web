@@ -48,5 +48,6 @@ export function classifyConnectError(rawMessage) {
 export function boardLabelKey(boardType) {
   if (boardType === "esp32-micropython") return "boardEsp32Mp";
   if (boardType === "esp32-eda6") return "boardEsp32Eda6";
+  if (boardType === "esp32-universal-lab") return "labBoardModalLabel";
   return "boardArduino";
 }

@@ -79,6 +79,10 @@ export const waveshareEsp32S3TouchLcd154 = Object.freeze({
     sdmmc: Object.freeze([13, 14, 15, 16, 17, 18]),
     usb: Object.freeze([19, 20]),
   }),
+  /** Selectable in M1 UI, but not connect/programmable until M3. */
+  runtimeReady: false,
+  readinessLabel: "not ready",
+  hardwareValidation: "UNVERIFIED",
   firmware: Object.freeze({
     target: "esp32s3",
     runtimeFamily: "micropython-compatible",
@@ -87,6 +91,7 @@ export const waveshareEsp32S3TouchLcd154 = Object.freeze({
     partitionScheme: null,
     status: CAPABILITY_STATUS.PLANNED,
     milestone: "M3",
+    hardwareValidation: "UNVERIFIED",
   }),
   capabilities: Object.freeze({
     gpio: CAPABILITY_STATUS.PLANNED,
@@ -112,5 +117,9 @@ export const waveshareEsp32S3TouchLcd154 = Object.freeze({
   capabilityNotes: Object.freeze({
     zigbee: "ESP32-S3 has no 802.15.4 radio — UNSUPPORTED.",
     thread: "ESP32-S3 has no 802.15.4 radio — UNSUPPORTED.",
+    display: "M3 — not ready in M1; do not claim connected/programmable.",
+    touch: "M3 — not ready in M1.",
+    imu: "M3 — not ready in M1.",
+    audio: "M3 — not ready in M1.",
   }),
 });

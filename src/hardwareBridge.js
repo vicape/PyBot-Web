@@ -197,6 +197,8 @@ export function getBoardType() {
     if (v === "esp32-micropython") return "esp32-micropython";
     if (v === "esp32-eda6") return "esp32-eda6";
     if (v === "esp32-serial") return "esp32-serial";
+    // Additive Universal Lab sentinel — never remaps legacy types.
+    if (v === "esp32-universal-lab") return "esp32-universal-lab";
     return "arduino-firmata";
   } catch {
     return "arduino-firmata";
@@ -344,6 +346,12 @@ export async function hardwareConnect(hooks = {}) {
   }
 
   const boardType = getBoardType();
+
+  // Universal Lab uses its isolated runtime (connectLabBoard). Never fall through
+  // to Arduino Firmata or legacy MicroPython handlers for the lab sentinel.
+  if (boardType === "esp32-universal-lab") {
+    throw new Error("PYBOT_LAB:USE_LAB_RUNTIME");
+  }
 
   if (boardType === "esp32-eda6") {
     try {
