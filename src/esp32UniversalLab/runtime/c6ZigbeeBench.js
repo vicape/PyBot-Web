@@ -1,11 +1,11 @@
 /**
  * TARGET: vicape/PyBot-Web (branch feature/esp32-universal-lab only).
  * Exact, private firmware-build acceptance for the first physical ESP32-C6 bench.
- * Guided one-click "Preparar e instalar" flow: detect C6+4MB, obtain+verify pinned
- * package via authenticated server distributor, full 4 MB backup to a user-saved
- * file, explicit destructive consent, then flash. Binaries stay outside Git and
- * production. Full-image backup preserves on-device VFS paths /main.py, /boot.py,
- * /pybot/assets.
+ * Same UX simplicity as stock "Instalar MicroPython (C6)": one "Instalar firmware"
+ * CTA obtains+verifies the pinned package via authenticated server distributor,
+ * then WebSerial flash with chip/4MB checks. No mandatory backup, file picker, or
+ * multi-stage confirmation. CTA click = erase consent (apps/files may be wiped).
+ * Binaries stay outside Git and production.
  */
 import { isEsp32C6Chip } from "../firmware/esp32GenericC6.js";
 import { WAVESHARE_ESP32_C6_LCD_147_ID } from "../profiles/waveshareEsp32C6Lcd147.js";
@@ -30,17 +30,15 @@ export const C6_ZIGBEE_BENCH_PRESERVED_VFS_PATHS = Object.freeze([
   "/pybot/assets",
 ]);
 
-export const C6_ZIGBEE_BENCH_UI_LABEL = "Preparar e instalar";
+export const C6_ZIGBEE_BENCH_UI_LABEL = "Instalar firmware";
 export const C6_ZIGBEE_BENCH_FETCH_ACTION = "Obtener firmware y verificar";
+/** @deprecated No intermediate Continuar step; kept for import compatibility. */
 export const C6_ZIGBEE_BENCH_CONTINUE_LABEL = "Continuar";
 export const C6_ZIGBEE_BENCH_FIRMWARE_API = "/api/c6-zigbee-bench-firmware";
 
 /** Ordered progress stages for the one-click installer (status only — not buttons). */
 export const C6_ZIGBEE_BENCH_PROGRESS_STAGES = Object.freeze([
-  Object.freeze({ id: "detect", es: "Placa", en: "Board" }),
   Object.freeze({ id: "fetch", es: "Firmware", en: "Firmware" }),
-  Object.freeze({ id: "backup", es: "Respaldo", en: "Backup" }),
-  Object.freeze({ id: "consent", es: "Confirmación", en: "Consent" }),
   Object.freeze({ id: "flash", es: "Instalación", en: "Install" }),
 ]);
 
@@ -341,8 +339,8 @@ export async function detectC6ZigbeeBenchTarget(options = {}) {
 }
 
 /**
- * Full 4 MB backup to a USER-SAVED local file before any erase/write.
- * Never claims backup completed merely because it was requested.
+ * Optional full 4 MB backup helper (not part of the install UX; install no longer
+ * requires backup). Never claims backup completed merely because it was requested.
  */
 export async function backupC6ZigbeeBenchFlash(options = {}) {
   if (typeof globalThis.isSecureContext === "boolean" && !globalThis.isSecureContext) {
@@ -394,8 +392,8 @@ export async function backupC6ZigbeeBenchFlash(options = {}) {
 /** Human-readable gate codes for the compact installer UI (never invent success). */
 export const C6_ZIGBEE_BENCH_GATE_MESSAGES = Object.freeze({
   BENCH_PACKAGE_NOT_VERIFIED: {
-    es: "El firmware aún no está verificado. Usá Preparar e instalar.",
-    en: "Firmware is not verified yet. Use Preparar e instalar.",
+    es: "El firmware aún no está verificado. Usá Instalar firmware.",
+    en: "Firmware is not verified yet. Use Instalar firmware.",
   },
   BENCH_AUTH_DENIED: {
     es: "Sesión requerida: iniciá sesión con una cuenta autorizada.",
@@ -406,8 +404,8 @@ export const C6_ZIGBEE_BENCH_GATE_MESSAGES = Object.freeze({
     en: "Server setup missing (private storage + Preview secrets).",
   },
   BENCH_FETCH_INTERRUPTED: {
-    es: "Descarga interrumpida. Reintentá Preparar e instalar.",
-    en: "Download interrupted. Retry Preparar e instalar.",
+    es: "Descarga interrumpida. Reintentá Instalar firmware.",
+    en: "Download interrupted. Retry Instalar firmware.",
   },
   BENCH_SERVER_HASH_MISMATCH: {
     es: "El paquete del servidor no coincide con el manifesto anclado.",
@@ -429,33 +427,17 @@ export const C6_ZIGBEE_BENCH_GATE_MESSAGES = Object.freeze({
     es: "La placa detectada no es compatible.",
     en: "Detected board is not compatible.",
   },
-  BENCH_BACKUP_REQUIRED: {
-    es: "Hace falta un respaldo completo guardado antes de borrar.",
-    en: "A complete saved backup is required before erase.",
-  },
-  BENCH_BACKUP_DOWNLOAD_ACK_REQUIRED: {
-    es: "No se pudo confirmar el archivo de respaldo local. Instalación bloqueada.",
-    en: "Could not confirm the local backup file. Install blocked.",
-  },
-  BENCH_BACKUP_READ_UNSUPPORTED: {
-    es: "Este navegador no puede leer el respaldo completo. Instalación bloqueada.",
-    en: "This browser cannot read a full backup. Install blocked.",
-  },
-  BENCH_ERASE_ACK_REQUIRED: {
-    es: "Confirmá el borrado total antes de instalar.",
-    en: "Confirm full erase before installing.",
-  },
-  BENCH_SECOND_CONFIRMATION_REQUIRED: {
-    es: "Confirmá el borrado total antes de instalar.",
-    en: "Confirm full erase before installing.",
-  },
   BENCH_FLASH_CONSENT_REQUIRED: {
-    es: "Confirmá el borrado total antes de instalar.",
-    en: "Confirm full erase before installing.",
+    es: "Pulsá Instalar firmware para autorizar el borrado e instalación.",
+    en: "Press Instalar firmware to authorize erase and install.",
   },
-  BENCH_FLASH_CONSENT_DECLINED: {
-    es: "Instalación cancelada: no hubo consentimiento de borrado.",
-    en: "Install cancelled: erase consent was not given.",
+  BENCH_WEBSERIAL_REQUIRED: {
+    es: "Web Serial no disponible (Chrome/Edge de escritorio por HTTPS).",
+    en: "Web Serial unavailable (desktop Chrome/Edge over HTTPS).",
+  },
+  BENCH_HTTPS_REQUIRED: {
+    es: "Se requiere HTTPS (o localhost) para acceder al puerto USB.",
+    en: "HTTPS (or localhost) is required for USB port access.",
   },
 });
 
@@ -466,56 +448,45 @@ export function describeC6ZigbeeBenchGateReason(reason, lang = "es") {
 }
 
 function hasDestructiveFlashConsent(options = {}) {
-  if (options.destructiveFlashConsent === true) return true;
-  return options.eraseAcknowledged === true && options.secondConfirmation === "ESP32-C6";
+  // Same pattern as stock C6 flasher: the Install CTA click is erase consent.
+  return options.destructiveFlashConsent === true || options.eraseAcknowledged === true;
 }
 
-/** This gate must be checked on the final human-triggered Flash action. */
+/**
+ * Pre-flash gates (package, board, disconnect, CTA consent). Chip/4MB detection
+ * runs after the user grants WebSerial — same as stock MicroPython flash.
+ */
 export function assertC6ZigbeeBenchFlashConsent(options = {}) {
   if (!options.validated?.ok) return { allowed: false, reason: "BENCH_PACKAGE_NOT_VERIFIED" };
   if (options.profileId !== C6_ZIGBEE_BENCH_PACKAGE.board) {
     return { allowed: false, reason: "BENCH_WRONG_BOARD_PROFILE" };
   }
   if (options.connected === true) return { allowed: false, reason: "BENCH_DISCONNECT_FIRST" };
-  if (options.detection?.ok !== true || options.detection?.flashSize !== "4MB") {
-    return { allowed: false, reason: "BENCH_DETECTION_REQUIRED" };
-  }
-  if (!isEsp32C6Chip(options.detection?.chipName)) {
-    return { allowed: false, reason: "BENCH_CHIP_NOT_ESP32_C6" };
-  }
-  const backup = options.backupResult;
-  if (
-    !backup ||
-    backup.ok !== true ||
-    backup.byteLength !== C6_FULL_FLASH_BYTES
-  ) {
-    return { allowed: false, reason: "BENCH_BACKUP_REQUIRED" };
-  }
-  if (backup.downloadConfirmed !== true && options.backupDownloadAcknowledged !== true) {
-    return { allowed: false, reason: "BENCH_BACKUP_DOWNLOAD_ACK_REQUIRED" };
-  }
   if (!hasDestructiveFlashConsent(options)) {
     return { allowed: false, reason: "BENCH_FLASH_CONSENT_REQUIRED" };
+  }
+  if (options.detection) {
+    if (options.detection.ok !== true || options.detection.flashSize !== "4MB") {
+      return { allowed: false, reason: "BENCH_DETECTION_REQUIRED" };
+    }
+    if (!isEsp32C6Chip(options.detection.chipName)) {
+      return { allowed: false, reason: "BENCH_CHIP_NOT_ESP32_C6" };
+    }
   }
   return { allowed: true, reason: "ok" };
 }
 
 /**
- * One-click prepare orchestration (detect → fetch/SHA → backup → consent → flash).
- * Never auto-flashes: requestFlashConsent must resolve true. Fail-closed on
- * auth/setup/SHA/backup/consent gaps. Continuar only via waitForContinue when
- * a fresh user gesture is required (WebSerial / file picker activation).
+ * One-click install (fetch/SHA → WebSerial detect+flash), matching stock C6 UX.
+ * CTA click supplies destructiveFlashConsent. Fail-closed on auth/setup/SHA/USB/
+ * chip gaps. No mandatory backup, file picker, Continuar, or second confirm UI.
  *
  * @param {{
  *   profileId: string,
  *   connected?: boolean,
  *   onLog?: Function,
  *   onProgress?: Function,
- *   waitForContinue?: Function,
- *   requestFlashConsent: Function,
- *   detect?: Function,
  *   fetchPackage?: Function,
- *   backup?: Function,
  *   flash?: Function,
  *   getAccessToken?: Function,
  *   fetchImpl?: Function,
@@ -524,37 +495,24 @@ export function assertC6ZigbeeBenchFlashConsent(options = {}) {
  * }} options
  */
 export async function orchestrateC6ZigbeeBenchOneClick(options = {}) {
-  const detect = options.detect || detectC6ZigbeeBenchTarget;
   const fetchPackage = options.fetchPackage || fetchAndValidateC6ZigbeeBenchPackage;
-  const backup = options.backup || backupC6ZigbeeBenchFlash;
   const flash = options.flash || flashC6ZigbeeBenchPackage;
   const onProgress = options.onProgress || (() => {});
 
-  onProgress({ stage: "detect", pct: 5, phase: "detect" });
-  let detection;
-  try {
-    detection = await detect({ onLog: options.onLog, requestPort: options.requestPort });
-  } catch (e) {
-    const reason = e?.message || String(e);
-    return { ok: false, stage: "detect", reason, flashed: false };
+  if (options.profileId !== C6_ZIGBEE_BENCH_PACKAGE.board) {
+    return { ok: false, stage: "fetch", reason: "BENCH_WRONG_BOARD_PROFILE", flashed: false };
   }
-  if (!detection?.ok) {
-    return {
-      ok: false,
-      stage: "detect",
-      reason: detection?.reason || "BENCH_DETECTION_REQUIRED",
-      detection,
-      flashed: false,
-    };
+  if (options.connected === true) {
+    return { ok: false, stage: "fetch", reason: "BENCH_DISCONNECT_FIRST", flashed: false };
   }
 
-  onProgress({ stage: "fetch", pct: 25, phase: "fetch" });
+  onProgress({ stage: "fetch", pct: 10, phase: "fetch" });
   const validated = await fetchPackage({
     getAccessToken: options.getAccessToken,
     fetchImpl: options.fetchImpl,
     digest: options.digest,
     signal: options.signal,
-    onProgress: (p) => onProgress({ stage: "fetch", pct: 25 + Math.round((p.pct || 0) * 0.35), phase: p.phase, role: p.role }),
+    onProgress: (p) => onProgress({ stage: "fetch", pct: 10 + Math.round((p.pct || 0) * 0.5), phase: p.phase, role: p.role }),
   });
   if (!validated?.ok) {
     return {
@@ -562,114 +520,28 @@ export async function orchestrateC6ZigbeeBenchOneClick(options = {}) {
       stage: "fetch",
       reason: validated?.reason || "BENCH_FETCH_FAILED",
       detail: validated?.detail,
-      detection,
       validated,
       flashed: false,
     };
   }
 
-  onProgress({ stage: "backup", pct: 60, phase: "backup_wait", needsContinue: true });
-  if (typeof options.waitForContinue === "function") {
-    await options.waitForContinue();
-  }
-  onProgress({ stage: "backup", pct: 65, phase: "backup" });
-  let backupResult;
-  try {
-    backupResult = await backup({
-      onLog: options.onLog,
-      requestPort: options.requestPort,
-      showSaveFilePicker: options.showSaveFilePicker,
-      document: options.document,
-      onProgress: (p) => onProgress({ stage: "backup", pct: 65 + Math.round((p.pct || 0) * 0.15), phase: "backup_read" }),
-    });
-  } catch (e) {
-    const reason = e?.missingCapability
-      ? "BENCH_BACKUP_READ_UNSUPPORTED"
-      : (e?.message || String(e));
-    return {
-      ok: false,
-      stage: "backup",
-      reason,
-      detail: e?.missingCapability || undefined,
-      detection,
-      validated,
-      flashed: false,
-    };
-  }
-  if (!backupResult?.ok) {
-    return {
-      ok: false,
-      stage: "backup",
-      reason: backupResult?.reason || "BENCH_BACKUP_INCOMPLETE",
-      detection: backupResult?.detection || detection,
-      validated,
-      backupResult,
-      flashed: false,
-    };
-  }
-  if (backupResult.downloadConfirmed !== true) {
-    return {
-      ok: false,
-      stage: "backup",
-      reason: "BENCH_BACKUP_DOWNLOAD_ACK_REQUIRED",
-      detection: backupResult.detection || detection,
-      validated,
-      backupResult,
-      flashed: false,
-    };
-  }
-
-  const detectionFinal = backupResult.detection?.ok ? backupResult.detection : detection;
-  onProgress({ stage: "consent", pct: 85, phase: "consent" });
-  if (typeof options.requestFlashConsent !== "function") {
-    return {
-      ok: false,
-      stage: "consent",
-      reason: "BENCH_FLASH_CONSENT_REQUIRED",
-      detection: detectionFinal,
-      validated,
-      backupResult,
-      flashed: false,
-    };
-  }
-  const consented = await options.requestFlashConsent({
-    detection: detectionFinal,
-    validated,
-    backupResult,
-  });
-  if (consented !== true) {
-    return {
-      ok: false,
-      stage: "consent",
-      reason: "BENCH_FLASH_CONSENT_DECLINED",
-      detection: detectionFinal,
-      validated,
-      backupResult,
-      flashed: false,
-    };
-  }
-
-  onProgress({ stage: "flash", pct: 90, phase: "flash" });
+  onProgress({ stage: "flash", pct: 65, phase: "flash" });
   try {
     const flashResult = await flash(validated, {
       profileId: options.profileId,
       connected: options.connected,
-      detection: detectionFinal,
-      backupResult,
+      detection: options.detection,
       destructiveFlashConsent: true,
       eraseAcknowledged: true,
-      secondConfirmation: "ESP32-C6",
       onLog: options.onLog,
       requestPort: options.requestPort,
-      onProgress: (p) => onProgress({ stage: "flash", pct: 90 + Math.round((p.pct || 0) * 0.1), phase: "flash_write" }),
+      onProgress: (p) => onProgress({ stage: "flash", pct: 65 + Math.round((p.pct || 0) * 0.35), phase: "flash_write" }),
     });
     onProgress({ stage: "flash", pct: 100, phase: "done" });
     return {
       ok: true,
       stage: "done",
-      detection: detectionFinal,
       validated,
-      backupResult,
       flashResult,
       flashed: true,
     };
@@ -678,17 +550,15 @@ export async function orchestrateC6ZigbeeBenchOneClick(options = {}) {
       ok: false,
       stage: "flash",
       reason: e?.message || String(e),
-      detection: detectionFinal,
       validated,
-      backupResult,
       flashed: false,
     };
   }
 }
 
 /**
- * User-initiated physical operation only. Validation + consent precede a
- * requestPort() gesture; the connected chip is verified again by the bootloader.
+ * User-initiated physical write. Package validation + CTA consent precede
+ * requestPort(); connected chip and 4 MB flash are verified in the bootloader.
  */
 export async function flashC6ZigbeeBenchPackage(validated, options = {}) {
   const gate = assertC6ZigbeeBenchFlashConsent({ ...options, validated });

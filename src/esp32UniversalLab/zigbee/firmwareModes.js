@@ -163,7 +163,7 @@ export function listC6FirmwareModeDescriptors(profileId = WAVESHARE_ESP32_C6_LCD
       artifactBlockReason: mpyZb.artifact.blockReason,
       decision: mpyZb.decision,
       warning:
-        "Custom MicroPython+_uzigbee image ERASES stock MicroPython. Backup first. " +
+        "Custom MicroPython+_uzigbee image ERASES stock MicroPython (apps/files may be wiped). " +
         "Never auto-flashed. NOT READY until READY artifact + validated boot/partition. " +
         "Hardware Zigbee UNVERIFIED.",
       note:

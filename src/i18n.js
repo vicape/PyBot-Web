@@ -75,15 +75,15 @@ const STRINGS = {
     labZigbeeCoordinatorSection:
       "Coordinador Zigbee ESP-IDF (ruta host aparte)",
     labZigbeeBlockedHint:
-      "No disponible: sin imagen ESP-IDF validada. No es el firmware MicroPython+Zigbee de esta placa. Usá «Preparar e instalar» abajo para esa opción.",
+      "No disponible: sin imagen ESP-IDF validada. No es el firmware MicroPython+Zigbee de esta placa. Usá «Instalar firmware» abajo para esa opción.",
     labZigbeeReadyHint:
       "Artefacto coordinador ESP-IDF READY (hardware UNVERIFIED). Host USB; Python (create network, allow joining, status, command on/off, read). autoFlash=false. Distinto de MicroPython+Zigbee.",
     labMpyZigbeeSection:
       "MicroPython + Zigbee nativo (misma placa)",
     labMpyZigbeeBenchHint:
-      "Instalador guiado del firmware custom con _uzigbee. Obtiene el paquete privado autenticado (#555), respaldo 4 MB y confirmación. Sin auto-flash.",
+      "Instala el firmware custom con _uzigbee (paquete privado autenticado, SHA automático). Las apps/archivos de la placa pueden borrarse. Experimental / hardware no verificado.",
     labMpyZigbeeBenchDisconnectHint:
-      "Desconectá la placa del IDE antes de preparar e instalar (el puerto USB debe quedar libre).",
+      "Desconectá la placa del IDE antes de instalar (el puerto USB debe quedar libre).",
     labMpyZigbeeBenchNoSerialHint:
       "Web Serial no disponible (usá Chrome/Edge de escritorio por HTTPS).",
     labZigbeeConnectBtn: "Conectar host Zigbee (WebSerial)",
@@ -737,15 +737,15 @@ Creado por VIC.`,
     labZigbeeCoordinatorSection:
       "ESP-IDF Zigbee coordinator (separate host path)",
     labZigbeeBlockedHint:
-      "Unavailable: no validated ESP-IDF image. This is not the same-board MicroPython+Zigbee firmware. Use “Preparar e instalar” below for that option.",
+      "Unavailable: no validated ESP-IDF image. This is not the same-board MicroPython+Zigbee firmware. Use “Instalar firmware” below for that option.",
     labZigbeeReadyHint:
       "ESP-IDF coordinator artifact READY (hardware UNVERIFIED). USB host; Python (create network, allow joining, status, command on/off, read). autoFlash=false. Distinct from MicroPython+Zigbee.",
     labMpyZigbeeSection:
       "MicroPython + native Zigbee (same board)",
     labMpyZigbeeBenchHint:
-      "Guided installer for the custom _uzigbee firmware. Fetches the private authenticated #555 package, 4 MB backup, and explicit consent. No auto-flash.",
+      "Installs the custom _uzigbee firmware (authenticated private package, automatic SHA). Board apps/files may be erased. Experimental / hardware unverified.",
     labMpyZigbeeBenchDisconnectHint:
-      "Disconnect the board from the IDE before prepare/install (USB port must be free).",
+      "Disconnect the board from the IDE before installing (USB port must be free).",
     labMpyZigbeeBenchNoSerialHint:
       "Web Serial unavailable (use desktop Chrome/Edge over HTTPS).",
     labZigbeeConnectBtn: "Connect Zigbee host (WebSerial)",

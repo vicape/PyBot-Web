@@ -2725,7 +2725,7 @@ export default function PyBotIDE() {
                               setZigbeeBenchOpen(true);
                             }}
                           >
-                            Preparar e instalar
+                            Instalar firmware
                           </button>
                           <div className="toolbar-menu-hint" data-testid="lab-mpy-zigbee-bench-hint">
                             {connected

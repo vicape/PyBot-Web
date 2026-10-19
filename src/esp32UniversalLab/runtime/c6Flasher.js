@@ -193,7 +193,7 @@ export async function writeC6MultiOffsetFirmware(ctx, segments, options = {}) {
       flashMode: "dio",
       flashFreq: "80m",
       flashSize: "4MB",
-      eraseAll: true, // Full backup and erasure consent required by the caller.
+      eraseAll: true, // Caller CTA supplies erase consent (apps/files may be wiped).
       compress: true,
       reportProgress: (fileIndex, written, fileTotal) => {
         options.onProgress?.({
