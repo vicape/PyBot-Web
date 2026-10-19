@@ -1,246 +1,222 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getLang } from "./i18n.js";
 import {
-  C6_ZIGBEE_BENCH_PACKAGE,
   C6_ZIGBEE_BENCH_UI_LABEL,
+  C6_ZIGBEE_BENCH_CONTINUE_LABEL,
   C6_ZIGBEE_BENCH_POST_FLASH_CHECKS,
-  C6_FULL_FLASH_BYTES,
-  assertC6ZigbeeBenchFlashConsent,
-  detectC6ZigbeeBenchTarget,
-  backupC6ZigbeeBenchFlash,
-  flashC6ZigbeeBenchPackage,
-  fetchAndValidateC6ZigbeeBenchPackage,
+  C6_ZIGBEE_BENCH_PROGRESS_STAGES,
+  orchestrateC6ZigbeeBenchOneClick,
   describeC6ZigbeeBenchGateReason,
 } from "./esp32UniversalLab/runtime/c6ZigbeeBench.js";
 
 /**
- * Guided Preparar e instalar for Waveshare ESP32-C6-LCD-1.47 private bench.
- * Compact 4-step flow. Obtains firmware via authenticated server distributor
- * (never file-picker / GitHub ZIP). Never auto-flashes. Distinct from ESP-IDF
- * coordinator mode. Ordinary users never see operator decision popups.
+ * One-click Preparar e instalar for Waveshare ESP32-C6-LCD-1.47 private bench.
+ * Single primary CTA starts automatic detect → fetch/SHA → backup; Continuar only
+ * when WebSerial/file-picker needs a fresh gesture; one explicit destructive
+ * flash consent after verified backup. No stage buttons, uploads, or ZIP.
  */
 export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, connected }) {
-  const [validated, setValidated] = useState(null);
-  const [detection, setDetection] = useState(null);
-  const [backupResult, setBackupResult] = useState(null);
-  const [backupAck, setBackupAck] = useState(false);
-  const [erase, setErase] = useState(false);
-  const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [phase, setPhase] = useState("");
   const [pct, setPct] = useState(0);
+  const [stage, setStage] = useState("");
   const [finished, setFinished] = useState(false);
   const [postChecks, setPostChecks] = useState(null);
+  const [needsContinue, setNeedsContinue] = useState(false);
+  const [needsFlashConsent, setNeedsFlashConsent] = useState(false);
+  const continueResolver = useRef(null);
+  const consentResolver = useRef(null);
   const en = getLang() === "en";
 
-  useEffect(() => {
-    if (!open) return;
-    setValidated(null);
-    setDetection(null);
-    setBackupResult(null);
-    setBackupAck(false);
-    setErase(false);
-    setConfirm("");
+  const resetUi = () => {
     setBusy(false);
     setError("");
     setPhase("");
     setPct(0);
+    setStage("");
     setFinished(false);
     setPostChecks(null);
+    setNeedsContinue(false);
+    setNeedsFlashConsent(false);
+    if (continueResolver.current) {
+      continueResolver.current();
+      continueResolver.current = null;
+    }
+    if (consentResolver.current) {
+      consentResolver.current(false);
+      consentResolver.current = null;
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    resetUi();
   }, [open]);
 
   if (!open) return null;
-  const packageReady = validated?.ok === true;
-  const gate = assertC6ZigbeeBenchFlashConsent({
-    validated,
-    profileId,
-    connected,
-    detection,
-    backupResult,
-    backupDownloadAcknowledged: backupAck,
-    eraseAcknowledged: erase,
-    secondConfirmation: confirm.trim(),
-  });
-  const needsBackupAck =
-    backupResult?.ok === true && backupResult.downloadConfirmed !== true;
-  const gateHint =
-    !gate.allowed && !finished
-      ? describeC6ZigbeeBenchGateReason(gate.reason, en ? "en" : "es")
-      : "";
 
-  const stepStatus = (done, active) => {
-    if (done) return en ? "done" : "listo";
-    if (active) return en ? "current" : "actual";
-    return en ? "pending" : "pendiente";
-  };
-  const step1Done = detection?.ok === true;
-  const step2Done = packageReady;
-  const step3Done = backupResult?.ok === true && (!needsBackupAck || backupAck);
-  const step4Active = step1Done && step2Done && step3Done;
+  const stageIndex = C6_ZIGBEE_BENCH_PROGRESS_STAGES.findIndex((s) => s.id === stage);
+  const activeIndex = stage === "done" ? C6_ZIGBEE_BENCH_PROGRESS_STAGES.length - 1 : stageIndex;
 
-  const runDetect = async () => {
-    setBusy(true);
-    setError("");
-    setPhase(en ? "Select the ESP32-C6 USB port…" : "Seleccioná el puerto USB del ESP32-C6…");
-    try {
-      const result = await detectC6ZigbeeBenchTarget({ onLog });
-      if (!result.ok) {
-        setDetection(result);
-        throw new Error(result.reason || "BENCH_DETECTION_REQUIRED");
-      }
-      setDetection(result);
+  const waitForContinue = () =>
+    new Promise((resolve) => {
+      setNeedsContinue(true);
       setPhase(en
-        ? `Detected ${result.chipName}, flash ${result.flashSize}.`
-        : `Detectado ${result.chipName}, flash ${result.flashSize}.`);
-    } catch (e) {
-      setDetection(null);
-      setError(e?.message || String(e));
-      setPhase(en
-        ? "Detection failed — install will not proceed."
-        : "Detección fallida — la instalación no continúa.");
-    } finally {
+        ? "Select the USB port and save the backup when prompted."
+        : "Seleccioná el puerto USB y guardá el respaldo cuando se pida.");
+      continueResolver.current = () => {
+        setNeedsContinue(false);
+        continueResolver.current = null;
+        resolve();
+      };
+    });
+
+  const requestFlashConsent = () =>
+    new Promise((resolve) => {
+      setNeedsFlashConsent(true);
       setBusy(false);
+      setPhase(en
+        ? "Backup saved. Confirm full erase to install."
+        : "Respaldo guardado. Confirmá el borrado total para instalar.");
+      consentResolver.current = (accepted) => {
+        setNeedsFlashConsent(false);
+        consentResolver.current = null;
+        resolve(accepted === true);
+      };
+    });
+
+  const resolveErrorMessage = (result) => {
+    const hint = describeC6ZigbeeBenchGateReason(result.reason, en ? "en" : "es");
+    const parts = [hint || result.reason || (en ? "Install blocked." : "Instalación bloqueada.")];
+    if (result.reason === "BENCH_OPERATOR_SETUP_REQUIRED" && result.detail) {
+      parts.push(result.detail);
     }
+    return parts.join("\n");
   };
 
-  const obtainFirmware = async () => {
-    if (!detection?.ok || busy) return;
+  const startOneClick = async () => {
+    if (busy || finished || needsContinue || needsFlashConsent) return;
     setBusy(true);
     setError("");
-    setValidated(null);
+    setFinished(false);
+    setPostChecks(null);
     setPct(0);
+    setStage("detect");
     setPhase(en
-      ? "Obtaining firmware from authorized server…"
-      : "Obteniendo firmware del servidor autorizado…");
+      ? "Select the board USB port when the browser asks."
+      : "Seleccioná el puerto USB de la placa cuando el navegador lo pida.");
     try {
-      const result = await fetchAndValidateC6ZigbeeBenchPackage({
+      const result = await orchestrateC6ZigbeeBenchOneClick({
+        profileId,
+        connected,
+        onLog,
+        waitForContinue,
+        requestFlashConsent,
         onProgress: (p) => {
-          setPct(p.pct || 0);
-          if (p.phase === "mint") {
-            setPhase(en ? "Requesting short-lived delivery tickets…" : "Solicitando tickets de entrega…");
-          } else if (p.phase === "download") {
+          if (p.stage) setStage(p.stage);
+          if (typeof p.pct === "number") setPct(p.pct);
+          if (p.phase === "detect") {
             setPhase(en
-              ? `Downloading ${p.role || "segment"}…`
-              : `Descargando ${p.role || "segmento"}…`);
+              ? "Select the board USB port when the browser asks."
+              : "Seleccioná el puerto USB de la placa cuando el navegador lo pida.");
+          } else if (p.phase === "fetch" || p.phase === "mint") {
+            setPhase(en ? "Getting firmware from the server…" : "Obteniendo firmware del servidor…");
+          } else if (p.phase === "download") {
+            setPhase(en ? "Downloading firmware…" : "Descargando firmware…");
           } else if (p.phase === "verify") {
-            setPhase(en ? "Verifying SHA-256…" : "Verificando SHA-256…");
+            setPhase(en ? "Verifying firmware…" : "Verificando firmware…");
+          } else if (p.phase === "backup_wait") {
+            setPhase(en
+              ? "Ready to back up. Press Continuar, then choose the port and save file."
+              : "Listo para respaldar. Pulsá Continuar y elegí puerto y archivo.");
+          } else if (p.phase === "backup" || p.phase === "backup_read") {
+            setPhase(en ? "Reading and saving the full backup…" : "Leyendo y guardando el respaldo completo…");
+          } else if (p.phase === "consent") {
+            setPhase(en
+              ? "Backup saved. Confirm full erase to install."
+              : "Respaldo guardado. Confirmá el borrado total para instalar.");
+          } else if (p.phase === "flash" || p.phase === "flash_write") {
+            setBusy(true);
+            setPhase(en
+              ? "Select the USB port, then writing firmware…"
+              : "Seleccioná el puerto USB; grabando firmware…");
+          } else if (p.phase === "done") {
+            setPhase(en
+              ? "Written. Unplug/reconnect USB, then Connect in PyBot."
+              : "Grabado. Desconectá/reconectá USB y usá Conectar en PyBot.");
           }
         },
       });
+
       if (!result.ok) {
-        const hint = describeC6ZigbeeBenchGateReason(result.reason, en ? "en" : "es");
-        const parts = [hint || result.reason || "BENCH_FETCH_FAILED"];
-        if (result.reason === "BENCH_OPERATOR_SETUP_REQUIRED" && result.detail) {
-          parts.push(result.detail);
+        if (result.reason === "BENCH_FLASH_CONSENT_DECLINED") {
+          setError(describeC6ZigbeeBenchGateReason(result.reason, en ? "en" : "es"));
+          setPhase(en ? "Install cancelled." : "Instalación cancelada.");
+          return;
         }
-        throw new Error(parts.join("\n"));
+        setError(resolveErrorMessage(result));
+        setPhase(en
+          ? "Stopped — install will not continue."
+          : "Detenido — la instalación no continúa.");
+        onLog?.("PYBOT_C6_ZIGBEE:ONE_CLICK_FAIL " + (result.reason || "unknown"));
+        return;
       }
-      setValidated(result);
-      setPct(100);
-      setPhase(en
-        ? "Firmware verified (0x0, 0x8000, 0x10000)."
-        : "Firmware verificado (0x0, 0x8000, 0x10000).");
-    } catch (e) {
-      setValidated(null);
-      setError(e?.message || String(e));
-      setPhase(en
-        ? "Could not obtain firmware — retry when ready."
-        : "No se pudo obtener el firmware — reintentá cuando esté listo.");
-    } finally {
-      setBusy(false);
-    }
-  };
 
-  const runBackup = async () => {
-    if (!detection?.ok || !packageReady || busy) return;
-    setBusy(true);
-    setError("");
-    setBackupAck(false);
-    setPhase(en
-      ? "Select the port, then save the full 4 MB backup…"
-      : "Seleccioná el puerto y guardá el respaldo completo de 4 MB…");
-    try {
-      const result = await backupC6ZigbeeBenchFlash({
-        onLog,
-        onProgress: (progress) => {
-          setPct(progress.pct || 0);
-          setPhase(en ? "Reading full 4 MB flash…" : "Leyendo flash completa de 4 MB…");
-        },
-      });
-      if (!result.ok) throw new Error(result.reason || "BENCH_BACKUP_INCOMPLETE");
-      setBackupResult(result);
-      setDetection(result.detection || detection);
+      setFinished(true);
+      setPostChecks(result.flashResult?.postFlashChecks || C6_ZIGBEE_BENCH_POST_FLASH_CHECKS);
       setPct(100);
-      setPhase(result.downloadConfirmed
-        ? (en
-          ? `Backup saved (${result.byteLength} bytes).`
-          : `Respaldo guardado (${result.byteLength} bytes).`)
-        : (en
-          ? `Backup read OK (${result.byteLength} bytes). Acknowledge the saved file.`
-          : `Lectura OK (${result.byteLength} bytes). Confirmá el archivo guardado.`));
-    } catch (e) {
-      setBackupResult(null);
-      const msg = e?.message || String(e);
-      const missing = e?.missingCapability;
-      setError(missing
-        ? `${msg} — missing capability: ${missing}. Firmware installation fail-closed.`
-        : msg);
+      setStage("done");
       setPhase(en
-        ? "Backup/recovery capability missing or failed — install blocked."
-        : "Falta o falló la capacidad de respaldo/recuperación — instalación bloqueada.");
-      onLog?.("PYBOT_C6_ZIGBEE:BACKUP_FAIL " + msg);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const flashNow = async () => {
-    if (!gate.allowed || busy) return;
-    setBusy(true);
-    setFinished(false);
-    setError("");
-    setPhase(en ? "Select the correct ESP32-C6 USB port…" : "Seleccioná el puerto USB correcto del ESP32-C6…");
-    try {
-      const result = await flashC6ZigbeeBenchPackage(validated, {
-        profileId,
-        connected,
-        detection,
-        backupResult,
-        backupDownloadAcknowledged: backupAck,
-        eraseAcknowledged: erase,
-        secondConfirmation: confirm.trim(),
-        onLog,
-        onProgress: (progress) => {
-          setPct(progress.pct);
-          setPhase(en ? "Writing firmware…" : "Grabando firmware…");
-        },
-      });
-      setFinished(result.written);
-      setPostChecks(result.postFlashChecks || C6_ZIGBEE_BENCH_POST_FLASH_CHECKS);
-      setPhase(en
-        ? "Written. Unplug/reconnect USB, then Connect in PyBot. Recovery: write_flash 0 backup.bin."
-        : "Grabado. Desconectá/reconectá USB y usá Conectar en PyBot. Recuperación: write_flash 0 respaldo.bin.");
+        ? "Written. Unplug/reconnect USB, then Connect in PyBot."
+        : "Grabado. Desconectá/reconectá USB y usá Conectar en PyBot.");
     } catch (e) {
       const msg = e?.message || String(e);
       setError(msg);
       setPhase(en
-        ? "No physical success claimed. Use the verified 4 MB backup if needed."
-        : "No se confirma funcionamiento físico. Usá el respaldo 4 MB si hace falta.");
+        ? "Stopped — install will not continue."
+        : "Detenido — la instalación no continúa.");
       onLog?.("PYBOT_C6_ZIGBEE:ERROR " + msg);
     } finally {
       setBusy(false);
+      setNeedsContinue(false);
+      setNeedsFlashConsent(false);
     }
   };
 
-  const stepBox = {
-    border: "1px solid var(--ide-border-subtle, #ddd)",
-    borderRadius: 8,
-    padding: "10px 12px",
-    marginBottom: 10,
+  const onContinue = () => {
+    if (continueResolver.current) continueResolver.current();
   };
-  const stepMeta = { fontSize: 11, color: "var(--fg-muted)", marginBottom: 6 };
+
+  const onConfirmFlash = () => {
+    if (consentResolver.current) {
+      setBusy(true);
+      consentResolver.current(true);
+    }
+  };
+
+  const onDeclineFlash = () => {
+    if (consentResolver.current) consentResolver.current(false);
+  };
+
   const compactP = { margin: "0 0 8px", fontSize: 13, lineHeight: 1.4 };
+  const progressTrack = {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 12,
+    listStyle: "none",
+    padding: 0,
+    margin: "0 0 12px",
+  };
+  const chipBase = {
+    fontSize: 11,
+    padding: "4px 8px",
+    borderRadius: 999,
+    border: "1px solid var(--ide-border-subtle, #ddd)",
+    color: "var(--fg-muted)",
+    background: "transparent",
+  };
 
   return (
     <div className="modal-back" role="presentation" data-testid="lab-c6-zigbee-bench-modal">
@@ -260,141 +236,112 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
         <div className="modal-body" style={{ padding: 16 }}>
           <p style={compactP} data-testid="lab-c6-zigbee-bench-path-label">
             {en
-              ? "MicroPython + native Zigbee (_uzigbee) for Waveshare ESP32-C6-LCD-1.47 — not the ESP-IDF coordinator host path."
-              : "MicroPython + Zigbee nativo (_uzigbee) para Waveshare ESP32-C6-LCD-1.47 — no es el coordinador ESP-IDF host."}
+              ? "MicroPython + native Zigbee for Waveshare ESP32-C6-LCD-1.47 — not the ESP-IDF coordinator host path."
+              : "MicroPython + Zigbee nativo para Waveshare ESP32-C6-LCD-1.47 — no es el coordinador ESP-IDF host."}
           </p>
           <p style={{ ...compactP, fontSize: 12, color: "var(--fg-muted)" }} data-testid="lab-c6-zigbee-bench-notices">
             {en
-              ? "Private authenticated bench. See THIRD_PARTY_NOTICES (esp-zboss-lib redistribution conditions)."
-              : "Banco privado autenticado. Ver THIRD_PARTY_NOTICES (condiciones de redistribución esp-zboss-lib)."}
+              ? "Private authenticated bench. See THIRD_PARTY_NOTICES for redistribution conditions."
+              : "Banco privado autenticado. Ver THIRD_PARTY_NOTICES para condiciones de redistribución."}
           </p>
 
-          <div style={stepBox} data-testid="lab-c6-zigbee-bench-step-1">
-            <div style={stepMeta}>
-              1/4 · {en ? "Detect C6 + 4 MB" : "Detectar C6 + 4 MB"} · {stepStatus(step1Done, !step1Done)}
-            </div>
-            <button
-              type="button"
-              className="toolbar-menu-item toolbar-menu-item--secondary"
-              disabled={busy || finished}
-              onClick={runDetect}
-              data-testid="lab-c6-zigbee-bench-detect"
-            >
-              {en ? "Detect board" : "Detectar placa"}
-            </button>
-            {detection?.ok ? (
-              <p role="status" data-testid="lab-c6-zigbee-bench-detected" style={{ ...compactP, marginTop: 8, marginBottom: 0 }}>
-                {detection.chipName} / {detection.flashSize} ({C6_FULL_FLASH_BYTES} bytes)
-              </p>
-            ) : null}
-          </div>
+          <ol
+            style={progressTrack}
+            data-testid="lab-c6-zigbee-bench-progress-stages"
+            aria-label={en ? "Install progress" : "Progreso de instalación"}
+          >
+            {C6_ZIGBEE_BENCH_PROGRESS_STAGES.map((item, idx) => {
+              const done = finished || (activeIndex >= 0 && idx < activeIndex);
+              const current = !finished && activeIndex === idx;
+              return (
+                <li
+                  key={item.id}
+                  data-testid={`lab-c6-zigbee-bench-stage-${item.id}`}
+                  data-state={done ? "done" : current ? "current" : "pending"}
+                  style={{
+                    ...chipBase,
+                    borderColor: current || done ? "var(--accent, #2563eb)" : chipBase.border,
+                    color: current || done ? "var(--fg, inherit)" : chipBase.color,
+                    fontWeight: current ? 600 : 400,
+                  }}
+                >
+                  {idx + 1}. {en ? item.en : item.es}
+                </li>
+              );
+            })}
+          </ol>
 
-          <div style={stepBox} data-testid="lab-c6-zigbee-bench-step-2">
-            <div style={stepMeta}>
-              2/4 · Obtener firmware y verificar · {stepStatus(step2Done, step1Done && !step2Done)}
-            </div>
-            <button
-              type="button"
-              className="toolbar-menu-item toolbar-menu-item--secondary"
-              disabled={busy || finished || !detection?.ok}
-              onClick={obtainFirmware}
-              data-testid="lab-c6-zigbee-bench-obtain"
-            >
-              Obtener firmware y verificar
-            </button>
-            {packageReady ? (
-              <p role="status" data-testid="lab-c6-zigbee-bench-verified" style={{ ...compactP, marginTop: 8, marginBottom: 0 }}>
-                {en
-                  ? `Hashes OK · v${validated.packageVersion || C6_ZIGBEE_BENCH_PACKAGE.version} · 0x0, 0x8000, 0x10000`
-                  : `Hashes OK · v${validated.packageVersion || C6_ZIGBEE_BENCH_PACKAGE.version} · 0x0, 0x8000, 0x10000`}
-              </p>
-            ) : null}
-          </div>
-
-          <div style={stepBox} data-testid="lab-c6-zigbee-bench-step-3">
-            <div style={stepMeta}>
-              3/4 · {en ? "Full 4 MB backup" : "Respaldo completo 4 MB"} · {stepStatus(step3Done, step2Done && !step3Done)}
-            </div>
-            <button
-              type="button"
-              className="toolbar-menu-item toolbar-menu-item--secondary"
-              disabled={busy || finished || !detection?.ok || !packageReady}
-              onClick={runBackup}
-              data-testid="lab-c6-zigbee-bench-backup"
-            >
-              {en ? "Back up 4 MB flash" : "Respaldar flash 4 MB"}
-            </button>
-            {backupResult?.ok ? (
-              <p role="status" data-testid="lab-c6-zigbee-bench-backup-ok" style={{ ...compactP, marginTop: 8 }}>
-                {backupResult.fileName} — {backupResult.byteLength} bytes
-                {backupResult.downloadConfirmed ? (en ? " (save confirmed)" : " (guardado confirmado)") : ""}
-              </p>
-            ) : null}
-            {needsBackupAck ? (
-              <label style={{ display: "block", fontSize: 13 }} data-testid="lab-c6-zigbee-bench-backup-ack-wrap">
-                <input
-                  type="checkbox"
-                  checked={backupAck}
-                  disabled={busy || finished}
-                  onChange={(e) => setBackupAck(e.target.checked)}
-                  data-testid="lab-c6-zigbee-bench-backup-ack"
+          {(busy || pct > 0) ? (
+            <div data-testid="lab-c6-zigbee-bench-progress" role="status" aria-live="polite" style={{ marginBottom: 10 }}>
+              <div
+                style={{
+                  height: 8,
+                  borderRadius: 4,
+                  background: "var(--ide-border-subtle, #e5e5e5)",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.max(0, Math.min(100, pct))}%`,
+                    height: "100%",
+                    background: "var(--accent, #2563eb)",
+                    transition: "width 160ms linear",
+                  }}
                 />
-                {" "}
-                {en
-                  ? "I verified the 4 MB backup file was saved (browser cannot confirm this download)."
-                  : "Verifiqué que el respaldo de 4 MB quedó guardado (el navegador no confirma esta descarga)."}
-              </label>
-            ) : null}
-          </div>
-
-          <div style={stepBox} data-testid="lab-c6-zigbee-bench-step-4">
-            <div style={stepMeta}>
-              4/4 · {en ? "Confirm & install" : "Confirmar e instalar"} · {stepStatus(finished, step4Active && !finished)}
+              </div>
+              <p style={{ ...compactP, marginTop: 6, marginBottom: 0 }}>{pct}%</p>
             </div>
-            <label style={{ display: "block", fontSize: 13, marginBottom: 8 }}>
-              <input type="checkbox" checked={erase} disabled={busy || finished} onChange={(e) => setErase(e.target.checked)} />
-              {" "}
-              {en
-                ? "I understand ALL 4 MB will be erased; BOOT/RESET recovery may be required."
-                : "Entiendo que se borrará toda la flash de 4 MB; podría necesitar BOOT/RESET."}
-            </label>
-            <label style={{ display: "block", fontSize: 13, marginBottom: 8 }}>
-              {en ? "Type ESP32-C6 to confirm" : "Escribí ESP32-C6 para confirmar"}
-              <input
-                type="text"
-                aria-label={en ? "Double confirmation" : "Segunda confirmación"}
-                placeholder="ESP32-C6"
-                value={confirm}
-                disabled={busy || finished}
-                onChange={(e) => setConfirm(e.target.value)}
-                style={{ display: "block", marginTop: 4, width: "100%", maxWidth: 200 }}
-              />
-            </label>
-            {gateHint ? (
-              <p role="status" data-testid="lab-c6-zigbee-bench-gate-hint" style={{ ...compactP, color: "var(--fg-muted)" }}>
-                {gateHint}
-              </p>
-            ) : null}
-            <button
-              type="button"
-              className="toolbar-menu-item toolbar-menu-item--highlight"
-              data-testid="lab-c6-zigbee-bench-flash"
-              disabled={!gate.allowed || busy || finished}
-              onClick={flashNow}
-            >
-              {busy
-                ? (en ? "Working…" : "Procesando…")
-                : C6_ZIGBEE_BENCH_UI_LABEL}
-            </button>
-          </div>
+          ) : null}
 
-          {busy && pct > 0 ? <p role="status" data-testid="lab-c6-zigbee-bench-progress">{pct}%</p> : null}
-          {phase ? <p role="status" style={{ fontSize: 13, marginTop: 4 }}>{phase}</p> : null}
+          {phase ? (
+            <p role="status" data-testid="lab-c6-zigbee-bench-phase" style={{ fontSize: 13, marginTop: 4 }}>
+              {phase}
+            </p>
+          ) : null}
+
+          {needsFlashConsent ? (
+            <div
+              data-testid="lab-c6-zigbee-bench-flash-consent"
+              style={{
+                border: "1px solid var(--ide-border-subtle, #ddd)",
+                borderRadius: 8,
+                padding: "10px 12px",
+                margin: "10px 0",
+              }}
+            >
+              <p style={compactP}>
+                {en
+                  ? "This will erase the entire 4 MB flash and install the bench firmware. Recovery may require BOOT/RESET and your saved backup."
+                  : "Se borrará toda la flash de 4 MB y se instalará el firmware del banco. La recuperación puede requerir BOOT/RESET y tu respaldo guardado."}
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <button
+                  type="button"
+                  className="toolbar-menu-item toolbar-menu-item--highlight"
+                  data-testid="lab-c6-zigbee-bench-flash-confirm"
+                  onClick={onConfirmFlash}
+                >
+                  {C6_ZIGBEE_BENCH_UI_LABEL}
+                </button>
+                <button
+                  type="button"
+                  className="toolbar-menu-item toolbar-menu-item--secondary"
+                  data-testid="lab-c6-zigbee-bench-flash-decline"
+                  onClick={onDeclineFlash}
+                >
+                  {en ? "Cancel" : "Cancelar"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {error ? (
             <p role="alert" data-testid="lab-c6-zigbee-bench-error" style={{ color: "var(--color-error, #b42318)", fontSize: 13, whiteSpace: "pre-wrap" }}>
               {error}
             </p>
           ) : null}
+
           {finished ? (
             <div data-testid="lab-c6-zigbee-bench-finished">
               <p role="status" style={compactP}>
@@ -412,8 +359,31 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
             </div>
           ) : null}
         </div>
-        <div className="modal-footer" style={{ padding: 12 }}>
+        <div className="modal-footer" style={{ padding: 12, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
           <button type="button" disabled={busy} onClick={onClose}>{en ? "Close" : "Cerrar"}</button>
+          {needsContinue ? (
+            <button
+              type="button"
+              className="toolbar-menu-item toolbar-menu-item--secondary"
+              data-testid="lab-c6-zigbee-bench-continue"
+              onClick={onContinue}
+            >
+              {C6_ZIGBEE_BENCH_CONTINUE_LABEL}
+            </button>
+          ) : null}
+          {!needsContinue && !needsFlashConsent && !finished ? (
+            <button
+              type="button"
+              className="toolbar-menu-item toolbar-menu-item--highlight"
+              data-testid="lab-c6-zigbee-bench-start"
+              disabled={busy}
+              onClick={startOneClick}
+            >
+              {busy
+                ? (en ? "Working…" : "Procesando…")
+                : C6_ZIGBEE_BENCH_UI_LABEL}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

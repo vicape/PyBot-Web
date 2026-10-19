@@ -4,10 +4,12 @@ import {
   C6_ZIGBEE_BENCH_PACKAGE,
   C6_ZIGBEE_BENCH_UI_LABEL,
   C6_ZIGBEE_BENCH_FETCH_ACTION,
+  C6_ZIGBEE_BENCH_CONTINUE_LABEL,
   C6_ZIGBEE_BENCH_DISTRIBUTION,
   C6_ZIGBEE_BENCH_POST_FLASH_CHECKS,
   C6_ZIGBEE_BENCH_PRESERVED_VFS_PATHS,
   C6_ZIGBEE_BENCH_OPERATOR_SETUP,
+  C6_ZIGBEE_BENCH_PROGRESS_STAGES,
   C6_FULL_FLASH_BYTES,
   validateC6ZigbeeBenchFiles,
   assertC6ZigbeeBenchFlashConsent,
@@ -17,6 +19,7 @@ import {
   detectC6ZigbeeBenchTarget,
   backupC6ZigbeeBenchFlash,
   describeC6ZigbeeBenchGateReason,
+  orchestrateC6ZigbeeBenchOneClick,
 } from "../src/esp32UniversalLab/runtime/c6ZigbeeBench.js";
 import {
   writeC6MultiOffsetFirmware,
@@ -80,16 +83,27 @@ test("C6 Zigbee: durable manifest anchors versions/chip/offsets/sizes/SHA", () =
   assert.equal(existsSync(join(here, "../api/c6-zigbee-bench-firmware.js")), true);
 });
 
-test("C6 Zigbee: UI label is exactly Preparar e instalar; step 2 is Obtener firmware y verificar", () => {
+test("C6 Zigbee: one-click UI — single Preparar e instalar CTA, no stage buttons", () => {
   assert.equal(C6_ZIGBEE_BENCH_UI_LABEL, "Preparar e instalar");
   assert.equal(C6_ZIGBEE_BENCH_FETCH_ACTION, "Obtener firmware y verificar");
+  assert.equal(C6_ZIGBEE_BENCH_CONTINUE_LABEL, "Continuar");
   assert.match(modalSrc, /Preparar e instalar/);
-  assert.match(modalSrc, /Obtener firmware y verificar/);
-  assert.match(modalSrc, /lab-c6-zigbee-bench-obtain/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-start/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-progress/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-progress-stages/);
+  assert.match(modalSrc, /orchestrateC6ZigbeeBenchOneClick/);
+  assert.doesNotMatch(modalSrc, /lab-c6-zigbee-bench-detect/);
+  assert.doesNotMatch(modalSrc, /lab-c6-zigbee-bench-obtain/);
+  assert.doesNotMatch(modalSrc, /lab-c6-zigbee-bench-backup"/);
+  assert.doesNotMatch(modalSrc, /Detectar placa/);
+  assert.doesNotMatch(modalSrc, /Obtener firmware y verificar/);
+  assert.doesNotMatch(modalSrc, /Respaldar flash 4 MB/);
+  assert.doesNotMatch(modalSrc, /Escribí ESP32-C6|Type ESP32-C6/);
   assert.doesNotMatch(modalSrc, /type="file"/);
   assert.doesNotMatch(modalSrc, /DECISION REQUIRED/);
   assert.doesNotMatch(benchSrc, /status:\s*"DECISION REQUIRED"/);
   assert.notEqual(C6_ZIGBEE_BENCH_DISTRIBUTION.status, "DECISION REQUIRED");
+  assert.equal(C6_ZIGBEE_BENCH_PROGRESS_STAGES.map((s) => s.id).join(","), "detect,fetch,backup,consent,flash");
 });
 
 test("C6 Zigbee: menu separates MicroPython+Zigbee install from ESP-IDF coordinator", () => {
@@ -106,16 +120,19 @@ test("C6 Zigbee: menu separates MicroPython+Zigbee install from ESP-IDF coordina
   assert.ok(mpyIdx > 0 && coordIdx > mpyIdx);
 });
 
-test("C6 Zigbee: compact 4-step installer without ordinary-user decision popup", () => {
-  assert.match(modalSrc, /lab-c6-zigbee-bench-step-1/);
-  assert.match(modalSrc, /lab-c6-zigbee-bench-step-2/);
-  assert.match(modalSrc, /lab-c6-zigbee-bench-step-3/);
-  assert.match(modalSrc, /lab-c6-zigbee-bench-step-4/);
+test("C6 Zigbee: progress stages + path label; no ordinary-user decision popup", () => {
+  assert.match(modalSrc, /lab-c6-zigbee-bench-stage-\$\{item\.id\}/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-progress-stages/);
   assert.match(modalSrc, /lab-c6-zigbee-bench-path-label/);
-  assert.match(modalSrc, /MicroPython \+ native Zigbee|_uzigbee/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-continue/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-flash-consent/);
+  assert.match(modalSrc, /MicroPython \+ native Zigbee|Zigbee nativo/);
   assert.match(modalSrc, /not the ESP-IDF coordinator|no es el coordinador ESP-IDF/);
   assert.equal(describeC6ZigbeeBenchGateReason("BENCH_BACKUP_REQUIRED", "es").length > 10, true);
   assert.match(describeC6ZigbeeBenchGateReason("BENCH_DISCONNECT_FIRST", "en"), /Disconnect/);
+  assert.deepEqual(C6_ZIGBEE_BENCH_PROGRESS_STAGES.map((s) => s.id), [
+    "detect", "fetch", "backup", "consent", "flash",
+  ]);
 });
 
 test("C6 Zigbee: TARGET vicape/PyBot-Web + backup preserves /main.py /boot.py /pybot/assets", () => {
@@ -351,7 +368,7 @@ test("C6 Zigbee: save backup — picker confirms; anchor requires ack limitation
   assert.equal(clicks.length, 1);
 });
 
-test("C6 Zigbee: consent requires detection + verified backup + erase + ESP32-C6; no port before gates", async () => {
+test("C6 Zigbee: consent requires detection + verified backup + destructive consent; no port before gates", async () => {
   const validated = await validateC6ZigbeeBenchFiles(specs.map((s) => file(s)), { digest: mockDigest });
   const detection = { ok: true, chipName: "ESP32-C6", flashSize: "4MB", flashBytes: C6_FULL_FLASH_BYTES };
   const backupResult = {
@@ -367,10 +384,15 @@ test("C6 Zigbee: consent requires detection + verified backup + erase + ESP32-C6
     detection,
     backupResult,
     backupDownloadAcknowledged: false,
-    eraseAcknowledged: true,
-    secondConfirmation: "ESP32-C6",
+    destructiveFlashConsent: true,
   };
   assert.equal(assertC6ZigbeeBenchFlashConsent(base).allowed, true);
+  assert.equal(assertC6ZigbeeBenchFlashConsent({
+    ...base,
+    destructiveFlashConsent: false,
+    eraseAcknowledged: true,
+    secondConfirmation: "ESP32-C6",
+  }).allowed, true);
 
   assert.equal(assertC6ZigbeeBenchFlashConsent({
     ...base,
@@ -392,8 +414,7 @@ test("C6 Zigbee: consent requires detection + verified backup + erase + ESP32-C6
     { backupResult: null },
     { backupResult: { ok: false, byteLength: 0 } },
     { backupResult: { ok: true, byteLength: 100, downloadConfirmed: true } },
-    { eraseAcknowledged: false },
-    { secondConfirmation: "" },
+    { destructiveFlashConsent: false },
   ]) {
     assert.equal(assertC6ZigbeeBenchFlashConsent({ ...base, ...override }).allowed, false);
   }
@@ -401,12 +422,141 @@ test("C6 Zigbee: consent requires detection + verified backup + erase + ESP32-C6
   await assert.rejects(
     () => flashC6ZigbeeBenchPackage(validated, {
       ...base,
-      eraseAcknowledged: false,
+      destructiveFlashConsent: false,
       requestPort: async () => { portRequested = true; return {}; },
     }),
-    /BENCH_ERASE_ACK_REQUIRED/,
+    /BENCH_FLASH_CONSENT_REQUIRED/,
   );
   assert.equal(portRequested, false, "No serial permission before every safety gate passes");
+});
+
+test("C6 Zigbee: one-click orchestration sequence + no auto-flash without consent", async () => {
+  const stages = [];
+  const detection = { ok: true, chipName: "ESP32-C6", flashSize: "4MB", flashBytes: C6_FULL_FLASH_BYTES };
+  const validatedOk = {
+    ok: true,
+    segments: specs.map((s) => ({ role: s.role, address: s.address, data: new Uint8Array(8) })),
+    autoFlash: false,
+  };
+  const backupOk = {
+    ok: true,
+    byteLength: C6_FULL_FLASH_BYTES,
+    downloadConfirmed: true,
+    fileName: "backup.bin",
+    detection,
+  };
+  let flashCalls = 0;
+  let continueCalls = 0;
+
+  const declined = await orchestrateC6ZigbeeBenchOneClick({
+    profileId: C6_ZIGBEE_BENCH_PACKAGE.board,
+    connected: false,
+    detect: async () => detection,
+    fetchPackage: async () => validatedOk,
+    backup: async () => backupOk,
+    waitForContinue: async () => { continueCalls += 1; },
+    requestFlashConsent: async () => false,
+    flash: async () => { flashCalls += 1; return { written: true }; },
+    onProgress: (p) => stages.push(p.stage),
+  });
+  assert.equal(declined.ok, false);
+  assert.equal(declined.reason, "BENCH_FLASH_CONSENT_DECLINED");
+  assert.equal(declined.flashed, false);
+  assert.equal(flashCalls, 0, "must not flash without consent");
+  assert.equal(continueCalls, 1);
+  assert.deepEqual(
+    stages.filter((s, i) => stages.indexOf(s) === i),
+    ["detect", "fetch", "backup", "consent"],
+  );
+
+  flashCalls = 0;
+  const ok = await orchestrateC6ZigbeeBenchOneClick({
+    profileId: C6_ZIGBEE_BENCH_PACKAGE.board,
+    connected: false,
+    detect: async () => detection,
+    fetchPackage: async () => validatedOk,
+    backup: async () => backupOk,
+    waitForContinue: async () => {},
+    requestFlashConsent: async () => true,
+    flash: async (_v, opts) => {
+      flashCalls += 1;
+      assert.equal(opts.destructiveFlashConsent, true);
+      return { written: true, postFlashChecks: C6_ZIGBEE_BENCH_POST_FLASH_CHECKS };
+    },
+  });
+  assert.equal(ok.ok, true, ok.reason);
+  assert.equal(ok.flashed, true);
+  assert.equal(flashCalls, 1);
+});
+
+test("C6 Zigbee: one-click fail-closed on auth, SHA, backup, and missing local save confirm", async () => {
+  const detection = { ok: true, chipName: "ESP32-C6", flashSize: "4MB", flashBytes: C6_FULL_FLASH_BYTES };
+  const validatedOk = { ok: true, segments: [], autoFlash: false };
+
+  const auth = await orchestrateC6ZigbeeBenchOneClick({
+    profileId: C6_ZIGBEE_BENCH_PACKAGE.board,
+    detect: async () => detection,
+    fetchPackage: async () => ({ ok: false, reason: "BENCH_AUTH_DENIED" }),
+    requestFlashConsent: async () => true,
+    flash: async () => { assert.fail("flash"); },
+  });
+  assert.equal(auth.ok, false);
+  assert.equal(auth.reason, "BENCH_AUTH_DENIED");
+  assert.equal(auth.flashed, false);
+
+  const setup = await orchestrateC6ZigbeeBenchOneClick({
+    profileId: C6_ZIGBEE_BENCH_PACKAGE.board,
+    detect: async () => detection,
+    fetchPackage: async () => ({ ok: false, reason: "BENCH_OPERATOR_SETUP_REQUIRED", detail: "missing storage" }),
+    requestFlashConsent: async () => true,
+    flash: async () => { assert.fail("flash"); },
+  });
+  assert.equal(setup.reason, "BENCH_OPERATOR_SETUP_REQUIRED");
+  assert.equal(setup.flashed, false);
+
+  const sha = await orchestrateC6ZigbeeBenchOneClick({
+    profileId: C6_ZIGBEE_BENCH_PACKAGE.board,
+    detect: async () => detection,
+    fetchPackage: async () => ({ ok: false, reason: "BENCH_SHA256_MISMATCH:app" }),
+    requestFlashConsent: async () => true,
+    flash: async () => { assert.fail("flash"); },
+  });
+  assert.match(sha.reason, /SHA256_MISMATCH/);
+  assert.equal(sha.flashed, false);
+
+  const unsupported = await orchestrateC6ZigbeeBenchOneClick({
+    profileId: C6_ZIGBEE_BENCH_PACKAGE.board,
+    detect: async () => detection,
+    fetchPackage: async () => validatedOk,
+    waitForContinue: async () => {},
+    backup: async () => {
+      const err = new Error("LAB_READ_FLASH_UNAVAILABLE");
+      err.missingCapability = "readFlash";
+      throw err;
+    },
+    requestFlashConsent: async () => true,
+    flash: async () => { assert.fail("flash"); },
+  });
+  assert.equal(unsupported.reason, "BENCH_BACKUP_READ_UNSUPPORTED");
+  assert.equal(unsupported.flashed, false);
+
+  const noSave = await orchestrateC6ZigbeeBenchOneClick({
+    profileId: C6_ZIGBEE_BENCH_PACKAGE.board,
+    detect: async () => detection,
+    fetchPackage: async () => validatedOk,
+    waitForContinue: async () => {},
+    backup: async () => ({
+      ok: true,
+      byteLength: C6_FULL_FLASH_BYTES,
+      downloadConfirmed: false,
+      fileName: "backup.bin",
+      detection,
+    }),
+    requestFlashConsent: async () => true,
+    flash: async () => { assert.fail("flash"); },
+  });
+  assert.equal(noSave.reason, "BENCH_BACKUP_DOWNLOAD_ACK_REQUIRED");
+  assert.equal(noSave.flashed, false);
 });
 
 test("C6 Zigbee: detect/backup high-level helpers fail closed without Web Serial in Node", async () => {
