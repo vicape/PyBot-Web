@@ -9,6 +9,7 @@ import {
   C6_ZIGBEE_BENCH_POST_FLASH_CHECKS,
   C6_ZIGBEE_BENCH_PRESERVED_VFS_PATHS,
   C6_ZIGBEE_BENCH_OPERATOR_SETUP,
+  C6_ZIGBEE_BENCH_GUEST_APPROVAL_BLOCKER,
   C6_ZIGBEE_BENCH_PROGRESS_STAGES,
   C6_FULL_FLASH_BYTES,
   validateC6ZigbeeBenchFiles,
@@ -175,15 +176,40 @@ test("C6 Zigbee: automatic authenticated distributor is wired; no secrets in cli
   assert.doesNotMatch(modalSrc, /fetch\(\s*C6_ZIGBEE_BENCH_PACKAGE\.sourceArtifact/);
 });
 
-test("C6 Zigbee: client fetch auth denied / no token", async () => {
+test("C6 Zigbee: guest/no session stops with approval blocker (no login / no missing_bearer_token)", async () => {
   const denied = await fetchAndValidateC6ZigbeeBenchPackage({
     getAccessToken: async () => null,
     fetchImpl: async () => {
-      assert.fail("must not call API without token");
+      assert.fail("must not call private firmware API without guest approval");
     },
   });
   assert.equal(denied.ok, false);
-  assert.equal(denied.reason, "BENCH_AUTH_DENIED");
+  assert.equal(denied.reason, "BENCH_GUEST_APPROVAL_REQUIRED");
+  assert.equal(denied.detail, C6_ZIGBEE_BENCH_GUEST_APPROVAL_BLOCKER);
+  assert.notEqual(denied.detail, "missing_bearer_token");
+  assert.doesNotMatch(String(denied.detail || ""), /missing_bearer_token/);
+  const hint = describeC6ZigbeeBenchGateReason(denied.reason, "es");
+  assert.doesNotMatch(hint, /iniciá sesión|Sign in|login|GitHub|Supabase/i);
+  assert.match(C6_ZIGBEE_BENCH_GUEST_APPROVAL_BLOCKER, /LICENSE_ATTRIBUTION\.md/);
+  assert.match(C6_ZIGBEE_BENCH_GUEST_APPROVAL_BLOCKER, /THIRD_PARTY_NOTICES\.md/);
+});
+
+test("C6 Zigbee: one-click guest path surfaces approval blocker without auth denial", async () => {
+  const result = await orchestrateC6ZigbeeBenchOneClick({
+    profileId: C6_ZIGBEE_BENCH_PACKAGE.board,
+    getAccessToken: async () => null,
+    fetchImpl: async () => {
+      assert.fail("must not call private firmware API for guest without approval");
+    },
+    flash: async () => {
+      assert.fail("must not flash when guest delivery is blocked");
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.flashed, false);
+  assert.equal(result.reason, "BENCH_GUEST_APPROVAL_REQUIRED");
+  assert.notEqual(result.detail, "missing_bearer_token");
+  assert.equal(result.reason === "BENCH_AUTH_DENIED", false);
 });
 
 test("C6 Zigbee: client fetch authenticated valid path + SHA verify", async () => {

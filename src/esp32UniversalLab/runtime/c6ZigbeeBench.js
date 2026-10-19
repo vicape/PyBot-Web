@@ -49,6 +49,16 @@ export const C6_ZIGBEE_BENCH_PROGRESS_STAGES = Object.freeze([
 export const C6_ZIGBEE_BENCH_OPERATOR_SETUP =
   "OPERATOR_SETUP (Vercel Preview feature/esp32-universal-lab only): upload Maxwell artifact 12161052985 zigbee-firmware-private-bench/*.bin to private object storage that outlives GitHub Actions retention; set SUPABASE_URL, SUPABASE_SERVICE_KEY, PYBOT_C6_FIRMWARE_OPERATOR_EMAILS, PYBOT_C6_FIRMWARE_SIGNING_SECRET, PYBOT_C6_FIRMWARE_STORAGE_BASE_URL, and PYBOT_C6_FIRMWARE_STORAGE_AUTH_HEADER (Bearer/token for that store). Optional interim: PYBOT_C6_FIRMWARE_GITHUB_TOKEN + PYBOT_C6_FIRMWARE_GHA_ARTIFACT_ID=12161052985 + PYBOT_C6_FIRMWARE_GHA_REPO=vicape/cursor-control (still migrate to durable storage before artifact expiry).";
 
+/**
+ * Single approval blocker when a guest has no session. esp-zboss-lib allows binary
+ * redistribution with retained notices, but project policy
+ * (LICENSE_ATTRIBUTION.md / THIRD_PARTY_NOTICES.md) keeps delivery authenticated
+ * private-bench only until an explicit product decision authorizes anonymous
+ * distribution. Do not open /api/c6-zigbee-bench-firmware as a public CDN.
+ */
+export const C6_ZIGBEE_BENCH_GUEST_APPROVAL_BLOCKER =
+  "BLOCKER: Guest/anonymous delivery of pinned MicroPython+Zigbee firmware (Espressif/ZBOSS binaries) is not authorized under firmware/pybot-c6-micropython-zigbee/LICENSE_ATTRIBUTION.md and THIRD_PARTY_NOTICES.md (authenticated private physical-bench only; broader/public redistribution out of scope until explicit product approval). Install stops without login prompt, without fetching firmware, and without publishing binaries. Approve anonymous TEST-branch delivery (or keep operator-authenticated path) before enabling guest retrieval.";
+
 export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
   version: "0.1.0",
   board: WAVESHARE_ESP32_C6_LCD_147_ID,
@@ -210,8 +220,14 @@ export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
     typeof options.getAccessToken === "function"
       ? await options.getAccessToken()
       : await defaultAccessToken();
+  // Guest/no session: no login prompt and no BENCH_AUTH_DENIED/missing_bearer_token.
+  // Project distribution policy blocks anonymous firmware delivery until approval (AC4-B).
   if (!token) {
-    return { ok: false, reason: "BENCH_AUTH_DENIED", detail: "missing_bearer_token" };
+    return {
+      ok: false,
+      reason: "BENCH_GUEST_APPROVAL_REQUIRED",
+      detail: C6_ZIGBEE_BENCH_GUEST_APPROVAL_BLOCKER,
+    };
   }
   options.onProgress?.({ phase: "mint", pct: 5 });
   let mintRes;
@@ -398,6 +414,10 @@ export const C6_ZIGBEE_BENCH_GATE_MESSAGES = Object.freeze({
   BENCH_AUTH_DENIED: {
     es: "Sesión requerida: iniciá sesión con una cuenta autorizada.",
     en: "Sign in with an authorized account.",
+  },
+  BENCH_GUEST_APPROVAL_REQUIRED: {
+    es: "Entrega anónima no autorizada: falta aprobación de producto para distribuir este firmware (ZBOSS) sin sesión.",
+    en: "Anonymous delivery not authorized: product approval required to distribute this firmware (ZBOSS) without a session.",
   },
   BENCH_OPERATOR_SETUP_REQUIRED: {
     es: "Falta configuración del servidor (almacenamiento privado + secretos Preview).",

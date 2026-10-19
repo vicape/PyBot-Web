@@ -46,7 +46,11 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
   const resolveErrorMessage = (result) => {
     const hint = describeC6ZigbeeBenchGateReason(result.reason, en ? "en" : "es");
     const parts = [hint || result.reason || (en ? "Install blocked." : "Instalación bloqueada.")];
-    if (result.reason === "BENCH_OPERATOR_SETUP_REQUIRED" && result.detail) {
+    if (
+      (result.reason === "BENCH_OPERATOR_SETUP_REQUIRED" ||
+        result.reason === "BENCH_GUEST_APPROVAL_REQUIRED") &&
+      result.detail
+    ) {
       parts.push(result.detail);
     }
     return parts.join("\n");
