@@ -106,7 +106,7 @@ test("MPY+ZB: static validation gate passes", () => {
   assert.match(r.stdout, /STATIC_VALIDATION: PASS/);
 });
 
-test("MPY+ZB: manifest JS mirrors disk; artifact BLOCKED; no invented READY", () => {
+test("MPY+ZB: manifest JS mirrors disk; packaging gate; no invented READY", () => {
   const disk = JSON.parse(
     readFileSync(join(root, MICROPYTHON_ZIGBEE_MANIFEST_PATH), "utf8"),
   );
@@ -117,11 +117,20 @@ test("MPY+ZB: manifest JS mirrors disk; artifact BLOCKED; no invented READY", ()
   assert.equal(js.autoFlash, false);
   assert.equal(js.modeReady, false);
   assert.equal(js.zigbee.hardwareValidation, "UNVERIFIED");
+  assert.equal(js.artifact.status, disk.artifact.status);
+  assert.equal(js.artifact.sha256, disk.artifact.sha256);
 
   const art = resolveMicropythonZigbeeArtifact(js);
-  assert.equal(art.status, "BLOCKED");
-  assert.equal(art.sha256, null);
+  if (disk.artifact.status === "READY") {
+    assert.equal(art.status, "READY");
+    assert.equal(art.packaging, "multi-offset");
+    assert.ok(art.sha256 && art.sha256.length === 64);
+  } else {
+    assert.equal(art.status, "BLOCKED");
+    assert.equal(art.sha256, null);
+  }
   assert.equal(art.autoFlash, false);
+  assert.equal(art.modeReady, false);
 
   const fakeReady = {
     ...MICROPYTHON_ZIGBEE_MANIFEST,
@@ -146,33 +155,42 @@ test("MPY+ZB: manifest JS mirrors disk; artifact BLOCKED; no invented READY", ()
   assert.equal(isValidatedZigbeePackaging(appOnly), false);
 });
 
-test("MPY+ZB: mode NOT READY; never auto-flash; stock default preserved", () => {
+test("MPY+ZB: modeReady false until hardware; never auto-flash; stock default preserved", () => {
   clearC6FirmwareRuntimeMode();
   assert.equal(getDefaultC6FirmwareMode(), C6_FIRMWARE_MODE_MICROPYTHON);
-  assert.equal(canSelectMicropythonZigbeeMode(), false);
-  assert.equal(canOfferMicropythonZigbeeFlash(), false);
-  assert.throws(() => setC6FirmwareRuntimeMode(C6_FIRMWARE_MODE_MICROPYTHON_ZIGBEE));
+
+  const readiness = describeMicropythonZigbeeReadiness();
+  const artifactReady = readiness.artifact.status === "READY";
+  // Selectable only when a validated READY artifact exists; modeReady stays false.
+  assert.equal(canSelectMicropythonZigbeeMode(), artifactReady);
+  assert.equal(canOfferMicropythonZigbeeFlash(), artifactReady);
+  assert.equal(readiness.modeReady, false);
+  assert.equal(readiness.hardwareValidation, "UNVERIFIED");
+  assert.equal(readiness.autoFlash, false);
+
+  if (!artifactReady) {
+    assert.throws(() => setC6FirmwareRuntimeMode(C6_FIRMWARE_MODE_MICROPYTHON_ZIGBEE));
+  }
 
   const modes = listC6FirmwareModeDescriptors();
   const mpyZb = modes.find((m) => m.id === C6_FIRMWARE_MODE_MICROPYTHON_ZIGBEE);
   assert.ok(mpyZb);
-  assert.equal(mpyZb.selectable, false);
+  assert.equal(mpyZb.selectable, artifactReady);
   assert.equal(mpyZb.autoFlash, false);
   assert.equal(mpyZb.modeReady, false);
-  assert.match(mpyZb.warning, /NOT READY/i);
 
   const gate = assertMicropythonZigbeeFlashExplicitOptIn({
     explicitOptIn: true,
     acknowledgeErasesStockMicroPython: true,
   });
-  assert.equal(gate.allowed, false);
+  assert.equal(gate.allowed, artifactReady);
 
   const interim = modes.find((m) => m.id === C6_FIRMWARE_MODE_ZIGBEE_COORDINATOR);
   assert.ok(interim);
   assert.match(interim.warning, /not the desired standalone Python/i);
 
   const snap = getC6FirmwareModeSnapshot();
-  assert.equal(snap.micropythonZigbee.artifact.status, "BLOCKED");
+  assert.equal(snap.micropythonZigbee.artifact.status, readiness.artifact.status);
   assert.equal(snap.micropythonZigbee.modeReady, false);
   assert.equal(snap.micropythonZigbee.hardwareValidation, "UNVERIFIED");
 });
@@ -222,14 +240,23 @@ test("MPY+ZB: Python API / native interface contract (no mock radio)", () => {
   assert.match(py, /def onoff_on/);
   assert.match(py, /def onoff_off/);
   assert.match(py, /def onoff_read/);
+  assert.match(py, /def onoff_cached/);
+  assert.match(py, /def onoff_local_get/);
   assert.match(py, /CLUSTER_ON_OFF = 0x0006/);
   assert.match(py, /never invent/);
+  assert.match(py, /no remote ZCL Read Attributes/);
+  assert.match(py, /_normalize_active_endpoints/);
   assert.doesNotMatch(py, /class Mock|FakeRadio/);
 
   const mainPy = readFileSync(join(fwRoot, "onboard/main.py"), "utf8");
   assert.match(mainPy, /PERMIT_JOIN_ON_BOOT = False/);
-  assert.doesNotMatch(mainPy, /while True:[\s\S]*permit_join/);
+  // Join must not reopen unconditionally every idle loop tick; BOOT-gated OK.
+  assert.doesNotMatch(mainPy, /while True:\s*\n(?:[^\n]*\n){0,3}\s*zigbee\.permit_join/);
   assert.match(mainPy, /diagnose/);
+  assert.match(mainPy, /display\.init\(/);
+  assert.doesNotMatch(mainPy, /display\.Display\(/);
+  assert.match(mainPy, /ZIGBEE NOT INSTALLED/);
+  assert.match(mainPy, /BOOT_PIN = 9/);
 });
 
 test("MPY+ZB: autonomous boot assumptions documented; preflight build proof", () => {
@@ -254,6 +281,7 @@ test("MPY+ZB: autonomous boot assumptions documented; preflight build proof", ()
       "build.sh",
       "scripts/pins.env",
       "scripts/validate_static.py",
+      "scripts/fetch_upstream.sh",
       "DECISION.md",
       "LICENSE_ATTRIBUTION.md",
       "PINS.json",
@@ -271,6 +299,25 @@ test("MPY+ZB: autonomous boot assumptions documented; preflight build proof", ()
       mkdirSync(dirname(destination), { recursive: true });
       copyFileSync(join(fwRoot, rel), destination);
     }
+
+    // Stub fetch/bootstrap so the sandbox never clones toolchains or touches fwRoot.
+    // Minimal uZigbee tree: skip network bootstrap, reach the missing-IDF exit 2 path.
+    writeFileSync(
+      join(sandbox, "scripts/fetch_upstream.sh"),
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        'ROOT="$(cd "$(dirname "$0")/.." && pwd)"',
+        'UZ="$ROOT/third_party/uzigbee"',
+        'mkdir -p "$UZ/firmware" "$UZ/tools" "$UZ/third_party/micropython-esp32"',
+        'printf \'#!/usr/bin/env bash\\necho stub\\n\' > "$UZ/build_firmware.sh"',
+        'printf \'#!/usr/bin/env bash\\necho stub\\n\' > "$UZ/tools/bootstrap_third_party.sh"',
+        'chmod +x "$UZ/build_firmware.sh" "$UZ/tools/bootstrap_third_party.sh"',
+        'echo "[OK] sandbox stub uZigbee (no network)"',
+        "",
+      ].join("\n"),
+      "utf8",
+    );
 
     // Force only the interpreter's IDF-absent branch inside the disposable
     // script; the real build script and compiled firmware remain untouched.
@@ -318,7 +365,8 @@ test("MPY+ZB: firmware-binary gate only if real artifact built", () => {
       status: "READY",
     }),
   );
-  const binPath = join(root, readiness.artifact.path || "");
+  // artifact.path is relative to firmware/pybot-c6-micropython-zigbee/
+  const binPath = join(fwRoot, readiness.artifact.path || "");
   assert.ok(existsSync(binPath), "READY artifact path must exist on disk");
 });
 

@@ -19,12 +19,16 @@
     "deviceRole": "coordinator",
     "nativeModule": "_uzigbee",
     "pythonAdapter": "pybot.zigbee",
-    "baselineClusters": ["basic", "identify", "on_off(client)"],
+    "baselineClusters": [
+      "basic",
+      "identify",
+      "on_off(client)"
+    ],
     "commercialSwitchBaseline": "ZCL OnOff (0x0006) ON/OFF via send_on_off_cmd; READ via reporting cache / local get_attribute (upstream has no remote ZCL Read Attributes in native C)",
-    "endpointDiscovery": "request_active_endpoints + simple_descriptor snapshots — never invent endpoints 1/2",
+    "endpointDiscovery": "request_active_endpoints + simple_descriptor snapshots \u2014 never invent endpoints 1/2",
     "securityDefault": "centralized; permit_join OFF by default; bounded duration when opened",
     "hardwareValidation": "UNVERIFIED",
-    "persistentPairing": "zb_storage partition reserved; persistence where SDK/NVRAM supports — not claimed proven on this board"
+    "persistentPairing": "zb_storage partition reserved; persistence where SDK/NVRAM supports \u2014 not claimed proven on this board"
   },
   "toolchain": {
     "espIdf": "v5.3.2",
@@ -38,15 +42,15 @@
   },
   "coexistence": {
     "micropythonSameImage": true,
-    "intent": "Custom MicroPython + native Zigbee on one C6 — desired standalone Python hub path",
-    "measuredFitOn4Mb": false,
+    "intent": "Custom MicroPython + native Zigbee on one C6 \u2014 desired standalone Python hub path",
+    "measuredFitOn4Mb": true,
     "displayPlusZigbeeMeasured": false,
-    "reason": "Integration + build scripts exist; flash/RAM occupancy and ST7789 coexistence must be measured after a real artifact. SDK marketing claims are not proof.",
-    "interimNativeOnlyPath": "firmware/esp32c6-zigbee-coordinator/ remains interim NON-MicroPython host-controlled v2 target — not the desired standalone Python solution"
+    "reason": "Cloud rebuild produced multi-offset image fitting factory partition (86.23% / 3221280 bytes of 0x390000). ST7789+Zigbee heap/RAM coexistence still UNMEASURED on hardware. Installable public delivery BLOCKED by esp-zboss license + missing durable URL.",
+    "interimNativeOnlyPath": "firmware/esp32c6-zigbee-coordinator/ remains interim NON-MicroPython host-controlled v2 target \u2014 not the desired standalone Python solution"
   },
   "artifact": {
     "status": "BLOCKED",
-    "blockReason": "ESP-IDF v5.3.2 + MicroPython v1.27.0 toolchain not installed in this execution environment; binary produced only by firmware/pybot-c6-micropython-zigbee/build.sh when bootstrap succeeds (multi-offset bootloader+partition+app or merged-raw). No fabricated SHA/filename.",
+    "blockReason": "Native cloud rebuild SUCCEEDED (ESP-IDF v5.3.2 + MicroPython v1.27.0 + uZigbee ff25553c5fc9d59754eba9a89811e6433e0d4479) with verified multi-offset bins on the runner, but PyBot tracked delivery stays BLOCKED: (1) esp-zboss-lib proprietary \u2014 do not redistribute/deploy binaries until license verification; (2) no durable public/install URL for PyBot firmware delivery (GHA upload lacks ACTIONS_RUNTIME_TOKEN in this step; bins gitignored). Rebuild: firmware/pybot-c6-micropython-zigbee/build.sh. Verified runner package: bootloader@0x0 sha256=722b84280ff641c6401531090c6007ed805c8e0ef4e7fcd9733cdcb13dba46c6 partition@0x8000 sha256=b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f app@0x10000 sha256=f681daedde24ee89e7db8ba8bde8349193fd7b09c23f0024c5bafc2407f26b91 size=3221280 (86.23% factory).",
     "filename": null,
     "sha256": null,
     "size": null,
@@ -55,23 +59,30 @@
     "path": null,
     "packaging": null,
     "components": null,
-    "appOccupancyBytes": null,
+    "appOccupancyBytes": 3221280,
     "factoryPartitionBytes": 3735552,
     "heapRamMargins": null,
-    "printedVersions": null
+    "printedVersions": {
+      "espIdf": "ESP-IDF v5.3.2",
+      "espIdfTagRequired": "v5.3.2",
+      "micropython": "v1.27.0",
+      "uzigbeeCommit": "ff25553c5fc9d59754eba9a89811e6433e0d4479",
+      "espZigbeeLib": "~1.6.0",
+      "espZbossLib": "~1.6.0"
+    }
   },
   "license": {
-    "uzigbee": "MIT — see LICENSE_ATTRIBUTION.md",
-    "espZigbeeLib": "Espressif Component Registry at build time — not redistributed here",
-    "espZbossLib": "Proprietary Espressif/DSR terms — do not redistribute binaries until verified",
+    "uzigbee": "MIT \u2014 see LICENSE_ATTRIBUTION.md",
+    "espZigbeeLib": "Espressif Component Registry at build time \u2014 not redistributed here",
+    "espZbossLib": "Proprietary Espressif/DSR terms \u2014 do not redistribute binaries until verified",
     "espIdf": "Apache-2.0 / Espressif",
     "micropython": "MIT"
   },
   "autoFlash": false,
   "modeReady": false,
   "tuya": {
-    "standaloneZcl": "ZCL OnOff baseline only — separate from Smart Life",
-    "smartLifeOfficialGateway": "BLOCKED — separate licensing; no Tuya cloud support claimed",
+    "standaloneZcl": "ZCL OnOff baseline only \u2014 separate from Smart Life",
+    "smartLifeOfficialGateway": "BLOCKED \u2014 separate licensing; no Tuya cloud support claimed",
     "manufacturerSpecific": "Tuya proprietary clusters/DPs not blindly claimed"
   },
   "restoreMicroPython": {

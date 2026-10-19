@@ -9,8 +9,11 @@ What this integration targets:
 - Joined-device short-address discovery
 - Active-endpoint + simple-descriptor discovery (**no invented endpoints `1`/`2`**)
 - OnOff **ON / OFF / TOGGLE** commands to a **discovered** destination endpoint
-- OnOff **READ** of attribute `0x0000` via local `get_attribute` and/or reporting cache
-  (upstream `_uzigbee` has **no** remote ZCL Read Attributes command)
+- OnOff attribute access is **split on purpose**:
+  - `onoff_local_get` / `onoff_read(local_endpoint=…)` → local `get_attribute`
+  - `onoff_cached` / `onoff_read(dst_endpoint=…)` → report cache only
+    (upstream `_uzigbee` has **no** remote ZCL Read Attributes command)
+  - Cache keys are `(short_addr, endpoint, cluster, attr)` to avoid cross-device collisions
 
 What is **not** claimed:
 
@@ -48,3 +51,15 @@ remain **UNVERIFIED** in source.
 ST7789 172×320 must be retained in the product goal. **Coexistence of LCD + Zigbee
 radio/stack on 4 MB / no PSRAM must be measured on hardware.** Espressif or uZigbee
 SDK marketing claims are **not** proof of fit, heap margins, or flicker-free UI.
+
+## Firmware build (cloud evidence, this tree)
+
+A real `idf.py` / uZigbee compile on ESP-IDF **v5.3.2** + MicroPython **v1.27.0** +
+uZigbee `ff25553` produced a multi-offset package (bootloader @ 0x0, partition @ 0x8000,
+app @ 0x10000). App size ≈ **3.23 MB (~86% of factory 0x390000)** — fits 4 MB flash.
+`modeReady` stays **false** and hardware validation stays **UNVERIFIED** until bench boot.
+
+Build-time overlays required (see `overlays/README.md`): enable IEEE802154/Zigbee in
+`boards/sdkconfig.c6` (upstream MPY forces IEEE802154=n), disable I2C target, guard
+`esp_clk_tree_enable_src` for IDF &lt; 5.4. Zigbee SDK binary redistribution remains
+subject to Espressif license review.

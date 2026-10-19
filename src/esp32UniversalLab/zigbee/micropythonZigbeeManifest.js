@@ -41,14 +41,19 @@ export const MICROPYTHON_ZIGBEE_MANIFEST = Object.freeze({
   }),
   coexistence: Object.freeze({
     micropythonSameImage: true,
-    measuredFitOn4Mb: false,
+    measuredFitOn4Mb: true,
     displayPlusZigbeeMeasured: false,
     interimNativeOnlyPath: "firmware/esp32c6-zigbee-coordinator/",
+    reason:
+      "Cloud rebuild produced multi-offset image fitting factory partition (86.23% / 3221280 bytes of 0x390000). ST7789+Zigbee heap/RAM coexistence still UNMEASURED on hardware. Installable public delivery BLOCKED by esp-zboss license + missing durable URL.",
   }),
+  // Synced from firmware/pybot-c6-micropython-zigbee/manifest.json.
+  // READY only when installable multi-offset bins are reachable + license-cleared.
+  // modeReady stays false until hardware boot proof.
   artifact: Object.freeze({
     status: "BLOCKED",
     blockReason:
-      "ESP-IDF v5.3.2 + MicroPython v1.27.0 toolchain not installed in this execution environment; binary produced only by firmware/pybot-c6-micropython-zigbee/build.sh when bootstrap succeeds (multi-offset bootloader+partition+app or merged-raw). No fabricated SHA/filename.",
+      "Native cloud rebuild SUCCEEDED (ESP-IDF v5.3.2 + MicroPython v1.27.0 + uZigbee ff25553c5fc9d59754eba9a89811e6433e0d4479) with verified multi-offset bins on the runner, but PyBot tracked delivery stays BLOCKED: (1) esp-zboss-lib proprietary — do not redistribute/deploy binaries until license verification; (2) no durable public/install URL for PyBot firmware delivery (GHA upload lacks ACTIONS_RUNTIME_TOKEN in this step; bins gitignored). Rebuild: firmware/pybot-c6-micropython-zigbee/build.sh. Verified runner package: bootloader@0x0 sha256=722b84280ff641c6401531090c6007ed805c8e0ef4e7fcd9733cdcb13dba46c6 partition@0x8000 sha256=b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f app@0x10000 sha256=f681daedde24ee89e7db8ba8bde8349193fd7b09c23f0024c5bafc2407f26b91 size=3221280 (86.23% factory).",
     filename: null,
     sha256: null,
     size: null,
@@ -57,10 +62,17 @@ export const MICROPYTHON_ZIGBEE_MANIFEST = Object.freeze({
     path: null,
     packaging: null,
     components: null,
-    appOccupancyBytes: null,
+    appOccupancyBytes: 3221280,
     factoryPartitionBytes: 3735552,
     heapRamMargins: null,
-    printedVersions: null,
+    printedVersions: Object.freeze({
+      espIdf: "ESP-IDF v5.3.2",
+      espIdfTagRequired: "v5.3.2",
+      micropython: "v1.27.0",
+      uzigbeeCommit: "ff25553c5fc9d59754eba9a89811e6433e0d4479",
+      espZigbeeLib: "~1.6.0",
+      espZbossLib: "~1.6.0",
+    }),
   }),
   autoFlash: false,
   modeReady: false,

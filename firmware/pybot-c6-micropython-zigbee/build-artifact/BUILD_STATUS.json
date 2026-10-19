@@ -1,6 +1,6 @@
 {
   "status": "BLOCKED",
-  "reason": "idf.py not found \u2014 install ESP-IDF v5.3.2 and run: . $IDF_PATH/export.sh",
+  "reason": "Native cloud rebuild SUCCEEDED (ESP-IDF v5.3.2 + MicroPython v1.27.0 + uZigbee ff25553c5fc9d59754eba9a89811e6433e0d4479) with verified multi-offset bins on the runner, but PyBot tracked delivery stays BLOCKED: (1) esp-zboss-lib proprietary \u2014 do not redistribute/deploy binaries until license verification; (2) no durable public/install URL for PyBot firmware delivery (GHA upload lacks ACTIONS_RUNTIME_TOKEN in this step; bins gitignored). Rebuild: firmware/pybot-c6-micropython-zigbee/build.sh. Verified runner package: bootloader@0x0 sha256=722b84280ff641c6401531090c6007ed805c8e0ef4e7fcd9733cdcb13dba46c6 partition@0x8000 sha256=b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f app@0x10000 sha256=f681daedde24ee89e7db8ba8bde8349193fd7b09c23f0024c5bafc2407f26b91 size=3221280 (86.23% factory).",
   "espIdfRequired": "v5.3.2",
   "micropythonRequired": "v1.27.0",
   "uzigbeeCommit": "ff25553c5fc9d59754eba9a89811e6433e0d4479",
@@ -12,5 +12,53 @@
   "size": null,
   "packaging": null,
   "components": null,
-  "nextStep": "Install ESP-IDF v5.3.2, run scripts/fetch_upstream.sh, then third_party/uzigbee/tools/bootstrap_third_party.sh and re-run build.sh"
+  "licenseGate": "esp-zboss-lib proprietary \u2014 binary redistribution/deployment BLOCKED until verified",
+  "cloudBuildEvidence": {
+    "builtAt": "2026-10-19T02:53:47Z",
+    "runnerBuildExit": 0,
+    "packaging": "multi-offset",
+    "appOccupancyBytes": 3221280,
+    "factoryPartitionBytes": 3735552,
+    "appOccupancyPercentOfFactory": 86.23,
+    "components": [
+      {
+        "role": "bootloader",
+        "filename": "pybot-c6-micropython-zigbee-0.1.0-bootloader.bin",
+        "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.0-bootloader.bin",
+        "flashOffset": 0,
+        "sha256": "722b84280ff641c6401531090c6007ed805c8e0ef4e7fcd9733cdcb13dba46c6",
+        "size": 18384
+      },
+      {
+        "role": "partition-table",
+        "filename": "pybot-c6-micropython-zigbee-0.1.0-partition-table.bin",
+        "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.0-partition-table.bin",
+        "flashOffset": 32768,
+        "sha256": "b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f",
+        "size": 3072
+      },
+      {
+        "role": "app",
+        "filename": "pybot-c6-micropython-zigbee-0.1.0-app.bin",
+        "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.0-app.bin",
+        "flashOffset": 65536,
+        "sha256": "f681daedde24ee89e7db8ba8bde8349193fd7b09c23f0024c5bafc2407f26b91",
+        "size": 3221280
+      }
+    ],
+    "printedVersions": {
+      "espIdf": "ESP-IDF v5.3.2",
+      "espIdfTagRequired": "v5.3.2",
+      "micropython": "v1.27.0",
+      "uzigbeeCommit": "ff25553c5fc9d59754eba9a89811e6433e0d4479",
+      "espZigbeeLib": "~1.6.0",
+      "espZbossLib": "~1.6.0"
+    },
+    "zipSha256Local": "2b728846e2858c86e632c66af17e330b2c5ae499958d7737b32b3d31cf2c3750",
+    "durableArtifactUpload": "FAILED_NO_ACTIONS_RUNTIME_TOKEN",
+    "githubRunId": "39190907178",
+    "autoFlash": false
+  },
+  "nextStep": "Complete esp-zboss redistribution license check; upload verified multi-offset package to an approved private delivery location; then sync manifest/JS to READY. Hardware bench still required before modeReady/production.",
+  "autoFlash": false
 }
