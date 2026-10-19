@@ -28,6 +28,7 @@ export const TEST_SUITES = Object.freeze({
     "esp32UniversalLabM2A.test.mjs",
     "esp32UniversalLabMicropythonZigbee.test.mjs",
     "esp32UniversalLabC6Install.test.mjs",
+    "esp32UniversalLabC6ZigbeeBench.test.mjs",
     "esp32UniversalLabGraphics.test.mjs",
     "orgRole.test.mjs",
     "orgRoleMulti.test.mjs",

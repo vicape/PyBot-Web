@@ -1,0 +1,41 @@
+name: PyBot C6 Zigbee Feature QA
+
+on:
+  push:
+    branches:
+      - feature/esp32-universal-lab
+    paths:
+      - "src/esp32UniversalLab/**"
+      - "src/C6ZigbeeBenchModal.jsx"
+      - "src/PyBotIDE.jsx"
+      - "test/**"
+      - ".github/workflows/esp32-c6-bench-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pybot-c6-bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Focused Zigbee safety and test suite registry
+        run: node --test test/esp32UniversalLabC6ZigbeeBench.test.mjs test/testSuiteManifest.test.mjs
+      - name: Canonical complete tests
+        run: npm run test:full
+      - name: Frontend build (validation only, no deployment)
+        run: npm run build
+      - name: Source integrity (no tracked mutation)
+        run: git diff --exit-code

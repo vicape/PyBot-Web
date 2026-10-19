@@ -75,6 +75,7 @@ import { resolveEsp32ExecutionTarget } from "./esp32RunTarget.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
 import PrepareEsp32Modal from "./PrepareEsp32Modal.jsx";
+import C6ZigbeeBenchModal from "./C6ZigbeeBenchModal.jsx";
 import BluetoothPanel from "./BluetoothPanel.jsx";
 import IdeUserChip from "./components/IdeUserChip.jsx";
 import { useOptionalSession } from "./platform/useOptionalSession.js";
@@ -438,6 +439,7 @@ export default function PyBotIDE() {
   const [waitingInput, setWaitingInput] = useState(false);
   const [downloadingArduino, setDownloadingArduino] = useState(false);
   const [bleModalOpen, setBleModalOpen] = useState(false);
+  const [zigbeeBenchOpen, setZigbeeBenchOpen] = useState(false);
   const [bleInstalling, setBleInstalling] = useState(false);
   const [memDiagnosing, setMemDiagnosing] = useState(false);
   const [bleConnected, setBleConnected] = useState(false);
@@ -2750,6 +2752,27 @@ export default function PyBotIDE() {
                           )}
                         </div>
                       ) : null}
+                      {isLabBoard && labRuntimeReady && !connected && labProfileId === "waveshare-esp32-c6-lcd-1.47" ? (
+                        <div className="toolbar-menu-subgroup" data-testid="lab-c6-zigbee-bench-entry">
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--secondary"
+                            data-testid="lab-c6-zigbee-bench-open"
+                            disabled={connecting}
+                            onClick={() => {
+                              setBoardMenuOpen(false);
+                              setZigbeeBenchOpen(true);
+                            }}
+                          >
+                            {getLang() === "en" ? "Test Zigbee firmware (C6)" : "Probar firmware Zigbee (C6)"}
+                          </button>
+                          <div className="toolbar-menu-hint">
+                            {getLang() === "en"
+                              ? "Private physical bench. Requires three verified .bin files, backup and explicit consent. Does not affect production."
+                              : "Prueba física privada. Requiere tres .bin verificados, respaldo y autorización explícita. No afecta producción."}
+                          </div>
+                        </div>
+                      ) : null}
                       {isLabBoard && labRuntimeReady && !connected ? (
                         <div className="toolbar-menu-subgroup">
                           {labProfileId && canOfferFirmwareFlash(labProfileId) ? (
@@ -3458,6 +3481,14 @@ export default function PyBotIDE() {
         onPrepareEsp32={openPrepareEsp32}
         showPrepareEsp32={boardType === "esp32-micropython" || boardType === "esp32-eda6"}
         highlightPrepare={connectHighlightPrepare}
+      />
+
+      <C6ZigbeeBenchModal
+        open={zigbeeBenchOpen}
+        onClose={() => setZigbeeBenchOpen(false)}
+        profileId={labProfileId}
+        connected={connected}
+        onLog={(line) => appendConsole(String(line) + "\n", "info")}
       />
 
       <PrepareEsp32Modal

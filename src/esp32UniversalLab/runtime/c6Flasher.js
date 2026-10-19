@@ -158,6 +158,60 @@ export async function writeC6Firmware(ctx, bytes, options = {}) {
 }
 
 /**
+ * ESP32-C6 private-bench, multi-offset flashing. Caller MUST verify 3 SHA256
+ * hashes and double consent before invoking; this layer independently enforces
+ * fixed offsets, size boundaries and ESP32-C6 silicon identity.
+ * No automatic invocation and no effect on stock single-image flash.
+ */
+export async function writeC6MultiOffsetFirmware(ctx, segments, options = {}) {
+  if (!Array.isArray(segments) || segments.length !== 3) {
+    throw new Error("LAB_MULTI_OFFSET_NEED_THREE");
+  }
+  const chipName = String(ctx?.chipName || ctx?.chip?.CHIP_NAME || "");
+  if (!isEsp32C6Chip(chipName)) throw new Error("LAB_CHIP_NOT_C6");
+  if (typeof ctx?.loader?.writeFlash !== "function") {
+    throw new Error("LAB_BOOTLOADER_NOT_CONNECTED");
+  }
+  const slots = [
+    { role: "bootloader", address: 0x0, max: 0x8000 },
+    { role: "partition-table", address: 0x8000, max: 0x8000 },
+    { role: "app", address: 0x10000, max: 0x390000 },
+  ];
+  const fileArray = slots.map((slot) => {
+    const segment = segments.find((s) => s?.role === slot.role);
+    if (!segment || segment.address !== slot.address || !(segment.data instanceof Uint8Array) ||
+        segment.data.byteLength < 64 || segment.data.byteLength > slot.max) {
+      throw new Error("LAB_MULTI_OFFSET_INVALID:" + slot.role);
+    }
+    return { address: slot.address, data: segment.data };
+  });
+  let total = 0;
+  for (const file of fileArray) total += file.data.byteLength;
+  try {
+    await ctx.loader.writeFlash({
+      fileArray,
+      flashMode: "dio",
+      flashFreq: "80m",
+      flashSize: "4MB",
+      eraseAll: true, // Full backup and erasure consent required by the caller.
+      compress: true,
+      reportProgress: (fileIndex, written, fileTotal) => {
+        options.onProgress?.({
+          fileIndex,
+          bytesWritten: written,
+          bytesTotal: fileTotal || total,
+          pct: Math.min(100, Math.floor(100 * written / (fileTotal || total))),
+        });
+      },
+    });
+  } catch (e) {
+    const err = new Error("LAB_MULTI_OFFSET_FLASH_FAILED");
+    err.cause = e;
+    throw err;
+  }
+}
+
+/**
  * @param {{ loader?: { after: Function }, transport?: { disconnect: Function } }} ctx
  */
 export async function resetC6AndRelease(ctx) {
