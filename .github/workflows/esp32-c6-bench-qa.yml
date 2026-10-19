@@ -25,17 +25,31 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - name: Install exact dependencies
         run: npm ci
+      # The QA harness is transient; protected product snapshots must not be
+      # weakened just because this temporary workflow exists during validation.
+      - name: Isolate temporary CI harness from product tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/c6-ci"
+          mv .github/workflows/esp32-c6-bench-qa.yml "$RUNNER_TEMP/c6-ci/esp32-c6-bench-qa.yml"
+          rmdir .github/workflows
       - name: Focused Zigbee safety and test suite registry
         run: node --test test/esp32UniversalLabC6ZigbeeBench.test.mjs test/testSuiteManifest.test.mjs
       - name: Canonical complete tests
         run: npm run test:full
       - name: Frontend build (validation only, no deployment)
         run: npm run build
+      - name: Restore CI harness
+        if: always()
+        run: |
+          mkdir -p .github/workflows
+          cp "$RUNNER_TEMP/c6-ci/esp32-c6-bench-qa.yml" .github/workflows/esp32-c6-bench-qa.yml
       - name: Source integrity (no tracked mutation)
         run: git diff --exit-code
