@@ -1,6 +1,6 @@
 # ESP32-C6 MicroPython + Zigbee — prueba física
 
-RAMA EXCLUSIVA: feature/esp32-universal-lab. Producción permanece intacta.
+TARGET: `vicape/PyBot-Web` · RAMA EXCLUSIVA: feature/esp32-universal-lab. Producción permanece intacta.
 ESTADO: firmware compilado, 3 hashes SHA-256 verificados. Hardware NO VERIFICADO.
 
 ## Hardware
@@ -18,19 +18,24 @@ Descargar el artefacto y extraer los tres .bin del directorio zigbee-firmware-pr
 | MicroPython + Zigbee app | pybot-c6-micropython-zigbee-0.1.0-app.bin | 0x10000 | 3221280 | d22d48f5c474f327be4b946dfa88af49523606215dda5e74325a5864189ef096 |
 
 ## Paso 0: BACKUP OBLIGATORIO
-Antes de instalar, guardar FUERA DE LA PLACA /main.py, /boot.py, /pybot y los assets.
+Antes de instalar, guardar FUERA DE LA PLACA `/main.py`, `/boot.py`, `/pybot/assets` (vía imagen flash completa 4 MB).
 Para respaldar todos los 4 MB desde una PC con esptool: python -m esptool --chip esp32c6 -p COMx read_flash 0x0 0x400000 respaldo-c6-4mb.bin
 Identificar COMx correctamente antes de usarlo. Conservar original MicroPython ESP32_GENERIC_C6-20251209-v1.27.0.bin (SHA-256 111ca6322520f56ca44c41b6993d56ff75d7c1c0c3939991e53463024bb0e183).
 Instalar firmware experimental reemplaza el firmware actual y puede borrar toda la flash.
 
-## Instalador desde PyBot — SOLO despliegue de la rama de prueba
+## Instalador guiado desde PyBot — SOLO despliegue de la rama de prueba
+Etiqueta de UI exacta: **Preparar e instalar**.
+
+**DECISION REQUIRED — descarga automática:** no hay endpoint autorizado en este repo; los artefactos de GitHub Actions son privados/autenticados/expirables; no se embebe PAT ni credenciales en el frontend; esp-zboss proprietary bloquea redistribución pública. Alternativa interim: el operador descarga el artefacto privado autenticado (run `39193349317` / artifact `12161052985`) y carga los tres `.bin` en el flujo guiado.
+
 1. Elegir Universal Lab → Waveshare ESP32-C6-LCD-1.47 y desconectar sesiones WebSerial existentes.
-2. Menu → Probar firmware Zigbee (C6).
-3. Seleccionar los tres .bin previamente extraídos.
-4. Validar SHA-256; el navegador compara bytes con tamaños y hashes de ESTA compilación.
-5. Confirmar backup, borrado y escribir literalmente ESP32-C6.
-6. Hacer clic en Instalar firmware Zigbee experimental (manual), seleccionar puerto correcto, esperar escritura y reinicio.
-7. Desconectar/reconectar USB; hacer clic Conectar en PyBot para reinstalar /pybot (incluido pybot.zigbee).
+2. Menú → **Preparar e instalar**.
+3. Detectar ESP32-C6 real y flash **4 MB**; si falla, la instalación no continúa.
+4. Cargar los tres `.bin` del paquete privado #555; validar SHA-256, tamaños y offsets `0x0` / `0x8000` / `0x10000`.
+5. Respaldar **toda** la flash 4 MB (`read_flash`) a un archivo local del usuario (preserva `/main.py`, `/boot.py`, `/pybot/assets` en la imagen completa). Si el navegador no confirma la descarga, acuse explícito obligatorio.
+6. Confirmar borrado destructivo, escribir literalmente `ESP32-C6`, elegir el puerto correcto (sin auto-flash).
+7. Tras grabar: checklist REPL / `_uzigbee` / ST7789 / GPIO / Wi-Fi / BLE; pairing Zigbee y dual ON/OFF quedan **UNVERIFIED** hasta prueba física.
+8. Desconectar/reconectar USB; Conectar en PyBot para reinstalar `/pybot`.
 Esta opción NO se activa de forma automática ni publica el firmware en producción.
 
 ## Alternativa manual en PC (solo tras respaldo y autorización consciente)

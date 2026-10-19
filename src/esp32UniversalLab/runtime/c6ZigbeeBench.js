@@ -1,19 +1,44 @@
 /**
+ * TARGET: vicape/PyBot-Web (branch feature/esp32-universal-lab only).
  * Exact, private firmware-build acceptance for the first physical ESP32-C6 bench.
- * Binaries stay outside Git and production. A user chooses the three files locally.
- * This module cannot auto-flash: only an explicit call with two confirmations can
- * enter WebSerial bootloader mode. Source alone never makes a firmware READY.
+ * Guided "Preparar e instalar" flow: detect C6+4MB, verify pinned package, full 4 MB
+ * backup to a user-saved file, explicit consent, then manual flash. Binaries stay
+ * outside Git and production. Source alone never makes a firmware READY.
+ * Full-image backup preserves on-device VFS paths /main.py, /boot.py, /pybot/assets.
  */
 import { isEsp32C6Chip } from "../firmware/esp32GenericC6.js";
 import { WAVESHARE_ESP32_C6_LCD_147_ID } from "../profiles/waveshareEsp32C6Lcd147.js";
-import { sha256Hex, connectC6Bootloader, writeC6MultiOffsetFirmware, resetC6AndRelease } from "./c6Flasher.js";
+import {
+  sha256Hex,
+  connectC6Bootloader,
+  writeC6MultiOffsetFirmware,
+  resetC6AndRelease,
+  detectC6ChipAndFlashSize,
+  readC6FullFlashBackup,
+  saveC6BackupToUserFile,
+  C6_FULL_FLASH_BYTES,
+} from "./c6Flasher.js";
+
+export { C6_FULL_FLASH_BYTES };
+
+/** On-device VFS paths preserved inside the complete 4 MB flash backup image. */
+export const C6_ZIGBEE_BENCH_PRESERVED_VFS_PATHS = Object.freeze([
+  "/main.py",
+  "/boot.py",
+  "/pybot/assets",
+]);
+
+export const C6_ZIGBEE_BENCH_UI_LABEL = "Preparar e instalar";
 
 export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
   version: "0.1.0",
   board: WAVESHARE_ESP32_C6_LCD_147_ID,
   hardwareValidation: "UNVERIFIED",
   sourceCommit: "834a2ecd0ee648b3570d8c913f358d262b2a92ae",
+  /** Provenance pointer only — never used as a browser fetch URL. */
   sourceArtifact: "https://github.com/vicape/cursor-control/actions/runs/39193349317/artifacts/12161052985",
+  pinnedRunId: "39193349317",
+  pinnedArtifactId: "12161052985",
   autoFlash: false,
   publicReady: false,
   components: Object.freeze([
@@ -40,6 +65,60 @@ export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
     }),
   ]),
 });
+
+/**
+ * Automatic browser fetch of the private #555 artifact is not supported securely
+ * with existing infrastructure. Exact product token for operators/Maxwell.
+ */
+export const C6_ZIGBEE_BENCH_DISTRIBUTION = Object.freeze({
+  status: "DECISION REQUIRED",
+  automaticFetchSupported: false,
+  authorizedEndpointSupported: false,
+  pinnedRunId: C6_ZIGBEE_BENCH_PACKAGE.pinnedRunId,
+  pinnedArtifactId: C6_ZIGBEE_BENCH_PACKAGE.pinnedArtifactId,
+  blockers: Object.freeze([
+    "No access-controlled authorized firmware API exists in this repo (api/ has no artifact proxy).",
+    "GitHub Actions artifacts are private, authenticated, and expiring; frontend must never embed a GitHub PAT, Actions credentials, service-role secrets, or a transient artifact URL.",
+    "esp-zboss-lib proprietary terms — do not publish/redistribute the Zigbee-containing binaries until redistribution is cleared (see firmware/pybot-c6-micropython-zigbee/LICENSE_ATTRIBUTION.md and package THIRD_PARTY_NOTICES).",
+  ]),
+  alternatives: Object.freeze([
+    "A: Add a private authorized backend endpoint (operator auth) that streams pinned artifact 12161052985 from run 39193349317 without exposing credentials to the browser, after zboss redistribution clearance.",
+    "B: Host the verified package in an access-controlled private object store; issue short-lived signed URLs from that backend (same license gate).",
+    "C (interim truthful path): Operator downloads the private artifact via authenticated GitHub access and loads the three verified .bin files into this guided flow — no public publish, no simulated automatic fetch.",
+  ]),
+});
+
+/** Post-flash operator checklist. Zigbee pairing/dual-channel stay UNVERIFIED. */
+export const C6_ZIGBEE_BENCH_POST_FLASH_CHECKS = Object.freeze([
+  Object.freeze({ id: "micropython-repl", label: "MicroPython REPL boots", status: "OPERATOR_CHECK" }),
+  Object.freeze({ id: "uzigbee-import", label: "_uzigbee import", status: "OPERATOR_CHECK" }),
+  Object.freeze({ id: "st7789", label: "screen ST7789", status: "OPERATOR_CHECK" }),
+  Object.freeze({ id: "gpio", label: "GPIO", status: "OPERATOR_CHECK" }),
+  Object.freeze({ id: "wifi", label: "Wi-Fi", status: "OPERATOR_CHECK" }),
+  Object.freeze({ id: "ble", label: "BLE", status: "OPERATOR_CHECK" }),
+  Object.freeze({ id: "zigbee-pairing", label: "Zigbee pairing", status: "UNVERIFIED" }),
+  Object.freeze({
+    id: "zigbee-dual-onoff",
+    label: "Zigbee dual channel ON/OFF",
+    status: "UNVERIFIED",
+  }),
+]);
+
+/**
+ * Honest resolver for package acquisition. Never simulates a successful automatic fetch.
+ * @returns {{ status: string, automaticFetchSupported: boolean, authorizedEndpointSupported: boolean, blockers: readonly string[], alternatives: readonly string[] }}
+ */
+export function resolveC6ZigbeeBenchPackageFetch() {
+  return {
+    status: C6_ZIGBEE_BENCH_DISTRIBUTION.status,
+    automaticFetchSupported: false,
+    authorizedEndpointSupported: false,
+    blockers: C6_ZIGBEE_BENCH_DISTRIBUTION.blockers,
+    alternatives: C6_ZIGBEE_BENCH_DISTRIBUTION.alternatives,
+    pinnedRunId: C6_ZIGBEE_BENCH_DISTRIBUTION.pinnedRunId,
+    pinnedArtifactId: C6_ZIGBEE_BENCH_DISTRIBUTION.pinnedArtifactId,
+  };
+}
 
 /**
  * Verify a trusted manifest's pinned package, byte lengths and ALL SHA-256
@@ -75,6 +154,14 @@ export async function validateC6ZigbeeBenchFiles(files, options = {}) {
   if (selected.some((f) => !names.has(f?.name))) {
     return { ok: false, reason: "BENCH_EXTRA_OR_UNKNOWN_FILE" };
   }
+  // Reject app-only / wrong-offset packaging: all three pinned offsets required.
+  if (
+    segments[0]?.address !== 0x0 ||
+    segments[1]?.address !== 0x8000 ||
+    segments[2]?.address !== 0x10000
+  ) {
+    return { ok: false, reason: "BENCH_OFFSET_MISMATCH" };
+  }
   return {
     ok: true,
     segments,
@@ -84,6 +171,91 @@ export async function validateC6ZigbeeBenchFiles(files, options = {}) {
   };
 }
 
+/**
+ * Detect actual ESP32-C6 + 4 MB flash. Install must not proceed when this fails.
+ */
+export async function detectC6ZigbeeBenchTarget(options = {}) {
+  if (typeof globalThis.isSecureContext === "boolean" && !globalThis.isSecureContext) {
+    throw new Error("BENCH_HTTPS_REQUIRED");
+  }
+  const requestPort = options.requestPort || (() => {
+    if (typeof navigator === "undefined" || !navigator.serial?.requestPort) {
+      throw new Error("BENCH_WEBSERIAL_REQUIRED");
+    }
+    return navigator.serial.requestPort();
+  });
+  const port = await requestPort();
+  const boot = await connectC6Bootloader(port, { onLog: options.onLog });
+  try {
+    const detection = await detectC6ChipAndFlashSize(boot);
+    if (!detection.ok) {
+      await resetC6AndRelease(boot).catch(() => {});
+      return detection;
+    }
+    await resetC6AndRelease(boot);
+    return {
+      ok: true,
+      chipName: detection.chipName,
+      flashSize: detection.flashSize,
+      flashBytes: detection.flashBytes,
+    };
+  } catch (error) {
+    await resetC6AndRelease(boot).catch(() => {});
+    throw error;
+  }
+}
+
+/**
+ * Full 4 MB backup to a USER-SAVED local file before any erase/write.
+ * Never claims backup completed merely because it was requested.
+ */
+export async function backupC6ZigbeeBenchFlash(options = {}) {
+  if (typeof globalThis.isSecureContext === "boolean" && !globalThis.isSecureContext) {
+    throw new Error("BENCH_HTTPS_REQUIRED");
+  }
+  const requestPort = options.requestPort || (() => {
+    if (typeof navigator === "undefined" || !navigator.serial?.requestPort) {
+      throw new Error("BENCH_WEBSERIAL_REQUIRED");
+    }
+    return navigator.serial.requestPort();
+  });
+  const port = await requestPort();
+  const boot = await connectC6Bootloader(port, { onLog: options.onLog });
+  try {
+    const detection = await detectC6ChipAndFlashSize(boot);
+    if (!detection.ok) {
+      await resetC6AndRelease(boot).catch(() => {});
+      return { ok: false, reason: detection.reason, detection };
+    }
+    const read = await readC6FullFlashBackup(boot, { onProgress: options.onProgress });
+    await resetC6AndRelease(boot);
+    const saved = await saveC6BackupToUserFile(read.bytes, {
+      suggestedName: options.suggestedName,
+      showSaveFilePicker: options.showSaveFilePicker,
+      document: options.document,
+    });
+    const verified =
+      read.ok === true &&
+      read.byteLength === C6_FULL_FLASH_BYTES &&
+      saved.ok === true &&
+      saved.byteLength === C6_FULL_FLASH_BYTES;
+    return {
+      ok: verified,
+      reason: verified ? "ok" : "BENCH_BACKUP_INCOMPLETE",
+      byteLength: read.byteLength,
+      fileName: saved.fileName,
+      downloadConfirmed: saved.downloadConfirmed === true,
+      method: saved.method,
+      limitation: saved.limitation || null,
+      preservesViaFullImage: C6_ZIGBEE_BENCH_PRESERVED_VFS_PATHS,
+      detection,
+    };
+  } catch (error) {
+    await resetC6AndRelease(boot).catch(() => {});
+    throw error;
+  }
+}
+
 /** This gate must be checked on the final human-triggered Flash action. */
 export function assertC6ZigbeeBenchFlashConsent(options = {}) {
   if (!options.validated?.ok) return { allowed: false, reason: "BENCH_PACKAGE_NOT_VERIFIED" };
@@ -91,7 +263,23 @@ export function assertC6ZigbeeBenchFlashConsent(options = {}) {
     return { allowed: false, reason: "BENCH_WRONG_BOARD_PROFILE" };
   }
   if (options.connected === true) return { allowed: false, reason: "BENCH_DISCONNECT_FIRST" };
-  if (options.backupConfirmed !== true) return { allowed: false, reason: "BENCH_BACKUP_REQUIRED" };
+  if (options.detection?.ok !== true || options.detection?.flashSize !== "4MB") {
+    return { allowed: false, reason: "BENCH_DETECTION_REQUIRED" };
+  }
+  if (!isEsp32C6Chip(options.detection?.chipName)) {
+    return { allowed: false, reason: "BENCH_CHIP_NOT_ESP32_C6" };
+  }
+  const backup = options.backupResult;
+  if (
+    !backup ||
+    backup.ok !== true ||
+    backup.byteLength !== C6_FULL_FLASH_BYTES
+  ) {
+    return { allowed: false, reason: "BENCH_BACKUP_REQUIRED" };
+  }
+  if (backup.downloadConfirmed !== true && options.backupDownloadAcknowledged !== true) {
+    return { allowed: false, reason: "BENCH_BACKUP_DOWNLOAD_ACK_REQUIRED" };
+  }
   if (options.eraseAcknowledged !== true) return { allowed: false, reason: "BENCH_ERASE_ACK_REQUIRED" };
   if (options.secondConfirmation !== "ESP32-C6") {
     return { allowed: false, reason: "BENCH_SECOND_CONFIRMATION_REQUIRED" };
@@ -122,6 +310,11 @@ export async function flashC6ZigbeeBenchPackage(validated, options = {}) {
     throw new Error("BENCH_CHIP_NOT_ESP32_C6");
   }
   try {
+    const detection = await detectC6ChipAndFlashSize(boot);
+    if (!detection.ok) {
+      await resetC6AndRelease(boot).catch(() => {});
+      throw new Error(detection.reason || "BENCH_DETECTION_REQUIRED");
+    }
     await writeC6MultiOffsetFirmware(boot, validated.segments, { onProgress: options.onProgress });
     await resetC6AndRelease(boot);
   } catch (error) {
@@ -129,5 +322,11 @@ export async function flashC6ZigbeeBenchPackage(validated, options = {}) {
     throw error;
   }
   options.onLog?.("PYBOT_C6_ZIGBEE:FLASH_WRITTEN — reboot + MicroPython REPL + LCD + Zigbee physical tests STILL REQUIRED.");
-  return { written: true, physicallyVerified: false, hardwareValidation: "UNVERIFIED", modeReady: false };
+  return {
+    written: true,
+    physicallyVerified: false,
+    hardwareValidation: "UNVERIFIED",
+    modeReady: false,
+    postFlashChecks: C6_ZIGBEE_BENCH_POST_FLASH_CHECKS,
+  };
 }

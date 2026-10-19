@@ -2764,12 +2764,12 @@ export default function PyBotIDE() {
                               setZigbeeBenchOpen(true);
                             }}
                           >
-                            {getLang() === "en" ? "Test Zigbee firmware (C6)" : "Probar firmware Zigbee (C6)"}
+                            Preparar e instalar
                           </button>
                           <div className="toolbar-menu-hint">
                             {getLang() === "en"
-                              ? "Private physical bench. Requires three verified .bin files, backup and explicit consent. Does not affect production."
-                              : "Prueba física privada. Requiere tres .bin verificados, respaldo y autorización explícita. No afecta producción."}
+                              ? "Guided C6 prep/install: detect 4 MB, verify pinned package, full flash backup, explicit consent. No auto-fetch/auto-flash. Does not affect production."
+                              : "Preparación/instalación guiada C6: detectar 4 MB, verificar paquete anclado, respaldo completo, consentimiento explícito. Sin auto-descarga ni auto-flash. No afecta producción."}
                           </div>
                         </div>
                       ) : null}

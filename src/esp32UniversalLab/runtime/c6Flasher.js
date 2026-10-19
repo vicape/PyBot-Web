@@ -211,6 +211,138 @@ export async function writeC6MultiOffsetFirmware(ctx, segments, options = {}) {
   }
 }
 
+/** Full 4 MB flash image size for Waveshare ESP32-C6-LCD-1.47 (ESP32-C6FH4). */
+export const C6_FULL_FLASH_BYTES = 0x400000;
+
+/**
+ * Detect ESP32-C6 silicon and exact 4 MB flash before any erase/write.
+ * Fail closed when chip or flash size is wrong or undetectable.
+ * @param {{ loader: { detectFlashSize?: Function, CHIP_NAME?: string }, chipName?: string, chip?: { CHIP_NAME?: string } }} ctx
+ */
+export async function detectC6ChipAndFlashSize(ctx) {
+  const chipName = String(ctx?.chipName || ctx?.chip?.CHIP_NAME || ctx?.loader?.CHIP_NAME || "");
+  if (!isEsp32C6Chip(chipName)) {
+    return { ok: false, reason: "LAB_CHIP_NOT_C6", chipName: chipName || "unknown", flashSize: null };
+  }
+  if (typeof ctx?.loader?.detectFlashSize !== "function") {
+    return {
+      ok: false,
+      reason: "LAB_FLASH_DETECT_UNAVAILABLE",
+      chipName,
+      flashSize: null,
+      missingCapability: "esptool detectFlashSize",
+    };
+  }
+  let flashSize;
+  try {
+    flashSize = String(await ctx.loader.detectFlashSize());
+  } catch (e) {
+    const err = new Error("LAB_FLASH_DETECT_FAIL");
+    err.cause = e;
+    throw err;
+  }
+  if (flashSize !== "4MB") {
+    return { ok: false, reason: "LAB_FLASH_NOT_4MB", chipName, flashSize };
+  }
+  return { ok: true, chipName, flashSize, flashBytes: C6_FULL_FLASH_BYTES };
+}
+
+/**
+ * FULL 4 MB read_flash. Preserves firmware + VFS (/main.py, /boot.py, /pybot/assets)
+ * inside the complete image. Never claims success without exact byte length.
+ * @param {{ loader: { readFlash?: Function } }} ctx
+ * @param {{ onProgress?: Function }} [options]
+ */
+export async function readC6FullFlashBackup(ctx, options = {}) {
+  if (typeof ctx?.loader?.readFlash !== "function") {
+    const err = new Error("LAB_READ_FLASH_UNAVAILABLE");
+    err.missingCapability = "esptool-js readFlash (full 4 MB backup/recovery)";
+    throw err;
+  }
+  const onPacket = typeof options.onProgress === "function"
+    ? (packetIndex, totalPackets, _data) => {
+        const total = totalPackets || 1;
+        const pct = Math.min(100, Math.floor((100 * (packetIndex + 1)) / total));
+        options.onProgress({ packetIndex, totalPackets: total, pct, bytesExpected: C6_FULL_FLASH_BYTES });
+      }
+    : undefined;
+  let data;
+  try {
+    data = await ctx.loader.readFlash(0, C6_FULL_FLASH_BYTES, onPacket);
+  } catch (e) {
+    const err = new Error("LAB_READ_FLASH_FAIL");
+    err.cause = e;
+    throw err;
+  }
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data ?? []);
+  if (bytes.byteLength !== C6_FULL_FLASH_BYTES) {
+    throw new Error(
+      `LAB_BACKUP_SIZE_MISMATCH:expected=${C6_FULL_FLASH_BYTES} got=${bytes.byteLength}`,
+    );
+  }
+  return { ok: true, bytes, byteLength: bytes.byteLength, flashOffset: 0 };
+}
+
+/**
+ * Save a verified 4 MB backup to a user-chosen local file.
+ * showSaveFilePicker confirms write completion; anchor download cannot — caller must
+ * require explicit acknowledgment when downloadConfirmed is false.
+ * @param {Uint8Array} bytes
+ * @param {{ suggestedName?: string, showSaveFilePicker?: Function, document?: Document }} [options]
+ */
+export async function saveC6BackupToUserFile(bytes, options = {}) {
+  const image = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes ?? []);
+  if (image.byteLength !== C6_FULL_FLASH_BYTES) {
+    throw new Error(
+      `LAB_BACKUP_SAVE_SIZE_MISMATCH:expected=${C6_FULL_FLASH_BYTES} got=${image.byteLength}`,
+    );
+  }
+  const suggestedName = options.suggestedName || "pybot-c6-full-flash-backup-4mb.bin";
+  const picker =
+    options.showSaveFilePicker ||
+    (typeof globalThis.showSaveFilePicker === "function" ? globalThis.showSaveFilePicker.bind(globalThis) : null);
+  if (typeof picker === "function") {
+    const handle = await picker({
+      suggestedName,
+      types: [{ description: "ESP32 flash backup", accept: { "application/octet-stream": [".bin"] } }],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(image);
+    await writable.close();
+    return {
+      ok: true,
+      byteLength: image.byteLength,
+      fileName: handle.name || suggestedName,
+      downloadConfirmed: true,
+      method: "showSaveFilePicker",
+    };
+  }
+  const doc = options.document || (typeof document !== "undefined" ? document : null);
+  if (!doc?.createElement || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
+    const err = new Error("LAB_BACKUP_SAVE_UNAVAILABLE");
+    err.missingCapability = "showSaveFilePicker or anchor download";
+    throw err;
+  }
+  const blob = new Blob([image], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = doc.createElement("a");
+  a.href = url;
+  a.download = suggestedName;
+  doc.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return {
+    ok: true,
+    byteLength: image.byteLength,
+    fileName: suggestedName,
+    downloadConfirmed: false,
+    method: "anchor-download",
+    limitation:
+      "El navegador no confirma que el archivo quedó guardado en disco; se requiere acuse explícito del respaldo verificado.",
+  };
+}
+
 /**
  * @param {{ loader?: { after: Function }, transport?: { disconnect: Function } }} ctx
  */
