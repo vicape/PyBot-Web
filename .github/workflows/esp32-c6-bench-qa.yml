@@ -53,12 +53,13 @@ jobs:
           cp "$RUNNER_TEMP/c6-ci/esp32-c6-bench-qa.yml" .github/workflows/esp32-c6-bench-qa.yml
       - name: Restore only known test-generated tracked Python bytecode
         run: |
-          while IFS= read -r path; do
+          mapfile -t touched < <(git diff --name-only)
+          for path in "${touched[@]}"; do
             case "$path" in
               firmware/pybot-ble-runtime/__pycache__/*.pyc)
                 git restore -- "$path"
                 ;;
             esac
-          done < <(git diff --name-only)
+          done
       - name: Source integrity (no tracked mutation)
         run: git diff --exit-code
