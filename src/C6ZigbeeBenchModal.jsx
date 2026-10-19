@@ -11,8 +11,8 @@ import {
 
 /**
  * One-click Instalar firmware for Waveshare ESP32-C6-LCD-1.47 bench.
- * Same simplicity as stock MicroPython C6 flash: one CTA → anonymous fetch/SHA
- * → WebSerial flash. No backup picker, Continuar, or multi-stage confirm buttons.
+ * Same simplicity as stock MicroPython C6 flash: one CTA → static same-origin
+ * fetch/SHA → WebSerial flash. No backup picker, Continuar, or multi-stage confirm.
  * Notices shown without login or extra confirmation; autoFlash remains false.
  */
 export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, connected }) {
@@ -73,9 +73,7 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
         onProgress: (p) => {
           if (p.stage) setStage(p.stage);
           if (typeof p.pct === "number") setPct(p.pct);
-          if (p.phase === "fetch" || p.phase === "mint") {
-            setPhase(en ? "Getting firmware from the server…" : "Obteniendo firmware del servidor…");
-          } else if (p.phase === "download") {
+          if (p.phase === "fetch" || p.phase === "mint" || p.phase === "download") {
             setPhase(en ? "Downloading firmware…" : "Descargando firmware…");
           } else if (p.phase === "verify") {
             setPhase(en ? "Verifying firmware…" : "Verificando firmware…");

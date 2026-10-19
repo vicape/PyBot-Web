@@ -1,11 +1,12 @@
 /**
  * TARGET: vicape/PyBot-Web (branch feature/esp32-universal-lab only).
- * Exact, private firmware-build acceptance for the first physical ESP32-C6 bench.
+ * Exact firmware-build acceptance for the first physical ESP32-C6 bench.
  * Same UX simplicity as stock "Instalar MicroPython (C6)": one "Instalar firmware"
- * CTA obtains+verifies the pinned package via anonymous server distributor,
- * then WebSerial flash with chip/4MB checks. No mandatory backup, file picker, or
- * multi-stage confirmation. CTA click = erase consent (apps/files may be wiped).
- * Binaries stay outside Git and production. autoFlash remains false.
+ * CTA fetches+verifies the pinned package from static same-origin
+ * /firmware/c6-zigbee/*.bin (vendored like stock C6), then WebSerial flash with
+ * chip/4MB checks. No login, env secrets, ZIP, backup picker, or multi-stage
+ * confirmation. CTA click = erase consent (apps/files may be wiped).
+ * autoFlash remains false; hardwareValidation stays UNVERIFIED.
  */
 import { isEsp32C6Chip } from "../firmware/esp32GenericC6.js";
 import { WAVESHARE_ESP32_C6_LCD_147_ID } from "../profiles/waveshareEsp32C6Lcd147.js";
@@ -33,7 +34,10 @@ export const C6_ZIGBEE_BENCH_UI_LABEL = "Instalar firmware";
 export const C6_ZIGBEE_BENCH_FETCH_ACTION = "Obtener firmware y verificar";
 /** @deprecated No intermediate Continuar step; kept for import compatibility. */
 export const C6_ZIGBEE_BENCH_CONTINUE_LABEL = "Continuar";
+/** @deprecated Legacy API path; guest install uses static /firmware/c6-zigbee/ URLs. */
 export const C6_ZIGBEE_BENCH_FIRMWARE_API = "/api/c6-zigbee-bench-firmware";
+/** Static asset base (same pattern as /firmware/micropython/ for stock C6). */
+export const C6_ZIGBEE_BENCH_STATIC_BASE = "/firmware/c6-zigbee";
 
 /** Ordered progress stages for the one-click installer (status only — not buttons). */
 export const C6_ZIGBEE_BENCH_PROGRESS_STAGES = Object.freeze([
@@ -42,12 +46,11 @@ export const C6_ZIGBEE_BENCH_PROGRESS_STAGES = Object.freeze([
 ]);
 
 /**
- * Exact one-time SERVER-OPERATOR setup when Preview secrets / durable private
- * storage are missing. Not an end-user / login step; surfaced only as
- * operator_setup_required.
+ * @deprecated Static public assets replace operator secret setup for guest install.
+ * Kept for import compatibility; never emitted by the static fetch path.
  */
 export const C6_ZIGBEE_BENCH_OPERATOR_SETUP =
-  "OPERATOR_SETUP (Vercel Preview feature/esp32-universal-lab only): upload Maxwell artifact 12161052985 zigbee-firmware-private-bench/*.bin to private object storage that outlives GitHub Actions retention; set PYBOT_C6_FIRMWARE_SIGNING_SECRET, PYBOT_C6_FIRMWARE_STORAGE_BASE_URL, and PYBOT_C6_FIRMWARE_STORAGE_AUTH_HEADER (Bearer/token for that store). Optional interim: PYBOT_C6_FIRMWARE_GITHUB_TOKEN + PYBOT_C6_FIRMWARE_GHA_ARTIFACT_ID=12161052985 + PYBOT_C6_FIRMWARE_GHA_REPO=vicape/cursor-control (still migrate to durable storage before artifact expiry). Guest/anonymous mint does not require user login.";
+  "OPERATOR_SETUP obsolete: guest Zigbee firmware is served from static /firmware/c6-zigbee/ (no Preview secrets).";
 
 /**
  * @deprecated Product owner authorized anonymous guest delivery. Kept as empty
@@ -57,13 +60,14 @@ export const C6_ZIGBEE_BENCH_GUEST_APPROVAL_BLOCKER = "";
 
 /** Bundled notice summary shown without login or extra confirmation. */
 export const C6_ZIGBEE_BENCH_NOTICES = Object.freeze({
-  path: "firmware/pybot-c6-micropython-zigbee/THIRD_PARTY_NOTICES.md",
-  apiPath: `${C6_ZIGBEE_BENCH_FIRMWARE_API}?notices=1`,
+  path: "public/firmware/c6-zigbee/THIRD_PARTY_NOTICES.md",
+  /** HTTP-accessible notices (same-origin static asset). */
+  apiPath: `${C6_ZIGBEE_BENCH_STATIC_BASE}/THIRD_PARTY_NOTICES.md`,
   restrictions: Object.freeze([
     "esp-zboss-lib: retain copyright, conditions, and disclaimer; no reverse-engineering / decompile / modify / disassemble.",
     "esp-zigbee-lib: Apache-2.0 — retain license attributions.",
     "uZigbee: MIT — retain copyright and permission notice.",
-    "Pinned ESP32-C6 image only via short-lived tickets; no proprietary .a libs or credentials.",
+    "Pinned ESP32-C6 image via static /firmware/c6-zigbee/; no proprietary .a libs or credentials.",
   ]),
 });
 
@@ -79,12 +83,14 @@ export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
   pinnedArtifactId: "12161052985",
   autoFlash: false,
   publicReady: false,
-  noticesPath: "firmware/pybot-c6-micropython-zigbee/THIRD_PARTY_NOTICES.md",
+  noticesPath: "public/firmware/c6-zigbee/THIRD_PARTY_NOTICES.md",
   durableManifestPath: "firmware/pybot-c6-micropython-zigbee/private-bench-manifest.json",
+  staticBase: C6_ZIGBEE_BENCH_STATIC_BASE,
   components: Object.freeze([
     Object.freeze({
       role: "bootloader",
       name: "pybot-c6-micropython-zigbee-0.1.0-bootloader.bin",
+      url: `${C6_ZIGBEE_BENCH_STATIC_BASE}/pybot-c6-micropython-zigbee-0.1.0-bootloader.bin`,
       address: 0x0,
       size: 18384,
       sha256: "8eed4217cf16bb74313615a6a7fb9a90a4ae79c05b828dfa923e84b0f574fbe6",
@@ -92,6 +98,7 @@ export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
     Object.freeze({
       role: "partition-table",
       name: "pybot-c6-micropython-zigbee-0.1.0-partition-table.bin",
+      url: `${C6_ZIGBEE_BENCH_STATIC_BASE}/pybot-c6-micropython-zigbee-0.1.0-partition-table.bin`,
       address: 0x8000,
       size: 3072,
       sha256: "b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f",
@@ -99,6 +106,7 @@ export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
     Object.freeze({
       role: "app",
       name: "pybot-c6-micropython-zigbee-0.1.0-app.bin",
+      url: `${C6_ZIGBEE_BENCH_STATIC_BASE}/pybot-c6-micropython-zigbee-0.1.0-app.bin`,
       address: 0x10000,
       size: 3221280,
       sha256: "d22d48f5c474f327be4b946dfa88af49523606215dda5e74325a5864189ef096",
@@ -107,22 +115,22 @@ export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
 });
 
 /**
- * Automatic delivery via anonymous server distributor + short-lived tickets.
+ * Automatic delivery via static same-origin assets (stock C6 pattern).
  * License: esp-zboss-lib permits binary redistribution with notice retention;
- * product owner authorizes guest delivery of the pinned package (not open CDN).
+ * product owner authorizes guest delivery of the pinned package.
  */
 export const C6_ZIGBEE_BENCH_DISTRIBUTION = Object.freeze({
-  status: "AUTOMATIC_SERVER",
+  status: "STATIC_PUBLIC",
   automaticFetchSupported: true,
-  authorizedEndpointSupported: true,
+  authorizedEndpointSupported: false,
   guestAnonymousSupported: true,
-  endpointPath: C6_ZIGBEE_BENCH_FIRMWARE_API,
+  endpointPath: C6_ZIGBEE_BENCH_STATIC_BASE,
   fetchActionLabel: C6_ZIGBEE_BENCH_FETCH_ACTION,
   pinnedRunId: C6_ZIGBEE_BENCH_PACKAGE.pinnedRunId,
   pinnedArtifactId: C6_ZIGBEE_BENCH_PACKAGE.pinnedArtifactId,
   operatorSetup: C6_ZIGBEE_BENCH_OPERATOR_SETUP,
   licensePolicy:
-    "Guest anonymous delivery of pinned ESP32-C6 image authorized. THIRD_PARTY_NOTICES include esp-zboss-lib conditions (retain copyright/disclaimer; no reverse-engineering).",
+    "Guest anonymous delivery of pinned ESP32-C6 image authorized via static /firmware/c6-zigbee/. THIRD_PARTY_NOTICES include esp-zboss-lib conditions (retain copyright/disclaimer; no reverse-engineering).",
 });
 /** Post-flash operator checklist. Zigbee pairing/dual-channel stay UNVERIFIED. */
 export const C6_ZIGBEE_BENCH_POST_FLASH_CHECKS = Object.freeze([
@@ -141,14 +149,14 @@ export const C6_ZIGBEE_BENCH_POST_FLASH_CHECKS = Object.freeze([
 ]);
 
 /**
- * Resolver for package acquisition UI. Automatic anonymous server path is the
+ * Resolver for package acquisition UI. Automatic anonymous static fetch is the
  * product flow; users see obtain/verify status, never a guest-policy popup.
  */
 export function resolveC6ZigbeeBenchPackageFetch() {
   return {
     status: C6_ZIGBEE_BENCH_DISTRIBUTION.status,
     automaticFetchSupported: true,
-    authorizedEndpointSupported: true,
+    authorizedEndpointSupported: false,
     guestAnonymousSupported: true,
     endpointPath: C6_ZIGBEE_BENCH_DISTRIBUTION.endpointPath,
     fetchActionLabel: C6_ZIGBEE_BENCH_FETCH_ACTION,
@@ -210,17 +218,18 @@ export async function validateC6ZigbeeBenchFiles(files, options = {}) {
 }
 
 /**
- * Anonymous (guest) server fetch of the three verified segments + client SHA check.
- * No login / getSession prerequisite. End users never download GitHub ZIPs or pick .bin files.
- * @param {{getAccessToken?:Function, fetchImpl?:Function, onProgress?:Function, signal?:AbortSignal}} options
+ * Anonymous (guest) static fetch of the three verified segments + client SHA check.
+ * Same architecture as stock C6 (/firmware/micropython/...): same-origin GET,
+ * size + SHA-256 verify, then existing writeC6MultiOffsetFirmware.
+ * No login, env secrets, API mint, ZIP, or file picker.
+ * @param {{getAccessToken?:Function, fetchImpl?:Function, onProgress?:Function, signal?:AbortSignal, digest?:Function}} options
  */
 export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== "function") {
     return { ok: false, reason: "BENCH_FETCH_UNAVAILABLE" };
   }
-  // Optional token ignored for gating — guest mint is authorized. Kept only so
-  // callers that still pass getAccessToken do not break.
+  // Optional token ignored for gating — static guest path needs no session.
   if (typeof options.getAccessToken === "function") {
     try {
       await options.getAccessToken();
@@ -228,68 +237,19 @@ export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
       /* ignore — anonymous path does not require a session */
     }
   }
-  options.onProgress?.({ phase: "mint", pct: 5 });
-  let mintRes;
-  try {
-    mintRes = await fetchImpl(C6_ZIGBEE_BENCH_FIRMWARE_API, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ chip: C6_ZIGBEE_BENCH_PACKAGE.chip }),
-      signal: options.signal,
-    });
-  } catch (e) {
-    if (e?.name === "AbortError") return { ok: false, reason: "BENCH_FETCH_INTERRUPTED" };
-    return { ok: false, reason: "BENCH_FETCH_NETWORK", detail: String(e?.message || e) };
-  }
-  let mintJson = null;
-  try {
-    mintJson = await mintRes.json();
-  } catch {
-    mintJson = null;
-  }
-  if (mintJson?.error === "chip_denied" || (mintRes.status === 403 && mintJson?.error === "chip_denied")) {
-    return {
-      ok: false,
-      reason: "BENCH_CHIP_DENIED",
-      detail: mintJson?.reason || "chip_denied",
-    };
-  }
-  if (mintRes.status === 401 || mintRes.status === 403) {
-    return {
-      ok: false,
-      reason: "BENCH_AUTH_DENIED",
-      detail: mintJson?.reason || "unauthorized",
-    };
-  }
-  if (mintRes.status === 503 || mintJson?.error === "operator_setup_required") {
-    return {
-      ok: false,
-      reason: "BENCH_OPERATOR_SETUP_REQUIRED",
-      detail: mintJson?.reason || C6_ZIGBEE_BENCH_OPERATOR_SETUP,
-    };
-  }
-  if (!mintRes.ok || !mintJson?.ok || !Array.isArray(mintJson.tickets)) {
-    return {
-      ok: false,
-      reason: mintJson?.error === "hash_mismatch" ? "BENCH_SERVER_HASH_MISMATCH" : "BENCH_FETCH_FAILED",
-      detail: mintJson?.reason || `http_${mintRes.status}`,
-    };
-  }
+  const components = C6_ZIGBEE_BENCH_PACKAGE.components;
   const files = [];
-  const total = mintJson.tickets.length;
+  const total = components.length;
   for (let i = 0; i < total; i++) {
-    const ticket = mintJson.tickets[i];
+    const spec = components[i];
     options.onProgress?.({
       phase: "download",
-      role: ticket.role,
+      role: spec.role,
       pct: 10 + Math.round(((i + 0.5) / total) * 70),
     });
     let segRes;
     try {
-      segRes = await fetchImpl(ticket.path || `${C6_ZIGBEE_BENCH_FIRMWARE_API}?ticket=${encodeURIComponent(ticket.ticket)}`, {
+      segRes = await fetchImpl(spec.url, {
         method: "GET",
         signal: options.signal,
       });
@@ -298,20 +258,11 @@ export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
       return { ok: false, reason: "BENCH_FETCH_NETWORK", detail: String(e?.message || e) };
     }
     if (!segRes.ok) {
-      let errBody = null;
-      try {
-        errBody = await segRes.json();
-      } catch {
-        errBody = null;
-      }
-      if (errBody?.error === "hash_mismatch") {
-        return { ok: false, reason: "BENCH_SERVER_HASH_MISMATCH", detail: errBody.reason };
-      }
-      return { ok: false, reason: "BENCH_SEGMENT_FETCH_FAILED", detail: ticket.role };
+      return { ok: false, reason: "BENCH_SEGMENT_FETCH_FAILED", detail: spec.role };
     }
     const buf = await segRes.arrayBuffer();
     files.push({
-      name: ticket.name,
+      name: spec.name,
       size: buf.byteLength,
       arrayBuffer: async () => buf,
     });
@@ -322,9 +273,9 @@ export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
   options.onProgress?.({ phase: "done", pct: 100 });
   return {
     ...validated,
-    source: "pinned-server",
-    packageVersion: mintJson.packageVersion || C6_ZIGBEE_BENCH_PACKAGE.version,
-    notices: mintJson.notices || C6_ZIGBEE_BENCH_NOTICES,
+    source: "static-public",
+    packageVersion: C6_ZIGBEE_BENCH_PACKAGE.version,
+    notices: C6_ZIGBEE_BENCH_NOTICES,
   };
 }
 
@@ -428,8 +379,12 @@ export const C6_ZIGBEE_BENCH_GATE_MESSAGES = Object.freeze({
     en: "Only the pinned ESP32-C6 firmware is delivered.",
   },
   BENCH_OPERATOR_SETUP_REQUIRED: {
-    es: "Falta configuración del servidor (almacenamiento privado + secretos Preview). No es un problema de login.",
-    en: "Server setup missing (private storage + Preview secrets). Not a user-login issue.",
+    es: "Firmware estático no disponible en /firmware/c6-zigbee/.",
+    en: "Static firmware unavailable under /firmware/c6-zigbee/.",
+  },
+  BENCH_SEGMENT_FETCH_FAILED: {
+    es: "No se pudo descargar un segmento del firmware.",
+    en: "Could not download a firmware segment.",
   },
   BENCH_FETCH_INTERRUPTED: {
     es: "Descarga interrumpida. Reintentá Instalar firmware.",
@@ -505,9 +460,9 @@ export function assertC6ZigbeeBenchFlashConsent(options = {}) {
 }
 
 /**
- * One-click install (fetch/SHA → WebSerial detect+flash), matching stock C6 UX.
- * CTA click supplies destructiveFlashConsent. Fail-closed on auth/setup/SHA/USB/
- * chip gaps. No mandatory backup, file picker, Continuar, or second confirm UI.
+ * One-click install (static fetch/SHA → WebSerial detect+flash), matching stock C6 UX.
+ * CTA click supplies destructiveFlashConsent. Fail-closed on fetch/SHA/USB/chip
+ * gaps. No mandatory backup, file picker, Continuar, or second confirm UI.
  *
  * @param {{
  *   profileId: string,

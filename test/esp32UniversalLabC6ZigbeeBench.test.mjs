@@ -160,73 +160,61 @@ test("C6 Zigbee: TARGET vicape/PyBot-Web + backup preserves /main.py /boot.py /p
   assert.match(readFileSync(join(root, "vicape/PyBot-Web"), "utf8"), /vicape\/PyBot-Web/);
 });
 
-test("C6 Zigbee: automatic guest distributor is wired; no secrets in client", () => {
+test("C6 Zigbee: static guest distributor is wired; no secrets in client", () => {
   const resolved = resolveC6ZigbeeBenchPackageFetch();
-  assert.equal(resolved.status, "AUTOMATIC_SERVER");
-  assert.equal(C6_ZIGBEE_BENCH_DISTRIBUTION.status, "AUTOMATIC_SERVER");
+  assert.equal(resolved.status, "STATIC_PUBLIC");
+  assert.equal(C6_ZIGBEE_BENCH_DISTRIBUTION.status, "STATIC_PUBLIC");
   assert.equal(resolved.automaticFetchSupported, true);
-  assert.equal(resolved.authorizedEndpointSupported, true);
+  assert.equal(resolved.authorizedEndpointSupported, false);
   assert.equal(resolved.guestAnonymousSupported, true);
-  assert.equal(resolved.endpointPath, "/api/c6-zigbee-bench-firmware");
+  assert.equal(resolved.endpointPath, "/firmware/c6-zigbee");
   assert.equal(resolved.fetchActionLabel, "Obtener firmware y verificar");
-  assert.match(C6_ZIGBEE_BENCH_OPERATOR_SETUP, /PYBOT_C6_FIRMWARE_STORAGE_BASE_URL/);
+  assert.match(C6_ZIGBEE_BENCH_OPERATOR_SETUP, /obsolete|static \/firmware\/c6-zigbee/i);
   assert.doesNotMatch(C6_ZIGBEE_BENCH_OPERATOR_SETUP, /SUPABASE_SERVICE_KEY|OPERATOR_EMAILS/);
   assert.match(C6_ZIGBEE_BENCH_DISTRIBUTION.licensePolicy, /Guest anonymous/i);
+  assert.equal(C6_ZIGBEE_BENCH_NOTICES.apiPath, "/firmware/c6-zigbee/THIRD_PARTY_NOTICES.md");
+  for (const spec of specs) {
+    assert.match(spec.url, /^\/firmware\/c6-zigbee\//);
+    assert.equal(spec.url, `/firmware/c6-zigbee/${spec.name}`);
+  }
   // Env *names* may mention GITHUB_TOKEN; never embed live credential material.
   assert.doesNotMatch(benchSrc, /github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]{20,}|ACTIONS_RUNTIME_TOKEN\s*[:=]|service_role\s*[:=]/i);
   assert.doesNotMatch(modalSrc, /github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]{20,}|ACTIONS_RUNTIME_TOKEN\s*[:=]|service_role\s*[:=]/i);
   assert.doesNotMatch(benchSrc, /fetch\(\s*C6_ZIGBEE_BENCH_PACKAGE\.sourceArtifact/);
   assert.doesNotMatch(modalSrc, /fetch\(\s*C6_ZIGBEE_BENCH_PACKAGE\.sourceArtifact/);
+  assert.doesNotMatch(benchSrc, /method:\s*"POST"/);
 });
 
-test("C6 Zigbee: guest/no session mints anonymously (no login / no guest policy blocker)", async () => {
-  const tickets = specs.map((s) => ({
-    role: s.role,
-    name: s.name,
-    address: s.address,
-    size: s.size,
-    sha256: s.sha256,
-    ticket: `t-${s.role}`,
-    path: `/api/c6-zigbee-bench-firmware?ticket=t-${s.role}`,
-  }));
-  let postSeen = false;
+function staticFetchImpl(url, init = {}) {
+  assert.notEqual(init.method, "POST");
+  const role = String(url).includes("bootloader")
+    ? "bootloader"
+    : String(url).includes("partition")
+      ? "partition-table"
+      : "app";
+  const spec = specs.find((s) => s.role === role);
+  assert.ok(spec, "unknown static url " + url);
+  assert.equal(url, spec.url);
+  return {
+    ok: true,
+    status: 200,
+    arrayBuffer: async () => new Uint8Array(spec.size).buffer,
+  };
+}
+
+test("C6 Zigbee: guest/no session fetches static bins anonymously (no login / no guest policy blocker)", async () => {
+  let getCount = 0;
   const ok = await fetchAndValidateC6ZigbeeBenchPackage({
     getAccessToken: async () => null,
-    fetchImpl: async (_url, init = {}) => {
-      if (init.method === "POST") {
-        postSeen = true;
-        assert.equal(init.headers?.Authorization, undefined);
-        const body = JSON.parse(init.body || "{}");
-        assert.equal(body.chip, "ESP32-C6");
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            ok: true,
-            guest: true,
-            packageVersion: "0.1.0",
-            notices: { path: C6_ZIGBEE_BENCH_NOTICES.path },
-            tickets,
-          }),
-        };
-      }
-      const role = String(_url).includes("bootloader")
-        ? "bootloader"
-        : String(_url).includes("partition")
-          ? "partition-table"
-          : "app";
-      const spec = specs.find((s) => s.role === role);
-      return {
-        ok: true,
-        status: 200,
-        arrayBuffer: async () => new Uint8Array(spec.size).buffer,
-      };
+    fetchImpl: async (url, init = {}) => {
+      getCount += 1;
+      return staticFetchImpl(url, init);
     },
     digest: mockDigest,
   });
-  assert.equal(postSeen, true);
+  assert.equal(getCount, 3);
   assert.equal(ok.ok, true, ok.reason);
-  assert.equal(ok.source, "pinned-server");
+  assert.equal(ok.source, "static-public");
   assert.ok(ok.notices);
   assert.doesNotMatch(benchSrc, /sb\.auth\.getSession/);
   assert.doesNotMatch(benchSrc, /BENCH_GUEST_APPROVAL_REQUIRED/);
@@ -235,40 +223,12 @@ test("C6 Zigbee: guest/no session mints anonymously (no login / no guest policy 
   assert.match(modalSrc, /lab-c6-zigbee-bench-notices/);
 });
 
-test("C6 Zigbee: one-click guest path fetches without auth denial", async () => {
-  const tickets = specs.map((s) => ({
-    role: s.role,
-    name: s.name,
-    address: s.address,
-    size: s.size,
-    sha256: s.sha256,
-    ticket: `t-${s.role}`,
-    path: `/api/c6-zigbee-bench-firmware?ticket=t-${s.role}`,
-  }));
+test("C6 Zigbee: one-click guest path fetches static without auth denial", async () => {
   let flashed = false;
   const result = await orchestrateC6ZigbeeBenchOneClick({
     profileId: C6_ZIGBEE_BENCH_PACKAGE.board,
     getAccessToken: async () => null,
-    fetchImpl: async (_url, init = {}) => {
-      if (init.method === "POST") {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ ok: true, guest: true, tickets }),
-        };
-      }
-      const role = String(_url).includes("bootloader")
-        ? "bootloader"
-        : String(_url).includes("partition")
-          ? "partition-table"
-          : "app";
-      const spec = specs.find((s) => s.role === role);
-      return {
-        ok: true,
-        status: 200,
-        arrayBuffer: async () => new Uint8Array(spec.size).buffer,
-      };
-    },
+    fetchImpl: staticFetchImpl,
     digest: mockDigest,
     flash: async () => {
       flashed = true;
@@ -280,72 +240,27 @@ test("C6 Zigbee: one-click guest path fetches without auth denial", async () => 
   assert.equal(flashed, true);
   assert.notEqual(result.reason, "BENCH_AUTH_DENIED");
   assert.notEqual(result.reason, "BENCH_GUEST_APPROVAL_REQUIRED");
+  assert.notEqual(result.reason, "BENCH_OPERATOR_SETUP_REQUIRED");
 });
 
-test("C6 Zigbee: client fetch anonymous valid path + SHA verify", async () => {
-  const tickets = specs.map((s) => ({
-    role: s.role,
-    name: s.name,
-    address: s.address,
-    size: s.size,
-    sha256: s.sha256,
-    ticket: `t-${s.role}`,
-    path: `/api/c6-zigbee-bench-firmware?ticket=t-${s.role}`,
-  }));
-  const fetchImpl = async (url, init = {}) => {
-    if (init.method === "POST") {
-      assert.equal(init.headers?.Authorization, undefined);
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          ok: true,
-          packageVersion: "0.1.0",
-          tickets,
-        }),
-      };
-    }
-    const role = String(url).includes("bootloader")
-      ? "bootloader"
-      : String(url).includes("partition")
-        ? "partition-table"
-        : "app";
-    const spec = specs.find((s) => s.role === role);
-    return {
-      ok: true,
-      status: 200,
-      arrayBuffer: async () => new Uint8Array(spec.size).buffer,
-    };
-  };
+test("C6 Zigbee: client fetch anonymous static path + SHA verify", async () => {
   const ok = await fetchAndValidateC6ZigbeeBenchPackage({
-    fetchImpl,
+    fetchImpl: staticFetchImpl,
     digest: mockDigest,
   });
   assert.equal(ok.ok, true, ok.reason);
-  assert.equal(ok.source, "pinned-server");
+  assert.equal(ok.source, "static-public");
   assert.deepEqual(ok.segments.map((s) => s.address), [0, 0x8000, 0x10000]);
 });
 
 test("C6 Zigbee: client fetch hash mismatch and interruption", async () => {
-  const tickets = specs.map((s) => ({
-    role: s.role,
-    name: s.name,
-    ticket: `t-${s.role}`,
-    path: `/api/c6-zigbee-bench-firmware?ticket=t-${s.role}`,
-  }));
   const mismatch = await fetchAndValidateC6ZigbeeBenchPackage({
-    fetchImpl: async (_url, init = {}) => {
-      if (init.method === "POST") {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ ok: true, tickets }),
-        };
-      }
+    fetchImpl: async (url) => {
+      const spec = specs.find((s) => s.url === url) || specs[0];
       return {
         ok: true,
         status: 200,
-        arrayBuffer: async () => new Uint8Array(specs[0].size).buffer,
+        arrayBuffer: async () => new Uint8Array(spec.size).buffer,
       };
     },
     digest: async () => "0".repeat(64),
@@ -362,6 +277,34 @@ test("C6 Zigbee: client fetch hash mismatch and interruption", async () => {
   });
   assert.equal(interrupted.ok, false);
   assert.equal(interrupted.reason, "BENCH_FETCH_INTERRUPTED");
+
+  const missingSeg = await fetchAndValidateC6ZigbeeBenchPackage({
+    fetchImpl: async () => ({ ok: false, status: 404 }),
+  });
+  assert.equal(missingSeg.ok, false);
+  assert.equal(missingSeg.reason, "BENCH_SEGMENT_FETCH_FAILED");
+});
+
+test("C6 Zigbee: public static bins exist with pinned size+SHA256", async () => {
+  const { createHash } = await import("node:crypto");
+  const root = join(here, "..");
+  for (const spec of specs) {
+    // url is /firmware/c6-zigbee/... → public/firmware/c6-zigbee/...
+    const filePath = join(root, "public", ...spec.url.split("/").filter(Boolean));
+    assert.equal(existsSync(filePath), true, "missing " + filePath);
+    const bytes = readFileSync(filePath);
+    assert.equal(bytes.byteLength, spec.size, spec.role + " size");
+    const sha = createHash("sha256").update(bytes).digest("hex");
+    assert.equal(sha, spec.sha256, spec.role + " sha256");
+  }
+  assert.equal(
+    existsSync(join(root, "public/firmware/c6-zigbee/THIRD_PARTY_NOTICES.md")),
+    true,
+  );
+  assert.equal(
+    existsSync(join(root, "public/firmware/c6-zigbee/licenses/espressif__esp-zboss-lib.LICENSE.txt")),
+    true,
+  );
 });
 
 test("C6 Zigbee: exact three binary names, SHA and bytes validated before WebSerial", async () => {
