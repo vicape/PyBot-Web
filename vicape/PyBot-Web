@@ -1,0 +1,3 @@
+# TARGET: vicape/PyBot-Web — workspace/path marker for Maxwell C6 physical-bench scope.
+# Repo: vicape/PyBot-Web · branch feature/esp32-universal-lab only.
+# Not executed by the web app; anchors tests and operator docs to this TARGET.
