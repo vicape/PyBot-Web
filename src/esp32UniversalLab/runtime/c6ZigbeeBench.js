@@ -2,14 +2,13 @@
  * TARGET: vicape/PyBot-Web (branch feature/esp32-universal-lab only).
  * Exact, private firmware-build acceptance for the first physical ESP32-C6 bench.
  * Same UX simplicity as stock "Instalar MicroPython (C6)": one "Instalar firmware"
- * CTA obtains+verifies the pinned package via authenticated server distributor,
+ * CTA obtains+verifies the pinned package via anonymous server distributor,
  * then WebSerial flash with chip/4MB checks. No mandatory backup, file picker, or
  * multi-stage confirmation. CTA click = erase consent (apps/files may be wiped).
- * Binaries stay outside Git and production.
+ * Binaries stay outside Git and production. autoFlash remains false.
  */
 import { isEsp32C6Chip } from "../firmware/esp32GenericC6.js";
 import { WAVESHARE_ESP32_C6_LCD_147_ID } from "../profiles/waveshareEsp32C6Lcd147.js";
-import { getSupabase } from "../../supabaseClient.js";
 import {
   sha256Hex,
   connectC6Bootloader,
@@ -43,21 +42,30 @@ export const C6_ZIGBEE_BENCH_PROGRESS_STAGES = Object.freeze([
 ]);
 
 /**
- * Exact one-time operator setup when Preview secrets / durable private storage
- * are missing. Not an end-user step; surfaced only as operator_setup_required.
+ * Exact one-time SERVER-OPERATOR setup when Preview secrets / durable private
+ * storage are missing. Not an end-user / login step; surfaced only as
+ * operator_setup_required.
  */
 export const C6_ZIGBEE_BENCH_OPERATOR_SETUP =
-  "OPERATOR_SETUP (Vercel Preview feature/esp32-universal-lab only): upload Maxwell artifact 12161052985 zigbee-firmware-private-bench/*.bin to private object storage that outlives GitHub Actions retention; set SUPABASE_URL, SUPABASE_SERVICE_KEY, PYBOT_C6_FIRMWARE_OPERATOR_EMAILS, PYBOT_C6_FIRMWARE_SIGNING_SECRET, PYBOT_C6_FIRMWARE_STORAGE_BASE_URL, and PYBOT_C6_FIRMWARE_STORAGE_AUTH_HEADER (Bearer/token for that store). Optional interim: PYBOT_C6_FIRMWARE_GITHUB_TOKEN + PYBOT_C6_FIRMWARE_GHA_ARTIFACT_ID=12161052985 + PYBOT_C6_FIRMWARE_GHA_REPO=vicape/cursor-control (still migrate to durable storage before artifact expiry).";
+  "OPERATOR_SETUP (Vercel Preview feature/esp32-universal-lab only): upload Maxwell artifact 12161052985 zigbee-firmware-private-bench/*.bin to private object storage that outlives GitHub Actions retention; set PYBOT_C6_FIRMWARE_SIGNING_SECRET, PYBOT_C6_FIRMWARE_STORAGE_BASE_URL, and PYBOT_C6_FIRMWARE_STORAGE_AUTH_HEADER (Bearer/token for that store). Optional interim: PYBOT_C6_FIRMWARE_GITHUB_TOKEN + PYBOT_C6_FIRMWARE_GHA_ARTIFACT_ID=12161052985 + PYBOT_C6_FIRMWARE_GHA_REPO=vicape/cursor-control (still migrate to durable storage before artifact expiry). Guest/anonymous mint does not require user login.";
 
 /**
- * Single approval blocker when a guest has no session. esp-zboss-lib allows binary
- * redistribution with retained notices, but project policy
- * (LICENSE_ATTRIBUTION.md / THIRD_PARTY_NOTICES.md) keeps delivery authenticated
- * private-bench only until an explicit product decision authorizes anonymous
- * distribution. Do not open /api/c6-zigbee-bench-firmware as a public CDN.
+ * @deprecated Product owner authorized anonymous guest delivery. Kept as empty
+ * sentinel so older imports do not break; never emitted as a fetch blocker.
  */
-export const C6_ZIGBEE_BENCH_GUEST_APPROVAL_BLOCKER =
-  "BLOCKER: Guest/anonymous delivery of pinned MicroPython+Zigbee firmware (Espressif/ZBOSS binaries) is not authorized under firmware/pybot-c6-micropython-zigbee/LICENSE_ATTRIBUTION.md and THIRD_PARTY_NOTICES.md (authenticated private physical-bench only; broader/public redistribution out of scope until explicit product approval). Install stops without login prompt, without fetching firmware, and without publishing binaries. Approve anonymous TEST-branch delivery (or keep operator-authenticated path) before enabling guest retrieval.";
+export const C6_ZIGBEE_BENCH_GUEST_APPROVAL_BLOCKER = "";
+
+/** Bundled notice summary shown without login or extra confirmation. */
+export const C6_ZIGBEE_BENCH_NOTICES = Object.freeze({
+  path: "firmware/pybot-c6-micropython-zigbee/THIRD_PARTY_NOTICES.md",
+  apiPath: `${C6_ZIGBEE_BENCH_FIRMWARE_API}?notices=1`,
+  restrictions: Object.freeze([
+    "esp-zboss-lib: retain copyright, conditions, and disclaimer; no reverse-engineering / decompile / modify / disassemble.",
+    "esp-zigbee-lib: Apache-2.0 — retain license attributions.",
+    "uZigbee: MIT — retain copyright and permission notice.",
+    "Pinned ESP32-C6 image only via short-lived tickets; no proprietary .a libs or credentials.",
+  ]),
+});
 
 export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
   version: "0.1.0",
@@ -99,23 +107,23 @@ export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
 });
 
 /**
- * Automatic delivery via authenticated server distributor + short-lived tickets.
+ * Automatic delivery via anonymous server distributor + short-lived tickets.
  * License: esp-zboss-lib permits binary redistribution with notice retention;
- * delivery is restricted to authenticated private physical bench.
+ * product owner authorizes guest delivery of the pinned package (not open CDN).
  */
 export const C6_ZIGBEE_BENCH_DISTRIBUTION = Object.freeze({
   status: "AUTOMATIC_SERVER",
   automaticFetchSupported: true,
   authorizedEndpointSupported: true,
+  guestAnonymousSupported: true,
   endpointPath: C6_ZIGBEE_BENCH_FIRMWARE_API,
   fetchActionLabel: C6_ZIGBEE_BENCH_FETCH_ACTION,
   pinnedRunId: C6_ZIGBEE_BENCH_PACKAGE.pinnedRunId,
   pinnedArtifactId: C6_ZIGBEE_BENCH_PACKAGE.pinnedArtifactId,
   operatorSetup: C6_ZIGBEE_BENCH_OPERATOR_SETUP,
   licensePolicy:
-    "Authenticated private bench only. THIRD_PARTY_NOTICES include esp-zboss-lib conditions (retain copyright/disclaimer; no reverse-engineering).",
+    "Guest anonymous delivery of pinned ESP32-C6 image authorized. THIRD_PARTY_NOTICES include esp-zboss-lib conditions (retain copyright/disclaimer; no reverse-engineering).",
 });
-
 /** Post-flash operator checklist. Zigbee pairing/dual-channel stay UNVERIFIED. */
 export const C6_ZIGBEE_BENCH_POST_FLASH_CHECKS = Object.freeze([
   Object.freeze({ id: "micropython-repl", label: "MicroPython REPL boots", status: "OPERATOR_CHECK" }),
@@ -133,28 +141,23 @@ export const C6_ZIGBEE_BENCH_POST_FLASH_CHECKS = Object.freeze([
 ]);
 
 /**
- * Resolver for package acquisition UI. Automatic authenticated path is the product
- * flow; ordinary users see obtain/verify status, never an operator-decision popup.
+ * Resolver for package acquisition UI. Automatic anonymous server path is the
+ * product flow; users see obtain/verify status, never a guest-policy popup.
  */
 export function resolveC6ZigbeeBenchPackageFetch() {
   return {
     status: C6_ZIGBEE_BENCH_DISTRIBUTION.status,
     automaticFetchSupported: true,
     authorizedEndpointSupported: true,
+    guestAnonymousSupported: true,
     endpointPath: C6_ZIGBEE_BENCH_DISTRIBUTION.endpointPath,
     fetchActionLabel: C6_ZIGBEE_BENCH_FETCH_ACTION,
     operatorSetup: C6_ZIGBEE_BENCH_OPERATOR_SETUP,
     pinnedRunId: C6_ZIGBEE_BENCH_DISTRIBUTION.pinnedRunId,
     pinnedArtifactId: C6_ZIGBEE_BENCH_DISTRIBUTION.pinnedArtifactId,
     licensePolicy: C6_ZIGBEE_BENCH_DISTRIBUTION.licensePolicy,
+    notices: C6_ZIGBEE_BENCH_NOTICES,
   };
-}
-
-async function defaultAccessToken() {
-  const sb = getSupabase();
-  if (!sb) return null;
-  const { data } = await sb.auth.getSession();
-  return data?.session?.access_token ?? null;
 }
 
 /**
@@ -207,8 +210,8 @@ export async function validateC6ZigbeeBenchFiles(files, options = {}) {
 }
 
 /**
- * Authenticated server fetch of the three verified segments + client SHA check.
- * End users never download GitHub ZIPs or pick .bin files.
+ * Anonymous (guest) server fetch of the three verified segments + client SHA check.
+ * No login / getSession prerequisite. End users never download GitHub ZIPs or pick .bin files.
  * @param {{getAccessToken?:Function, fetchImpl?:Function, onProgress?:Function, signal?:AbortSignal}} options
  */
 export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
@@ -216,18 +219,14 @@ export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
   if (typeof fetchImpl !== "function") {
     return { ok: false, reason: "BENCH_FETCH_UNAVAILABLE" };
   }
-  const token =
-    typeof options.getAccessToken === "function"
-      ? await options.getAccessToken()
-      : await defaultAccessToken();
-  // Guest/no session: no login prompt and no BENCH_AUTH_DENIED/missing_bearer_token.
-  // Project distribution policy blocks anonymous firmware delivery until approval (AC4-B).
-  if (!token) {
-    return {
-      ok: false,
-      reason: "BENCH_GUEST_APPROVAL_REQUIRED",
-      detail: C6_ZIGBEE_BENCH_GUEST_APPROVAL_BLOCKER,
-    };
+  // Optional token ignored for gating — guest mint is authorized. Kept only so
+  // callers that still pass getAccessToken do not break.
+  if (typeof options.getAccessToken === "function") {
+    try {
+      await options.getAccessToken();
+    } catch {
+      /* ignore — anonymous path does not require a session */
+    }
   }
   options.onProgress?.({ phase: "mint", pct: 5 });
   let mintRes;
@@ -235,9 +234,10 @@ export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
     mintRes = await fetchImpl(C6_ZIGBEE_BENCH_FIRMWARE_API, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
         Accept: "application/json",
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({ chip: C6_ZIGBEE_BENCH_PACKAGE.chip }),
       signal: options.signal,
     });
   } catch (e) {
@@ -249,6 +249,13 @@ export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
     mintJson = await mintRes.json();
   } catch {
     mintJson = null;
+  }
+  if (mintJson?.error === "chip_denied" || (mintRes.status === 403 && mintJson?.error === "chip_denied")) {
+    return {
+      ok: false,
+      reason: "BENCH_CHIP_DENIED",
+      detail: mintJson?.reason || "chip_denied",
+    };
   }
   if (mintRes.status === 401 || mintRes.status === 403) {
     return {
@@ -315,8 +322,9 @@ export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
   options.onProgress?.({ phase: "done", pct: 100 });
   return {
     ...validated,
-    source: "authenticated-server",
+    source: "pinned-server",
     packageVersion: mintJson.packageVersion || C6_ZIGBEE_BENCH_PACKAGE.version,
+    notices: mintJson.notices || C6_ZIGBEE_BENCH_NOTICES,
   };
 }
 
@@ -412,16 +420,16 @@ export const C6_ZIGBEE_BENCH_GATE_MESSAGES = Object.freeze({
     en: "Firmware is not verified yet. Use Instalar firmware.",
   },
   BENCH_AUTH_DENIED: {
-    es: "Sesión requerida: iniciá sesión con una cuenta autorizada.",
-    en: "Sign in with an authorized account.",
+    es: "El servidor rechazó la solicitud de firmware.",
+    en: "The server rejected the firmware request.",
   },
-  BENCH_GUEST_APPROVAL_REQUIRED: {
-    es: "Entrega anónima no autorizada: falta aprobación de producto para distribuir este firmware (ZBOSS) sin sesión.",
-    en: "Anonymous delivery not authorized: product approval required to distribute this firmware (ZBOSS) without a session.",
+  BENCH_CHIP_DENIED: {
+    es: "Solo se entrega firmware fijado para ESP32-C6.",
+    en: "Only the pinned ESP32-C6 firmware is delivered.",
   },
   BENCH_OPERATOR_SETUP_REQUIRED: {
-    es: "Falta configuración del servidor (almacenamiento privado + secretos Preview).",
-    en: "Server setup missing (private storage + Preview secrets).",
+    es: "Falta configuración del servidor (almacenamiento privado + secretos Preview). No es un problema de login.",
+    en: "Server setup missing (private storage + Preview secrets). Not a user-login issue.",
   },
   BENCH_FETCH_INTERRUPTED: {
     es: "Descarga interrumpida. Reintentá Instalar firmware.",

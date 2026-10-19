@@ -90,7 +90,8 @@ test("MPY+ZB: isolated source tree, pins, partitions, licenses present", () => {
   const license = readFileSync(join(fwRoot, "LICENSE_ATTRIBUTION.md"), "utf8");
   assert.match(license, /MIT License/);
   assert.match(license, /esp-zboss-lib/);
-  assert.match(license, /not redistribute/i);
+  // Resolved esp-zboss-lib LICENSE permits binary redistribution with retained notices/restrictions
+  assert.match(license, /permits.*redistribution/i);
 
   const parts = readFileSync(join(fwRoot, "partitions.csv"), "utf8");
   assert.match(parts, /factory.*0x10000.*0x390000/);

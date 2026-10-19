@@ -1,7 +1,9 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import handler, { clearFirmwareSegmentCache } from "../api/c6-zigbee-bench-firmware.js";
 import {
   C6_FIRMWARE_OPERATOR_SETUP,
@@ -9,6 +11,7 @@ import {
   sha256HexBuffer,
   storageConfigFromEnv,
   verifySegmentTicket,
+  getBundledFirmwareNotices,
 } from "../api/_c6ZigbeeBenchFirmware.js";
 import { C6_ZIGBEE_BENCH_PACKAGE } from "../src/esp32UniversalLab/runtime/c6ZigbeeBench.js";
 
@@ -22,14 +25,15 @@ const hasRealBins = existsSync(
 const savedEnv = { ...process.env };
 
 function setOperatorEnv(overrides = {}) {
-  process.env.SUPABASE_URL = "https://example.supabase.co";
-  process.env.SUPABASE_SERVICE_KEY = "service-test-key";
-  process.env.PYBOT_C6_FIRMWARE_OPERATOR_EMAILS = "op@example.com";
   process.env.PYBOT_C6_FIRMWARE_SIGNING_SECRET = "unit-test-signing-secret";
   process.env.PYBOT_C6_FIRMWARE_LOCAL_DIR = LOCAL_DIR;
   delete process.env.PYBOT_C6_FIRMWARE_STORAGE_BASE_URL;
   delete process.env.PYBOT_C6_FIRMWARE_STORAGE_AUTH_HEADER;
   delete process.env.PYBOT_C6_FIRMWARE_GITHUB_TOKEN;
+  // Auth envs no longer required for guest mint; leave unset by default.
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_KEY;
+  delete process.env.PYBOT_C6_FIRMWARE_OPERATOR_EMAILS;
   Object.assign(process.env, overrides);
 }
 
@@ -56,32 +60,6 @@ function mockRes() {
   };
 }
 
-async function withFetchUser(email, isSuperAdmin = false) {
-  const original = globalThis.fetch;
-  globalThis.fetch = async (url) => {
-    const u = String(url);
-    if (u.includes("/auth/v1/user")) {
-      if (email === null) return { ok: false, status: 401, json: async () => ({}) };
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ id: "11111111-1111-4111-8111-111111111111", email }),
-      };
-    }
-    if (u.includes("/rest/v1/profiles")) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => [{ is_super_admin: isSuperAdmin, email: email || "" }],
-      };
-    }
-    throw new Error("unexpected fetch " + u);
-  };
-  return () => {
-    globalThis.fetch = original;
-  };
-}
-
 before(() => {
   clearFirmwareSegmentCache();
 });
@@ -99,29 +77,42 @@ test("API helper: tickets mint/verify and expire", () => {
   assert.equal(verifySegmentTicket(ticket + "x", secret, 1_000_100).ok, false);
 });
 
-test("API: auth denied without token", async () => {
-  setOperatorEnv();
-  const res = mockRes();
-  await handler({ method: "POST", headers: {}, url: "/api/c6-zigbee-bench-firmware" }, res);
-  assert.equal(res.state.statusCode, 401);
-  const body = JSON.parse(res.state.body);
-  assert.equal(body.error, "auth_denied");
+test("API: bundled notices include zboss / zigbee / uzigbee texts", () => {
+  const notices = getBundledFirmwareNotices();
+  assert.ok(notices.documents["espressif__esp-zboss-lib.LICENSE.txt"].includes("DSR Corporation"));
+  assert.ok(notices.documents["espressif__esp-zigbee-lib.LICENSE.txt"].includes("Apache License"));
+  assert.ok(notices.documents["uZigbee.MIT.txt"].includes("MIT License"));
+  assert.ok(notices.restrictions.some((r) => /reverse.?engineered/i.test(r)));
 });
 
-test("API: operator_setup_required when storage secrets missing", async () => {
+test("API: anonymous notices GET without login", async () => {
+  const res = mockRes();
+  await handler(
+    { method: "GET", headers: {}, url: "/api/c6-zigbee-bench-firmware?notices=1" },
+    res,
+  );
+  assert.equal(res.state.statusCode, 200);
+  const body = JSON.parse(res.state.body);
+  assert.equal(body.ok, true);
+  assert.ok(body.notices.documents["THIRD_PARTY_NOTICES.md"]);
+});
+
+test("API: operator_setup_required when storage secrets missing (no login demand)", async () => {
   restoreEnv();
   delete process.env.PYBOT_C6_FIRMWARE_LOCAL_DIR;
   delete process.env.PYBOT_C6_FIRMWARE_STORAGE_BASE_URL;
   delete process.env.PYBOT_C6_FIRMWARE_GITHUB_TOKEN;
-  process.env.SUPABASE_URL = "https://example.supabase.co";
-  process.env.SUPABASE_SERVICE_KEY = "k";
-  process.env.PYBOT_C6_FIRMWARE_OPERATOR_EMAILS = "op@example.com";
   process.env.PYBOT_C6_FIRMWARE_SIGNING_SECRET = "s";
   const cfg = storageConfigFromEnv(process.env);
   assert.equal(cfg.mode, null);
   const res = mockRes();
   await handler(
-    { method: "POST", headers: { authorization: "Bearer x" }, url: "/api/c6-zigbee-bench-firmware" },
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: { chip: "ESP32-C6" },
+      url: "/api/c6-zigbee-bench-firmware",
+    },
     res,
   );
   assert.equal(res.state.statusCode, 503);
@@ -129,99 +120,126 @@ test("API: operator_setup_required when storage secrets missing", async () => {
   assert.equal(body.error, "operator_setup_required");
   assert.match(body.reason, /PYBOT_C6_FIRMWARE_STORAGE_BASE_URL/);
   assert.equal(body.reason, C6_FIRMWARE_OPERATOR_SETUP);
+  assert.match(body.reason, /does not require user login/i);
+  assert.doesNotMatch(body.error, /auth_denied/);
 });
 
-test("API: auth denied for non-allowlisted operator", async () => {
+test("API: chip denied for non-ESP32-C6", async () => {
   setOperatorEnv();
-  const restoreFetch = await withFetchUser("stranger@example.com", false);
-  try {
-    const res = mockRes();
-    await handler(
-      {
-        method: "POST",
-        headers: { authorization: "Bearer user-token" },
-        url: "/api/c6-zigbee-bench-firmware",
-      },
-      res,
-    );
-    assert.equal(res.state.statusCode, 403);
-    assert.equal(JSON.parse(res.state.body).error, "auth_denied");
-  } finally {
-    restoreFetch();
-  }
+  const res = mockRes();
+  await handler(
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: { chip: "ESP32-S3" },
+      url: "/api/c6-zigbee-bench-firmware",
+    },
+    res,
+  );
+  assert.equal(res.state.statusCode, 403);
+  const body = JSON.parse(res.state.body);
+  assert.equal(body.error, "chip_denied");
+});
+
+test("API: storage unavailable returns operator_setup / mint failure (not auth)", async () => {
+  setOperatorEnv({
+    PYBOT_C6_FIRMWARE_LOCAL_DIR: "/tmp/c6-fw-pkg-missing-dir-should-fail",
+  });
+  clearFirmwareSegmentCache();
+  const res = mockRes();
+  await handler(
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: { chip: "ESP32-C6" },
+      url: "/api/c6-zigbee-bench-firmware",
+    },
+    res,
+  );
+  assert.notEqual(res.state.statusCode, 200);
+  const body = JSON.parse(res.state.body);
+  assert.notEqual(body.error, "auth_denied");
+  assert.ok(
+    ["mint_failed", "segment_load_failed", "hash_mismatch", "operator_setup_required"].includes(
+      body.error,
+    ) || res.state.statusCode >= 400,
+  );
 });
 
 test(
-  "API: authenticated mint + segment GET with real Maxwell bins + SHA",
+  "API: anonymous guest mint + segment GET with real Maxwell bins + SHA",
   { skip: !hasRealBins },
   async () => {
     setOperatorEnv();
     clearFirmwareSegmentCache();
-    const restoreFetch = await withFetchUser("op@example.com", false);
-    try {
-      const mintRes = mockRes();
+    const mintRes = mockRes();
+    await handler(
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: { chip: "ESP32-C6" },
+        url: "/api/c6-zigbee-bench-firmware",
+      },
+      mintRes,
+    );
+    assert.equal(mintRes.state.statusCode, 200, String(mintRes.state.body));
+    const minted = JSON.parse(mintRes.state.body);
+    assert.equal(minted.ok, true);
+    assert.equal(minted.guest, true);
+    assert.equal(minted.chip, "ESP32-C6");
+    assert.equal(minted.tickets.length, 3);
+    assert.ok(minted.notices?.documents?.["espressif__esp-zboss-lib.LICENSE.txt"]);
+
+    for (const t of minted.tickets) {
+      const segRes = mockRes();
       await handler(
         {
-          method: "POST",
-          headers: { authorization: "Bearer user-token" },
-          url: "/api/c6-zigbee-bench-firmware",
+          method: "GET",
+          headers: {},
+          url: `/api/c6-zigbee-bench-firmware?ticket=${encodeURIComponent(t.ticket)}`,
         },
-        mintRes,
+        segRes,
       );
-      assert.equal(mintRes.state.statusCode, 200, String(mintRes.state.body));
-      const minted = JSON.parse(mintRes.state.body);
-      assert.equal(minted.ok, true);
-      assert.equal(minted.tickets.length, 3);
-
-      for (const t of minted.tickets) {
-        const segRes = mockRes();
-        await handler(
-          {
-            method: "GET",
-            headers: {},
-            url: `/api/c6-zigbee-bench-firmware?ticket=${encodeURIComponent(t.ticket)}`,
-          },
-          segRes,
-        );
-        assert.equal(segRes.state.statusCode, 200, String(segRes.state.body));
-        const bytes = Buffer.from(segRes.state.body);
-        const expected = C6_ZIGBEE_BENCH_PACKAGE.components.find((c) => c.role === t.role);
-        assert.equal(bytes.byteLength, expected.size);
-        assert.equal(sha256HexBuffer(bytes), expected.sha256);
-      }
-    } finally {
-      restoreFetch();
+      assert.equal(segRes.state.statusCode, 200, String(segRes.state.body));
+      const bytes = Buffer.from(segRes.state.body);
+      const expected = C6_ZIGBEE_BENCH_PACKAGE.components.find((c) => c.role === t.role);
+      assert.equal(bytes.byteLength, expected.size);
+      assert.equal(sha256HexBuffer(bytes), expected.sha256);
     }
   },
 );
 
-test(
-  "API: hash mismatch fails closed when local bytes are wrong size",
-  { skip: !hasRealBins },
-  async () => {
-    setOperatorEnv({
-      PYBOT_C6_FIRMWARE_LOCAL_DIR: "/tmp/c6-fw-pkg-missing-dir-should-fail",
-    });
+test("API: altered hash fails closed (negative)", async () => {
+  const dir = join(tmpdir(), `c6-fw-altered-${process.pid}`);
+  mkdirSync(dir, { recursive: true });
+  try {
+    for (const c of C6_ZIGBEE_BENCH_PACKAGE.components) {
+      // Wrong bytes / size → sha or size mismatch
+      writeFileSync(join(dir, c.name), Buffer.alloc(Math.max(8, c.size - 1), 0x5a));
+    }
+    setOperatorEnv({ PYBOT_C6_FIRMWARE_LOCAL_DIR: dir });
     clearFirmwareSegmentCache();
-    const restoreFetch = await withFetchUser("op@example.com", false);
-    try {
-      const mintRes = mockRes();
-      await handler(
-        {
-          method: "POST",
-          headers: { authorization: "Bearer user-token" },
-          url: "/api/c6-zigbee-bench-firmware",
-        },
-        mintRes,
-      );
-      assert.notEqual(mintRes.state.statusCode, 200);
-      const body = JSON.parse(mintRes.state.body);
-      assert.ok(["mint_failed", "segment_load_failed", "hash_mismatch", "operator_setup_required"].includes(body.error) || mintRes.state.statusCode >= 400);
-    } finally {
-      restoreFetch();
-    }
-  },
-);
+    const mintRes = mockRes();
+    await handler(
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: { chip: "ESP32-C6" },
+        url: "/api/c6-zigbee-bench-firmware",
+      },
+      mintRes,
+    );
+    assert.notEqual(mintRes.state.statusCode, 200);
+    const body = JSON.parse(mintRes.state.body);
+    assert.ok(
+      ["hash_mismatch", "mint_failed", "segment_load_failed"].includes(body.error),
+      body.error,
+    );
+    assert.notEqual(body.error, "auth_denied");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("API: unauthenticated open redistribution blocked (GET without ticket)", async () => {
   setOperatorEnv();
@@ -230,22 +248,35 @@ test("API: unauthenticated open redistribution blocked (GET without ticket)", as
   assert.equal(res.state.statusCode, 400);
 });
 
-test(
-  "API: http server smoke — POST denied without auth",
-  async () => {
-    setOperatorEnv();
-    const server = createServer((req, res) => handler(req, res));
-    await new Promise((r) => server.listen(0, "127.0.0.1", r));
-    const { port } = server.address();
-    try {
-      const r = await fetch(`http://127.0.0.1:${port}/api/c6-zigbee-bench-firmware`, {
-        method: "POST",
-      });
-      assert.equal(r.status, 401);
-      const body = await r.json();
-      assert.equal(body.error, "auth_denied");
-    } finally {
-      await new Promise((r) => server.close(r));
-    }
-  },
-);
+test("API: http server smoke — anonymous POST reaches setup or mint (not auth_denied)", async () => {
+  setOperatorEnv({
+    PYBOT_C6_FIRMWARE_LOCAL_DIR: "/tmp/c6-fw-pkg-missing-dir-should-fail",
+  });
+  const server = createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      try {
+        req.body = raw ? JSON.parse(raw) : {};
+      } catch {
+        req.body = {};
+      }
+      handler(req, res);
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const { port } = server.address();
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/api/c6-zigbee-bench-firmware`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chip: "ESP32-C6" }),
+    });
+    assert.notEqual(r.status, 401);
+    const body = await r.json();
+    assert.notEqual(body.error, "auth_denied");
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
+});

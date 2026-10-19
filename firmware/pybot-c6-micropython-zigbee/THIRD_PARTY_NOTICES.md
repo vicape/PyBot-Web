@@ -5,12 +5,14 @@ ESP-IDF: ESP-IDF v5.3.2
 MicroPython: v1.27.0
 uZigbee: ff25553c5fc9d59754eba9a89811e6433e0d4479
 
-This package is for **private authenticated physical bench tests only**.
-Do not redistribute unrestricted / public / commercial until compliance review
-of the exact resolved dependency licenses below.
+This package may be delivered to **anonymous guest users** on the test/preview
+branch via the pinned short-lived ticket distributor (`/api/c6-zigbee-bench-firmware`),
+provided the notices and license texts below are retained. It is **not** an open
+generic CDN; proprietary `.a` libraries and credentials must not be published.
 
-Official esp-zboss-lib LICENSE permits binary redistribution subject to conditions;
-esp-zigbee-lib v1.6 components are typically Apache-2.0 — verify each resolved file.
+Official esp-zboss-lib LICENSE permits binary redistribution subject to conditions
+(retain copyright/disclaimer; no reverse-engineering); esp-zigbee-lib v1.6 is
+Apache-2.0; uZigbee is MIT — resolved LICENSE files are packaged under `licenses/`.
 
 ## espressif__esp-zboss-lib
 - source: `third_party/uzigbee/third_party/micropython-esp32/ports/esp32/managed_components/espressif__esp-zboss-lib/LICENSE`

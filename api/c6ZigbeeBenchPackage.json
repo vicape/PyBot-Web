@@ -13,7 +13,7 @@
   "publicReady": false,
   "modeReady": false,
   "hardwareValidation": "UNVERIFIED",
-  "distribution": "private-authenticated-bench-only",
+  "distribution": "pinned-guest-allowlisted-short-lived",
   "durableStorageRequired": true,
   "sourceArtifact": {
     "kind": "maxwell-private-gha-artifact",

@@ -4,14 +4,16 @@ import {
   C6_ZIGBEE_BENCH_UI_LABEL,
   C6_ZIGBEE_BENCH_POST_FLASH_CHECKS,
   C6_ZIGBEE_BENCH_PROGRESS_STAGES,
+  C6_ZIGBEE_BENCH_NOTICES,
   orchestrateC6ZigbeeBenchOneClick,
   describeC6ZigbeeBenchGateReason,
 } from "./esp32UniversalLab/runtime/c6ZigbeeBench.js";
 
 /**
- * One-click Instalar firmware for Waveshare ESP32-C6-LCD-1.47 private bench.
- * Same simplicity as stock MicroPython C6 flash: one CTA → authenticated fetch/SHA
+ * One-click Instalar firmware for Waveshare ESP32-C6-LCD-1.47 bench.
+ * Same simplicity as stock MicroPython C6 flash: one CTA → anonymous fetch/SHA
  * → WebSerial flash. No backup picker, Continuar, or multi-stage confirm buttons.
+ * Notices shown without login or extra confirmation; autoFlash remains false.
  */
 export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, connected }) {
   const [busy, setBusy] = useState(false);
@@ -46,11 +48,7 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
   const resolveErrorMessage = (result) => {
     const hint = describeC6ZigbeeBenchGateReason(result.reason, en ? "en" : "es");
     const parts = [hint || result.reason || (en ? "Install blocked." : "Instalación bloqueada.")];
-    if (
-      (result.reason === "BENCH_OPERATOR_SETUP_REQUIRED" ||
-        result.reason === "BENCH_GUEST_APPROVAL_REQUIRED") &&
-      result.detail
-    ) {
+    if (result.reason === "BENCH_OPERATOR_SETUP_REQUIRED" && result.detail) {
       parts.push(result.detail);
     }
     return parts.join("\n");
@@ -161,11 +159,28 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
               ? "MicroPython + native Zigbee for Waveshare ESP32-C6-LCD-1.47 — not the ESP-IDF coordinator host path."
               : "MicroPython + Zigbee nativo para Waveshare ESP32-C6-LCD-1.47 — no es el coordinador ESP-IDF host."}
           </p>
-          <p style={{ ...compactP, fontSize: 12, color: "var(--fg-muted)" }} data-testid="lab-c6-zigbee-bench-notices">
-            {en
-              ? "Private authenticated bench (experimental; hardware UNVERIFIED). See THIRD_PARTY_NOTICES for redistribution conditions."
-              : "Banco privado autenticado (experimental; hardware UNVERIFIED). Ver THIRD_PARTY_NOTICES para condiciones de redistribución."}
-          </p>
+          <div style={{ ...compactP, fontSize: 12, color: "var(--fg-muted)" }} data-testid="lab-c6-zigbee-bench-notices">
+            <p style={{ margin: "0 0 6px" }}>
+              {en
+                ? "Experimental pinned ESP32-C6 firmware (hardware UNVERIFIED). Guest download allowed; third-party notices apply without extra confirmation:"
+                : "Firmware ESP32-C6 fijado experimental (hardware UNVERIFIED). Descarga guest permitida; aplican avisos de terceros sin confirmación extra:"}
+            </p>
+            <ul style={{ margin: "0 0 6px", paddingLeft: 18 }} data-testid="lab-c6-zigbee-bench-notice-restrictions">
+              {C6_ZIGBEE_BENCH_NOTICES.restrictions.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+            <p style={{ margin: 0 }}>
+              <a
+                href={C6_ZIGBEE_BENCH_NOTICES.apiPath}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="lab-c6-zigbee-bench-notices-link"
+              >
+                {en ? "Download THIRD_PARTY_NOTICES / licenses" : "Descargar THIRD_PARTY_NOTICES / licencias"}
+              </a>
+            </p>
+          </div>
           <p style={compactP} data-testid="lab-c6-zigbee-bench-erase-notice">
             {en
               ? "Installing replaces the flash image: apps and files already on the board can be erased. Authorize the USB port when the browser asks."

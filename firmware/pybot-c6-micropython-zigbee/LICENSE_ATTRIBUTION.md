@@ -43,13 +43,16 @@ Exact LICENSE files from the resolved Maxwell private-bench package are stored u
   binaries must not be reverse engineered / decompiled / modified / disassembled
   (see `licenses/espressif__esp-zboss-lib.LICENSE.txt`)
 
-**PyBot policy for this path:**
+**PyBot policy for this path (product-owner updated):**
 
-- Do not redistribute `.bin` firmware images or Zigbee `.a` libs into the public git
-  tree or an open/unauthenticated CDN; keep delivery authenticated and notice-gated.
-- Authenticated private physical-bench delivery via `/api/c6-zigbee-bench-firmware` is
-  allowed when notices are presented and access is operator-gated (not open public CDN).
-- Broader/public redistribution remains out of scope until an explicit product decision.
+- Do not publish proprietary Zigbee `.a` libs or storage credentials into git or logs.
+- Do not expose an open/generic unauthenticated CDN of arbitrary binaries.
+- Anonymous guest delivery of the **pinned** ESP32-C6 firmware image via
+  `/api/c6-zigbee-bench-firmware` is authorized when notices/restrictions are bundled
+  and short-lived signed tickets gate the three SHA256-verified segments.
+- Copyright of third-party components does **not** forbid all guest delivery; it
+  requires retaining notices/disclaimers (esp-zboss-lib) and license texts
+  (Apache-2.0 / MIT) — complied with by bundled `THIRD_PARTY_NOTICES` + licenses.
 
 ## Other toolchain licenses (fetched at build time, not vendored)
 

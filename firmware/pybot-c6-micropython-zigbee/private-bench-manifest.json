@@ -17,7 +17,7 @@
   "publicReady": false,
   "modeReady": false,
   "hardwareValidation": "UNVERIFIED",
-  "distribution": "private-authenticated-bench-only",
+  "distribution": "pinned-guest-allowlisted-short-lived",
   "durableStorageRequired": true,
   "sourceArtifact": {
     "kind": "maxwell-private-gha-artifact",
@@ -69,5 +69,5 @@
     "firmware/pybot-c6-micropython-zigbee/licenses/espressif__esp-zigbee-lib.LICENSE.txt",
     "firmware/pybot-c6-micropython-zigbee/licenses/espressif__mdns.LICENSE.txt"
   ],
-  "licensePolicy": "esp-zboss-lib LICENSE permits binary redistribution with copyright/disclaimer retention and no reverse-engineering; delivery restricted to authenticated private physical bench (not open public redistribute)."
+  "licensePolicy": "esp-zboss-lib LICENSE permits binary redistribution with copyright/disclaimer retention and no reverse-engineering; product owner authorizes anonymous guest delivery of the pinned ESP32-C6 image via short-lived signed tickets with bundled notices (not an open generic CDN; no proprietary .a libs or credentials)."
 }

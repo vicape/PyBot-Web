@@ -1,10 +1,12 @@
 /**
- * Server-only helpers for authenticated C6 MicroPython+_uzigbee private-bench
- * firmware delivery. Never import from the browser bundle.
+ * Server-only helpers for pinned C6 MicroPython+_uzigbee firmware delivery
+ * (anonymous guest mint allowed; short-lived tickets). Never import from the
+ * browser bundle.
  *
  * Durable bytes live outside git (private object storage / local operator path).
  * GitHub Actions artifact IDs are provenance only unless explicitly configured
  * as a temporary server-side source while durable storage is provisioned.
+ * Never log storage credentials or GitHub tokens.
  */
 import { createHmac, createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -15,16 +17,19 @@ const require = createRequire(import.meta.url);
 
 /** Bundled with the serverless function (keep in sync with firmware/.../private-bench-manifest.json). */
 export const PRIVATE_BENCH_MANIFEST = require("./c6ZigbeeBenchPackage.json");
+/** Bundled third-party notices (zboss / zigbee / uZigbee) for anonymous UI/API delivery. */
+export const C6_FIRMWARE_NOTICES = require("./c6ZigbeeBenchNotices.json");
 
 export const C6_FIRMWARE_API_PATH = "/api/c6-zigbee-bench-firmware";
 export const TICKET_TTL_MS = 120_000;
+export const C6_FIRMWARE_ALLOWED_CHIP = "ESP32-C6";
 
 /**
- * Exact one-time operator setup (NOT an end-user step) when preview secrets /
- * durable private storage are missing.
+ * Exact one-time SERVER-OPERATOR setup (NOT an end-user / login step) when
+ * preview secrets / durable private storage are missing.
  */
 export const C6_FIRMWARE_OPERATOR_SETUP =
-  "OPERATOR_SETUP (Vercel Preview feature/esp32-universal-lab only): upload Maxwell artifact 12161052985 zigbee-firmware-private-bench/*.bin to private object storage that outlives GitHub Actions retention; set SUPABASE_URL, SUPABASE_SERVICE_KEY, PYBOT_C6_FIRMWARE_OPERATOR_EMAILS, PYBOT_C6_FIRMWARE_SIGNING_SECRET, PYBOT_C6_FIRMWARE_STORAGE_BASE_URL, and PYBOT_C6_FIRMWARE_STORAGE_AUTH_HEADER (Bearer/token for that store). Optional interim: PYBOT_C6_FIRMWARE_GITHUB_TOKEN + PYBOT_C6_FIRMWARE_GHA_ARTIFACT_ID=12161052985 + PYBOT_C6_FIRMWARE_GHA_REPO=vicape/cursor-control (still migrate to durable storage before artifact expiry).";
+  "OPERATOR_SETUP (Vercel Preview feature/esp32-universal-lab only): upload Maxwell artifact 12161052985 zigbee-firmware-private-bench/*.bin to private object storage that outlives GitHub Actions retention; set PYBOT_C6_FIRMWARE_SIGNING_SECRET, PYBOT_C6_FIRMWARE_STORAGE_BASE_URL, and PYBOT_C6_FIRMWARE_STORAGE_AUTH_HEADER (Bearer/token for that store). Optional interim: PYBOT_C6_FIRMWARE_GITHUB_TOKEN + PYBOT_C6_FIRMWARE_GHA_ARTIFACT_ID=12161052985 + PYBOT_C6_FIRMWARE_GHA_REPO=vicape/cursor-control (still migrate to durable storage before artifact expiry). Guest/anonymous mint does not require user login.";
 
 export function sha256HexBuffer(buf) {
   return createHash("sha256").update(buf).digest("hex");
@@ -74,63 +79,35 @@ export function storageConfigFromEnv(env = process.env) {
 }
 
 export function describeMissingOperatorSetup(cfg) {
-  if (!cfg.supabaseUrl || !cfg.serviceKey) {
-    return C6_FIRMWARE_OPERATOR_SETUP;
-  }
+  // Anonymous guest mint: only signing secret + pinned storage source are required.
+  // Supabase / operator allowlist are not prerequisites for firmware delivery.
   if (!cfg.signingSecret) return C6_FIRMWARE_OPERATOR_SETUP;
-  if (!cfg.operatorEmails.length) return C6_FIRMWARE_OPERATOR_SETUP;
   if (!cfg.mode) return C6_FIRMWARE_OPERATOR_SETUP;
   return null;
 }
 
-export async function resolveAuthedOperator(req, cfg, fetchImpl = fetch) {
-  const authHeader = req.headers?.authorization || req.headers?.Authorization || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  if (!token) {
-    return { ok: false, status: 401, error: "auth_denied", reason: "missing_bearer_token" };
+/** Strict chip allowlist for the pinned package (no open/generic firmware proxy). */
+export function assertAllowedFirmwareChip(chip) {
+  const normalized = String(chip || "").trim();
+  if (normalized === C6_FIRMWARE_ALLOWED_CHIP) {
+    return { ok: true, chip: C6_FIRMWARE_ALLOWED_CHIP };
   }
-  if (!cfg.supabaseUrl || !cfg.serviceKey) {
-    return { ok: false, status: 503, error: "operator_setup_required", reason: C6_FIRMWARE_OPERATOR_SETUP };
-  }
-  let user;
-  try {
-    const userRes = await fetchImpl(`${cfg.supabaseUrl}/auth/v1/user`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        apikey: cfg.serviceKey,
-      },
-    });
-    if (!userRes.ok) {
-      return { ok: false, status: 401, error: "auth_denied", reason: "invalid_token" };
-    }
-    user = await userRes.json();
-  } catch {
-    return { ok: false, status: 401, error: "auth_denied", reason: "auth_lookup_failed" };
-  }
-  const email = String(user?.email || "").trim().toLowerCase();
-  if (!email || !cfg.operatorEmails.includes(email)) {
-    // Super-admin via profiles table (same pattern as platform admin).
-    try {
-      const profRes = await fetchImpl(
-        `${cfg.supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_super_admin,email`,
-        {
-          headers: {
-            apikey: cfg.serviceKey,
-            Authorization: `Bearer ${cfg.serviceKey}`,
-          },
-        },
-      );
-      const rows = profRes.ok ? await profRes.json() : [];
-      const row = Array.isArray(rows) ? rows[0] : null;
-      if (row?.is_super_admin === true) {
-        return { ok: true, user: { id: user.id, email: email || row.email || "" } };
-      }
-    } catch {
-      /* fall through to forbidden */
-    }
-    return { ok: false, status: 403, error: "auth_denied", reason: "operator_not_allowlisted" };
-  }
-  return { ok: true, user: { id: user.id, email } };
+  return {
+    ok: false,
+    status: 403,
+    error: "chip_denied",
+    reason: `only_${C6_FIRMWARE_ALLOWED_CHIP}`,
+  };
+}
+
+export function getBundledFirmwareNotices() {
+  return {
+    path: "firmware/pybot-c6-micropython-zigbee/THIRD_PARTY_NOTICES.md",
+    paths: C6_FIRMWARE_NOTICES.paths,
+    restrictions: C6_FIRMWARE_NOTICES.restrictions,
+    documents: C6_FIRMWARE_NOTICES.documents,
+    distribution: C6_FIRMWARE_NOTICES.distribution,
+  };
 }
 
 function b64url(buf) {
@@ -348,9 +325,9 @@ export async function mintPackageTickets(cfg, fetchImpl = fetch, manifest = PRIV
     ok: true,
     status: 200,
     packageVersion: manifest.version,
-    chip: manifest.chip,
+    chip: manifest.chip || C6_FIRMWARE_ALLOWED_CHIP,
     distribution: manifest.distribution,
-    notices: "firmware/pybot-c6-micropython-zigbee/THIRD_PARTY_NOTICES.md",
+    notices: getBundledFirmwareNotices(),
     durableHint:
       cfg.mode === "gha-artifact"
         ? "Serving from GitHub Actions artifact (interim). Migrate to PYBOT_C6_FIRMWARE_STORAGE_BASE_URL before artefact expiry."
