@@ -2705,12 +2705,50 @@ export default function PyBotIDE() {
                           {t("labBoardNotReady")}
                         </div>
                       ) : null}
+                      {isLabBoard && labRuntimeReady && labProfileId === "waveshare-esp32-c6-lcd-1.47" ? (
+                        <div className="toolbar-menu-subgroup" data-testid="lab-c6-zigbee-bench-entry">
+                          <span className="toolbar-menu-mode__label" data-testid="lab-mpy-zigbee-section">
+                            {t("labMpyZigbeeSection")}
+                          </span>
+                          <button
+                            type="button"
+                            className="toolbar-menu-item toolbar-menu-item--highlight"
+                            data-testid="lab-c6-zigbee-bench-open"
+                            disabled={
+                              connecting ||
+                              connected ||
+                              typeof navigator === "undefined" ||
+                              !navigator.serial
+                            }
+                            onClick={() => {
+                              setBoardMenuOpen(false);
+                              setZigbeeBenchOpen(true);
+                            }}
+                          >
+                            Preparar e instalar
+                          </button>
+                          <div className="toolbar-menu-hint" data-testid="lab-mpy-zigbee-bench-hint">
+                            {connected
+                              ? t("labMpyZigbeeBenchDisconnectHint")
+                              : typeof navigator !== "undefined" && !navigator.serial
+                                ? t("labMpyZigbeeBenchNoSerialHint")
+                                : t("labMpyZigbeeBenchHint")}
+                          </div>
+                        </div>
+                      ) : null}
                       {isLabBoard && zigbeeIde ? (
                         <div
                           className="toolbar-menu-subgroup"
                           data-testid="lab-zigbee-status"
                           data-zigbee-status={zigbeeIde.status}
+                          data-zigbee-path="esp-idf-coordinator"
                         >
+                          <span
+                            className="toolbar-menu-mode__label"
+                            data-testid="lab-zigbee-coordinator-section"
+                          >
+                            {t("labZigbeeCoordinatorSection")}
+                          </span>
                           {zigbeeIde.status === "READY" ? (
                             <>
                               <button
@@ -2745,32 +2783,8 @@ export default function PyBotIDE() {
                           ) : (
                             <div className="toolbar-menu-hint" data-testid="lab-zigbee-blocked">
                               {t("labZigbeeBlockedHint")}
-                              {zigbeeIde.blockReason
-                                ? ` (${zigbeeIde.blockReason})`
-                                : ""}
                             </div>
                           )}
-                        </div>
-                      ) : null}
-                      {isLabBoard && labRuntimeReady && !connected && labProfileId === "waveshare-esp32-c6-lcd-1.47" ? (
-                        <div className="toolbar-menu-subgroup" data-testid="lab-c6-zigbee-bench-entry">
-                          <button
-                            type="button"
-                            className="toolbar-menu-item toolbar-menu-item--secondary"
-                            data-testid="lab-c6-zigbee-bench-open"
-                            disabled={connecting}
-                            onClick={() => {
-                              setBoardMenuOpen(false);
-                              setZigbeeBenchOpen(true);
-                            }}
-                          >
-                            Preparar e instalar
-                          </button>
-                          <div className="toolbar-menu-hint">
-                            {getLang() === "en"
-                              ? "Guided C6 prep/install: detect 4 MB, verify pinned package, full flash backup, explicit consent. No auto-fetch/auto-flash. Does not affect production."
-                              : "Preparación/instalación guiada C6: detectar 4 MB, verificar paquete anclado, respaldo completo, consentimiento explícito. Sin auto-descarga ni auto-flash. No afecta producción."}
-                          </div>
                         </div>
                       ) : null}
                       {isLabBoard && labRuntimeReady && !connected ? (

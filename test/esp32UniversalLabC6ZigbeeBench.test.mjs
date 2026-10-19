@@ -13,6 +13,7 @@ import {
   resolveC6ZigbeeBenchPackageFetch,
   detectC6ZigbeeBenchTarget,
   backupC6ZigbeeBenchFlash,
+  describeC6ZigbeeBenchGateReason,
 } from "../src/esp32UniversalLab/runtime/c6ZigbeeBench.js";
 import {
   writeC6MultiOffsetFirmware,
@@ -38,6 +39,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const modalSrc = readFileSync(join(here, "../src/C6ZigbeeBenchModal.jsx"), "utf8");
 const benchSrc = readFileSync(join(here, "../src/esp32UniversalLab/runtime/c6ZigbeeBench.js"), "utf8");
 const flasherSrc = readFileSync(join(here, "../src/esp32UniversalLab/runtime/c6Flasher.js"), "utf8");
+const ideSrc = readFileSync(join(here, "../src/PyBotIDE.jsx"), "utf8");
+const i18nSrc = readFileSync(join(here, "../src/i18n.js"), "utf8");
 
 test("C6 Zigbee: only pinned 4 MB C6 private package, never production READY", () => {
   assert.equal(C6_ZIGBEE_BENCH_PACKAGE.publicReady, false);
@@ -53,6 +56,33 @@ test("C6 Zigbee: only pinned 4 MB C6 private package, never production READY", (
 test("C6 Zigbee: UI label is exactly Preparar e instalar", () => {
   assert.equal(C6_ZIGBEE_BENCH_UI_LABEL, "Preparar e instalar");
   assert.match(modalSrc, /Preparar e instalar/);
+});
+
+test("C6 Zigbee: menu separates MicroPython+Zigbee install from ESP-IDF coordinator", () => {
+  assert.match(ideSrc, /lab-mpy-zigbee-section/);
+  assert.match(ideSrc, /lab-c6-zigbee-bench-entry/);
+  assert.match(ideSrc, /data-zigbee-path="esp-idf-coordinator"/);
+  assert.match(ideSrc, /toolbar-menu-item--highlight/);
+  assert.match(i18nSrc, /labMpyZigbeeSection/);
+  assert.match(i18nSrc, /labZigbeeCoordinatorSection/);
+  assert.doesNotMatch(i18nSrc, /Zigbee coordinador: BLOCKED/);
+  assert.doesNotMatch(i18nSrc, /Zigbee coordinator: BLOCKED/);
+  // Desired path entry appears before ESP-IDF coordinator status in the board menu.
+  const mpyIdx = ideSrc.indexOf('data-testid="lab-c6-zigbee-bench-entry"');
+  const coordIdx = ideSrc.indexOf('data-testid="lab-zigbee-status"');
+  assert.ok(mpyIdx > 0 && coordIdx > mpyIdx);
+});
+
+test("C6 Zigbee: compact 4-step installer with honest distribution blocker", () => {
+  assert.match(modalSrc, /lab-c6-zigbee-bench-step-1/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-step-2/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-step-3/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-step-4/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-path-label/);
+  assert.match(modalSrc, /MicroPython \+ native Zigbee|_uzigbee/);
+  assert.match(modalSrc, /not the ESP-IDF coordinator|no es el coordinador ESP-IDF/);
+  assert.equal(describeC6ZigbeeBenchGateReason("BENCH_BACKUP_REQUIRED", "es").length > 10, true);
+  assert.match(describeC6ZigbeeBenchGateReason("BENCH_DISCONNECT_FIRST", "en"), /Disconnect/);
 });
 
 test("C6 Zigbee: TARGET vicape/PyBot-Web + backup preserves /main.py /boot.py /pybot/assets", () => {
@@ -277,5 +307,6 @@ test("C6 Zigbee: post-flash checks mark Zigbee pairing/dual ON/OFF as UNVERIFIED
   for (const id of ["micropython-repl", "uzigbee-import", "st7789", "gpio", "wifi", "ble"]) {
     assert.equal(byId[id].status, "OPERATOR_CHECK");
   }
+  assert.match(byId.st7789.label, /172×320|172x320/);
   assert.doesNotMatch(modalSrc, /zigbee-pairing.*PASS|PASS.*zigbee-pairing/);
 });

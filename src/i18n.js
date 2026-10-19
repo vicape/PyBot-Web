@@ -72,10 +72,20 @@ const STRINGS = {
     labSaveOk: "Programa guardado como main.py en la placa.",
     labRecoverBtn: "Recuperar REPL",
     labRecoverOk: "REPL recuperado.",
+    labZigbeeCoordinatorSection:
+      "Coordinador Zigbee ESP-IDF (ruta host aparte)",
     labZigbeeBlockedHint:
-      "Zigbee coordinador: BLOCKED (sin imagen validada merged/multi-offset). No hay botón READY ni auto-flash. MicroPython sigue siendo el modo seguro.",
+      "No disponible: sin imagen ESP-IDF validada. No es el firmware MicroPython+Zigbee de esta placa. Usá «Preparar e instalar» abajo para esa opción.",
     labZigbeeReadyHint:
-      "Zigbee artifact READY (hardware UNVERIFIED). Conexión host USB; programación en Python (create network, allow joining, status, command on/off, read). autoFlash=false.",
+      "Artefacto coordinador ESP-IDF READY (hardware UNVERIFIED). Host USB; Python (create network, allow joining, status, command on/off, read). autoFlash=false. Distinto de MicroPython+Zigbee.",
+    labMpyZigbeeSection:
+      "MicroPython + Zigbee nativo (misma placa)",
+    labMpyZigbeeBenchHint:
+      "Instalador guiado del firmware custom con _uzigbee. Requiere paquete privado #555, respaldo 4 MB y confirmación. Sin auto-flash.",
+    labMpyZigbeeBenchDisconnectHint:
+      "Desconectá la placa del IDE antes de preparar e instalar (el puerto USB debe quedar libre).",
+    labMpyZigbeeBenchNoSerialHint:
+      "Web Serial no disponible (usá Chrome/Edge de escritorio por HTTPS).",
     labZigbeeConnectBtn: "Conectar host Zigbee (WebSerial)",
     labZigbeeConnecting: "Abriendo WebSerial para protocolo Zigbee host…",
     labZigbeeConnected:
@@ -724,10 +734,20 @@ Creado por VIC.`,
     labSaveOk: "Program saved as main.py on the board.",
     labRecoverBtn: "Recover REPL",
     labRecoverOk: "REPL recovered.",
+    labZigbeeCoordinatorSection:
+      "ESP-IDF Zigbee coordinator (separate host path)",
     labZigbeeBlockedHint:
-      "Zigbee coordinator: BLOCKED (no validated merged/multi-offset image). No READY button and no auto-flash. MicroPython remains the safe default.",
+      "Unavailable: no validated ESP-IDF image. This is not the same-board MicroPython+Zigbee firmware. Use “Preparar e instalar” below for that option.",
     labZigbeeReadyHint:
-      "Zigbee artifact READY (hardware UNVERIFIED). USB host path; program in Python (create network, allow joining, status, command on/off, read). autoFlash=false.",
+      "ESP-IDF coordinator artifact READY (hardware UNVERIFIED). USB host; Python (create network, allow joining, status, command on/off, read). autoFlash=false. Distinct from MicroPython+Zigbee.",
+    labMpyZigbeeSection:
+      "MicroPython + native Zigbee (same board)",
+    labMpyZigbeeBenchHint:
+      "Guided installer for the custom _uzigbee firmware. Needs private #555 package, 4 MB backup, and explicit consent. No auto-flash.",
+    labMpyZigbeeBenchDisconnectHint:
+      "Disconnect the board from the IDE before prepare/install (USB port must be free).",
+    labMpyZigbeeBenchNoSerialHint:
+      "Web Serial unavailable (use desktop Chrome/Edge over HTTPS).",
     labZigbeeConnectBtn: "Connect Zigbee host (WebSerial)",
     labZigbeeConnecting: "Opening WebSerial for Zigbee host protocol…",
     labZigbeeConnected:

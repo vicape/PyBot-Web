@@ -92,7 +92,7 @@ export const C6_ZIGBEE_BENCH_DISTRIBUTION = Object.freeze({
 export const C6_ZIGBEE_BENCH_POST_FLASH_CHECKS = Object.freeze([
   Object.freeze({ id: "micropython-repl", label: "MicroPython REPL boots", status: "OPERATOR_CHECK" }),
   Object.freeze({ id: "uzigbee-import", label: "_uzigbee import", status: "OPERATOR_CHECK" }),
-  Object.freeze({ id: "st7789", label: "screen ST7789", status: "OPERATOR_CHECK" }),
+  Object.freeze({ id: "st7789", label: "LCD ST7789 172×320", status: "OPERATOR_CHECK" }),
   Object.freeze({ id: "gpio", label: "GPIO", status: "OPERATOR_CHECK" }),
   Object.freeze({ id: "wifi", label: "Wi-Fi", status: "OPERATOR_CHECK" }),
   Object.freeze({ id: "ble", label: "BLE", status: "OPERATOR_CHECK" }),
@@ -254,6 +254,52 @@ export async function backupC6ZigbeeBenchFlash(options = {}) {
     await resetC6AndRelease(boot).catch(() => {});
     throw error;
   }
+}
+
+/** Human-readable gate codes for the compact installer UI (never invent success). */
+export const C6_ZIGBEE_BENCH_GATE_MESSAGES = Object.freeze({
+  BENCH_PACKAGE_NOT_VERIFIED: {
+    es: "Falta verificar los tres .bin del paquete privado.",
+    en: "Verify the three private-package .bin files first.",
+  },
+  BENCH_WRONG_BOARD_PROFILE: {
+    es: "Seleccioná Waveshare ESP32-C6-LCD-1.47 en Placa.",
+    en: "Select Waveshare ESP32-C6-LCD-1.47 in Board.",
+  },
+  BENCH_DISCONNECT_FIRST: {
+    es: "Desconectá la placa del IDE antes de grabar.",
+    en: "Disconnect the board from the IDE before flashing.",
+  },
+  BENCH_DETECTION_REQUIRED: {
+    es: "Detectá ESP32-C6 con flash 4 MB primero.",
+    en: "Detect ESP32-C6 with 4 MB flash first.",
+  },
+  BENCH_CHIP_NOT_ESP32_C6: {
+    es: "El chip detectado no es ESP32-C6.",
+    en: "Detected chip is not ESP32-C6.",
+  },
+  BENCH_BACKUP_REQUIRED: {
+    es: "Respaldo completo de 4 MB obligatorio antes de borrar.",
+    en: "Full 4 MB backup required before erase.",
+  },
+  BENCH_BACKUP_DOWNLOAD_ACK_REQUIRED: {
+    es: "Confirmá que el archivo de respaldo quedó guardado.",
+    en: "Acknowledge that the backup file was saved.",
+  },
+  BENCH_ERASE_ACK_REQUIRED: {
+    es: "Marcá que entendés el borrado total de la flash.",
+    en: "Acknowledge full flash erase.",
+  },
+  BENCH_SECOND_CONFIRMATION_REQUIRED: {
+    es: "Escribí ESP32-C6 para confirmar.",
+    en: "Type ESP32-C6 to confirm.",
+  },
+});
+
+export function describeC6ZigbeeBenchGateReason(reason, lang = "es") {
+  const entry = C6_ZIGBEE_BENCH_GATE_MESSAGES[reason];
+  if (!entry) return reason || "";
+  return lang === "en" ? entry.en : entry.es;
 }
 
 /** This gate must be checked on the final human-triggered Flash action. */
