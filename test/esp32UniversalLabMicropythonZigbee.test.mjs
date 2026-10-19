@@ -4,7 +4,17 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -235,23 +245,63 @@ test("MPY+ZB: autonomous boot assumptions documented; preflight build proof", ()
   assert.match(buildSh, /multi-offset|bootloader/);
   assert.match(buildSh, /exit 2/);
 
-  // Live preflight: without IDF, build must BLOCK without inventing .bin
-  const r = spawnSync("bash", [join(fwRoot, "build.sh")], {
-    encoding: "utf8",
-    env: { ...process.env, PATH: process.env.PATH },
-  });
-  assert.equal(r.status, 2, r.stderr || r.stdout);
-  const statusPath = join(fwRoot, "build-artifact/BUILD_STATUS.json");
-  assert.ok(existsSync(statusPath));
-  const status = JSON.parse(readFileSync(statusPath, "utf8"));
-  assert.equal(status.status, "BLOCKED");
-  assert.equal(status.sha256, null);
-  assert.equal(status.filename, null);
-  assert.match(status.reason || "", /idf\.py|ESP-IDF/i);
+  // Exercise the missing-toolchain path in a disposable copy, NEVER in fwRoot.
+  // Running the real build.sh in the project can compile firmware (when IDF is
+  // installed) and overwrite the tracked manifest/BUILD_STATUS during QA.
+  const sandbox = mkdtempSync(join(tmpdir(), "pybot-zigbee-preflight-"));
+  try {
+    for (const rel of [
+      "build.sh",
+      "scripts/pins.env",
+      "scripts/validate_static.py",
+      "DECISION.md",
+      "LICENSE_ATTRIBUTION.md",
+      "PINS.json",
+      "VERSION",
+      "manifest.json",
+      "partitions.csv",
+      "flash_layout.json",
+      "README.md",
+      "onboard/pybot_zigbee.py",
+      "onboard/main.py",
+      "docs/BACKUP_RESTORE.md",
+      "docs/LIMITATIONS.md",
+    ]) {
+      const destination = join(sandbox, rel);
+      mkdirSync(dirname(destination), { recursive: true });
+      copyFileSync(join(fwRoot, rel), destination);
+    }
 
-  const artifactDir = join(fwRoot, "build-artifact");
-  const bins = readdirSync(artifactDir).filter((n) => n.endsWith(".bin"));
-  assert.equal(bins.length, 0, "must not invent firmware .bin without real build");
+    // Force only the interpreter's IDF-absent branch inside the disposable
+    // script; the real build script and compiled firmware remain untouched.
+    const isolatedBuild = join(sandbox, "build.sh");
+    const originalBuild = readFileSync(isolatedBuild, "utf8");
+    const idfCheck = "if ! command -v idf.py >/dev/null 2>&1; then";
+    assert.ok(originalBuild.includes(idfCheck), "missing-IDF guard must exist");
+    writeFileSync(
+      isolatedBuild,
+      originalBuild.replace(idfCheck, "if ! false; then"),
+      "utf8",
+    );
+
+    const r = spawnSync("bash", [isolatedBuild], {
+      encoding: "utf8",
+      timeout: 15000,
+    });
+    assert.equal(r.status, 2, r.stderr || r.stdout);
+    const artifactDir = join(sandbox, "build-artifact");
+    const statusPath = join(artifactDir, "BUILD_STATUS.json");
+    assert.ok(existsSync(statusPath));
+    const status = JSON.parse(readFileSync(statusPath, "utf8"));
+    assert.equal(status.status, "BLOCKED");
+    assert.equal(status.sha256, null);
+    assert.equal(status.filename, null);
+    assert.match(status.reason || "", /idf\.py|ESP-IDF/i);
+    const bins = readdirSync(artifactDir).filter((n) => n.endsWith(".bin"));
+    assert.equal(bins.length, 0, "must not invent firmware .bin without real build");
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
 });
 
 test("MPY+ZB: firmware-binary gate only if real artifact built", () => {
