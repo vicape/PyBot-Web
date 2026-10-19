@@ -3,14 +3,17 @@ import assert from "node:assert/strict";
 import {
   C6_ZIGBEE_BENCH_PACKAGE,
   C6_ZIGBEE_BENCH_UI_LABEL,
+  C6_ZIGBEE_BENCH_FETCH_ACTION,
   C6_ZIGBEE_BENCH_DISTRIBUTION,
   C6_ZIGBEE_BENCH_POST_FLASH_CHECKS,
   C6_ZIGBEE_BENCH_PRESERVED_VFS_PATHS,
+  C6_ZIGBEE_BENCH_OPERATOR_SETUP,
   C6_FULL_FLASH_BYTES,
   validateC6ZigbeeBenchFiles,
   assertC6ZigbeeBenchFlashConsent,
   flashC6ZigbeeBenchPackage,
   resolveC6ZigbeeBenchPackageFetch,
+  fetchAndValidateC6ZigbeeBenchPackage,
   detectC6ZigbeeBenchTarget,
   backupC6ZigbeeBenchFlash,
   describeC6ZigbeeBenchGateReason,
@@ -41,6 +44,12 @@ const benchSrc = readFileSync(join(here, "../src/esp32UniversalLab/runtime/c6Zig
 const flasherSrc = readFileSync(join(here, "../src/esp32UniversalLab/runtime/c6Flasher.js"), "utf8");
 const ideSrc = readFileSync(join(here, "../src/PyBotIDE.jsx"), "utf8");
 const i18nSrc = readFileSync(join(here, "../src/i18n.js"), "utf8");
+const durableManifest = JSON.parse(
+  readFileSync(join(here, "../firmware/pybot-c6-micropython-zigbee/private-bench-manifest.json"), "utf8"),
+);
+const apiPackage = JSON.parse(
+  readFileSync(join(here, "../api/c6ZigbeeBenchPackage.json"), "utf8"),
+);
 
 test("C6 Zigbee: only pinned 4 MB C6 private package, never production READY", () => {
   assert.equal(C6_ZIGBEE_BENCH_PACKAGE.publicReady, false);
@@ -51,11 +60,36 @@ test("C6 Zigbee: only pinned 4 MB C6 private package, never production READY", (
   assert.equal(C6_ZIGBEE_BENCH_PACKAGE.board, "waveshare-esp32-c6-lcd-1.47");
   assert.equal(C6_ZIGBEE_BENCH_PACKAGE.pinnedRunId, "39193349317");
   assert.equal(C6_ZIGBEE_BENCH_PACKAGE.pinnedArtifactId, "12161052985");
+  assert.equal(C6_ZIGBEE_BENCH_PACKAGE.chip, "ESP32-C6");
 });
 
-test("C6 Zigbee: UI label is exactly Preparar e instalar", () => {
+test("C6 Zigbee: durable manifest anchors versions/chip/offsets/sizes/SHA", () => {
+  assert.equal(durableManifest.chip, "ESP32-C6");
+  assert.deepEqual(durableManifest.offsets, ["0x0", "0x8000", "0x10000"]);
+  assert.equal(durableManifest.components.length, 3);
+  for (let i = 0; i < 3; i++) {
+    assert.equal(durableManifest.components[i].sha256, specs[i].sha256);
+    assert.equal(durableManifest.components[i].size, specs[i].size);
+    assert.equal(apiPackage.components[i].sha256, specs[i].sha256);
+  }
+  assert.equal(existsSync(join(here, "../firmware/pybot-c6-micropython-zigbee/THIRD_PARTY_NOTICES.md")), true);
+  assert.equal(
+    existsSync(join(here, "../firmware/pybot-c6-micropython-zigbee/licenses/espressif__esp-zboss-lib.LICENSE.txt")),
+    true,
+  );
+  assert.equal(existsSync(join(here, "../api/c6-zigbee-bench-firmware.js")), true);
+});
+
+test("C6 Zigbee: UI label is exactly Preparar e instalar; step 2 is Obtener firmware y verificar", () => {
   assert.equal(C6_ZIGBEE_BENCH_UI_LABEL, "Preparar e instalar");
+  assert.equal(C6_ZIGBEE_BENCH_FETCH_ACTION, "Obtener firmware y verificar");
   assert.match(modalSrc, /Preparar e instalar/);
+  assert.match(modalSrc, /Obtener firmware y verificar/);
+  assert.match(modalSrc, /lab-c6-zigbee-bench-obtain/);
+  assert.doesNotMatch(modalSrc, /type="file"/);
+  assert.doesNotMatch(modalSrc, /DECISION REQUIRED/);
+  assert.doesNotMatch(benchSrc, /status:\s*"DECISION REQUIRED"/);
+  assert.notEqual(C6_ZIGBEE_BENCH_DISTRIBUTION.status, "DECISION REQUIRED");
 });
 
 test("C6 Zigbee: menu separates MicroPython+Zigbee install from ESP-IDF coordinator", () => {
@@ -67,13 +101,12 @@ test("C6 Zigbee: menu separates MicroPython+Zigbee install from ESP-IDF coordina
   assert.match(i18nSrc, /labZigbeeCoordinatorSection/);
   assert.doesNotMatch(i18nSrc, /Zigbee coordinador: BLOCKED/);
   assert.doesNotMatch(i18nSrc, /Zigbee coordinator: BLOCKED/);
-  // Desired path entry appears before ESP-IDF coordinator status in the board menu.
   const mpyIdx = ideSrc.indexOf('data-testid="lab-c6-zigbee-bench-entry"');
   const coordIdx = ideSrc.indexOf('data-testid="lab-zigbee-status"');
   assert.ok(mpyIdx > 0 && coordIdx > mpyIdx);
 });
 
-test("C6 Zigbee: compact 4-step installer with honest distribution blocker", () => {
+test("C6 Zigbee: compact 4-step installer without ordinary-user decision popup", () => {
   assert.match(modalSrc, /lab-c6-zigbee-bench-step-1/);
   assert.match(modalSrc, /lab-c6-zigbee-bench-step-2/);
   assert.match(modalSrc, /lab-c6-zigbee-bench-step-3/);
@@ -99,27 +132,126 @@ test("C6 Zigbee: TARGET vicape/PyBot-Web + backup preserves /main.py /boot.py /p
   assert.equal(existsSync(join(root, "main.py")), true);
   assert.equal(existsSync(join(root, "boot.py")), true);
   assert.equal(existsSync(join(root, "pybot/assets")), true);
+  assert.equal(existsSync(join(root, "vicape/PyBot-Web")), true);
   assert.match(readFileSync(join(root, "main.py"), "utf8"), /vicape\/PyBot-Web/);
+  assert.match(readFileSync(join(root, "vicape/PyBot-Web"), "utf8"), /vicape\/PyBot-Web/);
 });
 
-test("C6 Zigbee: automatic fetch returns DECISION REQUIRED without secrets or simulated fetch", () => {
+test("C6 Zigbee: automatic authenticated distributor is wired; no secrets in client", () => {
   const resolved = resolveC6ZigbeeBenchPackageFetch();
-  assert.equal(resolved.status, "DECISION REQUIRED");
-  assert.equal(C6_ZIGBEE_BENCH_DISTRIBUTION.status, "DECISION REQUIRED");
-  assert.equal(resolved.automaticFetchSupported, false);
-  assert.equal(resolved.authorizedEndpointSupported, false);
-  assert.ok(resolved.blockers.length >= 3);
-  assert.ok(resolved.alternatives.length >= 3);
-  assert.doesNotMatch(benchSrc, /github_pat_|ghp_|GITHUB_TOKEN|ACTIONS_RUNTIME_TOKEN|service_role/i);
-  assert.doesNotMatch(modalSrc, /github_pat_|ghp_|GITHUB_TOKEN|ACTIONS_RUNTIME_TOKEN|service_role/i);
-  // Provenance URL may be documented; must not be used as fetch() target in frontend code.
+  assert.equal(resolved.status, "AUTOMATIC_SERVER");
+  assert.equal(C6_ZIGBEE_BENCH_DISTRIBUTION.status, "AUTOMATIC_SERVER");
+  assert.equal(resolved.automaticFetchSupported, true);
+  assert.equal(resolved.authorizedEndpointSupported, true);
+  assert.equal(resolved.endpointPath, "/api/c6-zigbee-bench-firmware");
+  assert.equal(resolved.fetchActionLabel, "Obtener firmware y verificar");
+  assert.match(C6_ZIGBEE_BENCH_OPERATOR_SETUP, /PYBOT_C6_FIRMWARE_STORAGE_BASE_URL/);
+  // Env *names* may mention GITHUB_TOKEN; never embed live credential material.
+  assert.doesNotMatch(benchSrc, /github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]{20,}|ACTIONS_RUNTIME_TOKEN\s*[:=]|service_role\s*[:=]/i);
+  assert.doesNotMatch(modalSrc, /github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]{20,}|ACTIONS_RUNTIME_TOKEN\s*[:=]|service_role\s*[:=]/i);
   assert.doesNotMatch(benchSrc, /fetch\(\s*C6_ZIGBEE_BENCH_PACKAGE\.sourceArtifact/);
   assert.doesNotMatch(modalSrc, /fetch\(\s*C6_ZIGBEE_BENCH_PACKAGE\.sourceArtifact/);
 });
 
+test("C6 Zigbee: client fetch auth denied / no token", async () => {
+  const denied = await fetchAndValidateC6ZigbeeBenchPackage({
+    getAccessToken: async () => null,
+    fetchImpl: async () => {
+      assert.fail("must not call API without token");
+    },
+  });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.reason, "BENCH_AUTH_DENIED");
+});
+
+test("C6 Zigbee: client fetch authenticated valid path + SHA verify", async () => {
+  const tickets = specs.map((s) => ({
+    role: s.role,
+    name: s.name,
+    address: s.address,
+    size: s.size,
+    sha256: s.sha256,
+    ticket: `t-${s.role}`,
+    path: `/api/c6-zigbee-bench-firmware?ticket=t-${s.role}`,
+  }));
+  const fetchImpl = async (url, init = {}) => {
+    if (init.method === "POST") {
+      assert.match(String(init.headers?.Authorization || ""), /^Bearer good-token$/);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          packageVersion: "0.1.0",
+          tickets,
+        }),
+      };
+    }
+    const role = String(url).includes("bootloader")
+      ? "bootloader"
+      : String(url).includes("partition")
+        ? "partition-table"
+        : "app";
+    const spec = specs.find((s) => s.role === role);
+    return {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => new Uint8Array(spec.size).buffer,
+    };
+  };
+  const ok = await fetchAndValidateC6ZigbeeBenchPackage({
+    getAccessToken: async () => "good-token",
+    fetchImpl,
+    digest: mockDigest,
+  });
+  assert.equal(ok.ok, true, ok.reason);
+  assert.equal(ok.source, "authenticated-server");
+  assert.deepEqual(ok.segments.map((s) => s.address), [0, 0x8000, 0x10000]);
+});
+
+test("C6 Zigbee: client fetch hash mismatch and interruption", async () => {
+  const tickets = specs.map((s) => ({
+    role: s.role,
+    name: s.name,
+    ticket: `t-${s.role}`,
+    path: `/api/c6-zigbee-bench-firmware?ticket=t-${s.role}`,
+  }));
+  const mismatch = await fetchAndValidateC6ZigbeeBenchPackage({
+    getAccessToken: async () => "tok",
+    fetchImpl: async (_url, init = {}) => {
+      if (init.method === "POST") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, tickets }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => new Uint8Array(specs[0].size).buffer,
+      };
+    },
+    digest: async () => "0".repeat(64),
+  });
+  assert.equal(mismatch.ok, false);
+  assert.match(mismatch.reason, /SHA256_MISMATCH/);
+
+  const interrupted = await fetchAndValidateC6ZigbeeBenchPackage({
+    getAccessToken: async () => "tok",
+    fetchImpl: async () => {
+      const err = new Error("aborted");
+      err.name = "AbortError";
+      throw err;
+    },
+  });
+  assert.equal(interrupted.ok, false);
+  assert.equal(interrupted.reason, "BENCH_FETCH_INTERRUPTED");
+});
+
 test("C6 Zigbee: exact three binary names, SHA and bytes validated before WebSerial", async () => {
   const valid = await validateC6ZigbeeBenchFiles(specs.map((s) => file(s)), { digest: mockDigest });
-  assert.equal(valid.ok, true, valid.reason || 'validation failed');
+  assert.equal(valid.ok, true, valid.reason || "validation failed");
   assert.equal(valid.autoFlash, false);
   assert.deepEqual(valid.segments.map((s) => s.address), [0, 0x8000, 0x10000]);
 
@@ -240,7 +372,6 @@ test("C6 Zigbee: consent requires detection + verified backup + erase + ESP32-C6
   };
   assert.equal(assertC6ZigbeeBenchFlashConsent(base).allowed, true);
 
-  // Anchor-download path: needs explicit ack when downloadConfirmed is false
   assert.equal(assertC6ZigbeeBenchFlashConsent({
     ...base,
     backupResult: { ...backupResult, downloadConfirmed: false },

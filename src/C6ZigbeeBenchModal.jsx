@@ -3,25 +3,23 @@ import { getLang } from "./i18n.js";
 import {
   C6_ZIGBEE_BENCH_PACKAGE,
   C6_ZIGBEE_BENCH_UI_LABEL,
-  C6_ZIGBEE_BENCH_DISTRIBUTION,
   C6_ZIGBEE_BENCH_POST_FLASH_CHECKS,
   C6_FULL_FLASH_BYTES,
-  validateC6ZigbeeBenchFiles,
   assertC6ZigbeeBenchFlashConsent,
   detectC6ZigbeeBenchTarget,
   backupC6ZigbeeBenchFlash,
   flashC6ZigbeeBenchPackage,
-  resolveC6ZigbeeBenchPackageFetch,
+  fetchAndValidateC6ZigbeeBenchPackage,
   describeC6ZigbeeBenchGateReason,
 } from "./esp32UniversalLab/runtime/c6ZigbeeBench.js";
 
 /**
  * Guided Preparar e instalar for Waveshare ESP32-C6-LCD-1.47 private bench.
- * Compact 4-step flow. Does not auto-fetch private binaries, auto-flash,
- * or mark Zigbee hardware verified. Distinct from ESP-IDF coordinator mode.
+ * Compact 4-step flow. Obtains firmware via authenticated server distributor
+ * (never file-picker / GitHub ZIP). Never auto-flashes. Distinct from ESP-IDF
+ * coordinator mode. Ordinary users never see operator decision popups.
  */
 export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, connected }) {
-  const [files, setFiles] = useState([]);
   const [validated, setValidated] = useState(null);
   const [detection, setDetection] = useState(null);
   const [backupResult, setBackupResult] = useState(null);
@@ -34,13 +32,10 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
   const [pct, setPct] = useState(0);
   const [finished, setFinished] = useState(false);
   const [postChecks, setPostChecks] = useState(null);
-  const [showDistDetail, setShowDistDetail] = useState(false);
   const en = getLang() === "en";
-  const distribution = resolveC6ZigbeeBenchPackageFetch();
 
   useEffect(() => {
     if (!open) return;
-    setFiles([]);
     setValidated(null);
     setDetection(null);
     setBackupResult(null);
@@ -53,7 +48,6 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
     setPct(0);
     setFinished(false);
     setPostChecks(null);
-    setShowDistDetail(false);
   }, [open]);
 
   if (!open) return null;
@@ -110,21 +104,49 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
     }
   };
 
-  const checkFiles = async () => {
+  const obtainFirmware = async () => {
+    if (!detection?.ok || busy) return;
     setBusy(true);
     setError("");
-    setPhase(en ? "Verifying all SHA-256 hashes…" : "Verificando todos los SHA-256…");
+    setValidated(null);
+    setPct(0);
+    setPhase(en
+      ? "Obtaining firmware from authorized server…"
+      : "Obteniendo firmware del servidor autorizado…");
     try {
-      const result = await validateC6ZigbeeBenchFiles(files);
-      if (!result.ok) throw new Error(result.reason);
+      const result = await fetchAndValidateC6ZigbeeBenchPackage({
+        onProgress: (p) => {
+          setPct(p.pct || 0);
+          if (p.phase === "mint") {
+            setPhase(en ? "Requesting short-lived delivery tickets…" : "Solicitando tickets de entrega…");
+          } else if (p.phase === "download") {
+            setPhase(en
+              ? `Downloading ${p.role || "segment"}…`
+              : `Descargando ${p.role || "segmento"}…`);
+          } else if (p.phase === "verify") {
+            setPhase(en ? "Verifying SHA-256…" : "Verificando SHA-256…");
+          }
+        },
+      });
+      if (!result.ok) {
+        const hint = describeC6ZigbeeBenchGateReason(result.reason, en ? "en" : "es");
+        const parts = [hint || result.reason || "BENCH_FETCH_FAILED"];
+        if (result.reason === "BENCH_OPERATOR_SETUP_REQUIRED" && result.detail) {
+          parts.push(result.detail);
+        }
+        throw new Error(parts.join("\n"));
+      }
       setValidated(result);
+      setPct(100);
       setPhase(en
-        ? "Three files verified (0x0, 0x8000, 0x10000)."
-        : "Tres archivos verificados (0x0, 0x8000, 0x10000).");
+        ? "Firmware verified (0x0, 0x8000, 0x10000)."
+        : "Firmware verificado (0x0, 0x8000, 0x10000).");
     } catch (e) {
       setValidated(null);
       setError(e?.message || String(e));
-      setPhase("");
+      setPhase(en
+        ? "Could not obtain firmware — retry when ready."
+        : "No se pudo obtener el firmware — reintentá cuando esté listo.");
     } finally {
       setBusy(false);
     }
@@ -241,47 +263,11 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
               ? "MicroPython + native Zigbee (_uzigbee) for Waveshare ESP32-C6-LCD-1.47 — not the ESP-IDF coordinator host path."
               : "MicroPython + Zigbee nativo (_uzigbee) para Waveshare ESP32-C6-LCD-1.47 — no es el coordinador ESP-IDF host."}
           </p>
-
-          <div
-            role="status"
-            data-testid="lab-c6-zigbee-bench-decision-required"
-            style={{
-              ...stepBox,
-              background: "var(--ide-elevated, #f6f7f9)",
-              fontSize: 12,
-              lineHeight: 1.4,
-            }}
-          >
-            <strong data-testid="lab-c6-zigbee-bench-distribution-status">
-              {C6_ZIGBEE_BENCH_DISTRIBUTION.status}
-            </strong>
-            {" — "}
+          <p style={{ ...compactP, fontSize: 12, color: "var(--fg-muted)" }} data-testid="lab-c6-zigbee-bench-notices">
             {en
-              ? "Automatic secure download unavailable."
-              : "Descarga automática segura no disponible."}
-            <button
-              type="button"
-              className="toolbar-menu-item toolbar-menu-item--secondary"
-              style={{ display: "inline", marginLeft: 8, padding: "2px 8px", fontSize: 11 }}
-              onClick={() => setShowDistDetail((v) => !v)}
-              data-testid="lab-c6-zigbee-bench-dist-toggle"
-            >
-              {showDistDetail ? (en ? "Hide details" : "Ocultar detalle") : (en ? "Why / alternatives" : "Por qué / alternativas")}
-            </button>
-            {showDistDetail ? (
-              <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-                {distribution.blockers.map((b) => `• ${b}`).join("\n")}
-                {"\n"}
-                {en ? "Alternatives:" : "Alternativas:"}
-                {"\n"}
-                {distribution.alternatives.map((a) => `• ${a}`).join("\n")}
-                {"\n"}
-                {en
-                  ? `Pinned private artifact: run ${C6_ZIGBEE_BENCH_PACKAGE.pinnedRunId} / artifact ${C6_ZIGBEE_BENCH_PACKAGE.pinnedArtifactId}. Respect THIRD_PARTY_NOTICES / zboss terms.`
-                  : `Artefacto privado anclado: run ${C6_ZIGBEE_BENCH_PACKAGE.pinnedRunId} / artifact ${C6_ZIGBEE_BENCH_PACKAGE.pinnedArtifactId}. Respetar THIRD_PARTY_NOTICES / términos zboss.`}
-              </div>
-            ) : null}
-          </div>
+              ? "Private authenticated bench. See THIRD_PARTY_NOTICES (esp-zboss-lib redistribution conditions)."
+              : "Banco privado autenticado. Ver THIRD_PARTY_NOTICES (condiciones de redistribución esp-zboss-lib)."}
+          </p>
 
           <div style={stepBox} data-testid="lab-c6-zigbee-bench-step-1">
             <div style={stepMeta}>
@@ -305,36 +291,22 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
 
           <div style={stepBox} data-testid="lab-c6-zigbee-bench-step-2">
             <div style={stepMeta}>
-              2/4 · {en ? "Load & verify 3× .bin (#555)" : "Cargar y verificar 3× .bin (#555)"} · {stepStatus(step2Done, step1Done && !step2Done)}
+              2/4 · Obtener firmware y verificar · {stepStatus(step2Done, step1Done && !step2Done)}
             </div>
-            <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>
-              <input
-                type="file"
-                multiple
-                accept=".bin"
-                disabled={busy || finished || !detection?.ok}
-                data-testid="lab-c6-zigbee-bench-files"
-                onChange={(e) => {
-                  setFiles(Array.from(e.target.files || []));
-                  setValidated(null);
-                  setError("");
-                  setPct(0);
-                }}
-                style={{ display: "block", marginTop: 4, maxWidth: "100%" }}
-              />
-            </label>
             <button
               type="button"
               className="toolbar-menu-item toolbar-menu-item--secondary"
-              disabled={busy || files.length !== 3 || finished || !detection?.ok}
-              onClick={checkFiles}
-              data-testid="lab-c6-zigbee-bench-verify"
+              disabled={busy || finished || !detection?.ok}
+              onClick={obtainFirmware}
+              data-testid="lab-c6-zigbee-bench-obtain"
             >
-              {en ? "Verify SHA-256" : "Verificar SHA-256"}
+              Obtener firmware y verificar
             </button>
             {packageReady ? (
               <p role="status" data-testid="lab-c6-zigbee-bench-verified" style={{ ...compactP, marginTop: 8, marginBottom: 0 }}>
-                {en ? "Hashes OK · 0x0, 0x8000, 0x10000" : "Hashes OK · 0x0, 0x8000, 0x10000"}
+                {en
+                  ? `Hashes OK · v${validated.packageVersion || C6_ZIGBEE_BENCH_PACKAGE.version} · 0x0, 0x8000, 0x10000`
+                  : `Hashes OK · v${validated.packageVersion || C6_ZIGBEE_BENCH_PACKAGE.version} · 0x0, 0x8000, 0x10000`}
               </p>
             ) : null}
           </div>
@@ -416,9 +388,13 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
             </button>
           </div>
 
-          {busy && pct > 0 ? <p role="status">{pct}%</p> : null}
+          {busy && pct > 0 ? <p role="status" data-testid="lab-c6-zigbee-bench-progress">{pct}%</p> : null}
           {phase ? <p role="status" style={{ fontSize: 13, marginTop: 4 }}>{phase}</p> : null}
-          {error ? <p role="alert" style={{ color: "var(--color-error, #b42318)", fontSize: 13 }}>{error}</p> : null}
+          {error ? (
+            <p role="alert" data-testid="lab-c6-zigbee-bench-error" style={{ color: "var(--color-error, #b42318)", fontSize: 13, whiteSpace: "pre-wrap" }}>
+              {error}
+            </p>
+          ) : null}
           {finished ? (
             <div data-testid="lab-c6-zigbee-bench-finished">
               <p role="status" style={compactP}>

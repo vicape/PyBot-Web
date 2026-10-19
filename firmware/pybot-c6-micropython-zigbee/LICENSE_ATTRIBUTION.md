@@ -32,22 +32,24 @@ SOFTWARE.
 PyBot-authored wrappers under `onboard/` and build scripts in this directory are
 part of the PyBot repository license unless otherwise noted.
 
-## Zigbee SDK precompiled / proprietary terms (NOT redistributed here)
+## Zigbee SDK precompiled terms (resolved LICENSE inspected)
 
-Upstream uZigbee `docs/LICENSE_NOTES.md` states:
+Exact LICENSE files from the resolved Maxwell private-bench package are stored under
+`licenses/` and summarized in `THIRD_PARTY_NOTICES.md`.
 
-- `esp-zigbee-lib` — obtained at **build time** from Espressif Component Registry
-- `esp-zboss-lib` — **proprietary** Espressif/DSR distribution terms
+- `esp-zigbee-lib` ~1.6.0 — Apache-2.0 (see `licenses/espressif__esp-zigbee-lib.LICENSE.txt`)
+- `esp-zboss-lib` ~1.6.0 — Espressif/DSR binary license that **permits** redistribution
+  in binary form provided copyright notice, conditions, and disclaimer are retained;
+  binaries must not be reverse engineered / decompiled / modified / disassembled
+  (see `licenses/espressif__esp-zboss-lib.LICENSE.txt`)
 
 **PyBot policy for this path:**
 
-- Do **not** vendor or commit Zigbee SDK binaries, `.a` libs, or merged firmware
-  images into the repository until redistribution terms are verified for the
-  intended distribution model.
-- Build scripts clone toolchains into ignored `third_party/` / write artifacts
-  under ignored `build-artifact/*.bin`.
-- Publishing a READY firmware artifact to end users requires a separate license
-  compliance check for bundled ZBOSS components.
+- Do not redistribute `.bin` firmware images or Zigbee `.a` libs into the public git
+  tree or an open/unauthenticated CDN; keep delivery authenticated and notice-gated.
+- Authenticated private physical-bench delivery via `/api/c6-zigbee-bench-firmware` is
+  allowed when notices are presented and access is operator-gated (not open public CDN).
+- Broader/public redistribution remains out of scope until an explicit product decision.
 
 ## Other toolchain licenses (fetched at build time, not vendored)
 

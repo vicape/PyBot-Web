@@ -1,13 +1,14 @@
 /**
  * TARGET: vicape/PyBot-Web (branch feature/esp32-universal-lab only).
  * Exact, private firmware-build acceptance for the first physical ESP32-C6 bench.
- * Guided "Preparar e instalar" flow: detect C6+4MB, verify pinned package, full 4 MB
- * backup to a user-saved file, explicit consent, then manual flash. Binaries stay
- * outside Git and production. Source alone never makes a firmware READY.
+ * Guided "Preparar e instalar" flow: detect C6+4MB, obtain+verify pinned package
+ * via authenticated server distributor, full 4 MB backup to a user-saved file,
+ * explicit consent, then manual flash. Binaries stay outside Git and production.
  * Full-image backup preserves on-device VFS paths /main.py, /boot.py, /pybot/assets.
  */
 import { isEsp32C6Chip } from "../firmware/esp32GenericC6.js";
 import { WAVESHARE_ESP32_C6_LCD_147_ID } from "../profiles/waveshareEsp32C6Lcd147.js";
+import { getSupabase } from "../../supabaseClient.js";
 import {
   sha256Hex,
   connectC6Bootloader,
@@ -29,10 +30,20 @@ export const C6_ZIGBEE_BENCH_PRESERVED_VFS_PATHS = Object.freeze([
 ]);
 
 export const C6_ZIGBEE_BENCH_UI_LABEL = "Preparar e instalar";
+export const C6_ZIGBEE_BENCH_FETCH_ACTION = "Obtener firmware y verificar";
+export const C6_ZIGBEE_BENCH_FIRMWARE_API = "/api/c6-zigbee-bench-firmware";
+
+/**
+ * Exact one-time operator setup when Preview secrets / durable private storage
+ * are missing. Not an end-user step; surfaced only as operator_setup_required.
+ */
+export const C6_ZIGBEE_BENCH_OPERATOR_SETUP =
+  "OPERATOR_SETUP (Vercel Preview feature/esp32-universal-lab only): upload Maxwell artifact 12161052985 zigbee-firmware-private-bench/*.bin to private object storage that outlives GitHub Actions retention; set SUPABASE_URL, SUPABASE_SERVICE_KEY, PYBOT_C6_FIRMWARE_OPERATOR_EMAILS, PYBOT_C6_FIRMWARE_SIGNING_SECRET, PYBOT_C6_FIRMWARE_STORAGE_BASE_URL, and PYBOT_C6_FIRMWARE_STORAGE_AUTH_HEADER (Bearer/token for that store). Optional interim: PYBOT_C6_FIRMWARE_GITHUB_TOKEN + PYBOT_C6_FIRMWARE_GHA_ARTIFACT_ID=12161052985 + PYBOT_C6_FIRMWARE_GHA_REPO=vicape/cursor-control (still migrate to durable storage before artifact expiry).";
 
 export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
   version: "0.1.0",
   board: WAVESHARE_ESP32_C6_LCD_147_ID,
+  chip: "ESP32-C6",
   hardwareValidation: "UNVERIFIED",
   sourceCommit: "834a2ecd0ee648b3570d8c913f358d262b2a92ae",
   /** Provenance pointer only — never used as a browser fetch URL. */
@@ -41,6 +52,8 @@ export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
   pinnedArtifactId: "12161052985",
   autoFlash: false,
   publicReady: false,
+  noticesPath: "firmware/pybot-c6-micropython-zigbee/THIRD_PARTY_NOTICES.md",
+  durableManifestPath: "firmware/pybot-c6-micropython-zigbee/private-bench-manifest.json",
   components: Object.freeze([
     Object.freeze({
       role: "bootloader",
@@ -67,25 +80,21 @@ export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
 });
 
 /**
- * Automatic browser fetch of the private #555 artifact is not supported securely
- * with existing infrastructure. Exact product token for operators/Maxwell.
+ * Automatic delivery via authenticated server distributor + short-lived tickets.
+ * License: esp-zboss-lib permits binary redistribution with notice retention;
+ * delivery is restricted to authenticated private physical bench.
  */
 export const C6_ZIGBEE_BENCH_DISTRIBUTION = Object.freeze({
-  status: "DECISION REQUIRED",
-  automaticFetchSupported: false,
-  authorizedEndpointSupported: false,
+  status: "AUTOMATIC_SERVER",
+  automaticFetchSupported: true,
+  authorizedEndpointSupported: true,
+  endpointPath: C6_ZIGBEE_BENCH_FIRMWARE_API,
+  fetchActionLabel: C6_ZIGBEE_BENCH_FETCH_ACTION,
   pinnedRunId: C6_ZIGBEE_BENCH_PACKAGE.pinnedRunId,
   pinnedArtifactId: C6_ZIGBEE_BENCH_PACKAGE.pinnedArtifactId,
-  blockers: Object.freeze([
-    "No access-controlled authorized firmware API exists in this repo (api/ has no artifact proxy).",
-    "GitHub Actions artifacts are private, authenticated, and expiring; frontend must never embed a GitHub PAT, Actions credentials, service-role secrets, or a transient artifact URL.",
-    "esp-zboss-lib proprietary terms — do not publish/redistribute the Zigbee-containing binaries until redistribution is cleared (see firmware/pybot-c6-micropython-zigbee/LICENSE_ATTRIBUTION.md and package THIRD_PARTY_NOTICES).",
-  ]),
-  alternatives: Object.freeze([
-    "A: Add a private authorized backend endpoint (operator auth) that streams pinned artifact 12161052985 from run 39193349317 without exposing credentials to the browser, after zboss redistribution clearance.",
-    "B: Host the verified package in an access-controlled private object store; issue short-lived signed URLs from that backend (same license gate).",
-    "C (interim truthful path): Operator downloads the private artifact via authenticated GitHub access and loads the three verified .bin files into this guided flow — no public publish, no simulated automatic fetch.",
-  ]),
+  operatorSetup: C6_ZIGBEE_BENCH_OPERATOR_SETUP,
+  licensePolicy:
+    "Authenticated private bench only. THIRD_PARTY_NOTICES include esp-zboss-lib conditions (retain copyright/disclaimer; no reverse-engineering).",
 });
 
 /** Post-flash operator checklist. Zigbee pairing/dual-channel stay UNVERIFIED. */
@@ -105,24 +114,32 @@ export const C6_ZIGBEE_BENCH_POST_FLASH_CHECKS = Object.freeze([
 ]);
 
 /**
- * Honest resolver for package acquisition. Never simulates a successful automatic fetch.
- * @returns {{ status: string, automaticFetchSupported: boolean, authorizedEndpointSupported: boolean, blockers: readonly string[], alternatives: readonly string[] }}
+ * Resolver for package acquisition UI. Automatic authenticated path is the product
+ * flow; ordinary users see obtain/verify status, never an operator-decision popup.
  */
 export function resolveC6ZigbeeBenchPackageFetch() {
   return {
     status: C6_ZIGBEE_BENCH_DISTRIBUTION.status,
-    automaticFetchSupported: false,
-    authorizedEndpointSupported: false,
-    blockers: C6_ZIGBEE_BENCH_DISTRIBUTION.blockers,
-    alternatives: C6_ZIGBEE_BENCH_DISTRIBUTION.alternatives,
+    automaticFetchSupported: true,
+    authorizedEndpointSupported: true,
+    endpointPath: C6_ZIGBEE_BENCH_DISTRIBUTION.endpointPath,
+    fetchActionLabel: C6_ZIGBEE_BENCH_FETCH_ACTION,
+    operatorSetup: C6_ZIGBEE_BENCH_OPERATOR_SETUP,
     pinnedRunId: C6_ZIGBEE_BENCH_DISTRIBUTION.pinnedRunId,
     pinnedArtifactId: C6_ZIGBEE_BENCH_DISTRIBUTION.pinnedArtifactId,
+    licensePolicy: C6_ZIGBEE_BENCH_DISTRIBUTION.licensePolicy,
   };
 }
 
+async function defaultAccessToken() {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  return data?.session?.access_token ?? null;
+}
+
 /**
- * Verify a trusted manifest's pinned package, byte lengths and ALL SHA-256
- * hashes before opening any serial device. Never trust arbitrary layouts.
+ * Verify pinned package bytes (from server tickets or File-like objects).
  * @param {Iterable<{name:string,arrayBuffer:Function,size?:number}>} files
  * @param {{digest?:Function}} options
  */
@@ -154,7 +171,6 @@ export async function validateC6ZigbeeBenchFiles(files, options = {}) {
   if (selected.some((f) => !names.has(f?.name))) {
     return { ok: false, reason: "BENCH_EXTRA_OR_UNKNOWN_FILE" };
   }
-  // Reject app-only / wrong-offset packaging: all three pinned offsets required.
   if (
     segments[0]?.address !== 0x0 ||
     segments[1]?.address !== 0x8000 ||
@@ -168,6 +184,114 @@ export async function validateC6ZigbeeBenchFiles(files, options = {}) {
     verifiedVersion: C6_ZIGBEE_BENCH_PACKAGE.version,
     hardwareValidation: "UNVERIFIED",
     autoFlash: false,
+  };
+}
+
+/**
+ * Authenticated server fetch of the three verified segments + client SHA check.
+ * End users never download GitHub ZIPs or pick .bin files.
+ * @param {{getAccessToken?:Function, fetchImpl?:Function, onProgress?:Function, signal?:AbortSignal}} options
+ */
+export async function fetchAndValidateC6ZigbeeBenchPackage(options = {}) {
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  if (typeof fetchImpl !== "function") {
+    return { ok: false, reason: "BENCH_FETCH_UNAVAILABLE" };
+  }
+  const token =
+    typeof options.getAccessToken === "function"
+      ? await options.getAccessToken()
+      : await defaultAccessToken();
+  if (!token) {
+    return { ok: false, reason: "BENCH_AUTH_DENIED", detail: "missing_bearer_token" };
+  }
+  options.onProgress?.({ phase: "mint", pct: 5 });
+  let mintRes;
+  try {
+    mintRes = await fetchImpl(C6_ZIGBEE_BENCH_FIRMWARE_API, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      signal: options.signal,
+    });
+  } catch (e) {
+    if (e?.name === "AbortError") return { ok: false, reason: "BENCH_FETCH_INTERRUPTED" };
+    return { ok: false, reason: "BENCH_FETCH_NETWORK", detail: String(e?.message || e) };
+  }
+  let mintJson = null;
+  try {
+    mintJson = await mintRes.json();
+  } catch {
+    mintJson = null;
+  }
+  if (mintRes.status === 401 || mintRes.status === 403) {
+    return {
+      ok: false,
+      reason: "BENCH_AUTH_DENIED",
+      detail: mintJson?.reason || "unauthorized",
+    };
+  }
+  if (mintRes.status === 503 || mintJson?.error === "operator_setup_required") {
+    return {
+      ok: false,
+      reason: "BENCH_OPERATOR_SETUP_REQUIRED",
+      detail: mintJson?.reason || C6_ZIGBEE_BENCH_OPERATOR_SETUP,
+    };
+  }
+  if (!mintRes.ok || !mintJson?.ok || !Array.isArray(mintJson.tickets)) {
+    return {
+      ok: false,
+      reason: mintJson?.error === "hash_mismatch" ? "BENCH_SERVER_HASH_MISMATCH" : "BENCH_FETCH_FAILED",
+      detail: mintJson?.reason || `http_${mintRes.status}`,
+    };
+  }
+  const files = [];
+  const total = mintJson.tickets.length;
+  for (let i = 0; i < total; i++) {
+    const ticket = mintJson.tickets[i];
+    options.onProgress?.({
+      phase: "download",
+      role: ticket.role,
+      pct: 10 + Math.round(((i + 0.5) / total) * 70),
+    });
+    let segRes;
+    try {
+      segRes = await fetchImpl(ticket.path || `${C6_ZIGBEE_BENCH_FIRMWARE_API}?ticket=${encodeURIComponent(ticket.ticket)}`, {
+        method: "GET",
+        signal: options.signal,
+      });
+    } catch (e) {
+      if (e?.name === "AbortError") return { ok: false, reason: "BENCH_FETCH_INTERRUPTED" };
+      return { ok: false, reason: "BENCH_FETCH_NETWORK", detail: String(e?.message || e) };
+    }
+    if (!segRes.ok) {
+      let errBody = null;
+      try {
+        errBody = await segRes.json();
+      } catch {
+        errBody = null;
+      }
+      if (errBody?.error === "hash_mismatch") {
+        return { ok: false, reason: "BENCH_SERVER_HASH_MISMATCH", detail: errBody.reason };
+      }
+      return { ok: false, reason: "BENCH_SEGMENT_FETCH_FAILED", detail: ticket.role };
+    }
+    const buf = await segRes.arrayBuffer();
+    files.push({
+      name: ticket.name,
+      size: buf.byteLength,
+      arrayBuffer: async () => buf,
+    });
+  }
+  options.onProgress?.({ phase: "verify", pct: 90 });
+  const validated = await validateC6ZigbeeBenchFiles(files, { digest: options.digest });
+  if (!validated.ok) return validated;
+  options.onProgress?.({ phase: "done", pct: 100 });
+  return {
+    ...validated,
+    source: "authenticated-server",
+    packageVersion: mintJson.packageVersion || C6_ZIGBEE_BENCH_PACKAGE.version,
   };
 }
 
@@ -259,8 +383,24 @@ export async function backupC6ZigbeeBenchFlash(options = {}) {
 /** Human-readable gate codes for the compact installer UI (never invent success). */
 export const C6_ZIGBEE_BENCH_GATE_MESSAGES = Object.freeze({
   BENCH_PACKAGE_NOT_VERIFIED: {
-    es: "Falta verificar los tres .bin del paquete privado.",
-    en: "Verify the three private-package .bin files first.",
+    es: "Obtené y verificá el firmware automáticamente primero.",
+    en: "Obtain and verify the firmware automatically first.",
+  },
+  BENCH_AUTH_DENIED: {
+    es: "Sesión requerida: iniciá sesión con una cuenta de operador autorizada.",
+    en: "Sign in with an authorized operator account.",
+  },
+  BENCH_OPERATOR_SETUP_REQUIRED: {
+    es: "Falta configuración one-time del operador (almacenamiento privado + secretos Preview).",
+    en: "One-time operator setup missing (private storage + Preview secrets).",
+  },
+  BENCH_FETCH_INTERRUPTED: {
+    es: "Descarga interrumpida. Reintentá Obtener firmware y verificar.",
+    en: "Download interrupted. Retry Obtener firmware y verificar.",
+  },
+  BENCH_SERVER_HASH_MISMATCH: {
+    es: "El paquete del servidor no coincide con el manifesto anclado (SHA).",
+    en: "Server package does not match the pinned manifest (SHA).",
   },
   BENCH_WRONG_BOARD_PROFILE: {
     es: "Seleccioná Waveshare ESP32-C6-LCD-1.47 en Placa.",

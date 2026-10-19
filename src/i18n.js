@@ -81,7 +81,7 @@ const STRINGS = {
     labMpyZigbeeSection:
       "MicroPython + Zigbee nativo (misma placa)",
     labMpyZigbeeBenchHint:
-      "Instalador guiado del firmware custom con _uzigbee. Requiere paquete privado #555, respaldo 4 MB y confirmación. Sin auto-flash.",
+      "Instalador guiado del firmware custom con _uzigbee. Obtiene el paquete privado autenticado (#555), respaldo 4 MB y confirmación. Sin auto-flash.",
     labMpyZigbeeBenchDisconnectHint:
       "Desconectá la placa del IDE antes de preparar e instalar (el puerto USB debe quedar libre).",
     labMpyZigbeeBenchNoSerialHint:
@@ -743,7 +743,7 @@ Creado por VIC.`,
     labMpyZigbeeSection:
       "MicroPython + native Zigbee (same board)",
     labMpyZigbeeBenchHint:
-      "Guided installer for the custom _uzigbee firmware. Needs private #555 package, 4 MB backup, and explicit consent. No auto-flash.",
+      "Guided installer for the custom _uzigbee firmware. Fetches the private authenticated #555 package, 4 MB backup, and explicit consent. No auto-flash.",
     labMpyZigbeeBenchDisconnectHint:
       "Disconnect the board from the IDE before prepare/install (USB port must be free).",
     labMpyZigbeeBenchNoSerialHint:
