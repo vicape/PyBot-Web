@@ -311,6 +311,7 @@ test("APS: 0.1.1-sc10-cmd guest bins preserved as rollback baseline", () => {
   const pub = join(root, "public/firmware/c6-zigbee");
   assert.ok(existsSync(join(pub, "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin")));
   assert.ok(existsSync(join(pub, "rollback-0.1.0")));
+  assert.ok(existsSync(join(pub, "rollback-0.1.1")));
   const sums = readFileSync(join(pub, "SHA256SUMS.txt"), "utf8");
   assert.match(sums, /0\.1\.1-sc10-cmd-app\.bin/);
   const app = readFileSync(join(pub, "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin"));
@@ -318,4 +319,25 @@ test("APS: 0.1.1-sc10-cmd guest bins preserved as rollback baseline", () => {
     createHash("sha256").update(app).digest("hex"),
     "e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa",
   );
+});
+
+test("APS: 0.1.2-sc10-aps guest bins published with matching SHA256SUMS", () => {
+  const pub = join(root, "public/firmware/c6-zigbee");
+  const appName = "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-app.bin";
+  assert.ok(existsSync(join(pub, appName)));
+  assert.ok(existsSync(join(pub, "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-bootloader.bin")));
+  assert.ok(existsSync(join(pub, "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-partition-table.bin")));
+  const sums = readFileSync(join(pub, "SHA256SUMS.txt"), "utf8");
+  assert.match(sums, /0\.1\.2-sc10-aps-app\.bin/);
+  assert.match(sums, /f18811848746fcd5ec3c4c44c714033f6dd1ae67cd5c3951376d27571f073ee2/);
+  const app = readFileSync(join(pub, appName));
+  assert.equal(app.byteLength, 3236944);
+  assert.equal(
+    createHash("sha256").update(app).digest("hex"),
+    "f18811848746fcd5ec3c4c44c714033f6dd1ae67cd5c3951376d27571f073ee2",
+  );
+  // Native APS capture compiled into image (QSTR), absent from prior 0.1.1
+  assert.ok(app.includes(Buffer.from("on_aps")));
+  const old = readFileSync(join(pub, "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin"));
+  assert.equal(old.includes(Buffer.from("on_aps")), false);
 });

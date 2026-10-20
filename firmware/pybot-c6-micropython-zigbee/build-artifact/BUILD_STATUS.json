@@ -2,41 +2,41 @@
   "status": "READY",
   "reason": null,
   "packaging": "multi-offset",
-  "filename": "pybot-c6-micropython-zigbee-0.1.0-app.bin",
-  "sha256": "e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa",
-  "size": 3229264,
+  "filename": "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-app.bin",
+  "sha256": "f18811848746fcd5ec3c4c44c714033f6dd1ae67cd5c3951376d27571f073ee2",
+  "size": 3236944,
   "flashOffset": 65536,
-  "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.0-app.bin",
+  "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.2-sc10-aps-app.bin",
   "components": [
     {
       "role": "bootloader",
-      "filename": "pybot-c6-micropython-zigbee-0.1.0-bootloader.bin",
-      "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.0-bootloader.bin",
+      "filename": "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-bootloader.bin",
+      "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.2-sc10-aps-bootloader.bin",
       "flashOffset": 0,
-      "sha256": "42d78bb1fcd180d12e64c4bd544ae260b6ab4bd2a4d385849395c6c8ab6038fa",
+      "sha256": "ea5213729ebcb21541ec34aef195961ecd049f85183390b406d3cb42a4d5a837",
       "size": 18384
     },
     {
       "role": "partition-table",
-      "filename": "pybot-c6-micropython-zigbee-0.1.0-partition-table.bin",
-      "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.0-partition-table.bin",
+      "filename": "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-partition-table.bin",
+      "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.2-sc10-aps-partition-table.bin",
       "flashOffset": 32768,
       "sha256": "b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f",
       "size": 3072
     },
     {
       "role": "app",
-      "filename": "pybot-c6-micropython-zigbee-0.1.0-app.bin",
-      "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.0-app.bin",
+      "filename": "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-app.bin",
+      "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.2-sc10-aps-app.bin",
       "flashOffset": 65536,
-      "sha256": "e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa",
-      "size": 3229264
+      "sha256": "f18811848746fcd5ec3c4c44c714033f6dd1ae67cd5c3951376d27571f073ee2",
+      "size": 3236944
     }
   ],
-  "builtAt": "2026-10-20T01:12:13Z",
-  "appOccupancyBytes": 3229264,
+  "builtAt": "2026-10-20T02:28:01Z",
+  "appOccupancyBytes": 3236944,
   "factoryPartitionBytes": 3735552,
-  "appOccupancyPercentOfFactory": 86.45,
+  "appOccupancyPercentOfFactory": 86.65,
   "printedVersions": {
     "espIdf": "ESP-IDF v5.3.2",
     "espIdfTagRequired": "v5.3.2",

@@ -74,21 +74,21 @@ export const C6_ZIGBEE_BENCH_NOTICES = Object.freeze({
 });
 
 export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
-  /** Guest installer package id — SC10 native command-capture (_uzigbee.on_command). */
-  version: "0.1.1-sc10-cmd",
-  /** Unambiguous UI/manifest marker for the command-capture build. */
-  buildMarker: "SC10-CMD-CAPTURE",
-  featureLabel: "SC10 command-capture (_uzigbee.on_command)",
+  /** Guest installer package id — SC10 native APS-capture (_uzigbee.on_aps). */
+  version: "0.1.2-sc10-aps",
+  /** Unambiguous UI/manifest marker for the APS-capture build. */
+  buildMarker: "SC10-APS-CAPTURE",
+  featureLabel: "SC10 APS-capture (_uzigbee.on_aps)",
   board: WAVESHARE_ESP32_C6_LCD_147_ID,
   chip: "ESP32-C6",
   hardwareValidation: "UNVERIFIED",
-  sourceCommit: "4d9e1f2f1830e409cd5d50bd18ec275f80079b54",
-  /** Provenance: one bounded cloud rebuild from pinned build.sh + SC10 overlay (bytes gitignored in #569). */
+  sourceCommit: "12cc9dc828e726b6467fe16c2e1e594ea59248b1",
+  /** Provenance: one bounded cloud rebuild from pinned build.sh + SC10 APS overlay. */
   sourceArtifact: "firmware/pybot-c6-micropython-zigbee/build-artifact/",
-  pinnedRunId: "sc10-cmd-rebuild-20261020",
-  pinnedArtifactId: "build-artifact-0.1.1-sc10-cmd",
-  builtAt: "2026-10-20T01:12:13Z",
-  rollbackPath: "public/firmware/c6-zigbee/rollback-0.1.0/",
+  pinnedRunId: "sc10-aps-rebuild-20261020",
+  pinnedArtifactId: "build-artifact-0.1.2-sc10-aps",
+  builtAt: "2026-10-20T02:28:01Z",
+  rollbackPath: "public/firmware/c6-zigbee/rollback-0.1.1/",
   autoFlash: false,
   publicReady: false,
   noticesPath: "public/firmware/c6-zigbee/THIRD_PARTY_NOTICES.md",
@@ -97,27 +97,27 @@ export const C6_ZIGBEE_BENCH_PACKAGE = Object.freeze({
   components: Object.freeze([
     Object.freeze({
       role: "bootloader",
-      name: "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-bootloader.bin",
-      url: `${C6_ZIGBEE_BENCH_STATIC_BASE}/pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-bootloader.bin`,
+      name: "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-bootloader.bin",
+      url: `${C6_ZIGBEE_BENCH_STATIC_BASE}/pybot-c6-micropython-zigbee-0.1.2-sc10-aps-bootloader.bin`,
       address: 0x0,
       size: 18384,
-      sha256: "42d78bb1fcd180d12e64c4bd544ae260b6ab4bd2a4d385849395c6c8ab6038fa",
+      sha256: "ea5213729ebcb21541ec34aef195961ecd049f85183390b406d3cb42a4d5a837",
     }),
     Object.freeze({
       role: "partition-table",
-      name: "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-partition-table.bin",
-      url: `${C6_ZIGBEE_BENCH_STATIC_BASE}/pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-partition-table.bin`,
+      name: "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-partition-table.bin",
+      url: `${C6_ZIGBEE_BENCH_STATIC_BASE}/pybot-c6-micropython-zigbee-0.1.2-sc10-aps-partition-table.bin`,
       address: 0x8000,
       size: 3072,
       sha256: "b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f",
     }),
     Object.freeze({
       role: "app",
-      name: "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin",
-      url: `${C6_ZIGBEE_BENCH_STATIC_BASE}/pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin`,
+      name: "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-app.bin",
+      url: `${C6_ZIGBEE_BENCH_STATIC_BASE}/pybot-c6-micropython-zigbee-0.1.2-sc10-aps-app.bin`,
       address: 0x10000,
-      size: 3229264,
-      sha256: "e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa",
+      size: 3236944,
+      sha256: "f18811848746fcd5ec3c4c44c714033f6dd1ae67cd5c3951376d27571f073ee2",
     }),
   ]),
 });

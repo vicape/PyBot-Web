@@ -1,21 +1,21 @@
 {
   "packageDir": "firmware/pybot-c6-micropython-zigbee/build-artifact",
-  "sourceHead": "4d9e1f2f1830e409cd5d50bd18ec275f80079b54",
-  "builtAt": "2026-10-20T01:12:13Z",
-  "version": "0.1.1-sc10-cmd",
-  "buildMarker": "SC10-CMD-CAPTURE",
+  "sourceHead": "12cc9dc828e726b6467fe16c2e1e594ea59248b1",
+  "builtAt": "2026-10-20T02:28:01Z",
+  "version": "0.1.2-sc10-aps",
+  "buildMarker": "SC10-APS-CAPTURE",
   "components": [
     {
       "role": "bootloader",
-      "filename": "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-bootloader.bin",
+      "filename": "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-bootloader.bin",
       "flashOffset": 0,
       "flashOffsetHex": "0x0",
       "size": 18384,
-      "sha256": "42d78bb1fcd180d12e64c4bd544ae260b6ab4bd2a4d385849395c6c8ab6038fa"
+      "sha256": "ea5213729ebcb21541ec34aef195961ecd049f85183390b406d3cb42a4d5a837"
     },
     {
       "role": "partition-table",
-      "filename": "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-partition-table.bin",
+      "filename": "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-partition-table.bin",
       "flashOffset": 32768,
       "flashOffsetHex": "0x8000",
       "size": 3072,
@@ -23,11 +23,11 @@
     },
     {
       "role": "app",
-      "filename": "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin",
+      "filename": "pybot-c6-micropython-zigbee-0.1.2-sc10-aps-app.bin",
       "flashOffset": 65536,
       "flashOffsetHex": "0x10000",
-      "size": 3229264,
-      "sha256": "e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa"
+      "size": 3236944,
+      "sha256": "f18811848746fcd5ec3c4c44c714033f6dd1ae67cd5c3951376d27571f073ee2"
     }
   ],
   "licenseNoticesCollected": 3,
@@ -36,6 +36,6 @@
     "partition-table": "0x8000",
     "app": "0x10000"
   },
-  "rollbackPath": "public/firmware/c6-zigbee/rollback-0.1.0/",
-  "note": "#569 runner SHAs (ce55a32e/0dc25016) were not retained as gitignored bins; this package is the verified one-bounded rebuild with on_command overlay (sizes match; app/bootloader SHAs differ due to non-bit-identical ESP rebuild paths)."
+  "rollbackPath": "public/firmware/c6-zigbee/rollback-0.1.1/",
+  "note": "Native pinned rebuild with apply_uzb_command_capture + apply_uzb_aps_capture overlays. Hardware flash UNVERIFIED. Prior 0.1.1-sc10-cmd preserved at public/firmware/c6-zigbee/ and rollback-0.1.1/."
 }
