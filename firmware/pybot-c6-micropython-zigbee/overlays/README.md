@@ -16,5 +16,11 @@ Applied by `build.sh` onto the ignored `third_party/uzigbee/...` checkout only,
    - `ESP_ZB_CORE_CMD_IAS_ZONE_ZONE_STATUS_CHANGE_NOT_ID` (0x1031)
    Bounded native queue (no MicroPython from Zigbee task); Python `_uzigbee.on_command`
    + `is_started`. Does **not** invent OnOff or Tuya DP mappings.
+5. **`apply_uzb_aps_capture.py`** — register SDK **1.6.8** APS indication callback
+   `esp_zb_aps_data_indication_handler_register` (indication **by value**) once after
+   `esp_zb_device_register` / before `esp_zb_start`. Captures HA profile `0x0104` +
+   cluster `0xEF00` ASDU into a bounded native queue; returns `false` so the stack
+   continues. Exposes `_uzigbee.on_aps`. Does **not** lift `add_custom_cluster` 0xFC00
+   gate (0xEF00 remains invalid there — APS path is the intended capture).
 
 These keep the ZBOSS/Zigbee v1.6 PoC pin (IDF 5.3.2) buildable. Not a claim of full MPY 1.27 feature parity on 5.3.2.

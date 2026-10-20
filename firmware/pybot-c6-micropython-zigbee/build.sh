@@ -113,6 +113,12 @@ else
     write_blocked "uzb command-capture overlay failed"
     exit 1
   }
+  # APSDE indication capture for HA 0xEF00 (SDK 1.6.8 by-value callback).
+  # Requires command-capture overlay first. Skip together when CMD overlay skipped.
+  python3 "$ROOT/overlays/apply_uzb_aps_capture.py" "$UZ" || {
+    write_blocked "uzb APS-capture overlay failed"
+    exit 1
+  }
 fi
 
 # MicroPython ports/esp32 Makefile does NOT forward make SDKCONFIG_DEFAULTS into

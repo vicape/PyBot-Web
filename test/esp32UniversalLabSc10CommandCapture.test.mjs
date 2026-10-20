@@ -51,14 +51,14 @@ test("SC10: LCD capture script never maps join/device_update to buttons", () => 
   const script = readFileSync(join(fwRoot, "onboard/sc10_lcd_capture.py"), "utf8");
   assert.match(script, /PERMIT_JOIN_ON_BOOT = False/);
   assert.match(script, /FORM_NETWORK_ON_BOOT = False/);
-  assert.match(script, /UNMAPPED/);
-  assert.match(script, /BUTTON_MAP/);
   assert.match(script, /signal-only \(not a button\)/);
-  assert.match(script, /0xEF00/);
-  assert.doesNotMatch(script, /kind == ["']join["'].*BTN/);
+  assert.match(script, /0xEF00|SC10_CLUSTER_EF00/);
+  assert.doesNotMatch(script, /kind == ["']join["'].*KEY/);
   assert.match(script, /OSError 259/);
-  // Two button labels only after mapped command events
-  assert.match(script, /BTN1.*BTN2|btn_seen/);
+  // APS path — never add_custom_cluster(0xEF00); KEY labels from validated button events
+  assert.match(script, /enable_aps_capture/);
+  assert.doesNotMatch(script, /\.add_custom_cluster\s*\(/);
+  assert.match(script, /KEY1|btn_seen/);
 });
 
 test("SC10: known-working guest installer bins preserved as rollback; new cmd-capture published", () => {

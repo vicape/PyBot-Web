@@ -15,7 +15,12 @@
 #   on_command (PyBot overlay on uZigbee): (src_short|None, src_ep, dst_ep,
 #     cluster, command_id, manuf_code, payload_bytes, callback_id, status)
 #     Verified SDK 1.6 ids: custom 0x1040/0x1041, privilege 0x1050/0x1051, IAS 0x1031.
+#   on_aps (PyBot APS overlay, SDK 1.6.8 by-value indication):
+#     (src_short, src_ep, dst_ep, profile, cluster, status, asdu, asdu_len,
+#      asdu_len_orig, truncated)
 # There is NO remote ZCL Read Attributes command in _uzigbee.
+# Cluster 0xEF00 is NOT a valid add_custom_cluster id (upstream requires >=0xFC00);
+# capture 0xEF00 via on_aps, never via add_custom_cluster(0xEF00).
 
 """pybot.zigbee — coordinator helpers over native ``_uzigbee``."""
 
@@ -52,12 +57,29 @@ CB_CMD_PRIVILEGE_REQ = 0x1050
 CB_CMD_PRIVILEGE_RESP = 0x1051
 CB_CMD_IAS_ZONE_STATUS_CHANGE = 0x1031
 
+# HA / Tuya (candidate until Basic manufacturer/model confirmed on bench)
+PROFILE_HA = 0x0104
+CLUSTER_TUYA_EF00 = 0xEF00
+# Candidate fingerprint for SC10 2-key scene remote (descriptor match only until Basic read)
+TS0021_MANUFACTURER = "_TZ3210_3ulg9kpo"
+TS0021_MODEL = "TS0021"
+# ZCL frame-control bits
+ZCL_FC_MANUFACTURER = 0x04
+# Tuya commandActiveStatusReport (herdsman / Z2M)
+TUYA_CMD_ACTIVE_STATUS_REPORT = 0x0A
+# DP enum gestures: 0 single, 1 double, 2 hold (ZHA/Z2M candidate)
+GESTURE_SINGLE = 0
+GESTURE_DOUBLE = 1
+GESTURE_HOLD = 2
+GESTURE_NAMES = {0: "single", 1: "double", 2: "hold"}
+
 # ESP_ERR_INVALID_STATE — repeated create/register/start after stack is live
 ESP_ERR_INVALID_STATE = 259
 
 PERMIT_JOIN_MAX_S = 254  # uint8 bound in native permit_join
 PERMIT_JOIN_DEFAULT_S = 60
 EVENT_QUEUE_MAX = 32
+APS_ASDU_MAX = 64  # must match UZB_APS_ASDU_MAX in APS overlay
 
 _MISSING_MSG = (
     "NATIVE_MODULE_MISSING: _uzigbee is not present on this firmware. "
@@ -162,12 +184,146 @@ _cb_leave = None
 _cb_report = None
 _cb_device_update = None
 _cb_command = None
+_cb_aps = None
+_cb_button = None
 _signal_hooked = False
 _command_hooked = False
+_aps_hooked = False
 _coordinator_started = False
+# Device Basic identity when available; None => UNVERIFIED TS0021 candidate
+_device_fingerprint = {}  # short_addr -> {manufacturer, model, verified}
 
 # Attr cache keyed by (short_addr_or_None, endpoint, cluster, attr)
 _attr_cache = {}
+
+
+def _hex_bytes(data):
+    if not data:
+        return ""
+    return "".join("%02x" % (b & 0xFF) for b in data)
+
+
+def parse_zcl_header(asdu):
+    """
+    Parse ZCL frame control / optional manuf / seq / command from ASDU bytes.
+    Returns dict or None if too short. Does not invent missing fields.
+    """
+    if asdu is None:
+        return None
+    raw = bytes(asdu)
+    if len(raw) < 3:
+        return None
+    fc = raw[0]
+    idx = 1
+    manuf = None
+    if fc & ZCL_FC_MANUFACTURER:
+        if len(raw) < 5:
+            return None
+        manuf = raw[1] | (raw[2] << 8)
+        idx = 3
+    if len(raw) < idx + 2:
+        return None
+    seq = raw[idx]
+    cmd = raw[idx + 1]
+    payload = raw[idx + 2 :]
+    return {
+        "frame_control": fc,
+        "manuf_code": manuf,
+        "seq": seq,
+        "command": cmd,
+        "payload": payload,
+        "raw_hex": _hex_bytes(raw),
+    }
+
+
+def parse_tuya_dp_payload(payload):
+    """
+    Parse Tuya DP list after ZCL command header.
+    Layout after ActiveStatusReport: seq_be(2) then repeats of
+    dp(1) + datatype(1) + len_be(2) + data(len).
+    Returns list of {dp, datatype, data, value_int?} with length checks.
+    """
+    if payload is None:
+        return []
+    raw = bytes(payload)
+    out = []
+    if len(raw) < 2:
+        return out
+    # Leading 2-byte sequence (big-endian) is common for active status report
+    pos = 2
+    while pos + 4 <= len(raw):
+        dp = raw[pos]
+        dtype = raw[pos + 1]
+        dlen = (raw[pos + 2] << 8) | raw[pos + 3]
+        pos += 4
+        if dlen < 0 or pos + dlen > len(raw):
+            break
+        data = raw[pos : pos + dlen]
+        pos += dlen
+        item = {"dp": dp, "datatype": dtype, "data": data, "data_hex": _hex_bytes(data)}
+        if dlen == 1:
+            item["value_int"] = data[0]
+        elif dlen == 2:
+            item["value_int"] = (data[0] << 8) | data[1]
+        elif dlen == 4:
+            item["value_int"] = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3]
+        out.append(item)
+    return out
+
+
+def decode_ts0021_button_from_aps(aps_payload):
+    """
+    Candidate TS0021 (_TZ3210_3ulg9kpo) DP1/DP2 → KEY1/KEY2 + gesture.
+    Emits only when DP in {1,2} and gesture in {0,1,2}. Never from join/report.
+    Returns None or button dict; always preserves raw_hex on aps_payload path.
+    """
+    if not aps_payload:
+        return None
+    cluster = int(aps_payload.get("cluster", -1))
+    if cluster != CLUSTER_TUYA_EF00:
+        return None
+    if aps_payload.get("truncated"):
+        # Do not invent full packet / DP on truncation
+        return None
+    asdu = aps_payload.get("asdu") or b""
+    zcl = parse_zcl_header(asdu)
+    if zcl is None:
+        return None
+    dps = parse_tuya_dp_payload(zcl.get("payload") or b"")
+    short_addr = aps_payload.get("short_addr")
+    fp = _device_fingerprint.get(short_addr) if short_addr is not None else None
+    verified = bool(fp and fp.get("verified"))
+    model_label = (
+        "%s %s" % (fp.get("manufacturer"), fp.get("model"))
+        if verified
+        else "UNVERIFIED TS0021 candidate (_TZ3210_3ulg9kpo)"
+    )
+    for item in dps:
+        dp = int(item.get("dp", -1))
+        if dp not in (1, 2):
+            continue
+        if "value_int" not in item:
+            continue
+        gesture = int(item["value_int"])
+        if gesture not in (GESTURE_SINGLE, GESTURE_DOUBLE, GESTURE_HOLD):
+            continue
+        key = "KEY1" if dp == 1 else "KEY2"
+        return {
+            "key": key,
+            "dp": dp,
+            "gesture": gesture,
+            "gesture_name": GESTURE_NAMES.get(gesture, str(gesture)),
+            "short_addr": short_addr,
+            "src_endpoint": aps_payload.get("src_endpoint"),
+            "cluster": cluster,
+            "command": zcl.get("command"),
+            "manuf_code": zcl.get("manuf_code"),
+            "raw_hex": zcl.get("raw_hex") or _hex_bytes(asdu),
+            "dp_candidates": dps,
+            "model": model_label,
+            "fingerprint_verified": verified,
+        }
+    return None
 
 
 def _push_event(kind, payload):
@@ -298,6 +454,80 @@ def _on_command(*args):
             pass
 
 
+def _parse_aps_callback_args(args):
+    """Native APS overlay: 10-tuple indication event."""
+    if len(args) < 10:
+        raise TypeError("aps callback expects 10 args")
+    asdu = args[6]
+    if asdu is None:
+        asdu = b""
+    elif not isinstance(asdu, (bytes, bytearray)):
+        try:
+            asdu = bytes(asdu)
+        except TypeError:
+            asdu = b""
+    asdu = bytes(asdu)
+    asdu_len = int(args[7])
+    asdu_len_orig = int(args[8])
+    truncated = bool(args[9])
+    # Enforce max; mark truncated if native lied or Python-side shrink
+    if len(asdu) > APS_ASDU_MAX:
+        asdu = asdu[:APS_ASDU_MAX]
+        truncated = True
+    if asdu_len_orig > APS_ASDU_MAX:
+        truncated = True
+    return {
+        "short_addr": int(args[0]) & 0xFFFF,
+        "src_endpoint": int(args[1]),
+        "dst_endpoint": int(args[2]),
+        "profile": int(args[3]),
+        "cluster": int(args[4]),
+        "status": int(args[5]),
+        "asdu": asdu,
+        "asdu_len": min(asdu_len, len(asdu)),
+        "asdu_len_orig": asdu_len_orig,
+        "truncated": truncated,
+        "raw_hex": _hex_bytes(asdu),
+    }
+
+
+def _on_aps(*args):
+    try:
+        payload = _parse_aps_callback_args(args)
+    except (TypeError, ValueError):
+        return
+    # Always surface raw APS first (bench priority over DP guessing)
+    zcl = parse_zcl_header(payload.get("asdu") or b"")
+    if zcl is not None:
+        payload["zcl"] = zcl
+        payload["dp_candidates"] = parse_tuya_dp_payload(zcl.get("payload") or b"")
+    else:
+        payload["dp_candidates"] = []
+    short_addr = payload.get("short_addr")
+    fp = _device_fingerprint.get(short_addr) if short_addr is not None else None
+    payload["model"] = (
+        "%s %s" % (fp.get("manufacturer"), fp.get("model"))
+        if fp and fp.get("verified")
+        else "UNVERIFIED TS0021 candidate (_TZ3210_3ulg9kpo)"
+    )
+    payload["fingerprint_verified"] = bool(fp and fp.get("verified"))
+    _push_event("aps", payload)
+    if _cb_aps:
+        try:
+            _cb_aps(payload)
+        except Exception:
+            pass
+    # Button ONLY from validated DP 1/2 + gesture 0/1/2 — never join/report
+    btn = decode_ts0021_button_from_aps(payload)
+    if btn is not None:
+        _push_event("button", btn)
+        if _cb_button:
+            try:
+                _cb_button(btn)
+            except Exception:
+                pass
+
+
 def _ensure_signal_hook():
     global _signal_hooked
     if _signal_hooked:
@@ -326,6 +556,24 @@ def _ensure_command_hook():
         raise UnsupportedError(
             "native _uzigbee has no on_command — rebuild with "
             "overlays/apply_uzb_command_capture.py (esp-zigbee-lib ~1.6)"
+        )
+
+
+def _ensure_aps_hook():
+    global _aps_hooked
+    if _aps_hooked:
+        return
+    zb = _require_native()
+    if hasattr(zb, "on_aps"):
+        zb.on_aps(_on_aps)
+        _aps_hooked = True
+    elif hasattr(zb, "set_aps_callback"):
+        zb.set_aps_callback(_on_aps)
+        _aps_hooked = True
+    else:
+        raise UnsupportedError(
+            "native _uzigbee has no on_aps — rebuild with "
+            "overlays/apply_uzb_aps_capture.py (esp-zigbee-lib 1.6.8 APS)"
         )
 
 
@@ -365,6 +613,10 @@ def start_coordinator(form_network=True, create_local_onoff_switch=True, local_e
         except UnsupportedError:
             pass
         try:
+            _ensure_aps_hook()
+        except UnsupportedError:
+            pass
+        try:
             close_join()
         except Exception:
             pass
@@ -396,6 +648,10 @@ def start_coordinator(form_network=True, create_local_onoff_switch=True, local_e
         pass
     try:
         _ensure_command_hook()
+    except UnsupportedError:
+        pass
+    try:
+        _ensure_aps_hook()
     except UnsupportedError:
         pass
     # Safety default: closed join window
@@ -834,6 +1090,9 @@ def enable_command_capture(custom_clusters=None):
     CLUSTER_ROLE_SERVER / CLUSTER_ROLE_CLIENT. Required for
     ESP_ZB_CORE_CMD_CUSTOM_CLUSTER_* when the coordinator must own that cluster.
     Call before ``start_coordinator`` / ``register_device``.
+
+    Do **not** pass cluster 0xEF00 — upstream ``add_custom_cluster`` rejects IDs
+    outside 0xFC00..0xFFFF. Use ``enable_aps_capture()`` for SC10/TS0021 0xEF00.
     """
     zb = _require_native()
     _ensure_command_hook()
@@ -842,12 +1101,87 @@ def enable_command_capture(custom_clusters=None):
             raise UnsupportedError("native _uzigbee has no add_custom_cluster")
         for item in custom_clusters:
             cluster_id, role = item[0], item[1]
-            zb.add_custom_cluster(int(cluster_id), int(role))
+            cid = int(cluster_id)
+            if cid == CLUSTER_TUYA_EF00:
+                raise ValueError(
+                    "add_custom_cluster(0xEF00) is invalid (upstream requires "
+                    "cluster_id >= 0xFC00). Use enable_aps_capture() instead."
+                )
+            zb.add_custom_cluster(cid, int(role))
     return True
 
 
+def enable_aps_capture():
+    """
+    Hook native on_aps for SDK 1.6.8 APSDE indication (HA 0xEF00 capture).
+
+    Safe to call before or after start_coordinator; native registration happens
+    inside uzb_core_start after device register. Reinit guards via _aps_hooked.
+    """
+    _ensure_aps_hook()
+    try:
+        _ensure_command_hook()
+    except UnsupportedError:
+        pass
+    try:
+        _ensure_signal_hook()
+    except Exception:
+        pass
+    return True
+
+
+def on_aps(callback):
+    """Register raw APS callback; receives aps payload dict (kind='aps')."""
+    global _cb_aps
+    _ensure_aps_hook()
+    _cb_aps = callback
+
+
+def on_button(callback):
+    """
+    Register button callback. Fires only for validated TS0021 DP1/DP2 gestures
+    decoded from real APS 0xEF00 frames — never from join/device_update/report.
+    """
+    global _cb_button
+    _ensure_aps_hook()
+    _cb_button = callback
+
+
+def set_device_fingerprint(short_addr, manufacturer, model, verified=False):
+    """
+    Record Basic identity after a real read. Until verified=True with matching
+    manufacturer/model, button events stay labeled UNVERIFIED.
+    """
+    addr = int(short_addr) & 0xFFFF
+    _device_fingerprint[addr] = {
+        "manufacturer": str(manufacturer) if manufacturer is not None else "",
+        "model": str(model) if model is not None else "",
+        "verified": bool(
+            verified
+            and manufacturer == TS0021_MANUFACTURER
+            and model == TS0021_MODEL
+        ),
+    }
+    return _device_fingerprint[addr]
+
+
+def tuya_configure_magic_packet_unsupported():
+    """
+    Explicit: configureMagicPacket needs remote ZCL Basic read of
+    [manufacturerName, zclVersion, appVersion, modelId, powerSource, 0xFFFE].
+    Native _uzigbee has no remote Read Attributes API — do not fabricate reads.
+    """
+    raise UnsupportedError(
+        "tuya configureMagicPacket / remote Basic read NOT available in pinned "
+        "_uzigbee — no remote ZCL Read Attributes. Log inability; no made-up reads."
+    )
+
+
 def poll_events(max_events=EVENT_QUEUE_MAX):
-    """Drain bounded event queue (non-blocking). Returns list of {kind,payload}."""
+    """Drain bounded event queue (non-blocking). Returns list of {kind,payload}.
+
+    kinds: join, leave, device_update, report, command, aps, button
+    """
     out = []
     n = min(int(max_events), len(_event_q))
     for _ in range(n):
@@ -859,9 +1193,12 @@ def tuya_manufacturer_dp_unsupported():
     """
     Explicit gate: no fabricated Tuya DP mappings without model evidence.
     Official Smart Life cloud is a separate licensed product — not claimed here.
+    Prefer decode_ts0021_button_from_aps on real APS captures; fingerprint via
+    set_device_fingerprint after a real Basic read when an API exists.
     """
     raise UnsupportedError(
         "Tuya manufacturer DP support requires grounded model ID / endpoint / "
         "cluster evidence from bench discovery. No fabricated DP map. "
-        "No Smart Life cloud / account spoofing."
+        "No Smart Life cloud / account spoofing. "
+        "configureMagicPacket: " + "see tuya_configure_magic_packet_unsupported()."
     )
