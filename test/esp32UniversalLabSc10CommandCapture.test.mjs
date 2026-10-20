@@ -4,6 +4,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,10 +61,18 @@ test("SC10: LCD capture script never maps join/device_update to buttons", () => 
   assert.match(script, /BTN1.*BTN2|btn_seen/);
 });
 
-test("SC10: known-working guest installer bins preserved as rollback (not overwritten here)", () => {
+test("SC10: known-working guest installer bins preserved as rollback; new cmd-capture published", () => {
   const pub = join(root, "public/firmware/c6-zigbee");
-  assert.ok(existsSync(join(pub, "pybot-c6-micropython-zigbee-0.1.0-app.bin")));
+  const rollback = join(pub, "rollback-0.1.0");
+  assert.ok(existsSync(join(rollback, "pybot-c6-micropython-zigbee-0.1.0-app.bin")));
+  assert.ok(existsSync(join(pub, "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin")));
   assert.ok(existsSync(join(pub, "SHA256SUMS.txt")));
   const sums = readFileSync(join(pub, "SHA256SUMS.txt"), "utf8");
-  assert.match(sums, /pybot-c6-micropython-zigbee-0\.1\.0-app\.bin/);
+  assert.match(sums, /pybot-c6-micropython-zigbee-0\.1\.1-sc10-cmd-app\.bin/);
+  assert.match(sums, /e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa/);
+  const oldApp = readFileSync(join(rollback, "pybot-c6-micropython-zigbee-0.1.0-app.bin"));
+  assert.equal(
+    createHash("sha256").update(oldApp).digest("hex"),
+    "d22d48f5c474f327be4b946dfa88af49523606215dda5e74325a5864189ef096",
+  );
 });

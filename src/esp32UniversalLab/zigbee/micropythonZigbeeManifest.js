@@ -22,7 +22,9 @@ export const MICROPYTHON_ZIGBEE_MANIFEST = Object.freeze({
   mcu: "ESP32-C6FH4",
   flashMb: 4,
   psramMb: 0,
-  firmwareVersion: "0.1.0",
+  firmwareVersion: "0.1.1-sc10-cmd",
+  buildMarker: "SC10-CMD-CAPTURE",
+  featureLabel: "SC10 command-capture (_uzigbee.on_command)",
   decision: "PIN_UZIGBEE_V1_6_AS_POC",
   zigbee: Object.freeze({
     spec: "Zigbee 3.x via ESP Zigbee SDK v1.6 / ZBOSS (uZigbee native _uzigbee)",
@@ -45,24 +47,47 @@ export const MICROPYTHON_ZIGBEE_MANIFEST = Object.freeze({
     displayPlusZigbeeMeasured: false,
     interimNativeOnlyPath: "firmware/esp32c6-zigbee-coordinator/",
     reason:
-      "Cloud rebuild produced multi-offset image fitting factory partition (86.23% / 3221280 bytes of 0x390000). ST7789+Zigbee heap/RAM coexistence still UNMEASURED on hardware. Installable public delivery BLOCKED by esp-zboss license + missing durable URL.",
+      "Cloud rebuild with command-capture overlay produced multi-offset image fitting factory (86.45% / 3229264 bytes of 0x390000). ST7789+Zigbee heap/RAM coexistence still UNMEASURED on hardware. Guest static image published under public/firmware/c6-zigbee/ (0.1.1-sc10-cmd); prior 0.1.0 preserved at rollback-0.1.0/.",
   }),
   // Synced from firmware/pybot-c6-micropython-zigbee/manifest.json.
-  // READY only when installable multi-offset bins are reachable + license-cleared.
-  // modeReady stays false until hardware boot proof.
+  // READY: installable multi-offset bins on guest static path; modeReady false until hardware boot proof.
   artifact: Object.freeze({
-    status: "BLOCKED",
-    blockReason:
-      "Native cloud rebuild SUCCEEDED (ESP-IDF v5.3.2 + MicroPython v1.27.0 + uZigbee ff25553c5fc9d59754eba9a89811e6433e0d4479) with verified multi-offset bins on the runner, but PyBot tracked delivery stays BLOCKED: (1) esp-zboss-lib proprietary — do not redistribute/deploy binaries until license verification; (2) no durable public/install URL for PyBot firmware delivery (GHA upload lacks ACTIONS_RUNTIME_TOKEN in this step; bins gitignored). Rebuild: firmware/pybot-c6-micropython-zigbee/build.sh. Verified runner package: bootloader@0x0 sha256=722b84280ff641c6401531090c6007ed805c8e0ef4e7fcd9733cdcb13dba46c6 partition@0x8000 sha256=b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f app@0x10000 sha256=f681daedde24ee89e7db8ba8bde8349193fd7b09c23f0024c5bafc2407f26b91 size=3221280 (86.23% factory).",
-    filename: null,
-    sha256: null,
-    size: null,
-    flashOffset: null,
-    builtAt: null,
-    path: null,
-    packaging: null,
-    components: null,
-    appOccupancyBytes: 3221280,
+    status: "READY",
+    blockReason: null,
+    filename: "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin",
+    sha256: "e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa",
+    size: 3229264,
+    flashOffset: 65536,
+    builtAt: "2026-10-20T01:12:13Z",
+    path: "../../public/firmware/c6-zigbee/pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin",
+    packaging: "multi-offset",
+    components: Object.freeze([
+      Object.freeze({
+        role: "bootloader",
+        filename: "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-bootloader.bin",
+        path: "../../public/firmware/c6-zigbee/pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-bootloader.bin",
+        flashOffset: 0,
+        sha256: "42d78bb1fcd180d12e64c4bd544ae260b6ab4bd2a4d385849395c6c8ab6038fa",
+        size: 18384,
+      }),
+      Object.freeze({
+        role: "partition-table",
+        filename: "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-partition-table.bin",
+        path: "../../public/firmware/c6-zigbee/pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-partition-table.bin",
+        flashOffset: 32768,
+        sha256: "b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f",
+        size: 3072,
+      }),
+      Object.freeze({
+        role: "app",
+        filename: "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin",
+        path: "../../public/firmware/c6-zigbee/pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin",
+        flashOffset: 65536,
+        sha256: "e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa",
+        size: 3229264,
+      }),
+    ]),
+    appOccupancyBytes: 3229264,
     factoryPartitionBytes: 3735552,
     heapRamMargins: null,
     printedVersions: Object.freeze({

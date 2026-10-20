@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getLang } from "./i18n.js";
 import {
   C6_ZIGBEE_BENCH_UI_LABEL,
+  C6_ZIGBEE_BENCH_PACKAGE,
   C6_ZIGBEE_BENCH_POST_FLASH_CHECKS,
   C6_ZIGBEE_BENCH_PROGRESS_STAGES,
   C6_ZIGBEE_BENCH_NOTICES,
@@ -156,6 +157,15 @@ export default function C6ZigbeeBenchModal({ open, onClose, onLog, profileId, co
             {en
               ? "MicroPython + native Zigbee for Waveshare ESP32-C6-LCD-1.47 — not the ESP-IDF coordinator host path."
               : "MicroPython + Zigbee nativo para Waveshare ESP32-C6-LCD-1.47 — no es el coordinador ESP-IDF host."}
+          </p>
+          <p
+            style={{ ...compactP, fontSize: 12, fontWeight: 600 }}
+            data-testid="lab-c6-zigbee-bench-firmware-version"
+            data-build-marker={C6_ZIGBEE_BENCH_PACKAGE.buildMarker}
+          >
+            {en
+              ? `Firmware ${C6_ZIGBEE_BENCH_PACKAGE.version} — ${C6_ZIGBEE_BENCH_PACKAGE.featureLabel}`
+              : `Firmware ${C6_ZIGBEE_BENCH_PACKAGE.version} — ${C6_ZIGBEE_BENCH_PACKAGE.featureLabel}`}
           </p>
           <div style={{ ...compactP, fontSize: 12, color: "var(--fg-muted)" }} data-testid="lab-c6-zigbee-bench-notices">
             <p style={{ margin: "0 0 6px" }}>

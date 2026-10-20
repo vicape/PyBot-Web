@@ -2,7 +2,9 @@
   "manifestVersion": 1,
   "id": "pybot-c6-micropython-zigbee-private-bench",
   "package": "MicroPython+_uzigbee",
-  "version": "0.1.0",
+  "version": "0.1.1-sc10-cmd",
+  "buildMarker": "SC10-CMD-CAPTURE",
+  "featureLabel": "SC10 command-capture (_uzigbee.on_command)",
   "chip": "ESP32-C6",
   "chipFamily": "esp32c6",
   "board": "waveshare-esp32-c6-lcd-1.47",
@@ -17,15 +19,13 @@
   "publicReady": false,
   "modeReady": false,
   "hardwareValidation": "UNVERIFIED",
-  "distribution": "pinned-guest-allowlisted-short-lived",
-  "durableStorageRequired": true,
+  "distribution": "static-public-guest",
+  "durableStorageRequired": false,
   "sourceArtifact": {
-    "kind": "maxwell-private-gha-artifact",
-    "repo": "vicape/cursor-control",
-    "runId": "39193349317",
-    "artifactId": "12161052985",
-    "packageDir": "zigbee-firmware-private-bench",
-    "note": "Provenance only. Not a browser fetch URL. Durable delivery uses private object storage via /api/c6-zigbee-bench-firmware."
+    "kind": "cloud-rebuild-build-artifact",
+    "repo": "vicape/PyBot-Web",
+    "path": "firmware/pybot-c6-micropython-zigbee/build-artifact/",
+    "note": "One bounded rebuild from pinned build.sh + SC10 overlay; guest install uses static /firmware/c6-zigbee/."
   },
   "toolchain": {
     "espIdf": "ESP-IDF v5.3.2",
@@ -35,20 +35,21 @@
     "espZigbeeLib": "~1.6.0",
     "espZbossLib": "~1.6.0"
   },
-  "builtAt": "2026-10-19T03:22:08Z",
-  "sourceCommit": "834a2ecd0ee648b3570d8c913f358d262b2a92ae",
+  "builtAt": "2026-10-20T01:12:13Z",
+  "sourceCommit": "4d9e1f2f1830e409cd5d50bd18ec275f80079b54",
+  "rollbackPath": "public/firmware/c6-zigbee/rollback-0.1.0/",
   "components": [
     {
       "role": "bootloader",
-      "name": "pybot-c6-micropython-zigbee-0.1.0-bootloader.bin",
+      "name": "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-bootloader.bin",
       "address": 0,
       "addressHex": "0x0",
       "size": 18384,
-      "sha256": "8eed4217cf16bb74313615a6a7fb9a90a4ae79c05b828dfa923e84b0f574fbe6"
+      "sha256": "42d78bb1fcd180d12e64c4bd544ae260b6ab4bd2a4d385849395c6c8ab6038fa"
     },
     {
       "role": "partition-table",
-      "name": "pybot-c6-micropython-zigbee-0.1.0-partition-table.bin",
+      "name": "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-partition-table.bin",
       "address": 32768,
       "addressHex": "0x8000",
       "size": 3072,
@@ -56,11 +57,11 @@
     },
     {
       "role": "app",
-      "name": "pybot-c6-micropython-zigbee-0.1.0-app.bin",
+      "name": "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin",
       "address": 65536,
       "addressHex": "0x10000",
-      "size": 3221280,
-      "sha256": "d22d48f5c474f327be4b946dfa88af49523606215dda5e74325a5864189ef096"
+      "size": 3229264,
+      "sha256": "e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa"
     }
   ],
   "notices": [
@@ -69,5 +70,5 @@
     "firmware/pybot-c6-micropython-zigbee/licenses/espressif__esp-zigbee-lib.LICENSE.txt",
     "firmware/pybot-c6-micropython-zigbee/licenses/espressif__mdns.LICENSE.txt"
   ],
-  "licensePolicy": "esp-zboss-lib LICENSE permits binary redistribution with copyright/disclaimer retention and no reverse-engineering; product owner authorizes anonymous guest delivery of the pinned ESP32-C6 image via short-lived signed tickets with bundled notices (not an open generic CDN; no proprietary .a libs or credentials)."
+  "licensePolicy": "esp-zboss-lib LICENSE permits binary redistribution with copyright/disclaimer retention and no reverse-engineering; product owner authorizes anonymous guest delivery of the pinned ESP32-C6 SC10 command-capture image via static /firmware/c6-zigbee/ with bundled notices (no proprietary .a libs or credentials)."
 }

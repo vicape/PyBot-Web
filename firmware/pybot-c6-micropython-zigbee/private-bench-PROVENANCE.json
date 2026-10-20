@@ -1,19 +1,21 @@
 {
-  "packageDir": "/home/runner/work/_temp/maxwell-555/zigbee-firmware-private-bench",
-  "sourceHead": "834a2ecd0ee648b3570d8c913f358d262b2a92ae",
-  "builtAt": "2026-10-19T03:22:08Z",
+  "packageDir": "firmware/pybot-c6-micropython-zigbee/build-artifact",
+  "sourceHead": "4d9e1f2f1830e409cd5d50bd18ec275f80079b54",
+  "builtAt": "2026-10-20T01:12:13Z",
+  "version": "0.1.1-sc10-cmd",
+  "buildMarker": "SC10-CMD-CAPTURE",
   "components": [
     {
       "role": "bootloader",
-      "filename": "pybot-c6-micropython-zigbee-0.1.0-bootloader.bin",
+      "filename": "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-bootloader.bin",
       "flashOffset": 0,
       "flashOffsetHex": "0x0",
       "size": 18384,
-      "sha256": "8eed4217cf16bb74313615a6a7fb9a90a4ae79c05b828dfa923e84b0f574fbe6"
+      "sha256": "42d78bb1fcd180d12e64c4bd544ae260b6ab4bd2a4d385849395c6c8ab6038fa"
     },
     {
       "role": "partition-table",
-      "filename": "pybot-c6-micropython-zigbee-0.1.0-partition-table.bin",
+      "filename": "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-partition-table.bin",
       "flashOffset": 32768,
       "flashOffsetHex": "0x8000",
       "size": 3072,
@@ -21,11 +23,11 @@
     },
     {
       "role": "app",
-      "filename": "pybot-c6-micropython-zigbee-0.1.0-app.bin",
+      "filename": "pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin",
       "flashOffset": 65536,
       "flashOffsetHex": "0x10000",
-      "size": 3221280,
-      "sha256": "d22d48f5c474f327be4b946dfa88af49523606215dda5e74325a5864189ef096"
+      "size": 3229264,
+      "sha256": "e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa"
     }
   ],
   "licenseNoticesCollected": 3,
@@ -33,5 +35,7 @@
     "bootloader": "0x0",
     "partition-table": "0x8000",
     "app": "0x10000"
-  }
+  },
+  "rollbackPath": "public/firmware/c6-zigbee/rollback-0.1.0/",
+  "note": "#569 runner SHAs (ce55a32e/0dc25016) were not retained as gitignored bins; this package is the verified one-bounded rebuild with on_command overlay (sizes match; app/bootloader SHAs differ due to non-bit-identical ESP rebuild paths)."
 }

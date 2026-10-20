@@ -1,3 +1,6 @@
-8eed4217cf16bb74313615a6a7fb9a90a4ae79c05b828dfa923e84b0f574fbe6  pybot-c6-micropython-zigbee-0.1.0-bootloader.bin
+e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa  pybot-c6-micropython-zigbee-0.1.0-app.bin
+42d78bb1fcd180d12e64c4bd544ae260b6ab4bd2a4d385849395c6c8ab6038fa  pybot-c6-micropython-zigbee-0.1.0-bootloader.bin
 b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f  pybot-c6-micropython-zigbee-0.1.0-partition-table.bin
-d22d48f5c474f327be4b946dfa88af49523606215dda5e74325a5864189ef096  pybot-c6-micropython-zigbee-0.1.0-app.bin
+e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa  pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-app.bin
+42d78bb1fcd180d12e64c4bd544ae260b6ab4bd2a4d385849395c6c8ab6038fa  pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-bootloader.bin
+b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f  pybot-c6-micropython-zigbee-0.1.1-sc10-cmd-partition-table.bin

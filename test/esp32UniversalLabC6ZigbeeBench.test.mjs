@@ -60,11 +60,22 @@ test("C6 Zigbee: only pinned 4 MB C6 private package, never production READY", (
   assert.equal(C6_ZIGBEE_BENCH_PACKAGE.autoFlash, false);
   assert.equal(C6_ZIGBEE_BENCH_PACKAGE.hardwareValidation, "UNVERIFIED");
   assert.deepEqual(specs.map((s) => s.address), [0, 0x8000, 0x10000]);
-  assert.equal(specs[2].size, 3221280);
+  assert.equal(specs[2].size, 3229264);
+  assert.equal(C6_ZIGBEE_BENCH_PACKAGE.version, "0.1.1-sc10-cmd");
+  assert.equal(C6_ZIGBEE_BENCH_PACKAGE.buildMarker, "SC10-CMD-CAPTURE");
+  assert.match(C6_ZIGBEE_BENCH_PACKAGE.featureLabel, /on_command/);
   assert.equal(C6_ZIGBEE_BENCH_PACKAGE.board, "waveshare-esp32-c6-lcd-1.47");
-  assert.equal(C6_ZIGBEE_BENCH_PACKAGE.pinnedRunId, "39193349317");
-  assert.equal(C6_ZIGBEE_BENCH_PACKAGE.pinnedArtifactId, "12161052985");
+  assert.equal(C6_ZIGBEE_BENCH_PACKAGE.pinnedRunId, "sc10-cmd-rebuild-20261020");
+  assert.equal(C6_ZIGBEE_BENCH_PACKAGE.pinnedArtifactId, "build-artifact-0.1.1-sc10-cmd");
   assert.equal(C6_ZIGBEE_BENCH_PACKAGE.chip, "ESP32-C6");
+  assert.equal(
+    specs[0].sha256,
+    "42d78bb1fcd180d12e64c4bd544ae260b6ab4bd2a4d385849395c6c8ab6038fa",
+  );
+  assert.equal(
+    specs[2].sha256,
+    "e9dcf6e9dcd09af29a8483584208086e0691a6964d6c85042a785967e0eb67aa",
+  );
 });
 
 test("C6 Zigbee: durable manifest anchors versions/chip/offsets/sizes/SHA", () => {

@@ -1,12 +1,14 @@
 # THIRD_PARTY_NOTICES — private bench firmware package
 
-BuiltAt: 2026-10-19T03:22:08Z
+BuiltAt: 2026-10-20T01:12:13Z
+Package: 0.1.1-sc10-cmd (SC10-CMD-CAPTURE — _uzigbee.on_command)
 ESP-IDF: ESP-IDF v5.3.2
 MicroPython: v1.27.0
 uZigbee: ff25553c5fc9d59754eba9a89811e6433e0d4479
+Rollback: /firmware/c6-zigbee/rollback-0.1.0/
 
 This package may be delivered to **anonymous guest users** on the test/preview
-branch via the pinned short-lived ticket distributor (`/api/c6-zigbee-bench-firmware`),
+branch via static same-origin assets under `/firmware/c6-zigbee/` (and legacy ticket API when configured),
 provided the notices and license texts below are retained. It is **not** an open
 generic CDN; proprietary `.a` libraries and credentials must not be published.
 
