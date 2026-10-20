@@ -295,6 +295,7 @@ test("MPY+ZB: autonomous boot assumptions documented; preflight build proof", ()
       "onboard/main.py",
       "docs/BACKUP_RESTORE.md",
       "docs/LIMITATIONS.md",
+      "overlays/apply_uzb_command_capture.py",
     ]) {
       const destination = join(sandbox, rel);
       mkdirSync(dirname(destination), { recursive: true });
@@ -335,6 +336,8 @@ test("MPY+ZB: autonomous boot assumptions documented; preflight build proof", ()
     const r = spawnSync("bash", [isolatedBuild], {
       encoding: "utf8",
       timeout: 15000,
+      // Sandbox has no real uZigbee c_module; skip overlay so preflight reaches missing-IDF exit 2.
+      env: { ...process.env, PYBOT_SKIP_UZB_CMD_OVERLAY: "1" },
     });
     assert.equal(r.status, 2, r.stderr || r.stdout);
     const artifactDir = join(sandbox, "build-artifact");

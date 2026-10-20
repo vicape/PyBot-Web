@@ -103,6 +103,18 @@ chmod +x "$UZ/build_firmware.sh" "$UZ/tools/"*.sh 2>/dev/null || true
 
 # --- Build-time overlays (ignored third_party only; after bootstrap) ---
 
+# SC10 / ZCL command capture: extend uzb_action_handler for verified SDK 1.6
+# callbacks (custom cluster, privilege, IAS zone status). Does not mutate upstream.
+# PYBOT_SKIP_UZB_CMD_OVERLAY=1 used only by disposable preflight sandbox tests.
+if [[ "${PYBOT_SKIP_UZB_CMD_OVERLAY:-}" == "1" ]]; then
+  echo "[INFO] Skipping uzb command-capture overlay (PYBOT_SKIP_UZB_CMD_OVERLAY=1)"
+else
+  python3 "$ROOT/overlays/apply_uzb_command_capture.py" "$UZ" || {
+    write_blocked "uzb command-capture overlay failed"
+    exit 1
+  }
+fi
+
 # MicroPython ports/esp32 Makefile does NOT forward make SDKCONFIG_DEFAULTS into
 # CMake; board mpconfigboard.cmake hard-sets boards/sdkconfig.* and
 # boards/sdkconfig.c6 forces CONFIG_IEEE802154_ENABLED=n — which silently

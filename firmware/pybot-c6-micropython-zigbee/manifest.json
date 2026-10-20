@@ -45,21 +45,21 @@
     "intent": "Custom MicroPython + native Zigbee on one C6 \u2014 desired standalone Python hub path",
     "measuredFitOn4Mb": true,
     "displayPlusZigbeeMeasured": false,
-    "reason": "Cloud rebuild produced multi-offset image fitting factory partition (86.23% / 3221280 bytes of 0x390000). ST7789+Zigbee heap/RAM coexistence still UNMEASURED on hardware. Installable public delivery BLOCKED by esp-zboss license + missing durable URL.",
+    "reason": "Cloud rebuild with command-capture overlay produced multi-offset image fitting factory (86.45% / 3229264 bytes of 0x390000). ST7789+Zigbee heap/RAM coexistence still UNMEASURED on hardware. Public guest image NOT overwritten; test bins in build-artifact.",
     "interimNativeOnlyPath": "firmware/esp32c6-zigbee-coordinator/ remains interim NON-MicroPython host-controlled v2 target \u2014 not the desired standalone Python solution"
   },
   "artifact": {
     "status": "BLOCKED",
-    "blockReason": "Native cloud rebuild SUCCEEDED (ESP-IDF v5.3.2 + MicroPython v1.27.0 + uZigbee ff25553c5fc9d59754eba9a89811e6433e0d4479) with verified multi-offset bins on the runner, but PyBot tracked delivery stays BLOCKED: (1) esp-zboss-lib proprietary \u2014 do not redistribute/deploy binaries until license verification; (2) no durable public/install URL for PyBot firmware delivery (GHA upload lacks ACTIONS_RUNTIME_TOKEN in this step; bins gitignored). Rebuild: firmware/pybot-c6-micropython-zigbee/build.sh. Verified runner package: bootloader@0x0 sha256=722b84280ff641c6401531090c6007ed805c8e0ef4e7fcd9733cdcb13dba46c6 partition@0x8000 sha256=b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f app@0x10000 sha256=f681daedde24ee89e7db8ba8bde8349193fd7b09c23f0024c5bafc2407f26b91 size=3221280 (86.23% factory).",
+    "blockReason": "Native cloud rebuild SUCCEEDED with SC10 command-capture overlay (ESP-IDF v5.3.2 + MicroPython v1.27.0 + uZigbee ff25553c5fc9d59754eba9a89811e6433e0d4479; esp-zigbee-lib ~1.6 callbacks CUSTOM/PRIVILEGE/IAS). Verified multi-offset bins on the runner, but PyBot tracked delivery stays BLOCKED: (1) esp-zboss-lib proprietary \u2014 do not overwrite public/firmware/c6-zigbee without operator approval; (2) durable guest install uses existing private-bench / static path \u2014 new test image stays in build-artifact. Verified runner package: bootloader@0x0 sha256=0dc250167e2c15ca88182f0541f0ebb0f0e174e3523efcd94b2b43d951138583 partition@0x8000 sha256=b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f app@0x10000 sha256=ce55a32ee05359579f85c4597a1834cbfdf1827b7483d57c3345c0ab9c65d9c1 size=3229264 (86.45% factory). Rollback public SHA256SUMS: build-artifact/ROLLBACK_public-c6-zigbee-SHA256SUMS.txt",
     "filename": null,
     "sha256": null,
     "size": null,
     "flashOffset": null,
-    "builtAt": null,
+    "builtAt": "2026-10-20T00:44:28Z",
     "path": null,
     "packaging": null,
     "components": null,
-    "appOccupancyBytes": 3221280,
+    "appOccupancyBytes": 3229264,
     "factoryPartitionBytes": 3735552,
     "heapRamMargins": null,
     "printedVersions": {
@@ -69,6 +69,59 @@
       "uzigbeeCommit": "ff25553c5fc9d59754eba9a89811e6433e0d4479",
       "espZigbeeLib": "~1.6.0",
       "espZbossLib": "~1.6.0"
+    },
+    "cloudBuildEvidence": {
+      "builtAt": "2026-10-20T00:44:28Z",
+      "runnerBuildExit": 0,
+      "packaging": "multi-offset",
+      "commandCaptureOverlay": true,
+      "sdkCallbacks": [
+        "0x1040",
+        "0x1041",
+        "0x1050",
+        "0x1051",
+        "0x1031"
+      ],
+      "appOccupancyBytes": 3229264,
+      "factoryPartitionBytes": 3735552,
+      "appOccupancyPercentOfFactory": 86.45,
+      "components": [
+        {
+          "role": "bootloader",
+          "filename": "pybot-c6-micropython-zigbee-0.1.0-bootloader.bin",
+          "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.0-bootloader.bin",
+          "flashOffset": 0,
+          "sha256": "0dc250167e2c15ca88182f0541f0ebb0f0e174e3523efcd94b2b43d951138583",
+          "size": 18384
+        },
+        {
+          "role": "partition-table",
+          "filename": "pybot-c6-micropython-zigbee-0.1.0-partition-table.bin",
+          "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.0-partition-table.bin",
+          "flashOffset": 32768,
+          "sha256": "b459f132d42af8ce0d3ffb047894135b9c2da262de2a85e4353e1bf84bab6e0f",
+          "size": 3072
+        },
+        {
+          "role": "app",
+          "filename": "pybot-c6-micropython-zigbee-0.1.0-app.bin",
+          "path": "build-artifact/pybot-c6-micropython-zigbee-0.1.0-app.bin",
+          "flashOffset": 65536,
+          "sha256": "ce55a32ee05359579f85c4597a1834cbfdf1827b7483d57c3345c0ab9c65d9c1",
+          "size": 3229264
+        }
+      ],
+      "printedVersions": {
+        "espIdf": "ESP-IDF v5.3.2",
+        "espIdfTagRequired": "v5.3.2",
+        "micropython": "v1.27.0",
+        "uzigbeeCommit": "ff25553c5fc9d59754eba9a89811e6433e0d4479",
+        "espZigbeeLib": "~1.6.0",
+        "espZbossLib": "~1.6.0"
+      },
+      "publicGuestImageOverwritten": false,
+      "rollbackSums": "build-artifact/ROLLBACK_public-c6-zigbee-SHA256SUMS.txt",
+      "autoFlash": false
     }
   },
   "license": {

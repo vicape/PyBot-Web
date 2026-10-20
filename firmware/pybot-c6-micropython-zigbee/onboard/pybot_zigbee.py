@@ -12,6 +12,9 @@
 #     desc = (endpoint, profile_id, device_id, device_version, in_clusters, out_clusters)
 #   on_attribute callback: (ep, cluster, attr, value, type, status)
 #     or with source: (src_short, ep, cluster, attr, value, type, status)
+#   on_command (PyBot overlay on uZigbee): (src_short|None, src_ep, dst_ep,
+#     cluster, command_id, manuf_code, payload_bytes, callback_id, status)
+#     Verified SDK 1.6 ids: custom 0x1040/0x1041, privilege 0x1050/0x1051, IAS 0x1031.
 # There is NO remote ZCL Read Attributes command in _uzigbee.
 
 """pybot.zigbee — coordinator helpers over native ``_uzigbee``."""
@@ -41,6 +44,16 @@ ATTR_LEVEL_CURRENT = 0x0000
 CMD_ON_OFF_OFF = 0
 CMD_ON_OFF_ON = 1
 CMD_ON_OFF_TOGGLE = 2
+
+# Verified esp-zigbee-lib ~1.6 core action callback ids (command capture overlay)
+CB_CMD_CUSTOM_CLUSTER_REQ = 0x1040
+CB_CMD_CUSTOM_CLUSTER_RESP = 0x1041
+CB_CMD_PRIVILEGE_REQ = 0x1050
+CB_CMD_PRIVILEGE_RESP = 0x1051
+CB_CMD_IAS_ZONE_STATUS_CHANGE = 0x1031
+
+# ESP_ERR_INVALID_STATE — repeated create/register/start after stack is live
+ESP_ERR_INVALID_STATE = 259
 
 PERMIT_JOIN_MAX_S = 254  # uint8 bound in native permit_join
 PERMIT_JOIN_DEFAULT_S = 60
@@ -142,13 +155,16 @@ def _ticks_add(base, delta):
     return int(base) + int(delta)
 
 
-# --- bounded event queue (join/leave/report) ---
+# --- bounded event queue (join/leave/report/command) ---
 _event_q = []
 _cb_join = None
 _cb_leave = None
 _cb_report = None
 _cb_device_update = None
+_cb_command = None
 _signal_hooked = False
+_command_hooked = False
+_coordinator_started = False
 
 # Attr cache keyed by (short_addr_or_None, endpoint, cluster, attr)
 _attr_cache = {}
@@ -240,6 +256,48 @@ def _on_attribute(*args):
             pass
 
 
+def _parse_command_callback_args(args):
+    """Native overlay: 9-tuple command event."""
+    if len(args) < 9:
+        raise TypeError("command callback expects 9 args")
+    src = args[0]
+    if src is not None:
+        src = int(src) & 0xFFFF
+    payload = args[6]
+    if payload is None:
+        payload = b""
+    elif not isinstance(payload, (bytes, bytearray)):
+        try:
+            payload = bytes(payload)
+        except TypeError:
+            payload = b""
+    return {
+        "short_addr": src,
+        "src_endpoint": int(args[1]),
+        "dst_endpoint": int(args[2]),
+        "cluster": int(args[3]),
+        "command": int(args[4]),
+        "manuf_code": int(args[5]),
+        "payload": bytes(payload),
+        "payload_len": len(payload),
+        "callback_id": int(args[7]),
+        "status": int(args[8]),
+    }
+
+
+def _on_command(*args):
+    try:
+        payload = _parse_command_callback_args(args)
+    except (TypeError, ValueError):
+        return
+    _push_event("command", payload)
+    if _cb_command:
+        try:
+            _cb_command(payload)
+        except Exception:
+            pass
+
+
 def _ensure_signal_hook():
     global _signal_hooked
     if _signal_hooked:
@@ -253,6 +311,34 @@ def _ensure_signal_hook():
         _signal_hooked = True
 
 
+def _ensure_command_hook():
+    global _command_hooked
+    if _command_hooked:
+        return
+    zb = _require_native()
+    if hasattr(zb, "on_command"):
+        zb.on_command(_on_command)
+        _command_hooked = True
+    elif hasattr(zb, "set_command_callback"):
+        zb.set_command_callback(_on_command)
+        _command_hooked = True
+    else:
+        raise UnsupportedError(
+            "native _uzigbee has no on_command — rebuild with "
+            "overlays/apply_uzb_command_capture.py (esp-zigbee-lib ~1.6)"
+        )
+
+
+def _native_is_started():
+    zb = _require_native()
+    if hasattr(zb, "is_started"):
+        try:
+            return bool(zb.is_started())
+        except Exception:
+            return bool(_coordinator_started)
+    return bool(_coordinator_started)
+
+
 def start_coordinator(form_network=True, create_local_onoff_switch=True, local_endpoint=1):
     """
     Start Zigbee 3.x coordinator via verified upstream ``init`` + ``start``.
@@ -263,17 +349,54 @@ def start_coordinator(form_network=True, create_local_onoff_switch=True, local_e
     Joining stays closed until an explicit ``permit_join(seconds)`` call.
     ``form_network=True`` forms a new network when none exists; SDK NVRAM
     (zb_storage) may reopen a prior network when ``form_network=False``.
+
+    Idempotent when the native stack is already started (avoids OSError 259).
     """
+    global _coordinator_started
     zb = _require_native()
+    if _native_is_started():
+        _coordinator_started = True
+        try:
+            _ensure_signal_hook()
+        except Exception:
+            pass
+        try:
+            _ensure_command_hook()
+        except UnsupportedError:
+            pass
+        try:
+            close_join()
+        except Exception:
+            pass
+        return diagnose()
+
     zb.init(ROLE_COORDINATOR)
     if create_local_onoff_switch and hasattr(zb, "create_on_off_switch"):
-        zb.create_on_off_switch(int(local_endpoint))
+        try:
+            zb.create_on_off_switch(int(local_endpoint))
+        except OSError as exc:
+            # ESP_ERR_INVALID_STATE (259) if endpoint already registered
+            if not (exc.args and int(exc.args[0]) == ESP_ERR_INVALID_STATE):
+                raise
     if hasattr(zb, "register_device"):
-        zb.register_device()
-    zb.start(bool(form_network))
+        try:
+            zb.register_device()
+        except OSError as exc:
+            if not (exc.args and int(exc.args[0]) == ESP_ERR_INVALID_STATE):
+                raise
+    try:
+        zb.start(bool(form_network))
+    except OSError as exc:
+        if not (exc.args and int(exc.args[0]) == ESP_ERR_INVALID_STATE):
+            raise
+    _coordinator_started = True
     try:
         _ensure_signal_hook()
     except Exception:
+        pass
+    try:
+        _ensure_command_hook()
+    except UnsupportedError:
         pass
     # Safety default: closed join window
     try:
@@ -688,6 +811,39 @@ def on_device_update(callback):
     _require_native()
     _ensure_signal_hook()
     _cb_device_update = callback
+
+
+def on_command(callback):
+    """
+    Register incoming ZCL/custom/IAS/privilege command callback.
+
+    Receives dict with short_addr, src/dst endpoints, cluster, command,
+    manuf_code, payload (bytes), callback_id, status. Never invents button
+    ON/OFF from join/device_update — only real native command frames.
+    """
+    global _cb_command
+    _ensure_command_hook()
+    _cb_command = callback
+
+
+def enable_command_capture(custom_clusters=None):
+    """
+    Hook native on_command and optionally register custom clusters BEFORE start.
+
+    ``custom_clusters`` is a list of (cluster_id, role) using native
+    CLUSTER_ROLE_SERVER / CLUSTER_ROLE_CLIENT. Required for
+    ESP_ZB_CORE_CMD_CUSTOM_CLUSTER_* when the coordinator must own that cluster.
+    Call before ``start_coordinator`` / ``register_device``.
+    """
+    zb = _require_native()
+    _ensure_command_hook()
+    if custom_clusters:
+        if not hasattr(zb, "add_custom_cluster"):
+            raise UnsupportedError("native _uzigbee has no add_custom_cluster")
+        for item in custom_clusters:
+            cluster_id, role = item[0], item[1]
+            zb.add_custom_cluster(int(cluster_id), int(role))
+    return True
 
 
 def poll_events(max_events=EVENT_QUEUE_MAX):
