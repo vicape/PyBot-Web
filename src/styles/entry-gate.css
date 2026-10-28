@@ -437,37 +437,38 @@ body:has(.auth-root.entry-root),
 }
 
 .entry-google-btn {
-  min-height: 2.55rem;
+  min-height: 56px;
   padding: 0.45rem 1rem;
-  border-radius: 10px;
+  border-radius: 16px;
   font-size: 0.875rem;
   letter-spacing: -0.012em;
-  border: 1px solid #dadce0;
-  background: #ffffff;
-  color: #3c4043;
-  box-shadow:
-    0 1px 2px rgba(60, 64, 67, 0.08),
-    0 0 0 0.5px rgba(60, 64, 67, 0.04);
+  border: 2px solid #2563EB;
+  background: #E8F2FF;
+  color: #1747A6;
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.24);
 }
 
 .auth-root.entry-root.dash-root[data-pbc-theme="dark"] .entry-google-btn {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: #fff;
-  color: #3c4043;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  border: 2px solid #2563EB;
+  background: #E8F2FF;
+  color: #1747A6;
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.32);
 }
 
 .entry-google-btn:hover:not(:disabled) {
-  background: #f8f9fa;
-  border-color: #c6c9cd;
-  box-shadow: 0 2px 8px rgba(60, 64, 67, 0.12);
+  background: #E8F2FF;
+  border-color: #2563EB;
+  color: #1747A6;
+  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.34);
   transform: translateY(-1px);
 }
 
 .entry-google-btn:active:not(:disabled) {
   transform: translateY(0);
-  background: #f1f3f4;
-  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.08);
+  background: #E8F2FF;
+  border-color: #2563EB;
+  color: #1747A6;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22);
 }
 
 .entry-google-btn:focus-visible {
@@ -1372,7 +1373,7 @@ body:has(.auth-root.entry-root),
   }
 
   .entry-google-btn {
-    min-height: 2.25rem;
+    min-height: 56px;
   }
 
   .entry-ide-btn {
@@ -1670,11 +1671,15 @@ body:has(.auth-root.entry-root),
   }
 
   .entry-google-btn {
-    min-height: clamp(2.2rem, 5.2vh, 2.65rem);
+    min-height: 56px;
     padding: 0.4rem 0.85rem;
     font-size: clamp(0.8rem, 2vw + 0.25vh, 0.9rem);
     font-weight: 650;
-    border-radius: 10px;
+    border-radius: 16px;
+    border: 2px solid #2563EB;
+    background: #E8F2FF;
+    color: #1747A6;
+    box-shadow: 0 8px 22px rgba(37, 99, 235, 0.24);
   }
 
   .entry-ide-btn {
@@ -1962,7 +1967,11 @@ body:has(.auth-root.entry-root),
   }
 
   .entry-google-btn {
-    min-height: clamp(2.25rem, 4.8vh, 2.45rem);
+    min-height: 56px;
+    border-radius: 16px;
+    border: 2px solid #2563EB;
+    background: #E8F2FF;
+    color: #1747A6;
   }
 }
 
@@ -2072,6 +2081,11 @@ body:has(.auth-root.entry-root),
     min-height: 1.95rem;
     padding: 0.28rem 0.6rem;
     font-size: 0.78rem;
+    border-radius: 16px;
+    border: 2px solid #2563EB;
+    background: #E8F2FF;
+    color: #1747A6;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.22);
   }
 
   .entry-ide-btn {
