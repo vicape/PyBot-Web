@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 350 110" role="img" aria-labelledby="title">
+<title id="title">PyClass</title>
+<defs><linearGradient id="hex" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#08798a"/><stop offset="1" stop-color="#07506a"/></linearGradient></defs>
+<path d="M50 6 92 30V79L50 104 8 79V30Z" fill="url(#hex)"/>
+<path d="M50 6 92 30 50 55 8 30Z" fill="#08788c" opacity=".65"/><path d="M8 30 50 55V104L8 79Z" fill="#034c64" opacity=".36"/>
+<path d="M34 88V47c0-13 10-23 23-23s23 10 23 23-10 23-23 23H47v25" fill="none" stroke="#f6f8f9" stroke-linecap="round" stroke-linejoin="round" stroke-width="11"/>
+<path d="M34 88V47c0-13 10-23 23-23s23 10 23 23-10 23-23 23H47v25" fill="none" stroke="#97085f" stroke-linecap="round" stroke-linejoin="round" stroke-width="7"/>
+<text x="111" y="72" fill="#07566e" font-size="48" font-family="Inter,Arial,sans-serif" font-weight="650">Py</text>
+<text x="168" y="72" fill="#607d95" font-size="48" font-family="Inter,Arial,sans-serif" font-weight="500">Class</text>
+</svg>
