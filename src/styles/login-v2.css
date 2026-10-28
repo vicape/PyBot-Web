@@ -1,0 +1,460 @@
+/* Login landing v2 — cristal, cian y magenta sobre el layout existente. */
+
+.auth-root.entry-root.dash-root.entry-v2 {
+  position: relative;
+  --entry-radius: 16px;
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] {
+  --entry-surface: rgba(16, 24, 40, 0.72);
+  --entry-surface-raised: rgba(18, 26, 42, 0.9);
+  --entry-surface-soft: rgba(12, 18, 32, 0.55);
+  --entry-border: rgba(186, 230, 253, 0.12);
+  --entry-border-strong: rgba(186, 230, 253, 0.24);
+  --entry-muted: rgba(214, 224, 236, 0.88);
+  --entry-subtle: rgba(186, 200, 220, 0.8);
+  --entry-accent: #67e8f9;
+  --entry-accent-soft: rgba(34, 211, 238, 0.12);
+  --entry-code-bg: #070b13;
+  --entry-code-active: rgba(14, 48, 64, 0.96);
+  --entry-window: rgba(10, 16, 28, 0.78);
+  --entry-window-bar: rgba(8, 12, 22, 0.94);
+  --entry-window-inset: #080d16;
+  background-color: #0a0e17;
+  background-image:
+    radial-gradient(640px 320px at 0% 0%, rgba(34, 211, 238, 0.16), transparent 62%),
+    radial-gradient(560px 340px at 100% 0%, rgba(232, 121, 249, 0.14), transparent 60%),
+    radial-gradient(520px 280px at 78% 100%, rgba(34, 211, 238, 0.08), transparent 64%);
+  background-size: auto;
+  background-position: center;
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="light"] {
+  --entry-accent: #0e7490;
+  --entry-accent-soft: rgba(14, 116, 144, 0.1);
+  --entry-glow-a: rgba(14, 116, 144, 0.12);
+  --entry-glow-b: rgba(192, 38, 211, 0.08);
+  background-color: #eef3f8;
+  background-image:
+    radial-gradient(560px 280px at 0% 0%, rgba(14, 116, 144, 0.12), transparent 62%),
+    radial-gradient(520px 300px at 100% 8%, rgba(192, 38, 211, 0.1), transparent 60%);
+  background-size: auto;
+  background-position: center;
+}
+
+.entry-v2__circuits {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: rgba(103, 232, 249, 0.55);
+}
+
+.entry-v2[data-pbc-theme="light"] .entry-v2__circuits {
+  color: rgba(14, 116, 144, 0.45);
+  opacity: 0.55;
+}
+
+.entry-v2__circuit-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.entry-v2__circuit-magenta {
+  stroke: #e879f9;
+  opacity: 0.7;
+}
+
+.entry-v2[data-pbc-theme="light"] .entry-v2__circuit-magenta {
+  stroke: #a21caf;
+}
+
+.entry-v2__circuit-nodes {
+  fill: currentColor;
+}
+
+.entry-v2__circuit-node-magenta {
+  fill: #e879f9;
+}
+
+.entry-v2 .entry-shell {
+  position: relative;
+  z-index: 1;
+}
+
+/* Barra flotante de cristal, sin sumar borde al alto. */
+.auth-root.entry-root.dash-root.entry-v2 .entry-top {
+  border-radius: 16px;
+  background: rgba(12, 18, 32, 0.62);
+  box-shadow:
+    inset 0 0 0 1px rgba(186, 230, 253, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 28px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px) saturate(140%);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="light"] .entry-top {
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow:
+    inset 0 0 0 1px rgba(15, 23, 42, 0.08),
+    0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+@media (min-width: 641px) {
+  .entry-v2 .entry-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    border-radius: 999px;
+  }
+
+  .entry-v2 .entry-top__brand {
+    justify-self: start;
+  }
+
+  .entry-v2 .entry-top__pyclass {
+    margin-inline: 0;
+    justify-self: center;
+  }
+
+  .entry-v2 .entry-top__controls {
+    justify-self: end;
+  }
+}
+
+.entry-v2[data-pbc-theme="dark"] .entry-top__logo {
+  filter: drop-shadow(0 0 10px rgba(45, 212, 191, 0.35));
+}
+
+.entry-v2[data-pbc-theme="dark"] .entry-top__pyclass {
+  background: rgba(248, 250, 252, 0.94);
+  border-radius: 999px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.65),
+    0 6px 16px rgba(0, 0, 0, 0.22);
+}
+
+.entry-v2 .entry-lang__select,
+.entry-v2 .entry-theme-btn {
+  border-color: rgba(148, 196, 230, 0.28);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.entry-v2[data-pbc-theme="light"] .entry-lang__select,
+.entry-v2[data-pbc-theme="light"] .entry-theme-btn {
+  background-color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+.entry-v2[data-pbc-theme="dark"] .entry-theme-btn__icon {
+  color: #67e8f9;
+}
+
+.entry-v2 .entry-title {
+  font-weight: 800;
+}
+
+.entry-v2[data-pbc-theme="dark"] .entry-title__pair {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.entry-v2[data-pbc-theme="light"] .entry-title__pair {
+  color: #0b1220;
+  font-weight: 800;
+}
+
+.entry-v2[data-pbc-theme="dark"] .entry-title__line--accent {
+  font-weight: 800;
+  background: linear-gradient(105deg, #67e8f9 0%, #22d3ee 34%, #e879f9 76%, #f0abfc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.entry-v2[data-pbc-theme="light"] .entry-title__line--accent {
+  font-weight: 800;
+  background: linear-gradient(105deg, #0e7490 0%, #155e75 36%, #a21caf 78%, #be185d 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .entry-v2 .entry-title__line--accent {
+    background: none;
+    -webkit-text-fill-color: unset;
+    color: #22d3ee;
+  }
+
+  .entry-v2[data-pbc-theme="light"] .entry-title__line--accent {
+    color: #0e7490;
+  }
+}
+
+.entry-v2[data-pbc-theme="dark"] .entry-lead {
+  color: #b7c4d6;
+}
+
+@media (min-width: 1280px) and (min-height: 820px) {
+  .entry-v2 .entry-title {
+    font-size: clamp(2.2rem, 2.7vw + 0.4vh, 3.35rem);
+  }
+}
+
+.auth-root.entry-root.dash-root.entry-v2 .entry-google-btn {
+  border-radius: 14px;
+  border: 2px solid rgba(186, 230, 253, 0.5);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
+  color: #f8fafc;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 0 0 1px rgba(34, 211, 238, 0.16),
+    0 10px 26px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="light"] .entry-google-btn {
+  border: 2px solid rgba(14, 116, 144, 0.35);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(240, 249, 255, 0.82));
+  color: #0f172a;
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    0 8px 22px rgba(15, 23, 42, 0.08);
+}
+
+.auth-root.entry-root.dash-root.entry-v2 .entry-google-btn:hover:not(:disabled) {
+  border-color: rgba(103, 232, 249, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    0 0 0 1px rgba(232, 121, 249, 0.28),
+    0 12px 28px rgba(0, 0, 0, 0.32);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="light"] .entry-google-btn:hover:not(:disabled) {
+  border-color: rgba(162, 28, 175, 0.45);
+  color: #0f172a;
+  background: linear-gradient(180deg, #ffffff, #f3e8ff);
+}
+
+.auth-root.entry-root.dash-root.entry-v2 .entry-ide-btn {
+  border-radius: 12px;
+  border-color: rgba(103, 232, 249, 0.4);
+  background: rgba(34, 211, 238, 0.06);
+  color: #e7f2ff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="light"] .entry-ide-btn {
+  color: #0f172a;
+  border-color: rgba(14, 116, 144, 0.35);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.auth-root.entry-root.dash-root.entry-v2 .entry-ide-btn:hover {
+  border-color: rgba(103, 232, 249, 0.75);
+  background: rgba(34, 211, 238, 0.14);
+  color: #ffffff;
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="light"] .entry-ide-btn:hover {
+  color: #0f172a;
+  border-color: rgba(162, 28, 175, 0.4);
+  background: rgba(243, 232, 255, 0.8);
+}
+
+.entry-v2[data-pbc-theme="dark"] .entry-ide-btn__icon {
+  color: #67e8f9;
+}
+
+.entry-v2 .entry-visual__window {
+  border-color: rgba(125, 211, 252, 0.32);
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(232, 121, 249, 0.16),
+    0 0 32px rgba(34, 211, 238, 0.12);
+}
+
+.entry-v2[data-pbc-theme="light"] .entry-visual__window {
+  border-color: rgba(14, 116, 144, 0.22);
+  box-shadow:
+    0 16px 36px rgba(15, 23, 42, 0.1),
+    0 0 0 1px rgba(192, 38, 211, 0.12);
+}
+
+.entry-v2 .entry-visual__cline--active {
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.2), rgba(232, 121, 249, 0.08) 72%, transparent);
+  box-shadow: inset 2px 0 0 #22d3ee;
+}
+
+.entry-v2 .tok-kw {
+  color: #67e8f9;
+}
+
+.entry-v2 .tok-str {
+  color: #f0abfc;
+}
+
+.entry-v2 .tok-num {
+  color: #fde68a;
+}
+
+.entry-v2 .tok-fn {
+  color: #86efac;
+}
+
+.entry-v2 .tok-p {
+  color: #e2e8f0;
+}
+
+.entry-v2 .entry-block--hat {
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.35);
+}
+
+.entry-v2 .entry-block--pin,
+.entry-v2 .entry-block--pin-alt {
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.38);
+}
+
+.entry-v2 .entry-block--wait {
+  box-shadow: 0 0 12px rgba(14, 165, 233, 0.4);
+}
+
+.entry-v2 .entry-block--servo {
+  background-color: #86198f;
+  background-image: linear-gradient(180deg, #e879f9 0%, #86198f 100%);
+  box-shadow: 0 0 12px rgba(232, 121, 249, 0.42);
+}
+
+.entry-v2 .entry-features {
+  position: relative;
+  border-top-color: transparent;
+}
+
+.entry-v2 .entry-features::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.7), rgba(232, 121, 249, 0.7), transparent);
+  pointer-events: none;
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature {
+  background: rgba(12, 18, 32, 0.62);
+  border-color: rgba(186, 230, 253, 0.14);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="light"] .entry-feature {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.entry-v2 .entry-feature {
+  overflow: hidden;
+}
+
+.entry-v2 .entry-feature::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #22d3ee, #e879f9);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.65);
+  pointer-events: none;
+}
+
+.entry-v2 .entry-feature--python::before {
+  background: linear-gradient(90deg, #22d3ee, #38bdf8);
+}
+
+.entry-v2 .entry-feature--blocks::before {
+  background: linear-gradient(90deg, #e879f9, #c084fc);
+}
+
+.entry-v2 .entry-feature--hardware::before {
+  background: linear-gradient(90deg, #34d399, #22d3ee);
+}
+
+.entry-v2 .entry-feature--classes::before {
+  background: linear-gradient(90deg, #38bdf8, #e879f9);
+}
+
+.entry-v2 .entry-feature--projects::before {
+  background: linear-gradient(90deg, #f472b6, #22d3ee);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature--python .entry-feature__icon {
+  color: #67e8f9;
+  background: rgba(34, 211, 238, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.3);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature--blocks .entry-feature__icon {
+  color: #f0abfc;
+  background: rgba(232, 121, 249, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(232, 121, 249, 0.32);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature--hardware .entry-feature__icon {
+  color: #5eead4;
+  background: rgba(45, 212, 191, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.3);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature--classes .entry-feature__icon {
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.32);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature--projects .entry-feature__icon {
+  color: #f9a8d4;
+  background: rgba(244, 114, 182, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.3);
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature--python .entry-feature__name {
+  color: #e0f2fe;
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature--blocks .entry-feature__name {
+  color: #fae8ff;
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature--hardware .entry-feature__name {
+  color: #ccfbf1;
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature--classes .entry-feature__name {
+  color: #ede9fe;
+}
+
+.auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] .entry-feature--projects .entry-feature__name {
+  color: #fce7f3;
+}
+
+.entry-v2[data-pbc-theme="dark"] .entry-features__title {
+  color: #9eb0c6;
+}
+
+.entry-v2 .entry-board-svg__wire-servo {
+  stroke: #e879f9;
+}
+
+.entry-v2 .entry-board-svg__pin--servo {
+  fill: #f0abfc;
+}
+
+.entry-v2 .entry-board-svg__plug {
+  fill: #111827;
+  stroke: #e879f9;
+}

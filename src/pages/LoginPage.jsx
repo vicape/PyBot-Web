@@ -16,6 +16,7 @@ import EntryProductVisual from "../components/entry/EntryProductVisual.jsx";
 import { EntryFeatureIcon } from "../components/entry/EntryFeatureIcons.jsx";
 import "../styles/dashboard-theme.css";
 import "../styles/entry-gate.css";
+import "../styles/login-v2.css";
 
 function IdeMark({ size = 18 }) {
   return (
@@ -174,11 +175,43 @@ export default function LoginPage() {
 
   return (
     <main
-      className="auth-root entry-root dash-root"
+      className="auth-root entry-root dash-root entry-v2"
       lang={lang}
       data-pbc-theme={resolvedTheme}
       data-pbc-theme-pref={appearance.theme}
     >
+      <div className="entry-v2__circuits" aria-hidden="true">
+        <svg className="entry-v2__circuit-svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+          <g fill="none" stroke="currentColor" strokeWidth="1.25">
+            <path d="M-10 92H150V176H292" />
+            <path d="M86-8V92H214" />
+            <path d="M292 176V268H430" />
+            <path d="M430 268H548V168" />
+            <path d="M1168 36H1316V148H1470" />
+            <path d="M1316 148V286" />
+            <path d="M1470 286H1364V372" />
+            <path d="M28 792H188V700H332" />
+            <path d="M188 700V612H304" />
+            <path d="M1088 868V772H1244V688H1460" />
+            <path d="M980 848H1104V760" />
+          </g>
+          <g className="entry-v2__circuit-magenta" fill="none" strokeWidth="1.25">
+            <path d="M548 168H668V96" />
+            <path d="M332 700H456V784" />
+            <path d="M1364 372H1248V456" />
+            <path d="M760 880V804H880" />
+          </g>
+          <g className="entry-v2__circuit-nodes">
+            <circle cx="292" cy="176" r="3.2" />
+            <circle cx="430" cy="268" r="3.2" />
+            <circle cx="1316" cy="148" r="3.2" />
+            <circle cx="188" cy="700" r="3.2" />
+            <circle cx="1244" cy="688" r="3" />
+            <circle cx="668" cy="96" r="3" className="entry-v2__circuit-node-magenta" />
+            <circle cx="456" cy="784" r="3" className="entry-v2__circuit-node-magenta" />
+          </g>
+        </svg>
+      </div>
       <a className="entry-skip" href="#entry-main">
         {t("entrySkipToMain")}
       </a>
