@@ -550,16 +550,20 @@ body:has(.auth-root.entry-root.dash-root.entry-v2),
   .entry-v2[data-pbc-theme="dark"] .entry-top__pyclass {
     order: 0;
     flex: 0 0 auto;
-    width: max-content;
+    width: calc(1.2rem * 35 / 11 + 0.44rem);
+    min-width: calc(1.2rem * 35 / 11 + 0.44rem);
     max-width: 5.15rem;
     padding: 0.06rem 0.22rem;
   }
 
   .entry-v2 .entry-top__pyclass img {
-    width: auto;
+    flex: 0 0 auto;
+    width: calc(1.2rem * 35 / 11);
+    min-width: calc(1.2rem * 35 / 11);
     max-width: 4.55rem;
+    height: 1.2rem;
+    min-height: 1.2rem;
     max-height: 1.2rem;
-    height: auto;
   }
 
   .entry-v2 .entry-hero {
