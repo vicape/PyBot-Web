@@ -350,15 +350,12 @@ export default function LoginPage() {
                 ) : null}
 
                 {showStub ? (
-                  <>
-                    <p className="entry-stub-hint">{t("entryStubHint")}</p>
-                    <button type="button" className="entry-google-btn" disabled>
-                      <span className="entry-google-btn__icon">
-                        <GoogleMark />
-                      </span>
-                      <span className="entry-google-btn__label">{t("entryGoogleDisabled")}</span>
-                    </button>
-                  </>
+                  <button type="button" className="entry-google-btn" disabled>
+                    <span className="entry-google-btn__icon">
+                      <GoogleMark />
+                    </span>
+                    <span className="entry-google-btn__label">{t("entryGoogleDisabled")}</span>
+                  </button>
                 ) : null}
 
                 {existing && !supabaseConfigured ? (

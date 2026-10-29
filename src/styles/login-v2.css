@@ -1,8 +1,23 @@
 /* Login landing v2 — cristal, cian y magenta sobre el layout existente. */
 
+/* Alto natural: el bloqueo de scroll de entry-gate solo aplica fuera de v2. */
+html:has(.auth-root.entry-root.dash-root.entry-v2),
+body:has(.auth-root.entry-root.dash-root.entry-v2),
+#root:has(.auth-root.entry-root.dash-root.entry-v2) {
+  height: auto;
+  min-height: 100%;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .auth-root.entry-root.dash-root.entry-v2 {
   position: relative;
   --entry-radius: 16px;
+  height: auto;
+  min-height: max(100%, 100dvh);
+  max-height: none;
+  overflow: visible;
 }
 
 .auth-root.entry-root.dash-root.entry-v2[data-pbc-theme="dark"] {
@@ -82,6 +97,37 @@
 .entry-v2 .entry-shell {
   position: relative;
   z-index: 1;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  gap: clamp(0.6rem, 1vh, 0.9rem);
+}
+
+.entry-v2 .entry-hero {
+  flex: 0 0 auto;
+  align-items: start;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  padding-top: 0.35rem;
+}
+
+.entry-v2 .entry-hero__copy,
+.entry-v2 .entry-hero__visual,
+.entry-v2 .entry-visual,
+.entry-v2 .entry-visual__stage {
+  flex: 0 0 auto;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  overflow: visible;
+}
+
+.entry-v2 .entry-features {
+  flex: 0 0 auto;
+  margin-top: 0;
 }
 
 /* Barra flotante de cristal, sin sumar borde al alto. */
@@ -102,26 +148,39 @@
     0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
-@media (min-width: 641px) {
-  .entry-v2 .entry-top {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
-    border-radius: 999px;
-  }
+.entry-v2 .entry-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  flex-wrap: nowrap;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  min-height: 2.6rem;
+}
 
-  .entry-v2 .entry-top__brand {
-    justify-self: start;
-  }
+.entry-v2 .entry-top__brand {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  min-width: 0;
+}
 
-  .entry-v2 .entry-top__pyclass {
-    margin-inline: 0;
-    justify-self: center;
-  }
+.entry-v2 .entry-top__pyclass {
+  grid-column: 2;
+  grid-row: 1;
+  order: 0;
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 9.5rem;
+  margin-inline: 0;
+  justify-self: center;
+  justify-content: center;
+}
 
-  .entry-v2 .entry-top__controls {
-    justify-self: end;
-  }
+.entry-v2 .entry-top__controls {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
 }
 
 .entry-v2[data-pbc-theme="dark"] .entry-top__logo {
@@ -129,6 +188,9 @@
 }
 
 .entry-v2[data-pbc-theme="dark"] .entry-top__pyclass {
+  width: max-content;
+  max-width: 9.5rem;
+  padding: 0.12rem 0.4rem;
   background: rgba(248, 250, 252, 0.94);
   border-radius: 999px;
   box-shadow:
@@ -457,4 +519,74 @@
 .entry-v2 .entry-board-svg__plug {
   fill: #111827;
   stroke: #e879f9;
+}
+
+/* Escritorio real: columnas equilibradas, sin estirar el héroe al viewport. */
+@media (min-width: 1024px) and (min-height: 640px) {
+  .entry-v2 .entry-hero {
+    align-items: center;
+    padding-top: 0.15rem;
+  }
+}
+
+/* Móvil: una sola barra y un IDE legible en flujo, con scroll de página. */
+@media (max-width: 640px) {
+  .entry-v2 .entry-shell {
+    gap: 0.75rem;
+  }
+
+  .entry-v2 .entry-top {
+    min-height: 0;
+    padding: 0.22rem 0.45rem;
+    column-gap: 0.35rem;
+  }
+
+  .entry-v2 .entry-top__logo {
+    height: 1.6rem;
+    max-width: 6.1rem;
+  }
+
+  .entry-v2 .entry-top__pyclass,
+  .entry-v2[data-pbc-theme="dark"] .entry-top__pyclass {
+    order: 0;
+    flex: 0 0 auto;
+    width: max-content;
+    max-width: 5.15rem;
+    padding: 0.06rem 0.22rem;
+  }
+
+  .entry-v2 .entry-top__pyclass img {
+    width: auto;
+    max-width: 4.55rem;
+    max-height: 1.2rem;
+    height: auto;
+  }
+
+  .entry-v2 .entry-hero {
+    align-items: stretch;
+    padding-top: 0.2rem;
+  }
+
+  .entry-v2 .entry-hero__visual,
+  .entry-v2 .entry-visual,
+  .entry-v2 .entry-visual__stage {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 260px;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .entry-v2 .entry-visual__window {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 280px;
+    min-height: 260px;
+    max-height: 320px;
+    overflow: hidden;
+  }
+
+  .entry-v2 .entry-board-svg {
+    max-height: 6.25rem;
+  }
 }
