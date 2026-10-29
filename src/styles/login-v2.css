@@ -608,7 +608,7 @@ body:has(.auth-root.entry-root.dash-root.entry-v2),
    smaller screens, translated text and accessibility. */
 @media (max-width: 640px) and (min-height: 650px) {
   .auth-root.entry-root.dash-root.entry-v2 .entry-shell {
-    gap: clamp(0.22rem, 0.55dvh, 0.38rem);
+    gap: clamp(0.32rem, 0.7dvh, 0.45rem);
     padding-top: max(0.2rem, env(safe-area-inset-top, 0px));
     padding-bottom: max(0.2rem, env(safe-area-inset-bottom, 0px));
   }
@@ -657,9 +657,9 @@ body:has(.auth-root.entry-root.dash-root.entry-v2),
   }
 
   .entry-v2 .entry-visual__window {
-    height: clamp(175px, 26dvh, 220px);
-    min-height: 175px;
-    max-height: 220px;
+    height: clamp(208px, 32dvh, 260px);
+    min-height: 208px;
+    max-height: 260px;
     overflow: hidden;
   }
 
@@ -678,7 +678,7 @@ body:has(.auth-root.entry-root.dash-root.entry-v2),
 
   .entry-v2 .entry-visual__code,
   .entry-v2 .entry-visual__gutter {
-    font-size: 0.65rem;
+    font-size: 0.68rem;
     line-height: 1.18;
   }
 
@@ -721,7 +721,7 @@ body:has(.auth-root.entry-root.dash-root.entry-v2),
   .entry-v2 .entry-features__rail {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: clamp(0.22rem, 0.55dvh, 0.35rem);
+    gap: clamp(0.32rem, 0.7dvh, 0.42rem);
     align-items: stretch;
   }
 
@@ -736,7 +736,7 @@ body:has(.auth-root.entry-root.dash-root.entry-v2),
     row-gap: 0.08rem;
     min-width: 0;
     min-height: 0;
-    padding: clamp(0.24rem, 0.52dvh, 0.32rem) 0.38rem;
+    padding: clamp(0.42rem, 0.85dvh, 0.55rem) 0.38rem;
     border-radius: 10px;
   }
 
@@ -765,7 +765,7 @@ body:has(.auth-root.entry-root.dash-root.entry-v2),
   .entry-v2 .entry-feature__desc {
     grid-column: 2;
     grid-row: 2;
-    font-size: 0.70rem;
+    font-size: 0.73rem;
     line-height: 1.17;
   }
 
