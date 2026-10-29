@@ -71,6 +71,13 @@ body:has(.auth-root.entry-root.dash-root.entry-v2),
   opacity: 0.55;
 }
 
+/* Por debajo del escritorio los trazos cruzan héroe, botones y tarjetas. */
+@media (max-width: 1023px) {
+  .entry-v2__circuits {
+    display: none;
+  }
+}
+
 .entry-v2__circuit-svg {
   display: block;
   width: 100%;
@@ -550,20 +557,20 @@ body:has(.auth-root.entry-root.dash-root.entry-v2),
   .entry-v2[data-pbc-theme="dark"] .entry-top__pyclass {
     order: 0;
     flex: 0 0 auto;
-    width: calc(1.2rem * 35 / 11 + 0.44rem);
-    min-width: calc(1.2rem * 35 / 11 + 0.44rem);
-    max-width: 5.15rem;
+    width: calc(1.75rem * 35 / 11 + 0.44rem);
+    min-width: calc(1.75rem * 35 / 11 + 0.44rem);
+    max-width: calc(1.75rem * 35 / 11 + 0.44rem);
     padding: 0.06rem 0.22rem;
   }
 
   .entry-v2 .entry-top__pyclass img {
     flex: 0 0 auto;
-    width: calc(1.2rem * 35 / 11);
-    min-width: calc(1.2rem * 35 / 11);
-    max-width: 4.55rem;
-    height: 1.2rem;
-    min-height: 1.2rem;
-    max-height: 1.2rem;
+    width: calc(1.75rem * 35 / 11);
+    min-width: calc(1.75rem * 35 / 11);
+    max-width: calc(1.75rem * 35 / 11);
+    height: 1.75rem;
+    min-height: 1.75rem;
+    max-height: 1.75rem;
   }
 
   .entry-v2 .entry-hero {
