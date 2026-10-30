@@ -12,11 +12,12 @@ import {
 } from "../platform/appearanceApi.js";
 import { t, getLang, setLang, SUPPORTED_LANGS, LANG_LABELS } from "../i18n.js";
 import GoogleMark from "../components/GoogleMark.jsx";
-import EntryProductVisual from "../components/entry/EntryProductVisual.jsx";
+
 import { EntryFeatureIcon } from "../components/entry/EntryFeatureIcons.jsx";
 import "../styles/dashboard-theme.css";
 import "../styles/entry-gate.css";
 import "../styles/login-v2.css";
+import "../styles/login-glass.css";
 
 function IdeMark({ size = 18 }) {
   return (
@@ -289,30 +290,26 @@ export default function LoginPage() {
           </div>
         </header>
 
-        <section id="entry-main" className="entry-hero" aria-labelledby="entry-title">
-          <div className="entry-hero__copy">
-            <p className="entry-eyebrow">{t("entryTagline")}</p>
-
-            <h1 id="entry-title" className="entry-title">
-              <span className="entry-title__pair">
-                <span className="entry-title__line">{t("entryTitleLine1")}</span>{" "}
-                <span className="entry-title__line">{t("entryTitleLine2")}</span>
-              </span>
-              <span className="entry-title__line entry-title__line--accent">
-                {t("entryTitleLine3")}
-              </span>
-            </h1>
-
-            <p className="entry-lead">{t("entryLead")}</p>
-
-            {existing && !supabaseConfigured ? (
-              <p className="entry-notice" role="status">
-                {t("entrySessionNotice")}
-              </p>
-            ) : null}
-
-            <div className="entry-actions">
-              <div className="entry-actions__primary">
+        <section id="entry-main" className="glass-login" aria-label="PyClass login">
+          <div className="glass-login__subjects">
+            <div className="glass-login__tutor">
+              <div className="glass-login__avatar" aria-hidden="true">✦</div>
+              <p>¡Hola! ¿En qué materia trabajamos hoy?</p>
+            </div>
+            <div className="glass-login__course"><span aria-hidden="true">🐍</span><div><strong>Python Avanzado</strong><small>print("Hola, mundo") · funciones · proyectos</small></div></div>
+            <div className="glass-login__course"><span aria-hidden="true">▣</span><div><strong>Robótica ESP32</strong><small>MicroPython | ESP32-WROOM-32U</small></div></div>
+            <div className="glass-login__course"><span aria-hidden="true">▤</span><div><strong>Historia y otras materias</strong><small>Explorá contenidos y actividades</small></div></div>
+            <p className="glass-login__demo-note">Vista previa de materias · Próximamente</p>
+          </div>
+          <div className="glass-login__auth">
+            <img src="/branding/pyclass-logo-secondary.svg" alt="PyClass" className="glass-login__logo" />
+            <h1 id="entry-title">Iniciar sesión</h1>
+            <p className="glass-login__hint">Accedé con tu cuenta de Google</p>
+            <div className="glass-login__field"><label htmlFor="glass-email">Email <span>· Próximamente</span></label><input id="glass-email" type="email" placeholder="ejemplo@correo.com" disabled autoComplete="off" /></div>
+            <div className="glass-login__field glass-login__field--purple"><label htmlFor="glass-password">Contraseña <span>· Próximamente</span></label><input id="glass-password" type="password" placeholder="••••••••" disabled autoComplete="off" /></div>
+            <button className="glass-login__enter" type="button" disabled title="Próximamente">Entrar · Próximamente</button>
+            <div className="glass-login__links"><span>Olvidé mi contraseña</span><span>Crear cuenta</span></div>
+            <div className="glass-login__google">
                 {supabaseConfigured ? (
                   <button
                     type="button"
@@ -358,24 +355,15 @@ export default function LoginPage() {
                   </button>
                 ) : null}
 
+
                 {existing && !supabaseConfigured ? (
                   <Link to="/dashboard/classes" className="entry-link entry-link--primary">
                     {t("entryDashboardLink")}
                   </Link>
                 ) : null}
-              </div>
 
-              <Link to="/" className="entry-ide-btn">
-                <span className="entry-ide-btn__icon" aria-hidden="true">
-                  <IdeMark />
-                </span>
-                <span className="entry-ide-btn__label">{t("entryIdeLink")}</span>
-              </Link>
             </div>
-          </div>
-
-          <div className="entry-hero__visual">
-            <EntryProductVisual labels={visualLabels} />
+            <div className="glass-login__ide"></div>
           </div>
         </section>
 
