@@ -60,13 +60,13 @@ export default function EntryProductVisual({ labels }) {
                         <span className="tok-str">&quot;out&quot;</span>
                         <span className="tok-p">,</span> <span className="tok-num">2</span>
                         <span className="tok-p">,</span> <span className="tok-num">1</span>
-                        <span className="tok-p">)</span>
+                        <span className="tok-p">);</span>
                       </span>
                       <span className="entry-visual__cline">
                         <span className="tok-kw">wait</span>
                         <span className="tok-p">(</span>
                         <span className="tok-num">0.5</span>
-                        <span className="tok-p">)</span>
+                        <span className="tok-p">);</span>
                       </span>
                       <span className="entry-visual__cline">
                         <span className="tok-kw">pin</span>
@@ -74,14 +74,14 @@ export default function EntryProductVisual({ labels }) {
                         <span className="tok-str">&quot;out&quot;</span>
                         <span className="tok-p">,</span> <span className="tok-num">2</span>
                         <span className="tok-p">,</span> <span className="tok-num">0</span>
-                        <span className="tok-p">)</span>
+                        <span className="tok-p">);</span>
                       </span>
                       <span className="entry-visual__cline">
                         <span className="tok-kw">servo</span>
                         <span className="tok-p">(</span>
                         <span className="tok-num">10</span>
                         <span className="tok-p">,</span> <span className="tok-num">90</span>
-                        <span className="tok-p">)</span>
+                        <span className="tok-p">);</span>
                       </span>
                       <span className="entry-visual__cline entry-visual__cline--extra">
                         <span className="tok-kw">wait</span>
@@ -93,7 +93,7 @@ export default function EntryProductVisual({ labels }) {
                         <span className="tok-fn">print</span>
                         <span className="tok-p">(</span>
                         <span className="tok-str">&quot;Hola PyBot&quot;</span>
-                        <span className="tok-p">)</span>
+                        <span className="tok-p">);</span>
                       </span>
                     </code>
                   </pre>
@@ -124,7 +124,7 @@ export default function EntryProductVisual({ labels }) {
                     </div>
                     <div className="entry-block entry-block--servo">
                       <span className="entry-block__label">
-                        servo <strong>90°</strong>
+                        servo <strong>10</strong> <strong>90</strong>
                       </span>
                     </div>
                     <div className="entry-block entry-block--print entry-block--extra">
@@ -140,96 +140,63 @@ export default function EntryProductVisual({ labels }) {
                   <div className="entry-visual__board">
                     <svg className="entry-board-svg" viewBox="0 0 176 104" fill="none">
                       <rect
-                        x="12"
-                        y="16"
-                        width="152"
-                        height="72"
-                        rx="5"
+                        x="20"
+                        y="18"
+                        width="128"
+                        height="70"
+                        rx="6"
                         className="entry-board-svg__body"
                       />
-                      <rect
-                        x="12"
-                        y="16"
-                        width="152"
-                        height="8"
-                        rx="0"
-                        className="entry-board-svg__edge"
-                      />
-                      <rect
-                        x="4"
-                        y="40"
-                        width="10"
-                        height="24"
-                        rx="1.5"
-                        className="entry-board-svg__usb"
-                      />
-                      <rect
-                        x="30"
-                        y="32"
-                        width="42"
-                        height="36"
-                        rx="2.5"
-                        className="entry-board-svg__chip"
-                      />
-                      <rect
-                        x="37"
-                        y="39"
-                        width="28"
-                        height="22"
-                        rx="1.2"
-                        className="entry-board-svg__die"
-                      />
-                      <circle cx="84" cy="36" r="2.8" className="entry-board-svg__led" />
-                      <circle
-                        cx="94"
-                        cy="36"
-                        r="2.8"
-                        className="entry-board-svg__led entry-board-svg__led--alt"
-                      />
+                      <rect x="20" y="18" width="128" height="7" className="entry-board-svg__edge" />
+                      <rect x="6" y="42" width="16" height="16" rx="2" className="entry-board-svg__usb" />
+                      <rect x="46" y="34" width="40" height="34" rx="3" className="entry-board-svg__chip" />
+                      <rect x="54" y="42" width="24" height="18" rx="1.4" className="entry-board-svg__die" />
+                      <circle cx="96" cy="30" r="2.5" className="entry-board-svg__led" />
+                      <circle cx="104" cy="30" r="2.5" className="entry-board-svg__led entry-board-svg__led--alt" />
                       <path
-                        d="M72 52h18M72 62h14"
+                        d="M86 50h14M86 60h10"
                         className="entry-board-svg__traces"
-                        strokeWidth="1.5"
+                        strokeWidth="1.4"
                         strokeLinecap="round"
                       />
+                      <g className="entry-board-svg__pins">
+                        <circle cx="118" cy="32" r="1.7" className="entry-board-svg__pin entry-board-svg__pin--active" />
+                        <circle cx="128" cy="32" r="1.7" className="entry-board-svg__pin" />
+                        <circle cx="118" cy="42" r="1.7" className="entry-board-svg__pin" />
+                        <circle cx="128" cy="42" r="1.7" className="entry-board-svg__pin entry-board-svg__pin--servo" />
+                        <circle cx="118" cy="52" r="1.7" className="entry-board-svg__pin" />
+                        <circle cx="128" cy="52" r="1.7" className="entry-board-svg__pin" />
+                        <circle cx="118" cy="62" r="1.7" className="entry-board-svg__pin" />
+                        <circle cx="128" cy="62" r="1.7" className="entry-board-svg__pin" />
+                        <circle cx="118" cy="72" r="1.7" className="entry-board-svg__pin" />
+                        <circle cx="128" cy="72" r="1.7" className="entry-board-svg__pin" />
+                      </g>
                       <path
-                        d="M90 52h18v10"
+                        d="M128 32H158V12"
                         className="entry-board-svg__traces entry-board-svg__traces--active"
-                        strokeWidth="1.5"
+                        strokeWidth="1.6"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
-                      <g className="entry-board-svg__pins">
-                        <circle cx="124" cy="30" r="1.55" className="entry-board-svg__pin entry-board-svg__pin--active" />
-                        <circle cx="134" cy="30" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="144" cy="30" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="124" cy="39" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="134" cy="39" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="144" cy="39" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="124" cy="48" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="134" cy="48" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="144" cy="48" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="124" cy="57" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="134" cy="57" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="144" cy="57" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="124" cy="66" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="134" cy="66" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="144" cy="66" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="124" cy="75" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="134" cy="75" r="1.55" className="entry-board-svg__pin" />
-                        <circle cx="144" cy="75" r="1.55" className="entry-board-svg__pin" />
-                      </g>
-                      <text x="30" y="84" className="entry-board-svg__label">
+                      <circle cx="158" cy="12" r="2.2" className="entry-board-svg__pin entry-board-svg__pin--active" />
+                      <path
+                        d="M128 42H150V86H138"
+                        className="entry-board-svg__traces entry-board-svg__wire-servo"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <rect x="126" y="82" width="22" height="10" rx="2" className="entry-board-svg__plug" />
+                      <circle cx="132" cy="87" r="1.2" className="entry-board-svg__pin entry-board-svg__pin--servo" />
+                      <circle cx="137" cy="87" r="1.2" className="entry-board-svg__pin" />
+                      <circle cx="142" cy="87" r="1.2" className="entry-board-svg__pin" />
+                      <text x="28" y="78" className="entry-board-svg__label">
                         ESP32
                       </text>
-                      <text
-                        x="86"
-                        y="84"
-                        className="entry-board-svg__label entry-board-svg__label--muted"
-                      >
+                      <text x="64" y="78" className="entry-board-svg__label entry-board-svg__label--muted">
                         Arduino
                       </text>
-                      <text x="118" y="26" className="entry-board-svg__pin-label">
+                      <text x="112" y="26" className="entry-board-svg__pin-label">
                         GPIO2
                       </text>
                     </svg>

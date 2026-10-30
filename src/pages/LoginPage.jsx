@@ -12,10 +12,12 @@ import {
 } from "../platform/appearanceApi.js";
 import { t, getLang, setLang, SUPPORTED_LANGS, LANG_LABELS } from "../i18n.js";
 import GoogleMark from "../components/GoogleMark.jsx";
-import EntryProductVisual from "../components/entry/EntryProductVisual.jsx";
+
 import { EntryFeatureIcon } from "../components/entry/EntryFeatureIcons.jsx";
 import "../styles/dashboard-theme.css";
 import "../styles/entry-gate.css";
+import "../styles/login-v2.css";
+import "../styles/login-glass.css";
 
 function IdeMark({ size = 18 }) {
   return (
@@ -174,11 +176,43 @@ export default function LoginPage() {
 
   return (
     <main
-      className="auth-root entry-root dash-root"
+      className="auth-root entry-root dash-root entry-v2"
       lang={lang}
       data-pbc-theme={resolvedTheme}
       data-pbc-theme-pref={appearance.theme}
     >
+      <div className="entry-v2__circuits" aria-hidden="true">
+        <svg className="entry-v2__circuit-svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+          <g fill="none" stroke="currentColor" strokeWidth="1.25">
+            <path d="M-10 92H150V176H292" />
+            <path d="M86-8V92H214" />
+            <path d="M292 176V268H430" />
+            <path d="M430 268H548V168" />
+            <path d="M1168 36H1316V148H1470" />
+            <path d="M1316 148V286" />
+            <path d="M1470 286H1364V372" />
+            <path d="M28 792H188V700H332" />
+            <path d="M188 700V612H304" />
+            <path d="M1088 868V772H1244V688H1460" />
+            <path d="M980 848H1104V760" />
+          </g>
+          <g className="entry-v2__circuit-magenta" fill="none" strokeWidth="1.25">
+            <path d="M548 168H668V96" />
+            <path d="M332 700H456V784" />
+            <path d="M1364 372H1248V456" />
+            <path d="M760 880V804H880" />
+          </g>
+          <g className="entry-v2__circuit-nodes">
+            <circle cx="292" cy="176" r="3.2" />
+            <circle cx="430" cy="268" r="3.2" />
+            <circle cx="1316" cy="148" r="3.2" />
+            <circle cx="188" cy="700" r="3.2" />
+            <circle cx="1244" cy="688" r="3" />
+            <circle cx="668" cy="96" r="3" className="entry-v2__circuit-node-magenta" />
+            <circle cx="456" cy="784" r="3" className="entry-v2__circuit-node-magenta" />
+          </g>
+        </svg>
+      </div>
       <a className="entry-skip" href="#entry-main">
         {t("entrySkipToMain")}
       </a>
@@ -256,30 +290,26 @@ export default function LoginPage() {
           </div>
         </header>
 
-        <section id="entry-main" className="entry-hero" aria-labelledby="entry-title">
-          <div className="entry-hero__copy">
-            <p className="entry-eyebrow">{t("entryTagline")}</p>
-
-            <h1 id="entry-title" className="entry-title">
-              <span className="entry-title__pair">
-                <span className="entry-title__line">{t("entryTitleLine1")}</span>{" "}
-                <span className="entry-title__line">{t("entryTitleLine2")}</span>
-              </span>
-              <span className="entry-title__line entry-title__line--accent">
-                {t("entryTitleLine3")}
-              </span>
-            </h1>
-
-            <p className="entry-lead">{t("entryLead")}</p>
-
-            {existing && !supabaseConfigured ? (
-              <p className="entry-notice" role="status">
-                {t("entrySessionNotice")}
-              </p>
-            ) : null}
-
-            <div className="entry-actions">
-              <div className="entry-actions__primary">
+        <section id="entry-main" className="glass-login" aria-label="PyClass login">
+          <div className="glass-login__subjects">
+            <div className="glass-login__tutor">
+              <div className="glass-login__avatar" aria-hidden="true">✦</div>
+              <p>¡Hola! ¿En qué materia trabajamos hoy?</p>
+            </div>
+            <div className="glass-login__course"><span aria-hidden="true">🐍</span><div><strong>Python Avanzado</strong><small>print("Hola, mundo") · funciones · proyectos</small></div></div>
+            <div className="glass-login__course"><span aria-hidden="true">▣</span><div><strong>Robótica ESP32</strong><small>MicroPython | ESP32-WROOM-32U</small></div></div>
+            <div className="glass-login__course"><span aria-hidden="true">▤</span><div><strong>Historia y otras materias</strong><small>Explorá contenidos y actividades</small></div></div>
+            <p className="glass-login__demo-note">Vista previa de materias · Próximamente</p>
+          </div>
+          <div className="glass-login__auth">
+            <img src="/branding/pyclass-logo-secondary.svg" alt="PyClass" className="glass-login__logo" />
+            <h1 id="entry-title">Iniciar sesión</h1>
+            <p className="glass-login__hint">Accedé con tu cuenta de Google</p>
+            <div className="glass-login__field"><label htmlFor="glass-email">Email <span>· Próximamente</span></label><input id="glass-email" type="email" placeholder="ejemplo@correo.com" disabled autoComplete="off" /></div>
+            <div className="glass-login__field glass-login__field--purple"><label htmlFor="glass-password">Contraseña <span>· Próximamente</span></label><input id="glass-password" type="password" placeholder="••••••••" disabled autoComplete="off" /></div>
+            <button className="glass-login__enter" type="button" disabled title="Próximamente">Entrar · Próximamente</button>
+            <div className="glass-login__links"><span>Olvidé mi contraseña</span><span>Crear cuenta</span></div>
+            <div className="glass-login__google">
                 {supabaseConfigured ? (
                   <button
                     type="button"
@@ -317,35 +347,23 @@ export default function LoginPage() {
                 ) : null}
 
                 {showStub ? (
-                  <>
-                    <p className="entry-stub-hint">{t("entryStubHint")}</p>
-                    <button type="button" className="entry-google-btn" disabled>
-                      <span className="entry-google-btn__icon">
-                        <GoogleMark />
-                      </span>
-                      <span className="entry-google-btn__label">{t("entryGoogleDisabled")}</span>
-                    </button>
-                  </>
+                  <button type="button" className="entry-google-btn" disabled>
+                    <span className="entry-google-btn__icon">
+                      <GoogleMark />
+                    </span>
+                    <span className="entry-google-btn__label">{t("entryGoogleDisabled")}</span>
+                  </button>
                 ) : null}
+
 
                 {existing && !supabaseConfigured ? (
                   <Link to="/dashboard/classes" className="entry-link entry-link--primary">
                     {t("entryDashboardLink")}
                   </Link>
                 ) : null}
-              </div>
 
-              <Link to="/" className="entry-ide-btn">
-                <span className="entry-ide-btn__icon" aria-hidden="true">
-                  <IdeMark />
-                </span>
-                <span className="entry-ide-btn__label">{t("entryIdeLink")}</span>
-              </Link>
             </div>
-          </div>
-
-          <div className="entry-hero__visual">
-            <EntryProductVisual labels={visualLabels} />
+            <div className="glass-login__ide"></div>
           </div>
         </section>
 
