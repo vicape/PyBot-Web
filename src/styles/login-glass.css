@@ -1,0 +1,35 @@
+/* Isolated experimental PyClass glass login. Existing OAuth and IDE links remain unchanged. */
+.auth-root.entry-v2:has(.glass-login){background:#020617 radial-gradient(ellipse at 20% 12%,#12324b 0%,transparent 48%),radial-gradient(ellipse at 85% 80%,#301540 0%,transparent 48%);color:#f8fafc;min-height:100dvh}
+.entry-v2:has(.glass-login) .entry-v2__circuits{opacity:.18}
+.entry-v2:has(.glass-login) .entry-shell{max-width:1180px;margin:auto;min-height:100dvh;justify-content:center;gap:1.5rem}
+.entry-v2:has(.glass-login) .entry-features{display:none}
+.entry-v2:has(.glass-login) .entry-top{background:rgba(15,23,42,.55);border:1px solid rgba(255,255,255,.12)}
+.glass-login{width:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,.9fr);gap:clamp(1.5rem,5vw,5rem);align-items:center;padding:clamp(1.25rem,4vw,3.5rem);background:rgba(15,23,42,.6);backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.12);border-radius:24px;box-shadow:0 28px 85px rgba(0,0,0,.4)}
+.glass-login__subjects{display:grid;gap:1rem;align-content:center}
+.glass-login__tutor{display:flex;align-items:center;gap:1.1rem;margin-bottom:1rem}
+.glass-login__avatar{display:grid;place-items:center;flex:none;width:76px;height:76px;border-radius:50%;background:linear-gradient(140deg,#a855f7,#ec4899);border:3px solid #d8b4fe;box-shadow:0 0 24px #a855f7;color:white;font-size:2rem}
+.glass-login__tutor p{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);padding:1rem;border-radius:14px;font-size:.95rem;color:#f8fafc}
+.glass-login__course{display:flex;gap:1rem;align-items:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:1rem;transition:transform .2s,border-color .2s}
+.glass-login__course:hover{transform:scale(1.025);border-color:rgba(34,211,238,.55)}
+.glass-login__course>span{font-size:1.6rem;color:#2dd4bf}
+.glass-login__course strong{display:block;color:#fff;font-size:1rem}
+.glass-login__course small{display:block;color:#aabbd0;font-size:.78rem;margin-top:.2rem}
+.glass-login__demo-note{color:#94a3b8;font-size:.75rem}
+.glass-login__auth{width:100%;max-width:420px;margin:auto;background:rgba(15,23,42,.65);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:clamp(1.3rem,3vw,2.2rem);box-shadow:0 15px 45px rgba(0,0,0,.25)}
+.glass-login__logo{display:block;max-width:160px;width:65%;height:auto;margin:0 auto 1rem;background:#f8fafc;border-radius:12px;padding:.3rem}
+.glass-login__auth h1{text-align:center;color:#06b6d4;font-size:1.55rem;line-height:1.25;margin:.4rem 0}
+.glass-login__hint{text-align:center;color:#aabbd0;font-size:.84rem;margin-bottom:1.5rem}
+.glass-login__field{margin-bottom:1rem}
+.glass-login__field label{display:flex;justify-content:space-between;color:#e2e8f0;font-size:.82rem;margin-bottom:.4rem}
+.glass-login__field label span{color:#94a3b8;font-size:.72rem}
+.glass-login__field input{width:100%;min-height:44px;background:rgba(2,6,23,.55);border:1px solid rgba(6,182,212,.55);border-radius:12px;padding:.7rem 1rem;color:#94a3b8;opacity:1;cursor:not-allowed}
+.glass-login__field--purple input{border-color:rgba(168,85,247,.6)}
+.glass-login__enter{display:block;width:100%;min-height:44px;border:0;border-radius:999px;background:#06b6d4;color:#082f49;font-weight:800;opacity:.6;cursor:not-allowed}
+.glass-login__links{display:flex;justify-content:space-between;gap:1rem;margin:1rem 0 1.4rem;color:#94a3b8;font-size:.76rem}
+.glass-login__google{display:grid;gap:.65rem}
+.glass-login__google .entry-google-btn{width:100%;border-color:rgba(236,72,153,.55)!important}
+.glass-login__google .entry-google-wrap{max-width:100%;overflow:hidden}
+.glass-login__ide{margin-top:1rem}
+.glass-login__ide .entry-ide-btn{width:100%;justify-content:center}
+@media(max-width:760px){.entry-v2:has(.glass-login) .entry-shell{justify-content:flex-start}.glass-login{grid-template-columns:1fr;padding:1rem;gap:1.5rem}.glass-login__auth{max-width:none}.glass-login__subjects{order:2}.glass-login__auth{order:1}.glass-login__tutor{margin-bottom:0}}
+@media(prefers-reduced-motion:reduce){.glass-login__course{transition:none}.glass-login__course:hover{transform:none}}
