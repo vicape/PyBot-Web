@@ -192,16 +192,16 @@ export default function LoginPage() {
         <section className="pc-layout" id="entry-main" aria-label="PyClass">
           <div className="pc-discovery">
             <div className="pc-assistant">
-              <div className="pc-avatar" aria-hidden="true">✦</div>
+              <div className="pc-avatar" aria-hidden="true"><svg viewBox="0 0 80 80" role="presentation"><circle cx="40" cy="40" r="39" fill="#392057"/><path d="M15 72c3-15 13-21 25-21s22 6 25 21" fill="#6457b9"/><path d="M20 36c0-20 10-28 21-28 15 0 23 11 21 29l-6 15-32-1z" fill="#20162e"/><ellipse cx="40" cy="37" rx="18" ry="22" fill="#e7ac92"/><path d="M22 33c0-18 12-25 20-25 14 0 21 10 20 25-7-2-12-7-16-13-6 9-14 13-24 13z" fill="#2b1b35"/><path d="M30 39h4m13 0h4" stroke="#312339" strokeWidth="2.5" strokeLinecap="round"/><path d="M35 49q5 4 10 0" stroke="#a44f65" strokeWidth="2" fill="none" strokeLinecap="round"/><path d="M17 36c-2-13 3-24 12-30m35 30c2-13-3-24-12-30" stroke="#bd8cf9" strokeWidth="5" fill="none" strokeLinecap="round"/><rect x="14" y="33" width="7" height="17" rx="3" fill="#b794f4"/><rect x="59" y="33" width="7" height="17" rx="3" fill="#b794f4"/></svg></div>
               <div className="pc-speech">
-                <span className="pc-assistant-label">PyClass · Tutor IA</span>
+                
                 <p>¡Hola! ¿En qué materia trabajamos hoy?</p>
               </div>
             </div>
             <div className="pc-courses" aria-label="Materias de ejemplo">
               <div className="pc-course">
                 <span className="pc-course-icon pc-course-icon--python" aria-hidden="true">Py</span>
-                <span><strong>Python Avanzado</strong><small>Funciones · Algoritmos · Proyectos</small></span>
+                <span><strong>Python Avanzado</strong><small>Programación · IA · Proyectos</small></span>
               </div>
               <div className="pc-course">
                 <span className="pc-course-icon pc-course-icon--esp" aria-hidden="true">▣</span>
@@ -209,17 +209,17 @@ export default function LoginPage() {
               </div>
               <div className="pc-course">
                 <span className="pc-course-icon pc-course-icon--history" aria-hidden="true">▤</span>
-                <span><strong>Historia y Humanidades</strong><small>Explorá · Investigá · Aprendé</small></span>
+                <span><strong>Historia de México</strong><small>Civilizaciones · Cultura · Sociedad</small></span>
               </div>
             </div>
-            <p className="pc-discovery-foot">Aprendé a tu ritmo. Creá, experimentá y compartí.</p>
+            
           </div>
           <div className="pc-login">
             <div className="pc-login-brand">
               <img src="/branding/pyclass-logo-secondary.svg" alt="PyClass" />
             </div>
             <h1>Iniciar sesión</h1>
-            <p className="pc-login-subtitle">Tu espacio para aprender comienza acá.</p>
+            
             <form className="pc-demo-form" onSubmit={(e) => { e.preventDefault(); setDemoNotice("El acceso por correo es una demostración. Ingresá con Google para continuar."); }}>
               <label htmlFor="pc-email">Email</label>
               <input id="pc-email" type="email" placeholder="ejemplo@correo.com" autoComplete="email" required />
@@ -235,11 +235,11 @@ export default function LoginPage() {
               </div>
             </form>
             {demoNotice && <p className="pc-demo-notice" role="status">{demoNotice}</p>}
-            <div className="pc-separator"><span>o continuá con</span></div>
+            
             <div className="pc-google">
               {supabaseConfigured ? (
                 <button type="button" className="pc-google-button" onClick={oauthSupabaseGoogle} disabled={oauthBusy} aria-busy={oauthBusy ? "true" : "false"}>
-                  <GoogleMark /><span>{oauthBusy ? t("entryGoogleLoading") : "Continuar con Google"}</span>
+                  <GoogleMark /><span>{oauthBusy ? t("entryGoogleLoading") : "Continuar con Google Classroom"}</span>
                 </button>
               ) : showGIS ? (
                 <div className="pc-google-gis"><GoogleLogin
