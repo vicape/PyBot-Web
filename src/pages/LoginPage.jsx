@@ -198,15 +198,6 @@ export default function LoginPage() {
               decoding="async"
             />
           </a>
-          <div className="entry-top__pyclass" aria-label="PyClass">
-            <img
-              src="/branding/pyclass-logo-secondary.svg"
-              alt="PyClass"
-              width={150}
-              height={48}
-              decoding="async"
-            />
-          </div>
           <div className="entry-top__controls">
             <label className="entry-lang">
               <span className="sr-only">{t("entryLanguage")}</span>
@@ -271,6 +262,16 @@ export default function LoginPage() {
             </h1>
 
             <p className="entry-lead">{t("entryLead")}</p>
+
+            <div className="entry-hero__pyclass">
+              <img
+                src="/branding/pyclass-logo-secondary.svg"
+                alt="PyClass"
+                width={150}
+                height={48}
+                decoding="async"
+              />
+            </div>
 
             {existing && !supabaseConfigured ? (
               <p className="entry-notice" role="status">
