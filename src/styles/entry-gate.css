@@ -2290,3 +2290,146 @@ html:has(.pyclass-preview),body:has(.pyclass-preview),#root:has(.pyclass-preview
 .pyclass-preview .pc-google{margin-top:13px}
 .pyclass-preview .pc-google-button{border-color:#e879f9;box-shadow:0 0 15px rgba(236,72,153,.24)}
 @media(max-width:760px){.pyclass-preview .pc-layout{grid-template-columns:1fr;gap:25px;padding:0}.pyclass-preview .pc-login{max-width:430px}.pyclass-preview .pc-discovery{gap:16px}.pyclass-preview .pc-avatar{width:66px;height:66px}.pyclass-preview .pc-courses{max-width:none;margin:0}.pyclass-preview .pc-speech p{font-size:13px}}
+
+/* Neon glassmorphism: midnight navy, circuit motifs, glass card and assistant footer */
+html:has(.pyclass-preview),
+body:has(.pyclass-preview),
+#root:has(.pyclass-preview) {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.auth-root.entry-root.dash-root.pyclass-preview {
+  background-color: #020617;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%2322d3ee' stroke-width='1.15' opacity='.5'%3E%3Cpath d='M12 28h46v38h34'/%3E%3Cpath d='M148 16v44h48'/%3E%3Cpath d='M78 64h30v22'/%3E%3C/g%3E%3Cg fill='%2322d3ee' opacity='.7'%3E%3Ccircle cx='92' cy='66' r='2.2'/%3E%3Ccircle cx='58' cy='28' r='2'/%3E%3Ccircle cx='196' cy='60' r='2'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%23f472b6' stroke-width='1.15' opacity='.48'%3E%3Cpath d='M16 150h54v-32h42'/%3E%3Cpath d='M138 188h52v-40'/%3E%3Cpath d='M96 168v28'/%3E%3C/g%3E%3Cg fill='%23f472b6' opacity='.65'%3E%3Ccircle cx='112' cy='118' r='2.1'/%3E%3Ccircle cx='190' cy='148' r='2'/%3E%3Ccircle cx='96' cy='196' r='2'/%3E%3C/g%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 84% 10%, rgba(34, 211, 238, 0.16), transparent 42%),
+    radial-gradient(ellipse at 8% 90%, rgba(244, 114, 182, 0.13), transparent 40%),
+    linear-gradient(165deg, #0b1730 0%, #07111f 48%, #020617 100%);
+  background-repeat: no-repeat;
+  background-size: 240px 240px, 260px 260px, auto, auto, auto;
+  background-position: right -36px top 4%, left -48px bottom 2%, center, center, center;
+}
+
+.pyclass-preview .pc-stage,
+.pyclass-preview .pc-layout,
+.pyclass-preview .pc-discovery,
+.pyclass-preview .pc-login,
+.pyclass-preview .pc-top,
+.pyclass-preview .pc-assistant {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pyclass-preview .pc-login {
+  border: 1px solid rgba(186, 230, 253, 0.28);
+  border-radius: 22px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03) 34%, transparent 52%),
+    linear-gradient(160deg, rgba(15, 23, 42, 0.62), rgba(2, 6, 23, 0.46));
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.pyclass-preview .pc-demo-form input:focus,
+.pyclass-preview .pc-password-wrap input:focus {
+  border-color: #22d3ee;
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.22), 0 0 18px rgba(6, 182, 212, 0.35);
+}
+
+.pyclass-preview .pc-submit {
+  background: #06b6d4;
+  color: #042f3a;
+  box-shadow: 0 0 22px rgba(6, 182, 212, 0.55);
+}
+
+.pyclass-preview .pc-submit:hover {
+  background: #22d3ee;
+}
+
+.pyclass-preview .pc-google-button {
+  border-color: #f472b6;
+  box-shadow: 0 0 16px rgba(244, 114, 182, 0.32);
+}
+
+.pyclass-preview .pc-google-button:hover:not(:disabled) {
+  border-color: #fb7185;
+  background: rgba(244, 114, 182, 0.12);
+}
+
+.pyclass-preview .pc-speech {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.42), rgba(2, 6, 23, 0.28));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 10px 28px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.pyclass-preview .pc-links {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.pyclass-preview .pc-links button,
+.pyclass-preview .pc-course,
+.pyclass-preview .pc-speech p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .pyclass-preview .pc-stage {
+    width: 100%;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .pyclass-preview .pc-login {
+    justify-self: stretch;
+  }
+
+  .pyclass-preview .pc-login-brand img {
+    width: min(230px, 100%);
+    max-width: 100%;
+    height: auto;
+    max-height: 76px;
+  }
+
+  .pyclass-preview .pc-top-brand {
+    min-width: 0;
+  }
+
+  .pyclass-preview .pc-top-brand img {
+    width: min(140px, 42vw);
+    max-width: 100%;
+  }
+
+  .pyclass-preview .pc-top-tools select {
+    max-width: 46vw;
+  }
+
+  .pyclass-preview .pc-assistant {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 18px;
+    background: linear-gradient(160deg, rgba(15, 23, 42, 0.5), rgba(2, 6, 23, 0.3));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 12px 28px rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .pyclass-preview .pc-speech {
+    flex: 1;
+    max-width: none;
+  }
+}
