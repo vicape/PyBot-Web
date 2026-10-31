@@ -74,6 +74,8 @@ export default function LoginPage() {
   const supabaseConfigured = isSupabaseConfigured();
   const [lang, setLangState] = useState(() => getLang());
   const [oauthBusy, setOauthBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [demoNotice, setDemoNotice] = useState("");
   const [appearance, setAppearance] = useState(() => readEntryAppearance());
   const [resolvedTheme, setResolvedTheme] = useState(() =>
     resolveTheme(readEntryAppearance().theme),
@@ -173,209 +175,100 @@ export default function LoginPage() {
     resolvedTheme === "dark" ? t("entryThemeLight") : t("entryThemeDark");
 
   return (
-    <main
-      className="auth-root entry-root dash-root"
-      lang={lang}
-      data-pbc-theme={resolvedTheme}
-      data-pbc-theme-pref={appearance.theme}
-    >
-      <a className="entry-skip" href="#entry-main">
-        {t("entrySkipToMain")}
-      </a>
-      <div className="entry-shell">
-        <header className="entry-top">
-          <a
-            className="entry-top__brand"
-            href="#entry-main"
-            aria-label={t("entryBrand")}
-          >
-            <img
-              src="/branding/pybot-logo-full.svg"
-              alt={t("entryBrand")}
-              className="entry-top__logo"
-              width={168}
-              height={66}
-              decoding="async"
-            />
-          </a>
-          <div className="entry-top__pyclass" aria-label="PyClass">
-            <img
-              src="/branding/pyclass-logo-secondary.svg"
-              alt="PyClass"
-              width={150}
-              height={48}
-              decoding="async"
-            />
-          </div>
-          <div className="entry-top__controls">
-            <label className="entry-lang">
-              <span className="sr-only">{t("entryLanguage")}</span>
-              <select
-                className="entry-lang__select"
-                value={lang}
-                onChange={(e) => onLangChange(e.target.value)}
-                aria-label={t("entryLanguage")}
-              >
-                {SUPPORTED_LANGS.map((code) => (
-                  <option key={code} value={code}>
-                    {LANG_SHORT[code] || LANG_LABELS[code]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              className="entry-theme-btn"
-              onClick={toggleTheme}
-              aria-label={`${t("entryTheme")}: ${themeLabel}`}
-              title={themeLabel}
-            >
-              <span className="entry-theme-btn__icon" aria-hidden="true">
-                {resolvedTheme === "dark" ? (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.8" />
-                    <path
-                      d="M12 2v2.2M12 19.8V22M4.2 12H2M22 12h-2.2M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M19 13.5A7.5 7.5 0 1 1 10.5 5 6 6 0 0 0 19 13.5Z"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                )}
-              </span>
-            </button>
+    <main className="auth-root entry-root dash-root pyclass-preview" lang={lang} data-pbc-theme="dark">
+      <a className="entry-skip" href="#entry-main">{t("entrySkipToMain")}</a>
+      <div className="pc-stage">
+        <header className="pc-top">
+          <Link to="/" className="pc-top-brand" aria-label="PyBot">
+            <img src="/branding/pybot-logo-full.svg" alt="PyBot" />
+          </Link>
+          <div className="pc-top-tools">
+            <label className="sr-only" htmlFor="pc-language">{t("entryLanguage")}</label>
+            <select id="pc-language" value={lang} onChange={(e) => onLangChange(e.target.value)} aria-label={t("entryLanguage")}>
+              {SUPPORTED_LANGS.map((code) => <option key={code} value={code}>{LANG_SHORT[code] || LANG_LABELS[code]}</option>)}
+            </select>
           </div>
         </header>
-
-        <section id="entry-main" className="entry-hero" aria-labelledby="entry-title">
-          <div className="entry-hero__copy">
-            <p className="entry-eyebrow">{t("entryTagline")}</p>
-
-            <h1 id="entry-title" className="entry-title">
-              <span className="entry-title__pair">
-                <span className="entry-title__line">{t("entryTitleLine1")}</span>{" "}
-                <span className="entry-title__line">{t("entryTitleLine2")}</span>
-              </span>
-              <span className="entry-title__line entry-title__line--accent">
-                {t("entryTitleLine3")}
-              </span>
-            </h1>
-
-            <p className="entry-lead">{t("entryLead")}</p>
-
-            {existing && !supabaseConfigured ? (
-              <p className="entry-notice" role="status">
-                {t("entrySessionNotice")}
-              </p>
-            ) : null}
-
-            <div className="entry-actions">
-              <div className="entry-actions__primary">
-                {supabaseConfigured ? (
-                  <button
-                    type="button"
-                    className="entry-google-btn"
-                    onClick={oauthSupabaseGoogle}
-                    disabled={oauthBusy}
-                    aria-busy={oauthBusy ? "true" : "false"}
-                  >
-                    <span className="entry-google-btn__icon">
-                      <GoogleMark />
-                    </span>
-                    <span className="entry-google-btn__label">
-                      {oauthBusy ? t("entryGoogleLoading") : googleLabel}
-                    </span>
-                  </button>
-                ) : null}
-
-                {showGIS ? (
-                  <div className="entry-google-wrap auth-google-wrap">
-                    <GoogleLogin
-                      onSuccess={(res) => {
-                        const cred = res.credential;
-                        if (cred && saveGoogleProfile(cred)) {
-                          navigate("/dashboard/classes", { replace: true });
-                        }
-                      }}
-                      onError={() => {}}
-                      theme="outline"
-                      size="large"
-                      text="continue_with"
-                      shape="rectangular"
-                      width={320}
-                    />
-                  </div>
-                ) : null}
-
-                {showStub ? (
-                  <>
-                    <p className="entry-stub-hint">{t("entryStubHint")}</p>
-                    <button type="button" className="entry-google-btn" disabled>
-                      <span className="entry-google-btn__icon">
-                        <GoogleMark />
-                      </span>
-                      <span className="entry-google-btn__label">{t("entryGoogleDisabled")}</span>
-                    </button>
-                  </>
-                ) : null}
-
-                {existing && !supabaseConfigured ? (
-                  <Link to="/dashboard/classes" className="entry-link entry-link--primary">
-                    {t("entryDashboardLink")}
-                  </Link>
-                ) : null}
+        <section className="pc-layout" id="entry-main" aria-label="PyClass">
+          <div className="pc-discovery">
+            <div className="pc-assistant">
+              <div className="pc-avatar" aria-hidden="true">
+                <svg viewBox="0 0 80 80" role="presentation" focusable="false">
+                  <defs>
+                    <linearGradient id="pyclassPGrad" x1="18" y1="10" x2="68" y2="70" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stopColor="#22d3ee" />
+                      <stop offset="100%" stopColor="#f472b6" />
+                    </linearGradient>
+                    <filter id="pyclassPGlow" x="-45%" y="-45%" width="190%" height="190%">
+                      <feGaussianBlur stdDeviation="2.1" />
+                    </filter>
+                  </defs>
+                  <path d="M25 66V18C25 14 29 14 34 14H42C58 14 66 22 66 36C66 50 58 58 42 58H34" fill="none" stroke="url(#pyclassPGrad)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#pyclassPGlow)" opacity="0.95" />
+                  <path d="M25 66V18C25 14 29 14 34 14H42C58 14 66 22 66 36C66 50 58 58 42 58H34" fill="none" stroke="url(#pyclassPGrad)" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M47 29.5 48.15 34.15 53 35.4 48.15 36.65 47 41.3 45.85 36.65 41 35.4 45.85 34.15Z" fill="url(#pyclassPGrad)" filter="url(#pyclassPGlow)" />
+                  <path d="M47 29.5 48.15 34.15 53 35.4 48.15 36.65 47 41.3 45.85 36.65 41 35.4 45.85 34.15Z" fill="url(#pyclassPGrad)" />
+                </svg>
               </div>
-
-              <Link to="/" className="entry-ide-btn">
-                <span className="entry-ide-btn__icon" aria-hidden="true">
-                  <IdeMark />
-                </span>
-                <span className="entry-ide-btn__label">{t("entryIdeLink")}</span>
-              </Link>
+              <div className="pc-speech">
+                
+                <p>¡Hola! ¿En qué materia trabajamos hoy?</p>
+              </div>
             </div>
+            <div className="pc-courses" aria-label="Materias de ejemplo">
+              <div className="pc-course">
+                <span className="pc-course-icon pc-course-icon--python" aria-hidden="true">Py</span>
+                <span><strong>Python Avanzado</strong><small>Programación · IA · Proyectos</small></span>
+              </div>
+              <div className="pc-course">
+                <span className="pc-course-icon pc-course-icon--esp" aria-hidden="true">▣</span>
+                <span><strong>Robótica ESP32</strong><small>MicroPython · Electrónica · IoT</small></span>
+              </div>
+              <div className="pc-course">
+                <span className="pc-course-icon pc-course-icon--history" aria-hidden="true">▤</span>
+                <span><strong>Historia de México</strong><small>Civilizaciones · Cultura · Sociedad</small></span>
+              </div>
+            </div>
+            
           </div>
-
-          <div className="entry-hero__visual">
-            <EntryProductVisual labels={visualLabels} />
+          <div className="pc-login">
+            <div className="pc-login-brand">
+              <img src="/branding/pyclass-logo-secondary.svg" alt="PyClass" />
+            </div>
+            <h1>Iniciar sesión</h1>
+            
+            <form className="pc-demo-form" onSubmit={(e) => { e.preventDefault(); setDemoNotice("El acceso por correo es una demostración. Ingresá con Google para continuar."); }}>
+              <label htmlFor="pc-email">Email</label>
+              <input id="pc-email" type="email" placeholder="ejemplo@correo.com" autoComplete="email" required />
+              <label htmlFor="pc-password">Contraseña</label>
+              <div className="pc-password-wrap">
+                <input id="pc-password" type={showPassword ? "text" : "password"} placeholder="••••••••" autoComplete="current-password" required minLength={6} />
+                <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>{showPassword ? "Ocultar" : "Mostrar"}</button>
+              </div>
+              <button className="pc-submit" type="submit">Entrar</button>
+              <div className="pc-links">
+                <button type="button" onClick={() => setDemoNotice("La recuperación de contraseña estará disponible próximamente.")}>Olvidé mi contraseña</button>
+                <button type="button" onClick={() => setDemoNotice("La creación de cuentas por correo estará disponible próximamente.")}>Crear cuenta</button>
+              </div>
+            </form>
+            {demoNotice && <p className="pc-demo-notice" role="status">{demoNotice}</p>}
+            
+            <div className="pc-google">
+              {supabaseConfigured ? (
+                <button type="button" className="pc-google-button" onClick={oauthSupabaseGoogle} disabled={oauthBusy} aria-busy={oauthBusy ? "true" : "false"}>
+                  <GoogleMark /><span>{oauthBusy ? t("entryGoogleLoading") : "Continuar con Google Classroom"}</span>
+                </button>
+              ) : showGIS ? (
+                <div className="pc-google-gis"><GoogleLogin
+                  onSuccess={(res) => { const cred = res.credential; if (cred && saveGoogleProfile(cred)) navigate("/dashboard/classes", { replace: true }); }}
+                  onError={() => {}} theme="outline" size="large" text="continue_with" shape="rectangular" width={280}
+                /></div>
+              ) : (
+                <button type="button" className="pc-google-button" disabled><GoogleMark /><span>{t("entryGoogleDisabled")}</span></button>
+              )}
+              {existing && !supabaseConfigured && <Link className="pc-existing" to="/dashboard/classes">{t("entryDashboardLink")}</Link>}
+            </div>
+            <p className="pc-demo-caption">Vista previa · Acceso por correo aún no disponible</p>
           </div>
-        </section>
-
-        <section className="entry-features" aria-labelledby="entry-features-title">
-          <h2 id="entry-features-title" className="entry-features__title">
-            {t("entryFeaturesLabel")}
-          </h2>
-          <ul className="entry-features__rail">
-            {FEATURES.map((feat) => {
-              const isCore =
-                feat.key === "python" || feat.key === "blocks" || feat.key === "hardware";
-              return (
-                <li
-                  key={feat.key}
-                  className={`entry-feature entry-feature--${feat.tone} ${
-                    isCore ? "entry-feature--core" : "entry-feature--extended"
-                  }`}
-                >
-                  <span className="entry-feature__icon" aria-hidden="true">
-                    <EntryFeatureIcon id={feat.key} />
-                  </span>
-                  <span className="entry-feature__name">{t(feat.title)}</span>
-                  <span className="entry-feature__desc">{t(feat.desc)}</span>
-                  {feat.key === "classes" && supabaseConfigured ? (
-                    <span className="entry-feature__note">{t("entryClassroomHint")}</span>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
         </section>
       </div>
     </main>
