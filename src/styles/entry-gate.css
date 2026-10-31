@@ -2271,3 +2271,22 @@ html:has(.pyclass-preview),body:has(.pyclass-preview),#root:has(.pyclass-preview
 @media(max-width:760px){.pyclass-preview .pc-stage{justify-content:flex-start;padding:16px;gap:14px}.pyclass-preview .pc-layout{grid-template-columns:1fr;gap:24px;padding:20px;border-radius:20px}.pyclass-preview .pc-login{justify-self:center;max-width:430px;order:0}.pyclass-preview .pc-discovery{order:1;gap:18px}.pyclass-preview .pc-courses{padding:0;gap:10px}.pyclass-preview .pc-discovery-foot{margin:0}.pyclass-preview .pc-avatar{width:56px;height:56px;font-size:28px}.pyclass-preview .pc-speech{padding:10px 13px}.pyclass-preview .pc-speech p{font-size:13px}}
 @media(max-width:380px){.pyclass-preview .pc-layout{padding:12px}.pyclass-preview .pc-login{padding:18px 14px}.pyclass-preview .pc-course{padding:12px}.pyclass-preview .pc-top-brand img{width:110px}}
 @media(prefers-reduced-motion:reduce){.pyclass-preview .pc-course{transition:none}}
+
+/* Reference fidelity refinement */
+.pyclass-preview .pc-layout{border:0;background:transparent;box-shadow:none;backdrop-filter:none;grid-template-columns:minmax(0,1fr) minmax(320px,.82fr);gap:clamp(40px,7vw,100px);padding:clamp(22px,4vw,54px)}
+.pyclass-preview .pc-discovery{gap:30px}
+.pyclass-preview .pc-assistant{align-items:center;gap:16px}
+.pyclass-preview .pc-avatar{width:90px;height:90px;border:3px solid #c65bfa;box-shadow:0 0 0 7px rgba(168,85,247,.13),0 0 35px #a855f7;overflow:hidden;background:#3b205f}
+.pyclass-preview .pc-avatar svg{width:100%;height:100%;display:block}
+.pyclass-preview .pc-speech{max-width:230px;background:rgba(148,163,184,.19);border-color:rgba(255,255,255,.18);box-shadow:0 10px 30px rgba(0,0,0,.25);backdrop-filter:blur(18px)}
+.pyclass-preview .pc-speech p{margin:0;font-size:15px}
+.pyclass-preview .pc-courses{max-width:360px;margin-left:20px;gap:15px}
+.pyclass-preview .pc-course{background:rgba(148,163,184,.17);border:1px solid rgba(255,255,255,.2);backdrop-filter:blur(16px)}
+.pyclass-preview .pc-login{background:linear-gradient(125deg,rgba(148,163,184,.22),rgba(15,23,42,.56));border:1px solid rgba(255,255,255,.22);border-radius:18px;box-shadow:0 20px 65px rgba(0,0,0,.27);max-width:390px}
+.pyclass-preview .pc-login-brand img{width:230px;height:76px}
+.pyclass-preview .pc-login h1{margin-bottom:23px}
+.pyclass-preview .pc-demo-form input{background:rgba(15,23,42,.45);box-shadow:0 0 13px rgba(6,182,212,.22)}
+.pyclass-preview .pc-submit{background:#06b6d4;box-shadow:0 0 20px rgba(6,182,212,.65)}
+.pyclass-preview .pc-google{margin-top:13px}
+.pyclass-preview .pc-google-button{border-color:#e879f9;box-shadow:0 0 15px rgba(236,72,153,.24)}
+@media(max-width:760px){.pyclass-preview .pc-layout{grid-template-columns:1fr;gap:25px;padding:0}.pyclass-preview .pc-login{max-width:430px}.pyclass-preview .pc-discovery{gap:16px}.pyclass-preview .pc-avatar{width:66px;height:66px}.pyclass-preview .pc-courses{max-width:none;margin:0}.pyclass-preview .pc-speech p{font-size:13px}}
