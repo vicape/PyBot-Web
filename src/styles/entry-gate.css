@@ -213,27 +213,6 @@ body:has(.auth-root.entry-root),
   object-position: left center;
 }
 
-.entry-top__pyclass {
-  display: inline-flex;
-  align-items: center;
-  margin-inline: auto;
-  min-width: 0;
-  flex: 0 1 9.375rem;
-}
-.entry-top__pyclass img {
-  display: block;
-  width: 100%;
-  max-width: 9.375rem;
-  height: auto;
-  max-height: 2.8rem;
-  object-fit: contain;
-}
-@media (max-width: 480px) {
-  .entry-top { flex-wrap: wrap; }
-  .entry-top__pyclass { order: 3; flex: 0 0 100%; justify-content: center; }
-  .entry-top__pyclass img { max-width: 8.75rem; }
-}
-
 .entry-top__controls {
   display: inline-flex;
   align-items: center;
@@ -322,6 +301,22 @@ body:has(.auth-root.entry-root),
   flex-direction: column;
   gap: 0;
   padding-top: 0.15rem;
+}
+
+.entry-hero__pyclass {
+  display: flex;
+  align-items: center;
+  margin: 0 0 clamp(0.55rem, 1.5vh, 0.9rem);
+  min-width: 0;
+}
+
+.entry-hero__pyclass img {
+  display: block;
+  width: min(9.375rem, 100%);
+  height: auto;
+  max-height: 3rem;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .entry-eyebrow {
