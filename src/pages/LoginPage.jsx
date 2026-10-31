@@ -192,7 +192,23 @@ export default function LoginPage() {
         <section className="pc-layout" id="entry-main" aria-label="PyClass">
           <div className="pc-discovery">
             <div className="pc-assistant">
-              <div className="pc-avatar" aria-hidden="true"><svg viewBox="0 0 80 80" role="presentation"><circle cx="40" cy="40" r="39" fill="#392057"/><path d="M15 72c3-15 13-21 25-21s22 6 25 21" fill="#6457b9"/><path d="M20 36c0-20 10-28 21-28 15 0 23 11 21 29l-6 15-32-1z" fill="#20162e"/><ellipse cx="40" cy="37" rx="18" ry="22" fill="#e7ac92"/><path d="M22 33c0-18 12-25 20-25 14 0 21 10 20 25-7-2-12-7-16-13-6 9-14 13-24 13z" fill="#2b1b35"/><path d="M30 39h4m13 0h4" stroke="#312339" strokeWidth="2.5" strokeLinecap="round"/><path d="M35 49q5 4 10 0" stroke="#a44f65" strokeWidth="2" fill="none" strokeLinecap="round"/><path d="M17 36c-2-13 3-24 12-30m35 30c2-13-3-24-12-30" stroke="#bd8cf9" strokeWidth="5" fill="none" strokeLinecap="round"/><rect x="14" y="33" width="7" height="17" rx="3" fill="#b794f4"/><rect x="59" y="33" width="7" height="17" rx="3" fill="#b794f4"/></svg></div>
+              <div className="pc-avatar" aria-hidden="true">
+                <svg viewBox="0 0 80 80" role="presentation" focusable="false">
+                  <defs>
+                    <linearGradient id="pyclassPGrad" x1="18" y1="10" x2="68" y2="70" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stopColor="#22d3ee" />
+                      <stop offset="100%" stopColor="#f472b6" />
+                    </linearGradient>
+                    <filter id="pyclassPGlow" x="-45%" y="-45%" width="190%" height="190%">
+                      <feGaussianBlur stdDeviation="2.1" />
+                    </filter>
+                  </defs>
+                  <path d="M25 66V18C25 14 29 14 34 14H42C58 14 66 22 66 36C66 50 58 58 42 58H34" fill="none" stroke="url(#pyclassPGrad)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#pyclassPGlow)" opacity="0.95" />
+                  <path d="M25 66V18C25 14 29 14 34 14H42C58 14 66 22 66 36C66 50 58 58 42 58H34" fill="none" stroke="url(#pyclassPGrad)" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M47 29.5 48.15 34.15 53 35.4 48.15 36.65 47 41.3 45.85 36.65 41 35.4 45.85 34.15Z" fill="url(#pyclassPGrad)" filter="url(#pyclassPGlow)" />
+                  <path d="M47 29.5 48.15 34.15 53 35.4 48.15 36.65 47 41.3 45.85 36.65 41 35.4 45.85 34.15Z" fill="url(#pyclassPGrad)" />
+                </svg>
+              </div>
               <div className="pc-speech">
                 
                 <p>¡Hola! ¿En qué materia trabajamos hoy?</p>
