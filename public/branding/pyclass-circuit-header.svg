@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 265" fill="none" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
+<defs>
+ <linearGradient id="traceA" x1="0" y1="20" x2="1080" y2="240" gradientUnits="userSpaceOnUse"><stop stop-color="#3de9f6"/><stop offset=".5" stop-color="#aa80e5"/><stop offset="1" stop-color="#24c7ea"/></linearGradient>
+ <filter id="glow" x="-50%" y="-80%" width="200%" height="260%"><feGaussianBlur stdDeviation="3"/></filter>
+</defs>
+<g stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" opacity=".58">
+ <path stroke="#22d3ee" d="M220 0v49h47l23 25h88l20 20h145l20-20h84"/>
+ <path stroke="#b8a2f8" d="M280 0v29h97l24 24h172l19-19h77"/>
+ <path stroke="#67e8f9" d="M402 0v17h129l30 25h136l32-32h91"/>
+ <path stroke="#d893d4" d="M480 0v28h46l32 33h94l31 28h135"/>
+ <path stroke="#3bbadd" d="M635 0v63h120l30-31h86"/>
+ <path stroke="#22d3ee" d="M770 0v97h88l27 27h143"/>
+ <path stroke="#ec8bc8" d="M20 30h61l27 22h59l17 19h51"/>
+ <path stroke="#e8b15e" d="M0 72h70l25 25h73"/>
+ <path stroke="#6fcdff" d="M795 160h104l25-24h156"/>
+</g>
+<g stroke="url(#traceA)" stroke-width="6" opacity=".28" filter="url(#glow)">
+ <path d="M220 0v49h47l23 25h88l20 20h145l20-20h84"/>
+ <path d="M402 0v17h129l30 25h136l32-32h91"/>
+ <path d="M770 0v97h88l27 27h143"/>
+</g>
+<g fill="#77ddf6" opacity=".66"><circle cx="267" cy="49" r="4"/><circle cx="398" cy="94" r="3"/><circle cx="573" cy="53" r="3"/><circle cx="697" cy="42" r="3"/><circle cx="885" cy="124" r="4"/><circle cx="899" cy="160" r="3"/></g>
+<g fill="#e9a2ca" opacity=".75"><circle cx="280" cy="29" r="3.5"/><circle cx="683" cy="89" r="3.5"/><circle cx="818" cy="89" r="3.5"/></g>
+</svg>
