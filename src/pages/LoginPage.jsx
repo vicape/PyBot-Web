@@ -75,7 +75,7 @@ export default function LoginPage() {
   const [lang, setLangState] = useState(() => getLang());
   const [oauthBusy, setOauthBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [demoNotice, setDemoNotice] = useState("");
+  const [demoNoticeKey, setDemoNoticeKey] = useState("");
   const [appearance, setAppearance] = useState(() => readEntryAppearance());
   const [resolvedTheme, setResolvedTheme] = useState(() =>
     resolveTheme(readEntryAppearance().theme),
@@ -211,21 +211,21 @@ export default function LoginPage() {
               </div>
               <div className="pc-speech">
                 
-                <p>¡Hola! ¿En qué materia trabajamos hoy?</p>
+                <p>{t("pcLoginGreeting")}</p>
               </div>
             </div>
-            <div className="pc-courses" aria-label="Materias de ejemplo">
+            <div className="pc-courses" aria-label={t("pcLoginCoursesLabel")}>
               <div className="pc-course">
                 <span className="pc-course-icon pc-course-icon--python" aria-hidden="true">Py</span>
-                <span><strong>Python Avanzado</strong><small>Programación · IA · Proyectos</small></span>
+                <span><strong>{t("pcLoginCoursePythonTitle")}</strong><small>{t("pcLoginCoursePythonMeta")}</small></span>
               </div>
               <div className="pc-course">
                 <span className="pc-course-icon pc-course-icon--esp" aria-hidden="true">▣</span>
-                <span><strong>Robótica ESP32</strong><small>MicroPython · Electrónica · IoT</small></span>
+                <span><strong>{t("pcLoginCourseRobotTitle")}</strong><small>{t("pcLoginCourseRobotMeta")}</small></span>
               </div>
               <div className="pc-course">
                 <span className="pc-course-icon pc-course-icon--history" aria-hidden="true">▤</span>
-                <span><strong>Historia de México</strong><small>Civilizaciones · Cultura · Sociedad</small></span>
+                <span><strong>{t("pcLoginCourseHistoryTitle")}</strong><small>{t("pcLoginCourseHistoryMeta")}</small></span>
               </div>
             </div>
             
@@ -234,28 +234,28 @@ export default function LoginPage() {
             <div className="pc-login-brand">
               <img src="/branding/pyclass-logo-secondary.svg" alt="PyClass" />
             </div>
-            <h1>Iniciar sesión</h1>
+            <h1>{t("pcLoginHeading")}</h1>
             
-            <form className="pc-demo-form" onSubmit={(e) => { e.preventDefault(); setDemoNotice("El acceso por correo es una demostración. Ingresá con Google para continuar."); }}>
-              <label htmlFor="pc-email">Email</label>
-              <input id="pc-email" type="email" placeholder="ejemplo@correo.com" autoComplete="email" required />
-              <label htmlFor="pc-password">Contraseña</label>
+            <form className="pc-demo-form" onSubmit={(e) => { e.preventDefault(); setDemoNoticeKey("pcLoginDemoEmail"); }}>
+              <label htmlFor="pc-email">{t("pcLoginEmail")}</label>
+              <input id="pc-email" type="email" placeholder={t("pcLoginEmailPlaceholder")} autoComplete="email" required />
+              <label htmlFor="pc-password">{t("pcLoginPassword")}</label>
               <div className="pc-password-wrap">
-                <input id="pc-password" type={showPassword ? "text" : "password"} placeholder="••••••••" autoComplete="current-password" required minLength={6} />
-                <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>{showPassword ? "Ocultar" : "Mostrar"}</button>
+                <input id="pc-password" type={showPassword ? "text" : "password"} placeholder={t("pcLoginPasswordPlaceholder")} autoComplete="current-password" required minLength={6} />
+                <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? t("pcLoginHidePassword") : t("pcLoginShowPassword")}>{showPassword ? t("pcLoginHide") : t("pcLoginShow")}</button>
               </div>
-              <button className="pc-submit" type="submit">Entrar</button>
+              <button className="pc-submit" type="submit">{t("pcLoginSubmit")}</button>
               <div className="pc-links">
-                <button type="button" onClick={() => setDemoNotice("La recuperación de contraseña estará disponible próximamente.")}>Olvidé mi contraseña</button>
-                <button type="button" onClick={() => setDemoNotice("La creación de cuentas por correo estará disponible próximamente.")}>Crear cuenta</button>
+                <button type="button" onClick={() => setDemoNoticeKey("pcLoginDemoForgot")}>{t("pcLoginForgot")}</button>
+                <button type="button" onClick={() => setDemoNoticeKey("pcLoginDemoCreate")}>{t("pcLoginCreate")}</button>
               </div>
             </form>
-            {demoNotice && <p className="pc-demo-notice" role="status">{demoNotice}</p>}
+            {demoNoticeKey && <p className="pc-demo-notice" role="status">{t(demoNoticeKey)}</p>}
             
             <div className="pc-google">
               {supabaseConfigured ? (
                 <button type="button" className="pc-google-button" onClick={oauthSupabaseGoogle} disabled={oauthBusy} aria-busy={oauthBusy ? "true" : "false"}>
-                  <GoogleMark /><span>{oauthBusy ? t("entryGoogleLoading") : "Continuar con Google Classroom"}</span>
+                  <GoogleMark /><span>{oauthBusy ? t("entryGoogleLoading") : t("pcLoginGoogleClassroom")}</span>
                 </button>
               ) : showGIS ? (
                 <div className="pc-google-gis"><GoogleLogin
@@ -267,7 +267,7 @@ export default function LoginPage() {
               )}
               {existing && !supabaseConfigured && <Link className="pc-existing" to="/dashboard/classes">{t("entryDashboardLink")}</Link>}
             </div>
-            <p className="pc-demo-caption">Vista previa · Acceso por correo aún no disponible</p>
+            <p className="pc-demo-caption">{t("pcLoginPreviewCaption")}</p>
           </div>
         </section>
       </div>

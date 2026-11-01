@@ -2384,6 +2384,47 @@ body:has(.pyclass-preview),
   overflow-wrap: anywhere;
 }
 
+.pyclass-preview .pc-password-wrap input {
+  padding-right: 7.5rem;
+}
+
+.pyclass-preview .pc-password-wrap button {
+  max-width: 7rem;
+  white-space: nowrap;
+}
+
+.pyclass-preview .pc-google-button {
+  height: auto;
+  text-align: center;
+}
+
+.pyclass-preview .pc-google-button span {
+  min-width: 0;
+  line-height: 1.3;
+}
+
+@media (max-width: 390px) {
+  .pyclass-preview .pc-login h1,
+  .pyclass-preview .pc-links button,
+  .pyclass-preview .pc-course strong,
+  .pyclass-preview .pc-course small,
+  .pyclass-preview .pc-speech p,
+  .pyclass-preview .pc-demo-caption,
+  .pyclass-preview .pc-demo-notice,
+  .pyclass-preview .pc-google-button span {
+    overflow-wrap: anywhere;
+  }
+
+  .pyclass-preview .pc-links button {
+    line-height: 1.35;
+    text-align: start;
+  }
+
+  .pyclass-preview .pc-login h1 {
+    font-size: 1.35rem;
+  }
+}
+
 @media (max-width: 760px) {
   .pyclass-preview .pc-stage {
     width: 100%;
