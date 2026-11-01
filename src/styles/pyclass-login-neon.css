@@ -1,0 +1,277 @@
+/*
+ * PyClass /login — neon reference refinement (isolated test branch).
+ * Only presentation: no authentication, routing or form semantics changed.
+ * SVG illustrations are small local assets; no external requests or animations.
+ */
+
+.auth-root.entry-root.dash-root.pyclass-preview {
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+  color: #f5f8ff;
+  background-color: #060e20;
+  background-image:
+    radial-gradient(ellipse 75% 34% at 66% 6%, rgba(21, 129, 171, .22), transparent 78%),
+    radial-gradient(ellipse 80% 44% at 10% 94%, rgba(136, 47, 165, .21), transparent 75%),
+    linear-gradient(170deg, #0a1931 0%, #0b1730 28%, #111329 70%, #100e22 100%);
+  background-attachment: scroll;
+}
+
+.pyclass-preview::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0 0 auto;
+  height: min(36vw, 340px);
+  min-height: 175px;
+  background: url("/branding/pyclass-circuit-header.svg") top center / cover no-repeat;
+  opacity: .88;
+  pointer-events: none;
+}
+
+.pyclass-preview .pc-stage {
+  position: relative;
+  z-index: 1;
+}
+
+.pyclass-preview .pc-top-brand img {
+  filter: drop-shadow(0 0 4px rgba(37, 218, 238, .34))
+          drop-shadow(0 0 9px rgba(244, 114, 182, .23));
+}
+
+.pyclass-preview .pc-top-tools {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.pyclass-preview .pc-top-tools::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 19px;
+  height: 19px;
+  transform: translateY(-50%);
+  background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9' stroke='%23d9e8f9' stroke-width='1.7'/%3E%3Cpath d='M3 12h18M12 3c6 6 6 12 0 18M12 3c-6 6-6 12 0 18' stroke='%23d9e8f9' stroke-width='1.5'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1;
+}
+
+.pyclass-preview .pc-top-tools select {
+  min-height: 44px;
+  padding: 9px 26px 9px 42px;
+  border: 1px solid rgba(197, 218, 240, .37);
+  border-radius: 13px;
+  color: #eef5ff;
+  background-color: #45576f;
+  background-image: linear-gradient(135deg, rgba(144, 167, 193, .35), rgba(72, 96, 126, .25));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .19), 0 5px 16px rgba(0, 0, 0, .19);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.pyclass-preview .pc-top-tools select:focus-visible {
+  outline: 2px solid #67e8f9;
+  outline-offset: 3px;
+}
+
+/* Glass card: neural art is decorative and stays behind readable controls. */
+.pyclass-preview .pc-login {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid rgba(211, 226, 250, .32);
+  border-radius: 23px;
+  background:
+    linear-gradient(155deg, rgba(106, 125, 154, .32), rgba(61, 75, 112, .22) 42%, rgba(16, 25, 48, .58) 100%),
+    rgba(21, 31, 53, .56);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, .43),
+    0 0 0 1px rgba(112, 205, 238, .07),
+    inset 0 1px 0 rgba(255, 255, 255, .23);
+  backdrop-filter: blur(19px) saturate(125%);
+  -webkit-backdrop-filter: blur(19px) saturate(125%);
+}
+
+.pyclass-preview .pc-login::before {
+  content: "";
+  position: absolute;
+  inset: 6% -13% 9%;
+  z-index: 0;
+  background: url("/branding/pyclass-neural-brain.svg") center 49% / 120% auto no-repeat;
+  opacity: .48;
+  pointer-events: none;
+}
+
+.pyclass-preview .pc-login::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, transparent 19%, rgba(8, 15, 33, .05) 39%, rgba(8, 14, 28, .22) 87%);
+}
+
+.pyclass-preview .pc-login > * {
+  position: relative;
+  z-index: 1;
+}
+
+.pyclass-preview .pc-login-brand img {
+  filter: saturate(1.35)
+          drop-shadow(0 0 5px rgba(37, 232, 244, .75))
+          drop-shadow(0 0 12px rgba(233, 75, 181, .44));
+}
+
+.pyclass-preview .pc-login h1 {
+  color: #f5fcff;
+  font-weight: 780;
+  text-shadow: 0 0 12px rgba(242, 249, 255, .45), 0 0 26px rgba(42, 204, 241, .25);
+}
+
+.pyclass-preview .pc-demo-form label {
+  color: #f1f5fe;
+  font-weight: 690;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, .3);
+}
+
+.pyclass-preview .pc-demo-form input {
+  color: #f7faff;
+  background: rgba(17, 28, 52, .39);
+  border-color: rgba(45, 209, 239, .66);
+  box-shadow: 0 0 14px rgba(20, 213, 241, .24), inset 0 1px 0 rgba(255, 255, 255, .025);
+}
+
+.pyclass-preview .pc-demo-form input::placeholder {
+  color: rgba(214, 222, 240, .49);
+}
+
+.pyclass-preview .pc-password-wrap input {
+  border-color: rgba(192, 149, 249, .69);
+  box-shadow: 0 0 14px rgba(176, 97, 244, .22);
+}
+
+.pyclass-preview .pc-password-wrap button {
+  color: #d9c6f7;
+  font-weight: 600;
+}
+
+.pyclass-preview .pc-submit {
+  border: 2px solid rgba(70, 235, 247, .74);
+  border-radius: 999px;
+  color: #062836;
+  background: linear-gradient(95deg, #0d809c 0%, #08ccdd 38%, #14f0f1 53%, #0ca6bc 79%, #0a718f 100%);
+  box-shadow:
+    0 0 13px rgba(16, 227, 236, .63),
+    0 0 31px rgba(7, 198, 226, .42),
+    inset 0 1px 1px rgba(241, 255, 255, .35);
+  text-shadow: 0 1px 1px rgba(255, 255, 255, .17);
+}
+
+.pyclass-preview .pc-submit:hover {
+  background: linear-gradient(95deg, #0a9fbd, #19eef1 49%, #1198b4);
+  box-shadow: 0 0 16px rgba(16, 227, 236, .75), 0 0 37px rgba(7, 198, 226, .52);
+}
+
+.pyclass-preview .pc-submit:focus-visible,
+.pyclass-preview .pc-password-wrap button:focus-visible,
+.pyclass-preview .pc-links button:focus-visible {
+  outline: 2px solid #b3f8ff;
+  outline-offset: 3px;
+}
+
+.pyclass-preview .pc-links button {
+  color: #e2e8f5;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.pyclass-preview .pc-links button:hover {
+  color: #77f0fa;
+  text-decoration: underline;
+}
+
+.pyclass-preview .pc-google-button {
+  border: 2px solid rgba(248, 117, 202, .76);
+  background: linear-gradient(100deg, rgba(226, 79, 170, .31), rgba(246, 107, 193, .43) 48%, rgba(211, 61, 162, .29));
+  color: #f1f2ff;
+  box-shadow: 0 0 13px rgba(243, 95, 192, .5), 0 0 25px rgba(230, 75, 177, .3), inset 0 1px 0 rgba(255,255,255,.17);
+  font-weight: 740;
+}
+
+.pyclass-preview .pc-google-button:disabled {
+  opacity: 1; /* unavailable state remains readable and genuinely disabled */
+  cursor: not-allowed;
+}
+
+.pyclass-preview .pc-google-button:hover:not(:disabled) {
+  border-color: #f9a8d4;
+  background: rgba(229, 92, 181, .42);
+  box-shadow: 0 0 20px rgba(243, 95, 192, .62);
+}
+
+.pyclass-preview .pc-demo-caption {
+  display: block;
+  margin-top: 17px;
+  padding: 9px 10px;
+  border: 1px solid rgba(194, 210, 235, .15);
+  border-radius: 10px;
+  background: rgba(126, 147, 177, .13);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07);
+  color: rgba(227, 236, 255, .74);
+}
+
+.pyclass-preview .pc-speech {
+  background: linear-gradient(130deg, rgba(132, 149, 180, .30), rgba(81, 104, 134, .19));
+  border-color: rgba(209, 227, 250, .31);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, .29), inset 0 1px 0 rgba(255, 255, 255, .15);
+}
+
+@media (max-width: 760px) {
+  .pyclass-preview::before {
+    height: 205px;
+    background-size: auto 205px;
+    background-position: 46% top;
+  }
+
+  .pyclass-preview .pc-login {
+    width: 100%;
+    max-width: 430px;
+  }
+
+  .pyclass-preview .pc-login::before {
+    inset: 7% -15% 9%;
+    background-size: 128% auto;
+    background-position: center 47%;
+    opacity: .46;
+  }
+
+  .pyclass-preview .pc-speech {
+    background: linear-gradient(155deg, rgba(120, 140, 172, .31), rgba(66, 83, 123, .24));
+  }
+}
+
+@media (max-width: 380px) {
+  .pyclass-preview .pc-login::before {
+    background-size: 140% auto;
+    opacity: .39;
+  }
+
+  .pyclass-preview .pc-top-tools select {
+    padding-left: 38px;
+    padding-right: 22px;
+  }
+
+  .pyclass-preview .pc-top-tools::before {
+    left: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pyclass-preview .pc-submit,
+  .pyclass-preview .pc-google-button {
+    animation: none;
+    transition: none;
+  }
+}

@@ -16,6 +16,7 @@ import EntryProductVisual from "../components/entry/EntryProductVisual.jsx";
 import { EntryFeatureIcon } from "../components/entry/EntryFeatureIcons.jsx";
 import "../styles/dashboard-theme.css";
 import "../styles/entry-gate.css";
+import "../styles/pyclass-login-neon.css";
 
 function IdeMark({ size = 18 }) {
   return (

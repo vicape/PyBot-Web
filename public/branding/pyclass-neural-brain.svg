@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 560" fill="none" role="img" aria-label="Ilustración de redes neuronales">
+<defs>
+  <linearGradient id="neon" x1="95" y1="80" x2="676" y2="455" gradientUnits="userSpaceOnUse"><stop stop-color="#29d9f4"/><stop offset=".46" stop-color="#548edc"/><stop offset=".79" stop-color="#d461c8"/><stop offset="1" stop-color="#ff75c8"/></linearGradient>
+  <linearGradient id="inner" x1="240" y1="65" x2="500" y2="450" gradientUnits="userSpaceOnUse"><stop stop-color="#4bd4f3"/><stop offset="1" stop-color="#f05fbb"/></linearGradient>
+  <filter id="halo" x="-45%" y="-45%" width="190%" height="190%"><feGaussianBlur stdDeviation="7"/></filter>
+  <g id="brain">
+    <path d="M381 101c-28-25-63-30-94-12-24-3-51 13-61 35-39-3-69 28-66 63-28 14-39 43-30 69-27 21-24 59 1 81-8 36 13 70 47 77 8 34 41 54 75 45 25 27 62 30 86 8 17 12 35 12 47 3" />
+    <path d="M381 101c28-25 64-30 94-12 24-3 51 13 61 35 39-3 69 28 66 63 28 14 39 43 30 69 27 21 24 59-1 81 8 36-13 70-47 77-8 34-41 54-75 45-25 27-62 30-86 8-17 12-35 12-47 3" />
+    <path d="M381 104v354" opacity=".85"/>
+    <path d="M286 91c11 27 0 52-25 70-24 18-27 37-17 62 17 18 16 45-6 56-24 7-35 26-29 45"/>
+    <path d="M227 128c8 30-17 48-40 54m-28 69c29-18 49-6 62 17m-90 68c29-14 49-4 62 26"/>
+    <path d="M262 165c31 0 48 13 49 40-5 25-23 33-24 54 0 18 17 32 44 28"/>
+    <path d="M301 113c16 26 38 29 45 51-19 22-21 43-2 61"/>
+    <path d="M324 289c-38-7-54 11-54 34 5 27 20 36 8 55-11 16-29 15-35 39"/>
+    <path d="M193 353c31-4 49 16 44 41m50 40c7-31 28-43 58-38"/>
+    <path d="M350 229c-21 24-17 48 2 68 13 13 15 33 4 53-12 19-14 39-3 56"/>
+    <path d="M470 91c-11 27 0 52 25 70 24 18 27 37 17 62-17 18-16 45 6 56 24 7 35 26 29 45"/>
+    <path d="M535 128c-8 30 17 48 40 54m28 69c-29-18-49-6-62 17m90 68c-29-14-49-4-62 26"/>
+    <path d="M500 165c-31 0-48 13-49 40 5 25 23 33 24 54 0 18-17 32-44 28"/>
+    <path d="M461 113c-16 26-38 29-45 51 19 22 21 43 2 61"/>
+    <path d="M438 289c38-7 54 11 54 34-5 27-20 36-8 55 11 16 29 15 35 39"/>
+    <path d="M569 353c-31-4-49 16-44 41m-50 40c-7-31-28-43-58-38"/>
+    <path d="M412 229c21 24 17 48-2 68-13 13-15 33-4 53 12 19 14 39 3 56"/>
+    <path d="M241 221c-9-19-25-23-48-21m111 112c-23-5-41 4-50 24m214-115c9-19 25-23 48-21m-111 112c23-5 41 4 50 24" opacity=".75"/>
+  </g>
+</defs>
+<use href="#brain" stroke="#50d5f1" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity=".43" filter="url(#halo)"/>
+<use href="#brain" stroke="url(#neon)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity=".77"/>
+<g fill="url(#inner)" opacity=".77"><circle cx="194" cy="354" r="5"/><circle cx="307" cy="206" r="4"/><circle cx="350" cy="351" r="4"/><circle cx="504" cy="164" r="5"/><circle cx="563" cy="350" r="5"/><circle cx="414" cy="297" r="3.5"/><circle cx="285" cy="437" r="4"/><circle cx="487" cy="378" r="4"/></g>
+</svg>
