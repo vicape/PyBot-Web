@@ -23,7 +23,7 @@ export async function runS3Provisioning(adapters,options={}){
     if(port)try{await adapters.ensurePortClosed(port);}catch{/* disconnected */}
   };
   const status=(ok,error)=>({ok,phase,error,flashed,
-    boardState:ok?BOARD_STATE.READY:flashed?BOARD_STATE.RESET_REQUIRED:BOARD_STATE.UNKNOWN});
+    boardState:ok?BOARD_STATE.MPY_ONLY:flashed?BOARD_STATE.RESET_REQUIRED:BOARD_STATE.UNKNOWN});
 
   try{
     emit(PHASE.SELECTING_PORT);
@@ -41,12 +41,12 @@ export async function runS3Provisioning(adapters,options={}){
       const probe=await adapters.probeRepl(port);
       session=probe.session;
       if(session){
-        emit(PHASE.ALREADY_PREPARED,{boardState:BOARD_STATE.READY});
+        emit(PHASE.ALREADY_PREPARED,{boardState:BOARD_STATE.MPY_ONLY});
         // Preserve the working connection and its firmware: no flash or erasure.
         adapters.keepSession(session);
         session=null;
         port=null; // live USB connection now owns port
-        return {ok:true,phase:PHASE.READY,alreadyPrepared:true,flashed:false,boardState:BOARD_STATE.READY};
+        return {ok:true,phase:PHASE.READY,alreadyPrepared:true,flashed:false,boardState:BOARD_STATE.MPY_ONLY};
       }
     }catch(e){
       if(e?.message==="BUSY"||e?.code==="BUSY")throw fail(PROVISION_ERROR.BUSY,e);
@@ -100,7 +100,7 @@ export async function runS3Provisioning(adapters,options={}){
       adapters.keepSession(session);
       session=null;
         port=null; // live USB connection now owns port
-      emit(PHASE.READY,{boardState:BOARD_STATE.READY});
+      emit(PHASE.READY,{boardState:BOARD_STATE.MPY_ONLY});
       return status(true,null);
     }catch(e){
       onLog("[S3] flashed successfully; REPL not available yet. Press RESET and retry connection.");
