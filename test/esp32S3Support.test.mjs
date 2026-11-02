@@ -84,3 +84,22 @@ test("S3 non-response does not claim missing firmware or recommend classic flash
   assert.match(ide,/formatHardwareError\(e\?\.message, boardType\)/);
   assert.match(ide,/setConnectHighlightPrepare\(!isEsp32S3Board\(boardType\)/);
 });
+
+test("S3 provisioning is a two-link user-controlled official flow, not a classic ESP32 flasher",async()=>{
+  const {ESP32_S3_FIRMWARE_GUIDE: guide}=await import("../src/esp32/s3FirmwareGuide.js");
+  assert.equal(guide.sourceUrl,"https://micropython.org/download/ESP32_GENERIC_S3/");
+  assert.equal(guide.flashToolUrl,"https://espressif.github.io/esptool-js/");
+  assert.match(guide.variant,/Octal-SPIRAM/);
+  assert.equal(guide.flashOffset,0);
+  assert.equal(guide.requiresExplicitEraseConsent,true);
+  const ide=read("src/PyBotIDE.jsx");
+  const modal=read("src/ConnectUsbModal.jsx");
+  const i18n=read("src/i18n.js");
+  assert.match(ide,/boardEsp32S3Download/);
+  assert.match(ide,/boardEsp32S3Flasher/);
+  assert.match(modal,/boardType === "esp32-s3-micropython" && phase === "failed"/);
+  assert.match(modal,/ESP32_S3_FIRMWARE_GUIDE\.flashToolUrl/);
+  assert.match(i18n,/boardEsp32S3FlashWarning/);
+  assert.match(i18n,/0x0/);
+  assert.match(read("src/hardwareBridge.js"),/if \(isEsp32S3Board\(getBoardType\(\)\)\)/);
+});
