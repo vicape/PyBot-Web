@@ -161,7 +161,7 @@ export async function connectBootloader(port, options = {}) {
   const name = String(chipName ?? loader.chip?.CHIP_NAME ?? "");
   const expectedChip=options.expectedChip||"ESP32";
   const isAllowed=expectedChip==="ESP32-S3"
-    ? /^ESP32-S3(?:$|\\s|\\()/i.test(name) && /^ESP32-S3(?:$|\\s|\\()/i.test(String(loader.chip?.CHIP_NAME||name))
+    ? /^ESP32-S3(?:$|\s|\()/i.test(name) && /^ESP32-S3(?:$|\s|\()/i.test(String(loader.chip?.CHIP_NAME||name))
     : expectedChip==="ESP32" && (isClassicEsp32Chip(name)||isClassicEsp32Chip(loader.chip?.CHIP_NAME));
   if(!isAllowed) {
     try {
