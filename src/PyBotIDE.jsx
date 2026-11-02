@@ -72,6 +72,7 @@ import { runPythonAsync, signalStop } from "./pyodideRunner.js";
 import { checkPythonSyntax } from "./pythonSyntaxDiagnostics.js";
 import { hasCanvasCode } from "./canvasCodeDetect.js";
 import { resolveEsp32ExecutionTarget } from "./esp32RunTarget.js";
+import { requiresMicroPythonRuntime } from "./esp32/micropythonRuntimeDetect.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
 import { isEsp32Board, isEsp32MicroPythonBoard, isEsp32S3Board } from "./esp32/boardTypes.js";
@@ -1333,7 +1334,11 @@ export default function PyBotIDE() {
     } catch {
       //
     }
-    const needsHw = codeNeedsHardware(activeCode);
+    // ESP32-S3 native imports (machine / framebuf / SPI) must NEVER be sent
+    // to browser Pyodide just because the code lacks PyBot pin()/servo().
+    // This correction is scoped to S3; classic ESP32 / EDA6 stay unchanged.
+    const needsHw = codeNeedsHardware(activeCode) ||
+      (isEsp32S3Board(boardType) && requiresMicroPythonRuntime(activeCode));
     const canvasCode = hasCanvasCode(activeCode);
 
     // ESP32 MicroPython / EDA6: APIs de hardware NUNCA caen a Pyodide.
