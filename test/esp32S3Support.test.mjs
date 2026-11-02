@@ -102,6 +102,9 @@ test("S3 installer is integrated in PyBot, pins image SHA-256 and requires expli
   const modal=read("src/PrepareEsp32Modal.jsx");
   assert.match(modal,/isS3 \? "boardEsp32S3Confirm"/);
   assert.match(modal,/phase === PHASE.ALREADY_PREPARED && !isS3/);
+  assert.match(modal,/s3ModelConfirmed/);
+  assert.match(modal,/boardEsp32S3ModelConsent/);
+  assert.match(modal,/disabled=\{isS3 && phase === PHASE.CONFIRM_FLASH && !s3ModelConfirmed\}/);
   const bridge=read("src/hardwareBridge.js");
   assert.match(bridge,/return runS3Provisioning\(/);
   assert.match(bridge,/expectedChip:"ESP32-S3"/);
