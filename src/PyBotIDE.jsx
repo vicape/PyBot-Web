@@ -75,6 +75,7 @@ import { resolveEsp32ExecutionTarget } from "./esp32RunTarget.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
 import { isEsp32Board, isEsp32MicroPythonBoard, isEsp32S3Board } from "./esp32/boardTypes.js";
+import { ESP32_S3_FIRMWARE_GUIDE } from "./esp32/s3FirmwareGuide.js";
 import PrepareEsp32Modal from "./PrepareEsp32Modal.jsx";
 import BluetoothPanel from "./BluetoothPanel.jsx";
 import IdeUserChip from "./components/IdeUserChip.jsx";
@@ -2573,10 +2574,19 @@ export default function PyBotIDE() {
                       </div>
                       {isEsp32S3Board(boardType) && !connected ? (
                         <div className="toolbar-menu-subgroup">
-                          <div className="toolbar-menu-hint">{t("boardEsp32S3Hint")}</div>
+                          <span className="toolbar-menu-mode__label">{t("boardEsp32S3Install")}</span>
+                          <div className="toolbar-menu-hint">{t("boardEsp32S3FlashWarning")}</div>
                           <a className="toolbar-menu-item toolbar-menu-item--secondary"
-                            href="https://micropython.org/download/ESP32_GENERIC_S3/"
-                            target="_blank" rel="noopener noreferrer">MicroPython ESP32-S3</a>
+                            href={ESP32_S3_FIRMWARE_GUIDE.sourceUrl}
+                            target="_blank" rel="noopener noreferrer">
+                            {t("boardEsp32S3Download")}
+                          </a>
+                          <a className="toolbar-menu-item toolbar-menu-item--secondary"
+                            href={ESP32_S3_FIRMWARE_GUIDE.flashToolUrl}
+                            target="_blank" rel="noopener noreferrer">
+                            {t("boardEsp32S3Flasher")}
+                          </a>
+                          <div className="toolbar-menu-hint">{t("boardEsp32S3AfterFlash")}</div>
                         </div>
                       ) : null}
                       {isEsp32S3Board(boardType) && connected ? (
