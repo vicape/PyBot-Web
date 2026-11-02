@@ -1,3 +1,4 @@
+import { ESP32_S3_FIRMWARE_GUIDE } from "./esp32/s3FirmwareGuide.js";
 import { useEffect, useState } from "react";
 import { t } from "./i18n.js";
 import {
@@ -107,6 +108,17 @@ export default function ConnectUsbModal({
         {phase === "failed" && errorMessage ? (
           <div className="connect-modal-error" role="alert">
             {errorMessage}
+          </div>
+        ) : null}
+        {boardType === "esp32-s3-micropython" && phase === "failed" ? (
+          <div className="connect-help">
+            <h4 className="connect-help__title">{t("boardEsp32S3Install")}</h4>
+            <p className="connect-help__note">{t("boardEsp32S3FlashWarning")}</p>
+            <p><a href={ESP32_S3_FIRMWARE_GUIDE.sourceUrl}
+              target="_blank" rel="noopener noreferrer">{t("boardEsp32S3Download")}</a></p>
+            <p><a href={ESP32_S3_FIRMWARE_GUIDE.flashToolUrl}
+              target="_blank" rel="noopener noreferrer">{t("boardEsp32S3Flasher")}</a></p>
+            <p>{t("boardEsp32S3AfterFlash")}</p>
           </div>
         ) : null}
 
