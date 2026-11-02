@@ -1142,14 +1142,14 @@ export default function PyBotIDE() {
       }
       return { ok: true };
     } catch (e) {
-      const display = formatHardwareError(e?.message);
+      const display = formatHardwareError(e?.message, boardType);
       appendConsole(`${display}\n`, "err");
       return { ok: false, message: e?.message, display };
     } finally {
       setConnecting(false);
       setConnectModalPreparing(false);
     }
-  }, [connecting, appendConsole, eda6Profile]);
+  }, [connecting, appendConsole, eda6Profile, boardType]);
 
   const openConnectFlow = useCallback(() => {
     if (connecting) return;
@@ -1179,13 +1179,13 @@ export default function PyBotIDE() {
       setConnectHighlightPrepare(false);
     } else if (!result.skipped) {
       setConnectModalPhase("failed");
-      setConnectModalError(result.display ?? formatHardwareError(result.message));
+      setConnectModalError(result.display ?? formatHardwareError(result.message, boardType));
       setConnectModalShowHelp(true);
-      setConnectHighlightPrepare(String(result.message ?? "").includes("NEEDS_PREP"));
+      setConnectHighlightPrepare(!isEsp32S3Board(boardType) && String(result.message ?? "").includes("NEEDS_PREP"));
     } else {
       setConnectModalPhase("ready");
     }
-  }, [performHardwareConnect]);
+  }, [performHardwareConnect, boardType]);
 
   const waitPrepareConfirm = useCallback(
     () =>
