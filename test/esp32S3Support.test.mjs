@@ -30,6 +30,10 @@ test("ESP32-S3 hardware Python never falls back silently to Pyodide",()=>{
     boardType:s3,pythonOnly:true,needsHardware:true,usbConnected:true,bleConnected:false,
   });
   assert.deepEqual(connected,{target:"board",switchToHardwareMode:true});
+  const staleBle=resolveEsp32ExecutionTarget({
+    boardType:s3,pythonOnly:false,needsHardware:true,usbConnected:false,bleConnected:true,
+  });
+  assert.equal(staleBle.target,"needConnect");
   const pure=resolveEsp32ExecutionTarget({
     boardType:s3,pythonOnly:true,needsHardware:false,usbConnected:true,bleConnected:false,
   });
