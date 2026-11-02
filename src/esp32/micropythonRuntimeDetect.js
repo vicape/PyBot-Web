@@ -29,9 +29,10 @@ export function requiresMicroPythonRuntime(source) {
         if (isMicroPythonModule(moduleName)) return true;
       }
     }
+    // Direct hardware constructors, even when the import is in a helper.
+    // Only match statement-leading calls/assignments, not explanatory strings.
+    if (/^(?:(?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*\s*=\s*)?(?:machine\.)?(?:Pin|SPI|I2C|PWM|ADC|SoftI2C)\s*\(/.test(line))
+      return true;
   }
-  // Support common MicroPython examples using `Pin(...)` or `SPI(...)`
-  // after importing via a helper and leaving the import in another file.
-  if (/\b(?:Pin|SPI|I2C|PWM|ADC|SoftI2C)\s*\(/.test(code)) return true;
   return false;
 }
