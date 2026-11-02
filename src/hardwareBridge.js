@@ -102,6 +102,8 @@ import {
 } from "./micropython/bleBackend.js";
 import { isEsp32MicroPythonBoard, isEsp32Board, isEsp32S3Board } from "./esp32/boardTypes.js";
 import { runEsp32Provisioning } from "./esp32/provisionEsp32.js";
+import { runS3Provisioning } from "./esp32/s3Provisioning.js";
+import { ESP32_S3_OCTAL_FIRMWARE, assertS3FirmwareManifest } from "./esp32/s3FirmwareManifest.js";
 import { inspectPybotOnSession } from "./esp32/boardProbe.js";
 import {
   expectedProvisionFiles,
@@ -535,13 +537,40 @@ async function requestSerialPort() {
  */
 export async function prepareEsp32(hooks = {}) {
   if (isEsp32S3Board(getBoardType())) {
-    // Do not erase the Waveshare factory firmware or write the classic image.
-    // USB execution on S3 is enabled only after the user installs compatible
-    // MicroPython manually; automatic S3 provisioning awaits physical QA.
-    const error = new Error(PROVISION_ERROR.VARIANT_UNSUPPORTED);
-    error.code = PROVISION_ERROR.VARIANT_UNSUPPORTED;
-    error.chipName = "ESP32-S3";
-    throw error;
+    // Standalone S3 provisioning. Never install classic ESP32 or BLE runtime.
+    // The ROM identity and SHA-256 are checked before any destructive operation.
+    await hardwareDisconnect();
+    return runS3Provisioning({
+      requestPort:requestSerialPort,
+      async probeRepl(port){
+        const {session,baudRate}=await connectMicroPythonEsp32Session(port,{
+          recoverRepl:true,mode:"esp32-s3-micropython",
+        });
+        _baudRate=baudRate;
+        return {session};
+      },
+      keepSession(session){
+        _mpSession=session;_mode="esp32-s3-micropython";_baudRate=115200;
+      },
+      connectBootloader:port=>connectBootloader(port,{
+        expectedChip:"ESP32-S3",onLog:hooks.onLog,
+      }),
+      eraseFlash,
+      writeFirmware,
+      resetAndRelease,
+      ensurePortClosed,
+      loadFirmware:()=>{
+        const manifest=assertS3FirmwareManifest(ESP32_S3_OCTAL_FIRMWARE);
+        return loadOfficialFirmware({manifest});
+      },
+      async connectRepl(port){
+        if(!port)throw new Error("S3_PORT_LOST");
+        await sleepMs(2200);
+        return connectMicroPythonEsp32Session(port,{
+          recoverRepl:true,mode:"esp32-s3-micropython",
+        });
+      },
+    },hooks);
   }
   await hardwareDisconnect();
   const mode = provisionMode();
