@@ -686,6 +686,9 @@ export async function runOnBoard(code, cb = {}) {
     }
     return _mpSession.runProgram(code, cb);
   }
+  // The S3 pilot has no validated BLE runtime and must never execute on a
+  // different, previously connected device.
+  if (isEsp32S3Board(getBoardType())) throw new Error("not_connected");
   if (isNativeBleEnabled() && _bleMpSession) {
     try {
       await _bleMpSession.interruptAndRecoverRepl();
