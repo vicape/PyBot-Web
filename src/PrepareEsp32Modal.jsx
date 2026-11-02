@@ -82,7 +82,7 @@ export default function PrepareEsp32Modal({
 
         {chipName && phase === PHASE.UNSUPPORTED_VARIANT ? (
           <div className="connect-modal-error" role="alert">
-            {t("prepareEsp32Unsupported").replace("{chip}", String(chipName))}
+            {t(isS3 ? "boardEsp32S3WrongChip" : "prepareEsp32Unsupported").replace("{chip}", String(chipName))}
           </div>
         ) : null}
 
