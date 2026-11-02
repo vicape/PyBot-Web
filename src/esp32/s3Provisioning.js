@@ -45,6 +45,7 @@ export async function runS3Provisioning(adapters,options={}){
         // Preserve the working connection and its firmware: no flash or erasure.
         adapters.keepSession(session);
         session=null;
+        port=null; // live USB connection now owns port
         return {ok:true,phase:PHASE.READY,alreadyPrepared:true,flashed:false,boardState:BOARD_STATE.READY};
       }
     }catch(e){
@@ -98,6 +99,7 @@ export async function runS3Provisioning(adapters,options={}){
       session=result.session;
       adapters.keepSession(session);
       session=null;
+        port=null; // live USB connection now owns port
       emit(PHASE.READY,{boardState:BOARD_STATE.READY});
       return status(true,null);
     }catch(e){
