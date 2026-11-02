@@ -460,6 +460,8 @@ const STRINGS = {
       "No se pudo conectar con la placa ESP32. Revisá el firmware PyBot ESP32, el cable y el puerto.",
     usbErr_MPY_NEEDS_PREP:
       "Esta ESP32 no tiene MicroPython. Usá «Preparar ESP32» para instalarlo desde el navegador (sin Thonny ni Arduino IDE).",
+    usbErr_S3_REPL_NOT_DETECTED:
+      "La ESP32-S3 no respondió al REPL de MicroPython. Puede tener el firmware de fábrica, un puerto USB distinto o la conexión ocupada. Revisá el puerto y probá nuevamente. Si no tiene MicroPython, instalá el firmware oficial ESP32-S3 adecuado a tu Waveshare. PyBot todavía NO puede instalarlo automáticamente; no uses el preparador de ESP32 clásico.",
     usbErr_MPY_BUSY:
       "El puerto está ocupado por otra aplicación. Cerrá Arduino IDE, Thonny u otra app que use el puerto y reintentá.",
     usbErr_MPY_REPL_FAIL:
@@ -1074,6 +1076,8 @@ Creado por VIC.`,
       "Could not connect to the ESP32 board. Check the PyBot ESP32 firmware, cable, and port.",
     usbErr_MPY_NEEDS_PREP:
       "This ESP32 does not have MicroPython. Use “Prepare ESP32” to install it from the browser (no Thonny or Arduino IDE).",
+    usbErr_S3_REPL_NOT_DETECTED:
+      "The ESP32-S3 did not respond to the MicroPython REPL. It may still have factory firmware, a different USB port may be selected, or the connection may be busy. Check the port and retry. If MicroPython is not installed, use firmware specifically for this Waveshare ESP32-S3. PyBot cannot install it automatically yet; do not use the classic ESP32 installer.",
     usbErr_MPY_BUSY:
       "The port is busy with another application. Close Arduino IDE, Thonny, or any app using the port and try again.",
     usbErr_MPY_REPL_FAIL:
@@ -1298,8 +1302,11 @@ export function t(key) {
  * Mensajes de hardwareBridge (PYBOT_USB:… / PYBOT_FIRMATA:…)
  * @param {string} message
  */
-export function formatHardwareError(message) {
+export function formatHardwareError(message, boardType = "") {
   const m = String(message ?? "");
+  if (boardType === "esp32-s3-micropython" && m === "PYBOT_MPY:NEEDS_PREP") {
+    return t("usbErr_S3_REPL_NOT_DETECTED");
+  }
   if (m.startsWith("PYBOT_USB:")) {
     const code = m.slice("PYBOT_USB:".length);
     const key = `usbErr_${code}`;
