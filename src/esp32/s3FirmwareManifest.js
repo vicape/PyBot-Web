@@ -14,9 +14,9 @@ export const ESP32_S3_OCTAL_FIRMWARE=Object.freeze({
   origin:"https://micropython.org/download/ESP32_GENERIC_S3/",
   originFile:"https://micropython.org/resources/firmware/ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin",
   license:"MIT",
-  // Populated only with checksum measured from exact official binary in isolated Actions.
-  sha256:"",
-  size:null,
+  // Computed by GitHub Actions directly from the official stable release binary.
+  sha256:"ab24eadfe3ef0e6ee38834d730e648def7cd82f3fa51ee0bbc59c29a6e1bd176",
+  size:1786704,
   flashOffset:0,
   flashSize:"16MB",
   flashMode:"dio",
