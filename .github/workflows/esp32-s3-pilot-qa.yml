@@ -41,6 +41,8 @@ jobs:
             -o "$RUNNER_TEMP/s3-oct.bin"
           echo "OFFICIAL_S3_OCT_SHA256 $(sha256sum "$RUNNER_TEMP/s3-oct.bin")"
           echo "OFFICIAL_S3_OCT_SIZE $(wc -c < "$RUNNER_TEMP/s3-oct.bin")"
+          test "$(sha256sum "$RUNNER_TEMP/s3-oct.bin" | cut -d' ' -f1)" = "ab24eadfe3ef0e6ee38834d730e648def7cd82f3fa51ee0bbc59c29a6e1bd176"
+          test "$(wc -c < "$RUNNER_TEMP/s3-oct.bin")" -eq 1786704
       - name: S3 isolated hardware and firmware guardrails
         run: node --test test/esp32S3Support.test.mjs
       - name: Existing hardware contracts (report separately)
