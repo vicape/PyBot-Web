@@ -52,12 +52,12 @@ test("classic firmware is never considered a valid S3 image",()=>{
   assert.match(bridge,/isEsp32MicroPythonBoard\(_mode\)/);
 });
 
-test("S3 is visible for USB and autonomous deployment, but not auto-flash or untested BLE",()=>{
+test("S3 exposes integrated firmware installer but keeps BLE actions disabled",()=>{
   const ide=read("src/PyBotIDE.jsx");
   assert.match(ide,/<option value="esp32-s3-micropython">/);
-  assert.match(ide,/boardEsp32S3Install/);
+  assert.match(ide,/boardEsp32S3Prepare/);
   assert.match(ide,/isEsp32S3Board\(boardType\) && connected/);
-  assert.match(ide,/showPrepareEsp32=\{boardType === "esp32-micropython" \|\| boardType === "esp32-eda6"\}/);
+  assert.match(ide,/showPrepareEsp32=\{isEsp32Board\(boardType\)\}/);
   assert.match(ide,/if \(isEsp32S3Board\(boardType\)\) return; \/\/ S3 BLE firmware not physically validated/);
   assert.match(read("src/hardwareBridge.js"),/if \(isEsp32MicroPythonBoard\(boardType\)\)/);
 });
@@ -85,21 +85,27 @@ test("S3 non-response does not claim missing firmware or recommend classic flash
   assert.match(ide,/setConnectHighlightPrepare\(!isEsp32S3Board\(boardType\)/);
 });
 
-test("S3 provisioning is a two-link user-controlled official flow, not a classic ESP32 flasher",async()=>{
-  const {ESP32_S3_FIRMWARE_GUIDE: guide}=await import("../src/esp32/s3FirmwareGuide.js");
-  assert.equal(guide.sourceUrl,"https://micropython.org/download/ESP32_GENERIC_S3/");
-  assert.equal(guide.flashToolUrl,"https://espressif.github.io/esptool-js/");
-  assert.match(guide.variant,/Octal-SPIRAM/);
-  assert.equal(guide.flashOffset,0);
-  assert.equal(guide.requiresExplicitEraseConsent,true);
+test("S3 installer is integrated in PyBot, pins image SHA-256 and requires explicit erase consent",async()=>{
+  const {ESP32_S3_OCTAL_FIRMWARE: fw, assertS3FirmwareManifest}=await import("../src/esp32/s3FirmwareManifest.js");
+  assert.equal(assertS3FirmwareManifest(fw),fw);
+  assert.equal(fw.board,"ESP32_GENERIC_S3-SPIRAM_OCT");
+  assert.equal(fw.flashOffset,0);
+  assert.equal(fw.flashSize,"16MB");
+  assert.equal(fw.sha256,"ab24eadfe3ef0e6ee38834d730e648def7cd82f3fa51ee0bbc59c29a6e1bd176");
+  assert.equal(fw.size,1786704);
+  assert.throws(()=>assertS3FirmwareManifest({...fw,sha256:""}));
   const ide=read("src/PyBotIDE.jsx");
-  const modal=read("src/ConnectUsbModal.jsx");
-  const i18n=read("src/i18n.js");
-  assert.match(ide,/boardEsp32S3Download/);
-  assert.match(ide,/boardEsp32S3Flasher/);
-  assert.match(modal,/boardType === "esp32-s3-micropython" && phase === "failed"/);
-  assert.match(modal,/ESP32_S3_FIRMWARE_GUIDE\.flashToolUrl/);
-  assert.match(i18n,/boardEsp32S3FlashWarning/);
-  assert.match(i18n,/0x0/);
-  assert.match(read("src/hardwareBridge.js"),/if \(isEsp32S3Board\(getBoardType\(\)\)\)/);
+  assert.match(ide,/boardEsp32S3Prepare/);
+  assert.match(ide,/onClick=\{\(\) => \{ openPrepareEsp32\(\)/);
+  assert.match(read("src/ConnectUsbModal.jsx"),/boardType === "esp32-s3-micropython"/);
+  const modal=read("src/PrepareEsp32Modal.jsx");
+  assert.match(modal,/isS3 \? "boardEsp32S3Confirm"/);
+  assert.match(modal,/phase === PHASE.ALREADY_PREPARED && !isS3/);
+  const bridge=read("src/hardwareBridge.js");
+  assert.match(bridge,/return runS3Provisioning\(/);
+  assert.match(bridge,/expectedChip:"ESP32-S3"/);
+  assert.match(read("src/esp32/esp32Flasher.js"),/expectedChip==="ESP32-S3"/);
+  assert.match(read("vercel.json"),/ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin/);
+  assert.equal(fw.originFile,"https://micropython.org/resources/firmware/"+fw.filename);
+  assert.equal(ESP32_GENERIC_FIRMWARE.flashOffset,0x1000);
 });
