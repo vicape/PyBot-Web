@@ -5,6 +5,7 @@ import { PHASE, canCloseModal, BOARD_STATE } from "./esp32/provisioningPhases.js
  * Modal educativo del flujo Preparar ESP32.
  */
 export default function PrepareEsp32Modal({
+  boardType = "esp32-micropython",
   open,
   phase = PHASE.IDLE,
   pct = null,
@@ -24,6 +25,7 @@ export default function PrepareEsp32Modal({
   onReinstall,
 }) {
   if (!open) return null;
+  const isS3 = boardType === "esp32-s3-micropython";
 
   const critical = !canCloseModal(phase);
   const close = () => {
@@ -48,9 +50,9 @@ export default function PrepareEsp32Modal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="prepare-esp32-title" className="modal-title">
-          {t("prepareEsp32Title")}
+          {t(isS3 ? "boardEsp32S3Title" : "prepareEsp32Title")}
         </h3>
-        <p className="connect-modal-intro">{t("prepareEsp32Intro")}</p>
+        <p className="connect-modal-intro">{t(isS3 ? "boardEsp32S3Intro" : "prepareEsp32Intro")}</p>
 
         {boardState ? (
           <div className="connect-modal-board">
@@ -107,17 +109,17 @@ export default function PrepareEsp32Modal({
         ) : null}
 
         {phase === PHASE.ALREADY_PREPARED ? (
-          <p className="prepare-esp32-ok">{t("prepareEsp32Already")}</p>
+          <p className="prepare-esp32-ok">{t(isS3 ? "boardEsp32S3Ready" : "prepareEsp32Already")}</p>
         ) : null}
 
         {phase === PHASE.READY ? (
-          <p className="prepare-esp32-ok">{t("prepareEsp32Ready")}</p>
+          <p className="prepare-esp32-ok">{t(isS3 ? "boardEsp32S3Ready" : "prepareEsp32Ready")}</p>
         ) : null}
 
         {confirmPhase ? (
           <div className="prepare-esp32-warn" role="alert">
             {phase === PHASE.CONFIRM_FLASH
-              ? t("prepareEsp32ConfirmFlash")
+              ? t(isS3 ? "boardEsp32S3Confirm" : "prepareEsp32ConfirmFlash")
               : phase === PHASE.CONFIRM_REINSTALL
                 ? t("prepareEsp32ConfirmReinstall")
                 : phase === PHASE.CONFIRM_UPDATE
