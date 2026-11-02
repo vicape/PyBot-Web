@@ -146,7 +146,7 @@ export default function PrepareEsp32Modal({
             </>
           ) : null}
 
-          {phase === PHASE.ALREADY_PREPARED ? (
+          {phase === PHASE.ALREADY_PREPARED && !isS3 ? (
             <button type="button" className="connect-btn connect-btn--ghost" onClick={onReinstall}>
               {t("prepareEsp32Reinstall")}
             </button>
