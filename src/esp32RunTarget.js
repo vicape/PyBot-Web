@@ -1,4 +1,4 @@
-import { isEsp32Board } from "./esp32/boardTypes.js";
+import { isEsp32Board, isEsp32S3Board } from "./esp32/boardTypes.js";
 /**
  * Destino de ejecución para ESP32 MicroPython / EDA6.
  * Evita que APIs de hardware caigan en silencio a Pyodide por un pythonOnly obsoleto.
@@ -31,7 +31,9 @@ export function resolveEsp32ExecutionTarget({
     return { target: "fallback", switchToHardwareMode: false };
   }
 
-  const boardConnected = Boolean(usbConnected || bleConnected);
+  // S3 pilot is USB-only: never inherit an unrelated BLE session.
+  const boardConnected = isEsp32S3Board(boardType)
+    ? Boolean(usbConnected) : Boolean(usbConnected || bleConnected);
 
   // APIs de hardware: NUNCA Pyodide. Con placa → board; sin placa → needConnect.
   if (needsHardware) {
