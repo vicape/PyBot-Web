@@ -54,6 +54,7 @@ test("ordinary Python in Solo Python mode continues to run in browser",()=>{
     'print("Hola mundo")',
     "import math\nprint(math.pi)",
     "for i in range(5):\n    print(i)",
+    'print("SPI(2) should not enable hardware")',
     "# from machine import Pin\nprint('hello')",
   ])assert.equal(requiresMicroPythonRuntime(s),false,s);
   const pure=resolveEsp32ExecutionTarget({
@@ -70,4 +71,10 @@ test("other board profiles preserve their existing routing behavior",()=>{
     });
     assert.equal(target.target,"pyodide",boardType);
   }
+});
+
+test("direct hardware constructor is detected, but plain text is not",()=>{
+  assert.equal(requiresMicroPythonRuntime("self.spi = SPI(2, sck=Pin(38))"),true);
+  assert.equal(requiresMicroPythonRuntime("Pin(4).value(1)"),true);
+  assert.equal(requiresMicroPythonRuntime('print("Pin(4).value(1)")'),false);
 });
