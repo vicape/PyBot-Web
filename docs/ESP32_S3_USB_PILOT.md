@@ -10,7 +10,7 @@ Para la Waveshare **ESP32-S3-Touch-LCD-1.54**, el fabricante declara ESP32-S3R8,
 
 ## Uso del piloto
 
-1. **No flashear desde PyBot.** Antes de conectar, instalar de manera independiente una imagen oficial MicroPython ESP32-S3 adecuada al hardware y a la PSRAM octal de la Waveshare, utilizando las instrucciones oficiales. Esta operación puede borrar el firmware de fábrica y requiere consentimiento y respaldo.
+1. **Instalación de firmware (guía, no flasheo integrado):** en el menú ESP32-S3 PyBot ofrece enlaces para descargar el `.bin` oficial **ESP32_GENERIC_S3 → Firmware (Support for Octal-SPIRAM)** y abrir el flasheador web oficial de Espressif. Debe seleccionarse el `.bin` completo y la dirección **`0x0`** según MicroPython. Es una operación controlada por el usuario en la herramienta externa: **puede borrar el firmware de fábrica y los programas**. Respaldar primero. No usar el instalador de ESP32 clásico de PyBot.
 2. En un navegador de escritorio compatible con Web Serial, seleccionar `ESP32-S3 MicroPython (USB)` en PyBot.
 3. Seleccionar el puerto USB. Comprobar primero `print("Hola desde ESP32-S3")`; ejecutar después un ejemplo mínimo de Wi-Fi sin credenciales compartidas.
 4. El botón **Ejecutar** usa el REPL MicroPython USB existente; el botón **Dejar programa en la placa** usa el instalador persistente existente de `main.py` y debe probarse físicamente antes de confiar en un arranque autónomo.
