@@ -541,7 +541,7 @@ export const EXAMPLES = [
     keyEs: "ESP32: Wi-Fi + HTTP",
     keyEn: "ESP32: Wi-Fi + HTTP",
     file: "esp32_wifi_http.py",
-    boards: ["esp32-micropython", "esp32-eda6"],
+    boards: ["esp32-micropython", "esp32-s3-micropython", "esp32-eda6"],
     code: [
       'wifi_conectar("MiRed", "clave")',
       'print("IP:", wifi_ip())',
@@ -558,7 +558,7 @@ export const EXAMPLES = [
     keyEs: "ESP32: Google Sheets",
     keyEn: "ESP32: Google Sheets",
     file: "esp32_sheets.py",
-    boards: ["esp32-micropython", "esp32-eda6"],
+    boards: ["esp32-micropython", "esp32-s3-micropython", "esp32-eda6"],
     code: [
       "# Reemplazá URL por tu Apps Script (ver docs/MICROPYTHON_NETWORK.md).",
       "# NO pongas claves reales en el codigo que compartis.",
