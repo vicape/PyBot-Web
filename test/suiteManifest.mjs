@@ -65,6 +65,7 @@ export const TEST_SUITES = Object.freeze({
     "esp32InstallManifest.test.mjs",
     "esp32Provisioning.test.mjs",
     "esp32SerialGpio.test.mjs",
+    "esp32S3Support.test.mjs",
     "firmwareAppLifecycle.test.mjs",
     "firmwareAppStopForce.test.mjs",
     "firmwareBootUpdate.test.mjs",
