@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { t } from "./i18n.js";
 import { PHASE, canCloseModal, BOARD_STATE } from "./esp32/provisioningPhases.js";
 
@@ -24,8 +25,12 @@ export default function PrepareEsp32Modal({
   onRetry,
   onReinstall,
 }) {
-  if (!open) return null;
   const isS3 = boardType === "esp32-s3-micropython";
+  const [s3ModelConfirmed,setS3ModelConfirmed]=useState(false);
+  useEffect(()=>{
+    setS3ModelConfirmed(false);
+  },[open,phase,boardType]);
+  if (!open) return null;
 
   const critical = !canCloseModal(phase);
   const close = () => {
@@ -128,6 +133,14 @@ export default function PrepareEsp32Modal({
           </div>
         ) : null}
 
+        {isS3 && phase === PHASE.CONFIRM_FLASH ? (
+          <label className="connect-help__note" style={{display:"block",margin:"12px 0"}}>
+            <input type="checkbox" checked={s3ModelConfirmed}
+              onChange={e=>setS3ModelConfirmed(e.target.checked)} />
+            {" "}{t("boardEsp32S3ModelConsent")}
+          </label>
+        ) : null}
+
         {showLog && logLines.length ? (
           <pre className="prepare-esp32-log" aria-label={t("prepareEsp32ShowLog")}>
             {logLines.join("\n")}
@@ -137,7 +150,8 @@ export default function PrepareEsp32Modal({
         <div className="connect-modal-actions">
           {confirmPhase ? (
             <>
-              <button type="button" className="connect-btn connect-btn--primary" onClick={onConfirm}>
+              <button type="button" className="connect-btn connect-btn--primary" onClick={onConfirm}
+                disabled={isS3 && phase === PHASE.CONFIRM_FLASH && !s3ModelConfirmed}>
                 {t("prepareEsp32ConfirmYes")}
               </button>
               <button type="button" className="connect-btn connect-btn--ghost" onClick={onCancelConfirm}>
