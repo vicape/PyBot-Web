@@ -60,8 +60,12 @@ test("S3 is visible for USB and autonomous deployment, but not auto-flash or unt
   assert.match(read("src/hardwareBridge.js"),/if \(isEsp32MicroPythonBoard\(boardType\)\)/);
 });
 
-test("Waveshare S3 network examples are available without extra project dependencies",()=>{
+test("S3 has a native Wi-Fi example without depending on the PyBot BLE runtime",()=>{
   const examples=read("src/examplesData.js");
-  assert.match(examples,/esp32_wifi_http[\s\S]*?boards: \["esp32-micropython", "esp32-s3-micropython", "esp32-eda6"\]/);
-  assert.match(examples,/esp32_google_sheets[\s\S]*?boards: \["esp32-micropython", "esp32-s3-micropython", "esp32-eda6"\]/);
+  assert.match(examples,/id: "esp32_s3_wifi_native"/);
+  assert.match(examples,/boards: \["esp32-s3-micropython"\]/);
+  assert.match(examples,/network\.WLAN\(network\.STA_IF\)/);
+  assert.match(examples,/wlan\.ifconfig\(\)/);
+  // Classic ESP32 examples do not become S3-only.
+  assert.match(examples,/id: "esp32_wifi_http"[\s\S]*?boards: \["esp32-micropython", "esp32-eda6"\]/);
 });
