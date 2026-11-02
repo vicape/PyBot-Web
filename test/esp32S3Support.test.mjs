@@ -48,7 +48,8 @@ test("classic firmware is never considered a valid S3 image",()=>{
   assert.equal(ESP32_GENERIC_FIRMWARE.flashOffset,0x1000);
   const bridge=read("src/hardwareBridge.js");
   assert.match(bridge,/if \(isEsp32S3Board\(getBoardType\(\)\)\)/);
-  assert.match(bridge,/PROVISION_ERROR\.VARIANT_UNSUPPORTED/);
+  assert.match(bridge,/return runS3Provisioning\(/);
+  assert.match(bridge,/expectedChip:"ESP32-S3"/);
   assert.match(bridge,/isEsp32MicroPythonBoard\(_mode\)/);
 });
 
