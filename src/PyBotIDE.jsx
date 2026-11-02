@@ -75,7 +75,6 @@ import { resolveEsp32ExecutionTarget } from "./esp32RunTarget.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
 import { isEsp32Board, isEsp32MicroPythonBoard, isEsp32S3Board } from "./esp32/boardTypes.js";
-import { ESP32_S3_FIRMWARE_GUIDE } from "./esp32/s3FirmwareGuide.js";
 import PrepareEsp32Modal from "./PrepareEsp32Modal.jsx";
 import BluetoothPanel from "./BluetoothPanel.jsx";
 import IdeUserChip from "./components/IdeUserChip.jsx";
@@ -1231,9 +1230,9 @@ export default function PyBotIDE() {
         if (result.ok && result.phase === PHASE.READY) {
           setConnected(hardwareIsConnected());
           setPybotBoardState(BOARD_STATE.READY);
-          appendConsole(t("prepareEsp32Ready") + "\n", "info");
+          appendConsole(t(isEsp32S3Board(boardType) ? "boardEsp32S3Ready" : "prepareEsp32Ready") + "\n", "info");
         } else if (result.alreadyPrepared) {
-          appendConsole(t("prepareEsp32Already") + "\n", "info");
+          appendConsole(t(isEsp32S3Board(boardType) ? "boardEsp32S3Ready" : "prepareEsp32Already") + "\n", "info");
         } else if (result.error && result.error !== "PORT_CANCELLED" && result.error !== "CANCELLED") {
           appendConsole((t(`provErr_${result.error}`) || t("provErr_UNKNOWN")) + "\n", "err");
         }
@@ -1245,7 +1244,7 @@ export default function PyBotIDE() {
         setPreparingEsp32(false);
       }
     },
-    [preparingEsp32, appendConsole, waitPrepareConfirm],
+    [preparingEsp32, appendConsole, waitPrepareConfirm, boardType],
   );
 
   const openPrepareEsp32 = useCallback(() => {
@@ -2574,19 +2573,12 @@ export default function PyBotIDE() {
                       </div>
                       {isEsp32S3Board(boardType) && !connected ? (
                         <div className="toolbar-menu-subgroup">
-                          <span className="toolbar-menu-mode__label">{t("boardEsp32S3Install")}</span>
-                          <div className="toolbar-menu-hint">{t("boardEsp32S3FlashWarning")}</div>
-                          <a className="toolbar-menu-item toolbar-menu-item--secondary"
-                            href={ESP32_S3_FIRMWARE_GUIDE.sourceUrl}
-                            target="_blank" rel="noopener noreferrer">
-                            {t("boardEsp32S3Download")}
-                          </a>
-                          <a className="toolbar-menu-item toolbar-menu-item--secondary"
-                            href={ESP32_S3_FIRMWARE_GUIDE.flashToolUrl}
-                            target="_blank" rel="noopener noreferrer">
-                            {t("boardEsp32S3Flasher")}
-                          </a>
-                          <div className="toolbar-menu-hint">{t("boardEsp32S3AfterFlash")}</div>
+                          <button type="button" className="toolbar-menu-item toolbar-menu-item--highlight"
+                            onClick={() => { openPrepareEsp32(); setBoardMenuOpen(false); }}
+                            disabled={preparingEsp32}>
+                            {t("boardEsp32S3Prepare")}
+                          </button>
+                          <div className="toolbar-menu-hint">{t("boardEsp32S3PrepareHint")}</div>
                         </div>
                       ) : null}
                       {isEsp32S3Board(boardType) && connected ? (
@@ -3116,11 +3108,12 @@ export default function PyBotIDE() {
         onConnect={onConnectFromModal}
         onToggleHelp={() => setConnectModalShowHelp((v) => !v)}
         onPrepareEsp32={openPrepareEsp32}
-        showPrepareEsp32={boardType === "esp32-micropython" || boardType === "esp32-eda6"}
+        showPrepareEsp32={isEsp32Board(boardType)}
         highlightPrepare={connectHighlightPrepare}
       />
 
       <PrepareEsp32Modal
+        boardType={boardType}
         open={prepareModalOpen}
         phase={preparePhase}
         pct={preparePct}
