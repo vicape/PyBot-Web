@@ -1601,7 +1601,7 @@ export async function installBleRuntime(hooks = {}) {
  */
 export async function runMemoryDiagnostic() {
   if (!_mpSession) throw new Error("not_connected");
-  if (_mode !== "esp32-micropython" && _mode !== "esp32-eda6") {
+  if (!isEsp32Board(_mode)) {
     throw new Error("not_esp32");
   }
   // Interrumpe main.py u otro programa colgado antes de entrar a raw REPL.
