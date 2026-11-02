@@ -561,7 +561,7 @@ export const EXAMPLES = [
       'print("Conectado:", wlan.isconnected())',
       "if wlan.isconnected():",
       '    print("IP:", wlan.ifconfig()[0])',
-    ].join("\\n"),
+    ].join("\n"),
   },
   {
     id: "esp32_wifi_http",
