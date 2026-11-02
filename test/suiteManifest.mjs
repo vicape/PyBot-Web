@@ -68,6 +68,7 @@ export const TEST_SUITES = Object.freeze({
     "esp32S3Support.test.mjs",
     "esp32S3Provisioning.test.mjs",
     "esp32S3PythonRouting.test.mjs",
+    "canvasCodeDetect.test.mjs",
     "firmwareAppLifecycle.test.mjs",
     "firmwareAppStopForce.test.mjs",
     "firmwareBootUpdate.test.mjs",
