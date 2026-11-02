@@ -62,6 +62,7 @@ const STRINGS = {
     boardEsp32S3Intro: "Instalación directa desde PyBot. Se comprueba el chip, se verifica el firmware oficial y se pide autorización antes de borrar. No se instala Bluetooth ni EDA6.",
     boardEsp32S3Confirm: "ATENCIÓN: esta operación BORRA el firmware de fábrica y los programas de la ESP32-S3 seleccionada. ¿Confirmás expresamente el borrado y la instalación de MicroPython?",
     boardEsp32S3ModelConsent: "Confirmo que la placa seleccionada es Waveshare ESP32-S3-Touch-LCD-1.54 (ESP32-S3R8, 16 MB flash, 8 MB PSRAM octal) y acepto perder el firmware de fábrica.",
+    boardEsp32S3WrongChip: "La placa detectada es {chip}, no ESP32-S3. Por seguridad no se borró ni grabó ningún firmware.",
     boardEsp32S3Ready: "ESP32-S3 conectada con MicroPython. Ya podés ejecutar Python en la placa por USB.",
 
     boardEsp32S3Download: "1. Descargar firmware oficial ESP32-S3 (Octal-SPIRAM)",
@@ -691,6 +692,7 @@ Creado por VIC.`,
     boardEsp32S3Intro: "Install directly in PyBot. Chip detection, official firmware integrity checks and explicit consent before erasing. No Bluetooth or EDA6 runtime is installed.",
     boardEsp32S3Confirm: "WARNING: this ERASES the selected ESP32-S3 factory firmware and saved programs. Do you expressly confirm erasing and installing MicroPython?",
     boardEsp32S3ModelConsent: "I confirm the selected board is Waveshare ESP32-S3-Touch-LCD-1.54 (ESP32-S3R8, 16 MB flash, 8 MB octal PSRAM) and accept losing the factory firmware.",
+    boardEsp32S3WrongChip: "Detected chip is {chip}, not ESP32-S3. Nothing was erased or flashed for safety.",
     boardEsp32S3Ready: "ESP32-S3 connected with MicroPython. You can now run Python on the board over USB.",
 
     boardEsp32S3Download: "1. Download official ESP32-S3 firmware (Octal-SPIRAM)",
