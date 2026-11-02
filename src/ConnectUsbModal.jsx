@@ -142,7 +142,7 @@ export default function ConnectUsbModal({
               onClick={onPrepareEsp32}
               disabled={connecting}
             >
-              {t("prepareEsp32Btn")}
+              {t(boardType === "esp32-s3-micropython" ? "boardEsp32S3Prepare" : "prepareEsp32Btn")}
             </button>
           ) : null}
           <button
@@ -168,7 +168,7 @@ export default function ConnectUsbModal({
               onClick={onPrepareEsp32}
               disabled={connecting}
             >
-              {t("prepareEsp32Btn")}
+              {t(boardType === "esp32-s3-micropython" ? "boardEsp32S3Prepare" : "prepareEsp32Btn")}
             </button>
           ) : null}
           <button type="button" className="connect-btn connect-btn--ghost" onClick={onToggleHelp}>
