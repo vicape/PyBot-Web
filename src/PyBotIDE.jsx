@@ -1131,7 +1131,7 @@ export default function PyBotIDE() {
       } else {
         appendConsole(`${t("arduinoConnected")}\n`, "info");
       }
-      if (pybotState === BOARD_STATE.MPY_ONLY) {
+      if (pybotState === BOARD_STATE.MPY_ONLY && !isEsp32S3Board(mode)) {
         appendConsole(t("mpyStateMpyOnly") + "\n", "info");
       } else if (pybotState === BOARD_STATE.OLD_PYBOT) {
         appendConsole(t("mpyStateOldPybot") + "\n", "info");
@@ -1229,7 +1229,7 @@ export default function PyBotIDE() {
         });
         if (result.ok && result.phase === PHASE.READY) {
           setConnected(hardwareIsConnected());
-          setPybotBoardState(BOARD_STATE.READY);
+          setPybotBoardState(isEsp32S3Board(boardType) ? BOARD_STATE.MPY_ONLY : BOARD_STATE.READY);
           appendConsole(t(isEsp32S3Board(boardType) ? "boardEsp32S3Ready" : "prepareEsp32Ready") + "\n", "info");
         } else if (result.alreadyPrepared) {
           appendConsole(t(isEsp32S3Board(boardType) ? "boardEsp32S3Ready" : "prepareEsp32Already") + "\n", "info");
