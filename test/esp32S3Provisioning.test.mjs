@@ -96,7 +96,7 @@ test("verified image is flashed and live USB REPL retained only after success",a
   assert.equal(r.ok,true);
   assert.equal(r.phase,PHASE.READY);
   assert.equal(r.flashed,true);
-  assert.equal(r.boardState,BOARD_STATE.READY);
+  assert.equal(r.boardState,BOARD_STATE.MPY_ONLY);
   assert.equal(h.calls.confirmed,1);
   assert.equal(h.calls.erase,1);
   assert.equal(h.calls.write,1);
