@@ -4,6 +4,10 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/firmware/micropython/ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin",
+      "destination": "https://micropython.org/resources/firmware/ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
