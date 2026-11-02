@@ -7,6 +7,8 @@ import {fileURLToPath} from "node:url";
 import {ESP32_S3_MICROPYTHON,isEsp32S3Board,isEsp32MicroPythonBoard,isEsp32Board}
   from "../src/esp32/boardTypes.js";
 import {resolveEsp32ExecutionTarget} from "../src/esp32RunTarget.js";
+import {boardLabelKey} from "../src/connectUsbAssistant.js";
+import {formatHardwareError} from "../src/i18n.js";
 import {isClassicEsp32Chip,ESP32_GENERIC_FIRMWARE} from "../src/esp32/firmwareManifest.js";
 
 const root=join(dirname(fileURLToPath(import.meta.url)),"..");
@@ -68,4 +70,17 @@ test("S3 has a native Wi-Fi example without depending on the PyBot BLE runtime",
   assert.match(examples,/wlan\.ifconfig\(\)/);
   // Classic ESP32 examples do not become S3-only.
   assert.match(examples,/id: "esp32_wifi_http"[\s\S]*?boards: \["esp32-micropython", "esp32-eda6"\]/);
+});
+
+test("S3 non-response does not claim missing firmware or recommend classic flash",()=>{
+  assert.equal(boardLabelKey(s3),"boardEsp32S3");
+  const actual=formatHardwareError("PYBOT_MPY:NEEDS_PREP",s3);
+  const classic=formatHardwareError("PYBOT_MPY:NEEDS_PREP","esp32-micropython");
+  assert.notEqual(actual,classic);
+  assert.match(actual,/MicroPython/);
+  assert.match(actual,/ESP32-S3/);
+  assert.doesNotMatch(actual,/Usá «Preparar ESP32»|Use “Prepare ESP32”/);
+  const ide=read("src/PyBotIDE.jsx");
+  assert.match(ide,/formatHardwareError\(e\?\.message, boardType\)/);
+  assert.match(ide,/setConnectHighlightPrepare\(!isEsp32S3Board\(boardType\)/);
 });
