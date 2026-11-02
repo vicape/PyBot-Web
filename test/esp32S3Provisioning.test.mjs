@@ -1,6 +1,8 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {runS3Provisioning} from "../src/esp32/s3Provisioning.js";
+import {connectBootloader,writeFirmware} from "../src/esp32/esp32Flasher.js";
+import {ESP32_S3_OCTAL_FIRMWARE} from "../src/esp32/s3FirmwareManifest.js";
 import {BOARD_STATE,PHASE,PROVISION_ERROR} from "../src/esp32/provisioningPhases.js";
 
 function harness({already=false,consent=true,chip="ESP32-S3",hashOk=true,replOk=true}={}){
@@ -116,4 +118,46 @@ test("post-flash REPL timeout does not claim READY or attempt another erase",asy
   assert.equal(h.calls.erase,1);
   assert.equal(h.calls.write,1);
   assert.equal(h.calls.adopt,0);
+});
+
+test("actual esptool chip gate accepts S3 only in S3 mode, never in classic mode",async()=>{
+  function fake(chip){
+    const changes={disconnect:0,hardReset:0};
+    class Transport{
+      constructor(port){assert.equal(port,"usb");}
+      async disconnect(){changes.disconnect++;}
+    }
+    class ESPLoader{
+      constructor({transport}){this.chip={CHIP_NAME:chip};this.transport=transport;}
+      async main(){return chip;}
+      async after(){changes.hardReset++;}
+    }
+    return {changes,esptool:{Transport,ESPLoader}};
+  }
+  const s3=fake("ESP32-S3");
+  const ctx=await connectBootloader("usb",{expectedChip:"ESP32-S3",esptool:s3.esptool});
+  assert.equal(ctx.chipName,"ESP32-S3");
+  assert.equal(s3.changes.disconnect,0);
+  const wrongClassic=fake("ESP32");
+  await assert.rejects(()=>connectBootloader("usb",{expectedChip:"ESP32-S3",esptool:wrongClassic.esptool}),
+    err=>err.code===PROVISION_ERROR.VARIANT_UNSUPPORTED);
+  assert.equal(wrongClassic.changes.disconnect,1);
+  const wrongS3=fake("ESP32-S3");
+  await assert.rejects(()=>connectBootloader("usb",{esptool:wrongS3.esptool}),
+    err=>err.code===PROVISION_ERROR.VARIANT_UNSUPPORTED);
+  assert.equal(wrongS3.changes.disconnect,1);
+  const classic=fake("ESP32");
+  const unchanged=await connectBootloader("usb",{esptool:classic.esptool});
+  assert.equal(unchanged.chipName,"ESP32");
+});
+
+test("actual esptool writer receives only S3 manifest address 0x0 and MD5 verifier",async()=>{
+  let options;
+  const image=new Uint8Array([0xE9,2,3,4]);
+  await writeFirmware({loader:{writeFlash:async opts=>{options=opts;}}},image,
+    {manifest:ESP32_S3_OCTAL_FIRMWARE});
+  assert.equal(options.fileArray[0].address,0);
+  assert.equal(options.flashSize,"16MB");
+  assert.equal(options.flashMode,"dio");
+  assert.equal(typeof options.calculateMD5Hash,"function");
 });
