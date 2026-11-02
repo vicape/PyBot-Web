@@ -1,0 +1,125 @@
+name: ESP32-S3 isolated USB pilot QA
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/esp32/**'
+      - 'src/esp32RunTarget.js'
+      - 'src/hardwareBridge.js'
+      - 'src/PyBotIDE.jsx'
+      - 'src/examplesData.js'
+      - 'src/i18n.js'
+      - 'test/**'
+      - 'docs/ESP32_S3_USB_PILOT.md'
+      - '.github/workflows/esp32-s3-pilot-qa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install existing dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Inspect official S3 Octal-SPIRAM firmware for pinned checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 2 --max-time 75 --silent --show-error \
+            "https://micropython.org/resources/firmware/ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin" \
+            -o "$RUNNER_TEMP/s3-oct.bin"
+          echo "OFFICIAL_S3_OCT_SHA256 $(sha256sum "$RUNNER_TEMP/s3-oct.bin")"
+          echo "OFFICIAL_S3_OCT_SIZE $(wc -c < "$RUNNER_TEMP/s3-oct.bin")"
+          test "$(sha256sum "$RUNNER_TEMP/s3-oct.bin" | cut -d' ' -f1)" = "ab24eadfe3ef0e6ee38834d730e648def7cd82f3fa51ee0bbc59c29a6e1bd176"
+          test "$(wc -c < "$RUNNER_TEMP/s3-oct.bin")" -eq 1786704
+      - name: S3 isolated hardware and firmware guardrails
+        run: node --test test/esp32S3Support.test.mjs
+      - name: Existing hardware contracts (report separately)
+        id: contracts
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run test:contracts 2>&1 | tee "$RUNNER_TEMP/pr-contracts.log"
+      - name: Existing architecture contracts (report separately)
+        id: architecture
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run test:architecture 2>&1 | tee "$RUNNER_TEMP/pr-architecture.log"
+      - name: Existing application regressions (report separately)
+        id: application
+        continue-on-error: true
+        run: npm run test:fast
+      - name: Production build (no deployment)
+        id: build
+        continue-on-error: true
+        run: npm run build
+      - name: Checkout exact unmodified base commit for attribution
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: baseline
+          persist-credentials: false
+      - name: Install baseline dependencies (no project scripts)
+        run: npm ci --prefix baseline --ignore-scripts --no-audit --no-fund
+      - name: Run baseline contracts and architecture on main snapshot
+        shell: bash
+        run: |
+          set -u
+          set +e
+          (cd baseline && npm run test:contracts) > "$RUNNER_TEMP/base-contracts.log" 2>&1
+          echo "Base contract exit: $?"
+          (cd baseline && npm run test:architecture) > "$RUNNER_TEMP/base-architecture.log" 2>&1
+          echo "Base architecture exit: $?"
+      - name: Compare all contract/architecture failures against base (no new regressions)
+        if: always()
+        env:
+          APPLICATION: ${{ steps.application.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$APPLICATION" = "success"
+          test "$BUILD" = "success"
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          import {join} from 'node:path';
+          const dir=process.env.RUNNER_TEMP;
+          const file=(prefix,suite)=>readFileSync(join(dir,prefix+'-'+suite+'.log'),'utf8');
+          const failed=log=>log.split(/\r?\n/).flatMap(line=>{
+            const m=line.match(/^not ok \d+ - (.+)$/);
+            return m?[m[1]]:[];
+          }).sort();
+          let introduced=0;
+          for(const suite of ['contracts','architecture']){
+            const prior=failed(file('base',suite));
+            const current=failed(file('pr',suite));
+            const available=new Map();
+            for(const name of prior)available.set(name,(available.get(name)||0)+1);
+            const fresh=[];
+            for(const name of current){
+              const n=available.get(name)||0;
+              if(n>0)available.set(name,n-1);
+              else fresh.push(name);
+            }
+            console.log(suite+': baseline failures='+prior.length+
+              ', PR failures='+current.length+', introduced='+fresh.length);
+            for(const name of fresh)console.log('::error::NEW '+suite+' regression: '+name);
+            if(prior.length)console.log('::warning::'+prior.length+' existing '+suite+
+              ' failures on unchanged base commit; tracked separately from S3 work');
+            introduced+=fresh.length;
+          }
+          if(introduced)process.exitCode=1;
+          else console.log('S3 REGRESSION GATE PASS: no new failures vs exact main SHA');
+          NODE

@@ -109,6 +109,9 @@ export default function ConnectUsbModal({
             {errorMessage}
           </div>
         ) : null}
+        {boardType === "esp32-s3-micropython" && phase === "failed" ? (
+          <p className="connect-help__note">{t("boardEsp32S3PrepareHint")}</p>
+        ) : null}
 
         {showHelp || phase === "failed" ? (
           <div className="connect-help">
@@ -139,7 +142,7 @@ export default function ConnectUsbModal({
               onClick={onPrepareEsp32}
               disabled={connecting}
             >
-              {t("prepareEsp32Btn")}
+              {t(boardType === "esp32-s3-micropython" ? "boardEsp32S3Prepare" : "prepareEsp32Btn")}
             </button>
           ) : null}
           <button
@@ -165,7 +168,7 @@ export default function ConnectUsbModal({
               onClick={onPrepareEsp32}
               disabled={connecting}
             >
-              {t("prepareEsp32Btn")}
+              {t(boardType === "esp32-s3-micropython" ? "boardEsp32S3Prepare" : "prepareEsp32Btn")}
             </button>
           ) : null}
           <button type="button" className="connect-btn connect-btn--ghost" onClick={onToggleHelp}>

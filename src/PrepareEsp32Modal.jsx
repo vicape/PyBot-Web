@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { t } from "./i18n.js";
 import { PHASE, canCloseModal, BOARD_STATE } from "./esp32/provisioningPhases.js";
 
@@ -5,6 +6,7 @@ import { PHASE, canCloseModal, BOARD_STATE } from "./esp32/provisioningPhases.js
  * Modal educativo del flujo Preparar ESP32.
  */
 export default function PrepareEsp32Modal({
+  boardType = "esp32-micropython",
   open,
   phase = PHASE.IDLE,
   pct = null,
@@ -23,6 +25,11 @@ export default function PrepareEsp32Modal({
   onRetry,
   onReinstall,
 }) {
+  const isS3 = boardType === "esp32-s3-micropython";
+  const [s3ModelConfirmed,setS3ModelConfirmed]=useState(false);
+  useEffect(()=>{
+    setS3ModelConfirmed(false);
+  },[open,phase,boardType]);
   if (!open) return null;
 
   const critical = !canCloseModal(phase);
@@ -48,9 +55,9 @@ export default function PrepareEsp32Modal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="prepare-esp32-title" className="modal-title">
-          {t("prepareEsp32Title")}
+          {t(isS3 ? "boardEsp32S3Title" : "prepareEsp32Title")}
         </h3>
-        <p className="connect-modal-intro">{t("prepareEsp32Intro")}</p>
+        <p className="connect-modal-intro">{t(isS3 ? "boardEsp32S3Intro" : "prepareEsp32Intro")}</p>
 
         {boardState ? (
           <div className="connect-modal-board">
@@ -75,7 +82,7 @@ export default function PrepareEsp32Modal({
 
         {chipName && phase === PHASE.UNSUPPORTED_VARIANT ? (
           <div className="connect-modal-error" role="alert">
-            {t("prepareEsp32Unsupported").replace("{chip}", String(chipName))}
+            {t(isS3 ? "boardEsp32S3WrongChip" : "prepareEsp32Unsupported").replace("{chip}", String(chipName))}
           </div>
         ) : null}
 
@@ -107,23 +114,31 @@ export default function PrepareEsp32Modal({
         ) : null}
 
         {phase === PHASE.ALREADY_PREPARED ? (
-          <p className="prepare-esp32-ok">{t("prepareEsp32Already")}</p>
+          <p className="prepare-esp32-ok">{t(isS3 ? "boardEsp32S3Ready" : "prepareEsp32Already")}</p>
         ) : null}
 
         {phase === PHASE.READY ? (
-          <p className="prepare-esp32-ok">{t("prepareEsp32Ready")}</p>
+          <p className="prepare-esp32-ok">{t(isS3 ? "boardEsp32S3Ready" : "prepareEsp32Ready")}</p>
         ) : null}
 
         {confirmPhase ? (
           <div className="prepare-esp32-warn" role="alert">
             {phase === PHASE.CONFIRM_FLASH
-              ? t("prepareEsp32ConfirmFlash")
+              ? t(isS3 ? "boardEsp32S3Confirm" : "prepareEsp32ConfirmFlash")
               : phase === PHASE.CONFIRM_REINSTALL
                 ? t("prepareEsp32ConfirmReinstall")
                 : phase === PHASE.CONFIRM_UPDATE
                   ? t("prepareEsp32ConfirmUpdate")
                   : t("prepareEsp32ConfirmInstall")}
           </div>
+        ) : null}
+
+        {isS3 && phase === PHASE.CONFIRM_FLASH ? (
+          <label className="connect-help__note" style={{display:"block",margin:"12px 0"}}>
+            <input type="checkbox" checked={s3ModelConfirmed}
+              onChange={e=>setS3ModelConfirmed(e.target.checked)} />
+            {" "}{t("boardEsp32S3ModelConsent")}
+          </label>
         ) : null}
 
         {showLog && logLines.length ? (
@@ -135,7 +150,8 @@ export default function PrepareEsp32Modal({
         <div className="connect-modal-actions">
           {confirmPhase ? (
             <>
-              <button type="button" className="connect-btn connect-btn--primary" onClick={onConfirm}>
+              <button type="button" className="connect-btn connect-btn--primary" onClick={onConfirm}
+                disabled={isS3 && phase === PHASE.CONFIRM_FLASH && !s3ModelConfirmed}>
                 {t("prepareEsp32ConfirmYes")}
               </button>
               <button type="button" className="connect-btn connect-btn--ghost" onClick={onCancelConfirm}>
@@ -144,7 +160,7 @@ export default function PrepareEsp32Modal({
             </>
           ) : null}
 
-          {phase === PHASE.ALREADY_PREPARED ? (
+          {phase === PHASE.ALREADY_PREPARED && !isS3 ? (
             <button type="button" className="connect-btn connect-btn--ghost" onClick={onReinstall}>
               {t("prepareEsp32Reinstall")}
             </button>

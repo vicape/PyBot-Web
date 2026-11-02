@@ -53,6 +53,22 @@ const STRINGS = {
     boardLabel: "Placa",
     boardArduino: "Arduino Uno/Nano compatible",
     boardEsp32Mp: "ESP32 MicroPython - GPIO directo",
+    boardEsp32S3: "ESP32-S3 MicroPython (USB)",
+    boardEsp32S3Hint: "Para usar ESP32-S3, instalá primero el firmware MicroPython específico de tu placa (PSRAM octal en Waveshare). PyBot no borra ni flashea automáticamente esta familia.",
+    boardEsp32S3Install: "Instalar MicroPython en ESP32-S3",
+    boardEsp32S3Prepare: "Preparar ESP32-S3 desde PyBot",
+    boardEsp32S3PrepareHint: "PyBot detecta el chip y, tras pedir tu confirmación, instala MicroPython Octal-SPIRAM verificado por USB. Si ya tiene MicroPython, NO borra el firmware.",
+    boardEsp32S3Title: "Preparar ESP32-S3 para PyBot",
+    boardEsp32S3Intro: "Instalación directa desde PyBot. Se comprueba el chip, se verifica el firmware oficial y se pide autorización antes de borrar. No se instala Bluetooth ni EDA6.",
+    boardEsp32S3Confirm: "ATENCIÓN: esta operación BORRA el firmware de fábrica y los programas de la ESP32-S3 seleccionada. ¿Confirmás expresamente el borrado y la instalación de MicroPython?",
+    boardEsp32S3ModelConsent: "Confirmo que la placa seleccionada es Waveshare ESP32-S3-Touch-LCD-1.54 (ESP32-S3R8, 16 MB flash, 8 MB PSRAM octal) y acepto perder el firmware de fábrica.",
+    boardEsp32S3WrongChip: "La placa detectada es {chip}, no ESP32-S3. Por seguridad no se borró ni grabó ningún firmware.",
+    boardEsp32S3Ready: "ESP32-S3 conectada con MicroPython. Ya podés ejecutar Python en la placa por USB.",
+
+    boardEsp32S3Download: "1. Descargar firmware oficial ESP32-S3 (Octal-SPIRAM)",
+    boardEsp32S3Flasher: "2. Abrir instalador web oficial de Espressif",
+    boardEsp32S3FlashWarning: "ATENCIÓN: instalar MicroPython puede borrar el firmware de fábrica y los programas guardados. Seleccioná el archivo .bin completo de la sección Octal-SPIRAM, elegí únicamente tu ESP32-S3 y grabá en la dirección 0x0. Cerrá PyBot y cualquier monitor serial antes de grabar. PyBot no ejecuta ni controla ese flasheo.",
+    boardEsp32S3AfterFlash: "3. Reiniciá la placa, volvé a PyBot y conectá por USB.",
     boardEsp32Eda6: "ESP32 EDA6 / WEMOS",
     eda6ProfileLabel: "Perfil EDA6",
     eda6ProfileWemos: "WEMOS (recomendado)",
@@ -458,6 +474,8 @@ const STRINGS = {
       "No se pudo conectar con la placa ESP32. Revisá el firmware PyBot ESP32, el cable y el puerto.",
     usbErr_MPY_NEEDS_PREP:
       "Esta ESP32 no tiene MicroPython. Usá «Preparar ESP32» para instalarlo desde el navegador (sin Thonny ni Arduino IDE).",
+    usbErr_S3_REPL_NOT_DETECTED:
+      "La ESP32-S3 no respondió al REPL de MicroPython. Puede tener el firmware de fábrica, un puerto USB distinto o la conexión ocupada. Revisá el puerto y probá nuevamente. Si no tiene MicroPython, instalá el firmware oficial ESP32-S3 adecuado a tu Waveshare. PyBot todavía NO puede instalarlo automáticamente; no uses el preparador de ESP32 clásico.",
     usbErr_MPY_BUSY:
       "El puerto está ocupado por otra aplicación. Cerrá Arduino IDE, Thonny u otra app que use el puerto y reintentá.",
     usbErr_MPY_REPL_FAIL:
@@ -665,6 +683,22 @@ Creado por VIC.`,
     boardLabel: "Board",
     boardArduino: "Arduino Uno/Nano compatible",
     boardEsp32Mp: "ESP32 MicroPython - direct GPIO",
+    boardEsp32S3: "ESP32-S3 MicroPython (USB)",
+    boardEsp32S3Hint: "Install the correct ESP32-S3 MicroPython firmware first (octal PSRAM on Waveshare). PyBot will not erase or automatically flash this chip family.",
+    boardEsp32S3Install: "Install MicroPython on ESP32-S3",
+    boardEsp32S3Prepare: "Prepare ESP32-S3 inside PyBot",
+    boardEsp32S3PrepareHint: "PyBot identifies the chip and, after your consent, installs verified Octal-SPIRAM MicroPython over USB. Working MicroPython firmware is never erased.",
+    boardEsp32S3Title: "Prepare ESP32-S3 for PyBot",
+    boardEsp32S3Intro: "Install directly in PyBot. Chip detection, official firmware integrity checks and explicit consent before erasing. No Bluetooth or EDA6 runtime is installed.",
+    boardEsp32S3Confirm: "WARNING: this ERASES the selected ESP32-S3 factory firmware and saved programs. Do you expressly confirm erasing and installing MicroPython?",
+    boardEsp32S3ModelConsent: "I confirm the selected board is Waveshare ESP32-S3-Touch-LCD-1.54 (ESP32-S3R8, 16 MB flash, 8 MB octal PSRAM) and accept losing the factory firmware.",
+    boardEsp32S3WrongChip: "Detected chip is {chip}, not ESP32-S3. Nothing was erased or flashed for safety.",
+    boardEsp32S3Ready: "ESP32-S3 connected with MicroPython. You can now run Python on the board over USB.",
+
+    boardEsp32S3Download: "1. Download official ESP32-S3 firmware (Octal-SPIRAM)",
+    boardEsp32S3Flasher: "2. Open Espressif's official web flasher",
+    boardEsp32S3FlashWarning: "WARNING: installing MicroPython can erase the factory firmware and saved programs. Select the complete .bin from Octal-SPIRAM firmware, choose only your ESP32-S3 and flash at address 0x0. Close PyBot and any serial monitor before flashing. PyBot does not execute or control this flash operation.",
+    boardEsp32S3AfterFlash: "3. Reboot the board, return to PyBot and connect over USB.",
     boardEsp32Eda6: "ESP32 EDA6 / WEMOS",
     eda6ProfileLabel: "EDA6 profile",
     eda6ProfileWemos: "WEMOS (recommended)",
@@ -1070,6 +1104,8 @@ Creado por VIC.`,
       "Could not connect to the ESP32 board. Check the PyBot ESP32 firmware, cable, and port.",
     usbErr_MPY_NEEDS_PREP:
       "This ESP32 does not have MicroPython. Use “Prepare ESP32” to install it from the browser (no Thonny or Arduino IDE).",
+    usbErr_S3_REPL_NOT_DETECTED:
+      "The ESP32-S3 did not respond to the MicroPython REPL. It may still have factory firmware, a different USB port may be selected, or the connection may be busy. Check the port and retry. If MicroPython is not installed, use firmware specifically for this Waveshare ESP32-S3. PyBot cannot install it automatically yet; do not use the classic ESP32 installer.",
     usbErr_MPY_BUSY:
       "The port is busy with another application. Close Arduino IDE, Thonny, or any app using the port and try again.",
     usbErr_MPY_REPL_FAIL:
@@ -1294,8 +1330,11 @@ export function t(key) {
  * Mensajes de hardwareBridge (PYBOT_USB:… / PYBOT_FIRMATA:…)
  * @param {string} message
  */
-export function formatHardwareError(message) {
+export function formatHardwareError(message, boardType = "") {
   const m = String(message ?? "");
+  if (boardType === "esp32-s3-micropython" && m === "PYBOT_MPY:NEEDS_PREP") {
+    return t("usbErr_S3_REPL_NOT_DETECTED");
+  }
   if (m.startsWith("PYBOT_USB:")) {
     const code = m.slice("PYBOT_USB:".length);
     const key = `usbErr_${code}`;

@@ -100,7 +100,10 @@ import {
   finalizeBleBackend,
   formatBleBackendDiagnosis,
 } from "./micropython/bleBackend.js";
+import { isEsp32MicroPythonBoard, isEsp32Board, isEsp32S3Board } from "./esp32/boardTypes.js";
 import { runEsp32Provisioning } from "./esp32/provisionEsp32.js";
+import { runS3Provisioning } from "./esp32/s3Provisioning.js";
+import { ESP32_S3_OCTAL_FIRMWARE, assertS3FirmwareManifest } from "./esp32/s3FirmwareManifest.js";
 import { inspectPybotOnSession } from "./esp32/boardProbe.js";
 import {
   expectedProvisionFiles,
@@ -194,7 +197,7 @@ export const PYBOT_MPY_FILENAME = "pybot_mpy.py";
 export function getBoardType() {
   try {
     const v = localStorage.getItem("pybot_board_type");
-    if (v === "esp32-micropython") return "esp32-micropython";
+    if (isEsp32MicroPythonBoard(v)) return v;
     if (v === "esp32-eda6") return "esp32-eda6";
     if (v === "esp32-serial") return "esp32-serial";
     return "arduino-firmata";
@@ -211,7 +214,7 @@ export function hardwareMode() {
 }
 
 export function isMicroPythonOnBoard() {
-  return _mode === "esp32-micropython" || _mode === "esp32-eda6";
+  return isEsp32Board(_mode);
 }
 
 /** EDA6 corre únicamente con su propio módulo y perfil, sin inyectar PyBot GPIO. */
@@ -366,11 +369,11 @@ export async function hardwareConnect(hooks = {}) {
     }
   }
 
-  if (boardType === "esp32-micropython") {
+  if (isEsp32MicroPythonBoard(boardType)) {
     try {
       const { session, baudRate } = await connectMicroPythonEsp32Session(port);
       _mpSession = session;
-      _mode = "esp32-micropython";
+      _mode = boardType;
       _baudRate = baudRate;
       return { baudRate, mode: _mode, ...(await pybotStateSnapshot()) };
     } catch (e) {
@@ -533,6 +536,42 @@ async function requestSerialPort() {
  * }} [hooks]
  */
 export async function prepareEsp32(hooks = {}) {
+  if (isEsp32S3Board(getBoardType())) {
+    // Standalone S3 provisioning. Never install classic ESP32 or BLE runtime.
+    // The ROM identity and SHA-256 are checked before any destructive operation.
+    await hardwareDisconnect();
+    return runS3Provisioning({
+      requestPort:requestSerialPort,
+      async probeRepl(port){
+        const {session,baudRate}=await connectMicroPythonEsp32Session(port,{
+          recoverRepl:true,mode:"esp32-s3-micropython",
+        });
+        _baudRate=baudRate;
+        return {session};
+      },
+      keepSession(session){
+        _mpSession=session;_mode="esp32-s3-micropython";_baudRate=115200;
+      },
+      connectBootloader:port=>connectBootloader(port,{
+        expectedChip:"ESP32-S3",onLog:hooks.onLog,
+      }),
+      eraseFlash,
+      writeFirmware,
+      resetAndRelease,
+      ensurePortClosed,
+      loadFirmware:()=>{
+        const manifest=assertS3FirmwareManifest(ESP32_S3_OCTAL_FIRMWARE);
+        return loadOfficialFirmware({manifest});
+      },
+      async connectRepl(port){
+        if(!port)throw new Error("S3_PORT_LOST");
+        await sleepMs(2200);
+        return connectMicroPythonEsp32Session(port,{
+          recoverRepl:true,mode:"esp32-s3-micropython",
+        });
+      },
+    },hooks);
+  }
   await hardwareDisconnect();
   const mode = provisionMode();
 
@@ -676,6 +715,9 @@ export async function runOnBoard(code, cb = {}) {
     }
     return _mpSession.runProgram(code, cb);
   }
+  // The S3 pilot has no validated BLE runtime and must never execute on a
+  // different, previously connected device.
+  if (isEsp32S3Board(getBoardType())) throw new Error("not_connected");
   if (isNativeBleEnabled() && _bleMpSession) {
     try {
       await _bleMpSession.interruptAndRecoverRepl();
@@ -1588,7 +1630,7 @@ export async function installBleRuntime(hooks = {}) {
  */
 export async function runMemoryDiagnostic() {
   if (!_mpSession) throw new Error("not_connected");
-  if (_mode !== "esp32-micropython" && _mode !== "esp32-eda6") {
+  if (!isEsp32Board(_mode)) {
     throw new Error("not_esp32");
   }
   // Interrumpe main.py u otro programa colgado antes de entrar a raw REPL.
@@ -1621,7 +1663,7 @@ export async function flashToEsp32(code) {
     const verify = await flashProgramToBoard(code, getEda6Profile());
     return { kind: "eda6", verify };
   }
-  if (_mode === "esp32-micropython") {
+  if (isEsp32MicroPythonBoard(_mode)) {
     const verify = await flashGpioProgramToBoard(code);
     return { kind: "gpio", verify };
   }

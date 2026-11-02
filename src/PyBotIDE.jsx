@@ -72,8 +72,10 @@ import { runPythonAsync, signalStop } from "./pyodideRunner.js";
 import { checkPythonSyntax } from "./pythonSyntaxDiagnostics.js";
 import { hasCanvasCode } from "./canvasCodeDetect.js";
 import { resolveEsp32ExecutionTarget } from "./esp32RunTarget.js";
+import { requiresMicroPythonRuntime } from "./esp32/micropythonRuntimeDetect.js";
 import { HELP_COURSE } from "./helpCourseData.js";
 import ConnectUsbModal from "./ConnectUsbModal.jsx";
+import { isEsp32Board, isEsp32MicroPythonBoard, isEsp32S3Board } from "./esp32/boardTypes.js";
 import PrepareEsp32Modal from "./PrepareEsp32Modal.jsx";
 import BluetoothPanel from "./BluetoothPanel.jsx";
 import IdeUserChip from "./components/IdeUserChip.jsx";
@@ -1110,7 +1112,7 @@ export default function PyBotIDE() {
       try {
         const transport = mode?.includes("esp32") ? "usb" : "usb";
         track("usb_connect", { transport, board_type: mode || boardType });
-        if (mode === "esp32-eda6" || mode === "esp32-micropython") {
+        if (isEsp32Board(mode)) {
           track("esp32_connect", { transport: "usb", board_type: mode });
         }
       } catch {
@@ -1123,14 +1125,14 @@ export default function PyBotIDE() {
         );
         appendConsole(t("eda6Hint") + "\n", "info");
         appendConsole(t("esp32ReconnectWarn") + "\n", "info");
-      } else if (mode === "esp32-micropython") {
+      } else if (isEsp32MicroPythonBoard(mode)) {
         appendConsole(t("mpyConnected") + "\n", "info");
         appendConsole(t("esp32FlashHint") + "\n", "info");
         appendConsole(t("esp32ReconnectWarn") + "\n", "info");
       } else {
         appendConsole(`${t("arduinoConnected")}\n`, "info");
       }
-      if (pybotState === BOARD_STATE.MPY_ONLY) {
+      if (pybotState === BOARD_STATE.MPY_ONLY && !isEsp32S3Board(mode)) {
         appendConsole(t("mpyStateMpyOnly") + "\n", "info");
       } else if (pybotState === BOARD_STATE.OLD_PYBOT) {
         appendConsole(t("mpyStateOldPybot") + "\n", "info");
@@ -1141,14 +1143,14 @@ export default function PyBotIDE() {
       }
       return { ok: true };
     } catch (e) {
-      const display = formatHardwareError(e?.message);
+      const display = formatHardwareError(e?.message, boardType);
       appendConsole(`${display}\n`, "err");
       return { ok: false, message: e?.message, display };
     } finally {
       setConnecting(false);
       setConnectModalPreparing(false);
     }
-  }, [connecting, appendConsole, eda6Profile]);
+  }, [connecting, appendConsole, eda6Profile, boardType]);
 
   const openConnectFlow = useCallback(() => {
     if (connecting) return;
@@ -1178,13 +1180,13 @@ export default function PyBotIDE() {
       setConnectHighlightPrepare(false);
     } else if (!result.skipped) {
       setConnectModalPhase("failed");
-      setConnectModalError(result.display ?? formatHardwareError(result.message));
+      setConnectModalError(result.display ?? formatHardwareError(result.message, boardType));
       setConnectModalShowHelp(true);
-      setConnectHighlightPrepare(String(result.message ?? "").includes("NEEDS_PREP"));
+      setConnectHighlightPrepare(!isEsp32S3Board(boardType) && String(result.message ?? "").includes("NEEDS_PREP"));
     } else {
       setConnectModalPhase("ready");
     }
-  }, [performHardwareConnect]);
+  }, [performHardwareConnect, boardType]);
 
   const waitPrepareConfirm = useCallback(
     () =>
@@ -1228,10 +1230,10 @@ export default function PyBotIDE() {
         });
         if (result.ok && result.phase === PHASE.READY) {
           setConnected(hardwareIsConnected());
-          setPybotBoardState(BOARD_STATE.READY);
-          appendConsole(t("prepareEsp32Ready") + "\n", "info");
+          setPybotBoardState(isEsp32S3Board(boardType) ? BOARD_STATE.MPY_ONLY : BOARD_STATE.READY);
+          appendConsole(t(isEsp32S3Board(boardType) ? "boardEsp32S3Ready" : "prepareEsp32Ready") + "\n", "info");
         } else if (result.alreadyPrepared) {
-          appendConsole(t("prepareEsp32Already") + "\n", "info");
+          appendConsole(t(isEsp32S3Board(boardType) ? "boardEsp32S3Ready" : "prepareEsp32Already") + "\n", "info");
         } else if (result.error && result.error !== "PORT_CANCELLED" && result.error !== "CANCELLED") {
           appendConsole((t(`provErr_${result.error}`) || t("provErr_UNKNOWN")) + "\n", "err");
         }
@@ -1243,7 +1245,7 @@ export default function PyBotIDE() {
         setPreparingEsp32(false);
       }
     },
-    [preparingEsp32, appendConsole, waitPrepareConfirm],
+    [preparingEsp32, appendConsole, waitPrepareConfirm, boardType],
   );
 
   const openPrepareEsp32 = useCallback(() => {
@@ -1301,7 +1303,7 @@ export default function PyBotIDE() {
 
   const onDisconnect = useCallback(async () => {
     const wasEsp =
-      boardType === "esp32-eda6" || boardType === "esp32-micropython";
+      isEsp32Board(boardType);
     await hardwareDisconnect();
     setConnected(false);
     setPybotBoardState(null);
@@ -1332,7 +1334,11 @@ export default function PyBotIDE() {
     } catch {
       //
     }
-    const needsHw = codeNeedsHardware(activeCode);
+    // ESP32-S3 native imports (machine / framebuf / SPI) must NEVER be sent
+    // to browser Pyodide just because the code lacks PyBot pin()/servo().
+    // This correction is scoped to S3; classic ESP32 / EDA6 stay unchanged.
+    const needsHw = codeNeedsHardware(activeCode) ||
+      (isEsp32S3Board(boardType) && requiresMicroPythonRuntime(activeCode));
     const canvasCode = hasCanvasCode(activeCode);
 
     // ESP32 MicroPython / EDA6: APIs de hardware NUNCA caen a Pyodide.
@@ -1355,7 +1361,7 @@ export default function PyBotIDE() {
       return;
     }
     if (esp32Target.target === "board") {
-      if (boardType === "esp32-micropython" && /\bpin\s*\([^)]*["'][Aa]\d/.test(activeCode)) {
+      if (isEsp32MicroPythonBoard(boardType) && /\bpin\s*\([^)]*["'][Aa]\d/.test(activeCode)) {
         appendConsole(formatPythonError("ESP32_GPIO_ONLY") + "\n", "err");
         return;
       }
@@ -1455,7 +1461,7 @@ export default function PyBotIDE() {
       appendConsole(t("needConnect") + "\n", "err");
       return;
     }
-    if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") {
+    if (!isEsp32Board(boardType)) {
       return;
     }
     const snapshot = captureProgramSnapshot();
@@ -1538,11 +1544,12 @@ export default function PyBotIDE() {
   }, [boardType, downloadingArduino, captureProgramSnapshot, appendConsole]);
 
   const onInstallBleRuntime = useCallback(async () => {
+    if (isEsp32S3Board(boardType)) return; // S3 BLE firmware not physically validated
     if (!connected) {
       appendConsole(t("needConnect") + "\n", "err");
       return;
     }
-    if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") {
+    if (!isEsp32Board(boardType)) {
       return;
     }
     if (bleInstalling) return;
@@ -1581,7 +1588,7 @@ export default function PyBotIDE() {
       appendConsole(t("needConnect") + "\n", "err");
       return;
     }
-    if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") {
+    if (!isEsp32Board(boardType)) {
       return;
     }
     if (memDiagnosing) return;
@@ -1678,11 +1685,12 @@ export default function PyBotIDE() {
   }, [connected, appendConsole]);
 
   const onClearPersistentAppUsb = useCallback(async () => {
+    if (isEsp32S3Board(boardType)) return; // S3 BLE firmware not physically validated
     if (!connected) {
       appendConsole(t("needConnect") + "\n", "err");
       return;
     }
-    if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") return;
+    if (!isEsp32Board(boardType)) return;
     appendConsole(t("bleClearAppStart") + "\n", "info");
     try {
       await clearPersistentAppUsb();
@@ -1739,12 +1747,13 @@ export default function PyBotIDE() {
   }, [appendConsole, refreshBleAppStatus]);
 
   const onBleDeploy = useCallback(async () => {
+    if (isEsp32S3Board(boardType)) return; // S3 BLE firmware not physically validated
     if (bleDeploying) return;
     if (!bleConnected) {
       appendConsole(t("bleNotConnected") + "\n", "err");
       return;
     }
-    if (boardType !== "esp32-micropython" && boardType !== "esp32-eda6") return;
+    if (!isEsp32Board(boardType)) return;
     const snapshot = captureProgramSnapshot();
     const activeCode = snapshot.source;
     if (!activeCode.trim()) {
@@ -1909,7 +1918,7 @@ export default function PyBotIDE() {
     // Importante: con BLE, Stop DEBE intentar aunque `running` local sea false
     // (app autostart / programa bajado sin sesión web activa).
     const onBoard =
-      (boardType === "esp32-micropython" || boardType === "esp32-eda6") &&
+      (isEsp32Board(boardType)) &&
       (hardwareIsConnected() || bleConnected);
     // USB/BLE WEMOS: Stop libera hardware aunque running ya sea false (fin normal).
     if (onBoard) {
@@ -2563,9 +2572,32 @@ export default function PyBotIDE() {
                         >
                           <option value="arduino-firmata">{t("boardArduino")}</option>
                           <option value="esp32-micropython">{t("boardEsp32Mp")}</option>
+                          <option value="esp32-s3-micropython">{t("boardEsp32S3")}</option>
                           <option value="esp32-eda6">{t("boardEsp32Eda6")}</option>
                         </select>
                       </div>
+                      {isEsp32S3Board(boardType) && !connected ? (
+                        <div className="toolbar-menu-subgroup">
+                          <button type="button" className="toolbar-menu-item toolbar-menu-item--highlight"
+                            onClick={() => { openPrepareEsp32(); setBoardMenuOpen(false); }}
+                            disabled={preparingEsp32}>
+                            {t("boardEsp32S3Prepare")}
+                          </button>
+                          <div className="toolbar-menu-hint">{t("boardEsp32S3PrepareHint")}</div>
+                        </div>
+                      ) : null}
+                      {isEsp32S3Board(boardType) && connected ? (
+                        <div className="toolbar-menu-subgroup">
+                          <span className="toolbar-menu-mode__label">{t("menuBoardToolsLabel")}</span>
+                          <button type="button" className="toolbar-menu-item toolbar-menu-item--secondary"
+                            onClick={() => { onFlashToEsp32(); setBoardMenuOpen(false); }}>
+                            {t("esp32FlashBtn")}
+                          </button>
+                          <button type="button" className="toolbar-menu-item toolbar-menu-item--secondary"
+                            onClick={() => { onRunMemoryDiagnostic(); setBoardMenuOpen(false); }}
+                            disabled={memDiagnosing}>{t("memDiagBtn")}</button>
+                        </div>
+                      ) : null}
                       {boardType === "esp32-eda6" ? (
                         <div className="toolbar-menu-mode">
                           <span className="toolbar-menu-mode__label">{t("eda6ProfileLabel")}</span>
@@ -3081,11 +3113,12 @@ export default function PyBotIDE() {
         onConnect={onConnectFromModal}
         onToggleHelp={() => setConnectModalShowHelp((v) => !v)}
         onPrepareEsp32={openPrepareEsp32}
-        showPrepareEsp32={boardType === "esp32-micropython" || boardType === "esp32-eda6"}
+        showPrepareEsp32={isEsp32Board(boardType)}
         highlightPrepare={connectHighlightPrepare}
       />
 
       <PrepareEsp32Modal
+        boardType={boardType}
         open={prepareModalOpen}
         phase={preparePhase}
         pct={preparePct}
