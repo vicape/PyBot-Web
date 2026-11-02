@@ -55,7 +55,7 @@ test("classic firmware is never considered a valid S3 image",()=>{
 test("S3 is visible for USB and autonomous deployment, but not auto-flash or untested BLE",()=>{
   const ide=read("src/PyBotIDE.jsx");
   assert.match(ide,/<option value="esp32-s3-micropython">/);
-  assert.match(ide,/boardEsp32S3Hint/);
+  assert.match(ide,/boardEsp32S3Install/);
   assert.match(ide,/isEsp32S3Board\(boardType\) && connected/);
   assert.match(ide,/showPrepareEsp32=\{boardType === "esp32-micropython" \|\| boardType === "esp32-eda6"\}/);
   assert.match(ide,/if \(isEsp32S3Board\(boardType\)\) return; \/\/ S3 BLE firmware not physically validated/);
