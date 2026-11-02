@@ -211,6 +211,11 @@
   box-shadow: 0 0 20px rgba(243, 95, 192, .62);
 }
 
+.pyclass-preview .pc-google-button:focus-visible:not(:disabled) {
+  outline: 2px solid #b3f8ff;
+  outline-offset: 3px;
+}
+
 .pyclass-preview .pc-demo-caption {
   display: block;
   margin-top: 17px;
